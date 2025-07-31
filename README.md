@@ -12,97 +12,50 @@ A comprehensive scholarship application and approval management system built wit
 - **Email Notifications**: Status updates and workflow notifications
 - **Responsive Design**: Modern UI with Tailwind CSS and shadcn/ui
 
-## 🏗️ Technology Stack
+## 🛠️ Quick Start
 
-### Backend
-- **Python 3.11** with FastAPI
-- **PostgreSQL 15** with asyncpg
-- **SQLAlchemy 2.0** (async)
-- **Redis** for caching and sessions
-- **MinIO** for object storage
-- **Alembic** for database migrations
+Get started in 5 minutes with Docker:
 
-### Frontend
-- **Next.js 15** with App Router
-- **React 18** with TypeScript
-- **Tailwind CSS** + shadcn/ui
-- **React Hook Form** + Zod validation
-- **Playwright** for E2E testing
-
-### DevOps
-- **Docker** & Docker Compose
-- **NGINX** reverse proxy
-- **pytest** (backend) + Jest (frontend) testing
-- **90% test coverage target**
-
-## 🛠️ Quick Start with Docker
-
-**⚠️ IMPORTANT**: Always use Docker for testing. Do not modify your local environment.
-
-### Prerequisites
-Ensure these ports are available:
-- `3000` - Frontend (Next.js)
-- `8000` - Backend API (FastAPI)
-- `5432` - PostgreSQL
-- `6379` - Redis
-- `9000` - MinIO API
-- `9001` - MinIO Console
-
-### Start the System
 ```bash
-# Make test script executable
-chmod +x test-docker.sh
-
 # Start all services
 ./test-docker.sh start
 
-# Check service status
-./test-docker.sh status
-
-# View logs
-./test-docker.sh logs [service_name]
+# Access the application
+# Frontend: http://localhost:3000
+# API Docs: http://localhost:8000/docs
 ```
 
-### Access Points
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **MinIO Console**: http://localhost:9001 (admin/admin123)
+👉 **[Complete Quick Start Guide](docs/getting-started/quick-start.md)**
 
-### Stop Services
-```bash
-# Stop all services
-./test-docker.sh stop
+## 📚 Documentation
 
-# Complete cleanup (removes volumes)
-./test-docker.sh cleanup
-```
+### Getting Started
+- 🚀 [Quick Start Guide](docs/getting-started/quick-start.md)
+- 📦 [Installation Guide](docs/getting-started/installation.md)
+- 🔧 [Development Setup](docs/getting-started/development-setup.md)
 
-## 📁 Project Structure
+### Architecture
+- 🏗️ [System Overview](docs/architecture/system-overview.md)
+- 🗄️ [Database Schema](docs/architecture/database-schema.md)
+- 🔌 [API Design](docs/architecture/api-design.md)
 
-```
-scholarship-system/
-├── backend/                 # FastAPI application
-│   ├── app/
-│   │   ├── api/v1/endpoints/   # API routes
-│   │   ├── core/               # Configuration & auth
-│   │   ├── db/                 # Database setup
-│   │   ├── models/             # SQLAlchemy models
-│   │   ├── schemas/            # Pydantic schemas
-│   │   ├── services/           # Business logic
-│   │   └── tests/              # Backend tests
-│   ├── alembic/             # Database migrations
-│   └── requirements.txt     # Python dependencies
-├── frontend/                # Next.js application
-│   ├── app/                 # App Router pages
-│   ├── components/          # React components
-│   ├── hooks/               # Custom hooks
-│   ├── lib/                 # Utilities
-│   └── styles/              # Global styles
-├── docs/                    # Documentation
-├── infra/                   # Infrastructure configs
-└── scripts/                 # Utility scripts
-```
+### Features
+- 👥 [User Management](docs/features/user-management.md)
+- 🔐 [Authentication System](docs/features/authentication.md)
+- 🧑‍💻 [Developer Profiles](docs/features/developer-profiles.md)
+
+### Development
+- 🧪 [Testing Guide](docs/development/testing.md)
+- 🚀 [CI/CD Pipeline](docs/development/ci-cd.md)
+- 📝 [Migration Guides](docs/development/migration-guides.md)
+
+### Deployment
+- 🐳 [Docker Setup](docs/deployment/docker-setup.md)
+- 🌐 [Production Deployment](docs/deployment/production-deployment.md)
+
+### Specifications
+- 📋 [System Requirements (SRS)](docs/specifications/srs-v1.0.md)
+- 📊 [Business Requirements](docs/specifications/requirements.md)
 
 ## 🔧 Development
 
