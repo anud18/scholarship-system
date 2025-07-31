@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:
         """Validate database URL format"""
+        # Allow SQLite URLs in test/CI environments
+        if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING"):
+            if v.startswith(("sqlite", "postgresql")):
+                return v
+        
         if not v.startswith("postgresql"):
             raise ValueError("Database URL must be PostgreSQL")
         return v
@@ -114,28 +119,6 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
-
-# Scholarship-specific constants
-SCHOLARSHIP_GPA_REQUIREMENTS = {
-    "undergraduate_freshman": 3.38,
-    "phd_nstc": 3.5,
-    "phd_moe": 3.5,
-    "direct_phd": 3.5
-}
-
-SCHOLARSHIP_CATEGORIES = [
-    "undergraduate_freshman",
-    "phd_nstc",
-    "phd_moe",
-    "direct_phd"
-]
-
-# Development mode settings for testing
-DEV_SCHOLARSHIP_SETTINGS = {
-    "ALWAYS_OPEN_APPLICATION": True,  # 開發模式下總是開放申請
-    "BYPASS_WHITELIST": True,         # 開發模式下略過白名單檢查 (注意：生產環境僅限白名單學生申請)
-    "MOCK_APPLICATION_PERIOD": True,  # 使用模擬的申請期間
-}
 
 # Application constants
 MAX_PERSONAL_STATEMENT_LENGTH = 2000

@@ -5,7 +5,7 @@ Application schemas for API requests and responses
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, validator
 from app.models.application import ApplicationStatus, ReviewStatus, FileType
 
 
@@ -28,46 +28,156 @@ class ApplicationBase(BaseModel):
     agree_terms: bool = Field(False, description="Agreement to terms")
 
 
+class DynamicFormField(BaseModel):
+    """動態表單欄位"""
+    field_id: str = Field(..., description="欄位ID")
+    field_type: str = Field(..., description="欄位類型 (text, number, select, etc.)")
+    value: Any = Field(None, description="欄位值")
+    required: bool = Field(default=True, description="是否必填")
+    validation_rules: Optional[Dict[str, Any]] = Field(default=None, description="驗證規則")
+
+    @validator('value')
+    def validate_value_type(cls, v, values):
+        """根據 field_type 驗證值的類型"""
+        field_type = values.get('field_type')
+        if field_type == 'select' and not isinstance(v, (list, str)):
+            raise ValueError('Select field value must be a string or list')
+        elif field_type == 'number' and not isinstance(v, (int, float)):
+            raise ValueError('Number field value must be a number')
+        return v
+
+
+class DocumentData(BaseModel):
+    """文件資料"""
+    document_id: str = Field(..., description="文件ID")
+    document_type: str = Field(..., description="文件類型")
+    file_path: str = Field(..., description="檔案路徑")
+    original_filename: str = Field(..., description="原始檔名")
+    upload_time: str = Field(..., description="上傳時間 (ISO format string)")
+    file_size: Optional[int] = Field(None, description="檔案大小")
+    mime_type: Optional[str] = Field(None, description="檔案類型")
+
+
+class ApplicationFormData(BaseModel):
+    """申請表單資料"""
+    fields: Dict[str, DynamicFormField] = Field(
+        ..., 
+        description="動態表單欄位",
+        example={
+            "bank_account": {
+                "field_id": "bank_account",
+                "field_type": "text",
+                "value": "123123",
+                "required": True
+            }
+        }
+    )
+    documents: List[DocumentData] = Field(
+        default=[],
+        description="文件列表",
+        example=[{
+            "document_id": "bank_account_cover",
+            "document_type": "存摺封面",
+            "file_path": "test.pdf",
+            "original_filename": "test.pdf",
+            "upload_time": "2024-03-19T10:00:00Z"
+        }]
+    )
+
+    @validator('fields')
+    def validate_required_fields(cls, v):
+        """驗證必填欄位"""
+        for field_id, field in v.items():
+            if field.required and (field.value is None or field.value == ""):
+                raise ValueError(f"必填欄位 {field_id} 未填寫")
+            
+            # 根據 field_type 進行特定驗證
+            if field.validation_rules:
+                if field.field_type == "number":
+                    min_val = field.validation_rules.get("min")
+                    max_val = field.validation_rules.get("max")
+                    if min_val is not None and field.value < min_val:
+                        raise ValueError(f"欄位 {field_id} 值不可小於 {min_val}")
+                    if max_val is not None and field.value > max_val:
+                        raise ValueError(f"欄位 {field_id} 值不可大於 {max_val}")
+                elif field.field_type == "text":
+                    min_length = field.validation_rules.get("min_length")
+                    max_length = field.validation_rules.get("max_length")
+                    if min_length is not None and len(str(field.value)) < min_length:
+                        raise ValueError(f"欄位 {field_id} 長度不可小於 {min_length}")
+                    if max_length is not None and len(str(field.value)) > max_length:
+                        raise ValueError(f"欄位 {field_id} 長度不可大於 {max_length}")
+        return v
+
+
 class ApplicationCreate(BaseModel):
-    """Application creation schema with optional fields for draft saving"""
-    scholarship_type: Optional[str] = Field(None, description="Scholarship type code")
-    academic_year: Optional[str] = Field(None, description="Academic year")
-    semester: Optional[str] = Field(None, description="Semester")
-    gpa: Optional[Decimal] = Field(None, description="GPA")
-    class_ranking_percent: Optional[Decimal] = Field(None, description="Class ranking percentage")
-    dept_ranking_percent: Optional[Decimal] = Field(None, description="Department ranking percentage")
-    completed_terms: Optional[int] = Field(None, description="Number of completed terms")
-    contact_phone: Optional[str] = Field(None, description="Contact phone")
-    contact_email: Optional[str] = Field(None, description="Contact email")
-    contact_address: Optional[str] = Field(None, description="Contact address")
-    bank_account: Optional[str] = Field(None, description="Bank account")
-    research_proposal: Optional[str] = Field(None, description="Research proposal")
-    budget_plan: Optional[str] = Field(None, description="Budget plan")
-    milestone_plan: Optional[str] = Field(None, description="Milestone plan")
-    agree_terms: Optional[bool] = Field(False, description="Agreement to terms")
+    """建立申請"""
+    scholarship_type: str = Field(
+        ..., 
+        description="獎學金類型代碼",
+        example="undergraduate_freshman"
+    )
+    scholarship_subtype_list: List[str] = Field(
+        default=[],
+        description="獎學金子類型列表",
+        example=["general", "special"]
+    )
+    form_data: ApplicationFormData = Field(
+        ..., 
+        description="表單資料"
+    )
+    agree_terms: Optional[bool] = Field(
+        False,
+        description="同意條款"
+    )
+    is_renewal: Optional[bool] = Field(
+        False,
+        description="是否為續領申請"
+    )
     
-    # 新增欄位支持前端
-    personal_statement: Optional[str] = Field(None, description="Personal statement")
-    expected_graduation_date: Optional[str] = Field(None, description="Expected graduation date")
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+        schema_extra = {
+            "example": {
+                "scholarship_type": "undergraduate_freshman",
+                "scholarship_subtype_list": ["general"],
+                "agree_terms": True,
+                "form_data": {
+                    "fields": {
+                        "bank_account": {
+                            "field_id": "bank_account",
+                            "field_type": "text",
+                            "value": "123123",
+                            "required": True
+                        }
+                    },
+                    "documents": [
+                        {
+                            "document_id": "bank_account_cover",
+                            "document_type": "存摺封面",
+                            "file_path": "test.pdf",
+                            "original_filename": "test.pdf",
+                            "upload_time": "2024-03-19T10:00:00Z"
+                        }
+                    ]
+                }
+            }
+        }
 
 
 class ApplicationUpdate(BaseModel):
-    """Application update schema"""
-    scholarship_type: Optional[str] = None
-    academic_year: Optional[str] = None
-    semester: Optional[str] = None
-    gpa: Optional[Decimal] = None
-    class_ranking_percent: Optional[Decimal] = None
-    dept_ranking_percent: Optional[Decimal] = None
-    completed_terms: Optional[int] = None
-    contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
-    contact_address: Optional[str] = None
-    bank_account: Optional[str] = None
-    research_proposal: Optional[str] = None
-    budget_plan: Optional[str] = None
-    milestone_plan: Optional[str] = None
-    agree_terms: Optional[bool] = None
+    """更新申請"""
+    form_data: Optional[ApplicationFormData] = Field(None, description="表單資料")
+    status: Optional[str] = Field(None, description="申請狀態")
+    agree_terms: Optional[bool] = Field(None, description="同意條款")
+    is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 
 class ApplicationFileResponse(BaseModel):
@@ -99,22 +209,44 @@ class ApplicationReviewResponse(BaseModel):
     reviewed_at: Optional[datetime]
 
 
+class ProfessorReviewItemCreate(BaseModel):
+    """Professor review item creation schema"""
+    sub_type_code: str = Field(..., description="Scholarship sub-type code (e.g., 'moe_1w')")
+    is_recommended: bool = Field(..., description="Whether to recommend this sub-type")
+    comments: Optional[str] = Field(None, description="Comments for this specific sub-type")
+
+
+class ProfessorReviewItemResponse(BaseModel):
+    """Professor review item response schema"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    review_id: int
+    sub_type_code: str
+    is_recommended: bool
+    comments: Optional[str] = None
+    created_at: datetime
+
+
 class ProfessorReviewCreate(BaseModel):
     application_id: int
-    selected_awards: Optional[List[str]] = None
     recommendation: Optional[str] = None
     review_status: Optional[str] = None
+    items: List[ProfessorReviewItemCreate] = Field(default=[], description="Individual sub-type recommendations")
 
 
 class ProfessorReviewResponse(BaseModel):
+    """Professor review response schema"""
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     application_id: int
     professor_id: int
-    selected_awards: Optional[List[str]] = None
     recommendation: Optional[str] = None
     review_status: Optional[str] = None
     reviewed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    items: List[ProfessorReviewItemResponse] = Field(default=[], description="Individual sub-type recommendations")
 
 
 class ApplicationResponse(BaseModel):
@@ -125,61 +257,50 @@ class ApplicationResponse(BaseModel):
     app_id: str
     user_id: int
     student_id: int
-    scholarship_type: str
-    scholarship_name: Optional[str]
-    amount: Optional[Decimal]
+    scholarship_type_id: int
+    scholarship_subtype_list: Optional[List[str]] = []
     status: str
     status_name: Optional[str]
-    academic_year: Optional[str]
-    semester: Optional[str]
-    gpa: Optional[Decimal]
-    class_ranking_percent: Optional[Decimal]
-    dept_ranking_percent: Optional[Decimal]
-    completed_terms: Optional[int]
-    contact_phone: Optional[str]
-    contact_email: Optional[str]
-    contact_address: Optional[str]
-    bank_account: Optional[str]
-    research_proposal: Optional[str]
-    budget_plan: Optional[str]
-    milestone_plan: Optional[str]
-    agree_terms: Optional[bool]
-    professor_id: Optional[int]
-    reviewer_id: Optional[int]
-    review_score: Optional[Decimal]
-    review_comments: Optional[str]
-    rejection_reason: Optional[str]
-    submitted_at: Optional[datetime]
-    reviewed_at: Optional[datetime]
-    approved_at: Optional[datetime]
+    is_renewal: bool = Field(False, description="是否為續領申請")
+    academic_year: int
+    semester: str
+    student_data: Dict[str, Any]
+    submitted_form_data: Dict[str, Any]  # 包含整合後的文件資訊
+    agree_terms: bool = False
+    professor_id: Optional[int] = None
+    reviewer_id: Optional[int] = None
+    final_approver_id: Optional[int] = None
+    review_score: Optional[Decimal] = None
+    review_comments: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-    files: List[ApplicationFileResponse] = []
+    meta_data: Optional[Dict[str, Any]] = None
+    
     reviews: List[ApplicationReviewResponse] = []
     professor_reviews: List[ProfessorReviewResponse] = []
     
-    # Computed properties
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        from app.models.application import ApplicationStatus
-        return self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value]
+        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
     
     @property
     def is_submitted(self) -> bool:
         """Check if application is submitted"""
-        from app.models.application import ApplicationStatus
-        return self.status != ApplicationStatus.DRAFT.value
+        return bool(self.status != ApplicationStatus.DRAFT.value)
     
     @property
     def can_be_reviewed(self) -> bool:
         """Check if application can be reviewed"""
-        from app.models.application import ApplicationStatus
-        return self.status in [
+        return bool(self.status in [
             ApplicationStatus.SUBMITTED.value,
             ApplicationStatus.UNDER_REVIEW.value,
             ApplicationStatus.RECOMMENDED.value
-        ]
+        ])
 
 
 class ApplicationReviewCreate(BaseModel):
@@ -189,11 +310,10 @@ class ApplicationReviewCreate(BaseModel):
     score: Optional[Decimal] = None
     comments: Optional[str] = None
     recommendation: Optional[str] = None
-    selected_awards: Optional[List[str]] = None
 
 
 class ApplicationListResponse(BaseModel):
-    """Application list item response schema"""
+    """Application list response schema"""
     model_config = ConfigDict(from_attributes=True)
     
     id: int
@@ -201,28 +321,48 @@ class ApplicationListResponse(BaseModel):
     user_id: int
     student_id: int
     scholarship_type: str
-    scholarship_name: Optional[str]
-    amount: Optional[Decimal]
+    scholarship_type_id: int
+    scholarship_type_zh: Optional[str] = None  # 中文獎學金類型名稱
+    scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
     status: str
     status_name: Optional[str]
-    submitted_at: Optional[datetime]
+    is_renewal: bool = Field(False, description="是否為續領申請")
+    academic_year: int
+    semester: str
+    student_data: Dict[str, Any]
+    submitted_form_data: Dict[str, Any]  # 包含整合後的文件資訊
+    agree_terms: bool = False
+    professor_id: Optional[int] = None
+    reviewer_id: Optional[int] = None
+    final_approver_id: Optional[int] = None
+    review_score: Optional[Decimal] = None
+    review_comments: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    meta_data: Optional[Dict[str, Any]] = None
     
-    # Optional fields for staff view
-    student_name: Optional[str] = None
-    student_no: Optional[str] = None
+    @property
+    def is_editable(self) -> bool:
+        """Check if application can be edited"""
+        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
     
-    # Extended fields for college/admin dashboard
-    gpa: Optional[Decimal] = None
-    department: Optional[str] = None
-    nationality: Optional[str] = None
+    @property
+    def is_submitted(self) -> bool:
+        """Check if application is submitted"""
+        return bool(self.status != ApplicationStatus.DRAFT.value)
     
-    # Chinese display name for scholarship type
-    scholarship_type_zh: Optional[str] = None
-    
-    # Computed fields
-    days_waiting: Optional[int] = None  # Days since submission
+    @property
+    def can_be_reviewed(self) -> bool:
+        """Check if application can be reviewed"""
+        return bool(self.status in [
+            ApplicationStatus.SUBMITTED.value,
+            ApplicationStatus.UNDER_REVIEW.value,
+            ApplicationStatus.RECOMMENDED.value
+        ])
 
 
 class ApplicationStatusUpdate(BaseModel):
@@ -245,20 +385,5 @@ class DashboardStats(BaseModel):
     recent_activities: List[Dict[str, Any]] = Field([], description="Recent application activities")
 
 
-class ProfessorReviewCreate(BaseModel):
-    application_id: int
-    selected_awards: Optional[List[str]] = None
-    recommendation: Optional[str] = None
-    review_status: Optional[str] = None
 
-
-class ProfessorReviewResponse(BaseModel):
-    id: int
-    application_id: int
-    professor_id: int
-    selected_awards: Optional[List[str]] = None
-    recommendation: Optional[str] = None
-    review_status: Optional[str] = None
-    reviewed_at: Optional[datetime] = None
-    created_at: Optional[datetime] = None 
     

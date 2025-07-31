@@ -1,8 +1,3 @@
----
-description: 
-globs: 
-alwaysApply: true
----
 # API Design Patterns and Standards
 
 Always follow these patterns when working with API endpoints and response schemas.
@@ -12,17 +7,17 @@ Always follow these patterns when working with API endpoints and response schema
 All API endpoints MUST use this response structure:
 
 ```python
-from typing import Generic, TypeVar, Optional
+from typing import Generic, TypeVar, Optional, List
 from pydantic import BaseModel
 
 DataType = TypeVar('DataType')
 
 class ApiResponse(BaseModel, Generic[DataType]):
     """Standard API response format"""
-    success: bool
+    success: bool = True
     message: str
     data: Optional[DataType] = None
-    errors: Optional[list[str]] = None
+    errors: Optional[List[str]] = None
     trace_id: Optional[str] = None
 ```
 
@@ -34,9 +29,11 @@ Success with data:
     "success": true,
     "message": "Application retrieved successfully",
     "data": {
-        "id": "12345",
+        "id": 12345,
         "student_id": "STU001",
-        "status": "submitted"
+        "status": "submitted",
+        "scholarship_type": "academic_excellence",
+        "gpa": 3.8
     },
     "trace_id": "req_abc123"
 }
@@ -74,22 +71,29 @@ Error response:
 - `500 Internal Server Error` - Unexpected errors
 - `503 Service Unavailable` - Service unavailable
 
-## Endpoint Naming (camelCase)
+## Endpoint Naming (snake_case)
 
 ### Resource Endpoints
 ```python
 # Users
 GET    /api/v1/users              # List users
 POST   /api/v1/users              # Create user
-GET    /api/v1/users/{userId}     # Get user
-PUT    /api/v1/users/{userId}     # Update user
-DELETE /api/v1/users/{userId}     # Delete user
+GET    /api/v1/users/{user_id}    # Get user
+PUT    /api/v1/users/{user_id}    # Update user
+DELETE /api/v1/users/{user_id}    # Delete user
 
 # Applications  
 GET    /api/v1/applications                    # List applications
 POST   /api/v1/applications                    # Create application
-GET    /api/v1/applications/{applicationId}    # Get application
-PUT    /api/v1/applications/{applicationId}    # Update application
+GET    /api/v1/applications/{application_id}   # Get application
+PUT    /api/v1/applications/{application_id}   # Update application
+DELETE /api/v1/applications/{application_id}   # Delete application
+
+# Scholarships
+GET    /api/v1/scholarships                    # List scholarships
+POST   /api/v1/scholarships                    # Create scholarship
+GET    /api/v1/scholarships/{scholarship_id}   # Get scholarship
+PUT    /api/v1/scholarships/{scholarship_id}   # Update scholarship
 ```
 
 ### Action Endpoints
@@ -98,11 +102,24 @@ PUT    /api/v1/applications/{applicationId}    # Update application
 POST /api/v1/auth/login
 POST /api/v1/auth/register
 POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+GET  /api/v1/auth/me
 
-# Workflow actions
-POST /api/v1/applications/{applicationId}/submit
-POST /api/v1/applications/{applicationId}/approve
-POST /api/v1/applications/{applicationId}/reject
+# Application workflow actions
+POST /api/v1/applications/{application_id}/submit
+PUT  /api/v1/applications/{application_id}/status
+POST /api/v1/applications/{application_id}/review
+GET  /api/v1/applications/review/list
+GET  /api/v1/applications/college/review
+
+# File management
+POST /api/v1/applications/{application_id}/files/upload
+GET  /api/v1/applications/{application_id}/files
+
+# Admin actions
+GET  /api/v1/admin/users
+PUT  /api/v1/admin/users/{user_id}
+GET  /api/v1/admin/applications
 ```
 
 ## Query Parameters
@@ -111,8 +128,8 @@ POST /api/v1/applications/{applicationId}/reject
 ```python
 page: int = 1           # Page number (1-based)
 size: int = 20          # Items per page  
-sort: str = "created_at" # Sort field
-order: str = "desc"     # Sort direction (asc/desc)
+sort_by: str = "created_at" # Sort field
+sort_order: str = "asc"     # Sort direction (asc/desc)
 ```
 
 ### Filtering
@@ -120,9 +137,14 @@ order: str = "desc"     # Sort direction (asc/desc)
 # Application-specific filters
 status: str                    # Filter by status
 scholarship_type: str          # Filter by type
+scholarship_type_id: int       # Filter by scholarship type ID
 student_id: str               # Filter by student
 created_after: datetime       # Date range filtering
 min_gpa: float                # GPA filtering
+
+# User-specific filters
+role: str                     # Filter by user role
+is_active: bool               # Filter by active status
 ```
 
 ## Dependencies Pattern
@@ -130,8 +152,11 @@ min_gpa: float                # GPA filtering
 Always use these dependency patterns:
 
 ```python
-from fastapi import Depends
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.deps import get_db
+from app.core.security import get_current_user, require_student, require_staff
+from app.models.user import User, UserRole
 
 async def get_db() -> AsyncSession:
     """Database session dependency"""
@@ -149,14 +174,63 @@ async def get_current_user(
     # Implementation...
     pass
 
+async def require_student(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Require student role"""
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Student access required"
+        )
+    return current_user
+
+async def require_staff(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Require staff role (professor, college, admin, super_admin)"""
+    if current_user.role not in [UserRole.PROFESSOR, UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff access required"
+        )
+    return current_user
+
 async def require_admin(
     current_user: User = Depends(get_current_user)
 ) -> User:
     """Require admin role"""
     if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
     return current_user
 ```
+
+## User Roles and Permissions
+
+### Role Definitions
+```python
+class UserRole(enum.Enum):
+    """User role enum"""
+    STUDENT = "student"          # 學生
+    PROFESSOR = "professor"      # 教授
+    COLLEGE = "college"         # 學院審核人員
+    ADMIN = "admin"             # 管理員
+    SUPER_ADMIN = "super_admin" # 超級管理員
+```
+
+### Role Hierarchy & Permissions
+```
+Super Admin > Admin > College > Professor > Student
+```
+
+### Permission Levels
+- **Application Management**: College, Admin, Super Admin
+- **User Management**: Admin, Super Admin only
+- **System Configuration**: Super Admin only
+- **Review Authority**: Professor (own students), College (department), Admin (all), Super Admin (all)
 
 ## Exception Handling
 
@@ -176,6 +250,11 @@ class NotFoundError(ScholarshipException):
     def __init__(self, resource: str, identifier: str):
         message = f"{resource} with ID {identifier} not found"
         super().__init__(message, 404)
+
+class ValidationError(ScholarshipException):
+    def __init__(self, message: str, errors: List[str] = None):
+        super().__init__(message, 422)
+        self.errors = errors or []
 ```
 
 ### Exception Handler
@@ -190,6 +269,275 @@ async def scholarship_exception_handler(request: Request, exc: ScholarshipExcept
             "trace_id": getattr(request.state, 'trace_id', None)
         }
     )
+```
+
+## Application Workflow States
+
+### Application Status Flow
+```python
+class ApplicationStatus(str, Enum):
+    DRAFT = "draft"              # Initial draft state
+    SUBMITTED = "submitted"      # Submitted for review
+    UNDER_REVIEW = "under_review" # Under faculty review
+    COLLEGE_REVIEW = "college_review" # Under college review
+    APPROVED = "approved"        # Approved
+    REJECTED = "rejected"        # Rejected
+    WITHDRAWN = "withdrawn"      # Withdrawn by student
+```
+
+### Status Transitions
+```python
+# Student actions
+DRAFT → SUBMITTED (submit_application)
+SUBMITTED → WITHDRAWN (withdraw_application)
+
+# Staff actions
+SUBMITTED → UNDER_REVIEW (assign_reviewer)
+UNDER_REVIEW → COLLEGE_REVIEW (professor_approval)
+COLLEGE_REVIEW → APPROVED/REJECTED (college_decision)
+```
+
+## File Upload Standards
+
+### Supported File Types
+```python
+ALLOWED_FILE_TYPES = [
+    "application/pdf",
+    "image/jpeg", 
+    "image/png",
+    "image/jpg"
+]
+
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+```
+
+### File Upload Endpoint Pattern
+```python
+@router.post("/{application_id}/files/upload")
+async def upload_file(
+    application_id: int = Path(..., description="Application ID"),
+    file: UploadFile = File(...),
+    file_type: str = Query("other", description="File type"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Upload file for application"""
+    # Implementation...
+    pass
+```
+
+## Database Models Pattern
+
+### Base Model
+```python
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+
+Base = declarative_base()
+
+class BaseModel(Base):
+    """Base model with common fields"""
+    __abstract__ = True
+    
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+```
+
+### Application Model Example
+```python
+class Application(BaseModel):
+    __tablename__ = "applications"
+    
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
+    status = Column(String(50), default="draft", nullable=False)
+    gpa = Column(Float, nullable=True)
+    form_data = Column(JSON, nullable=True)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id], back_populates="applications")
+    student = relationship("Student", foreign_keys=[student_id], back_populates="applications")
+    scholarship_type = relationship("ScholarshipType", back_populates="applications")
+    files = relationship("ApplicationFile", back_populates="application")
+    reviews = relationship("ApplicationReview", back_populates="application")
+```
+
+## Service Layer Pattern
+
+### Service Base Class
+```python
+class BaseService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+    
+    async def commit(self):
+        """Commit database changes"""
+        await self.db.commit()
+    
+    async def rollback(self):
+        """Rollback database changes"""
+        await self.db.rollback()
+```
+
+### Application Service Example
+```python
+class ApplicationService(BaseService):
+    async def create_application(
+        self,
+        user_id: int,
+        student_id: int,
+        application_data: ApplicationCreate,
+        is_draft: bool = False
+    ) -> ApplicationResponse:
+        """Create new application"""
+        try:
+            # Validate student exists
+            student = await self.get_student_by_id(student_id)
+            if not student:
+                raise NotFoundError("Student", str(student_id))
+            
+            # Create application
+            application = Application(
+                user_id=user_id,
+                student_id=student_id,
+                scholarship_type_id=application_data.scholarship_type_id,
+                status="draft" if is_draft else "submitted",
+                gpa=application_data.form_data.get("gpa"),
+                form_data=application_data.form_data.dict()
+            )
+            
+            self.db.add(application)
+            await self.commit()
+            await self.db.refresh(application)
+            
+            return ApplicationResponse.model_validate(application)
+            
+        except Exception as e:
+            await self.rollback()
+            raise e
+```
+
+## Testing Patterns
+
+### API Test Pattern
+```python
+@pytest.mark.asyncio
+async def test_create_application_success(authenticated_client, test_user):
+    """Test successful application creation"""
+    application_data = {
+        "scholarship_type_id": 1,
+        "form_data": {
+            "gpa": 3.8,
+            "personal_statement": "Test statement",
+            "expected_graduation": "2025-06-15"
+        }
+    }
+    
+    response = await authenticated_client.post(
+        "/api/v1/applications/",
+        json=application_data,
+        params={"is_draft": False}
+    )
+    
+    assert response.status_code == 201
+    data = response.json()
+    assert data["success"] is True
+    assert data["data"]["status"] == "submitted"
+    assert data["data"]["gpa"] == 3.8
+```
+
+### Service Test Pattern
+```python
+@pytest.mark.asyncio
+async def test_application_service_create(db_session, test_user, test_student):
+    """Test application service creation"""
+    service = ApplicationService(db_session)
+    
+    application_data = ApplicationCreate(
+        scholarship_type_id=1,
+        form_data=ApplicationFormData(
+            gpa=3.8,
+            personal_statement="Test statement"
+        )
+    )
+    
+    result = await service.create_application(
+        user_id=test_user.id,
+        student_id=test_student.id,
+        application_data=application_data,
+        is_draft=False
+    )
+    
+    assert result.status == "submitted"
+    assert result.gpa == 3.8
+```
+
+## Configuration Management
+
+### Environment Variables
+```python
+# Database
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/scholarship_db
+
+# Security
+SECRET_KEY=your-secret-key-here
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# File Storage
+UPLOAD_DIR=./uploads
+MAX_FILE_SIZE=10485760  # 10MB
+
+# Services
+REDIS_URL=redis://localhost:6379/0
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin123
+```
+
+## Performance Standards
+
+### Response Time Requirements
+- API response time: p95 < 600ms
+- Database queries: Use async/await
+- File uploads: Stream processing
+- Caching: Redis with 10-minute TTL
+
+### Optimization Patterns
+```python
+# Async database operations
+async def get_applications_with_relationships(user_id: int):
+    """Get applications with all relationships in single query"""
+    result = await db.execute(
+        select(Application)
+        .options(
+            selectinload(Application.student),
+            selectinload(Application.scholarship_type),
+            selectinload(Application.files)
+        )
+        .where(Application.user_id == user_id)
+    )
+    return result.scalars().all()
+
+# Caching pattern
+async def get_cached_data(key: str, fetch_func):
+    """Get data from cache or fetch if not available"""
+    cached = await redis.get(key)
+    if cached:
+        return json.loads(cached)
+    
+    data = await fetch_func()
+    await redis.setex(key, 600, json.dumps(data))  # 10 minutes TTL
+    return data
+```
+
+@api-response-template.py
+@exception-handlers.py
+
 ```
 
 @api-response-template.py

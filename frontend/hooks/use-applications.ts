@@ -35,11 +35,11 @@ export function useApplications() {
     }
   }, [isAuthenticated])
 
-  const createApplication = useCallback(async (applicationData: ApplicationCreate) => {
+  const createApplication = useCallback(async (applicationData: ApplicationCreate, isDraft: boolean = false) => {
     try {
       setError(null)
       
-      const response = await apiClient.applications.createApplication(applicationData)
+      const response = await apiClient.applications.createApplication(applicationData, isDraft)
       
       if (response.success && response.data) {
         setApplications(prev => [response.data!, ...prev])
@@ -160,6 +160,24 @@ export function useApplications() {
     }
   }, [])
 
+  const deleteApplication = useCallback(async (applicationId: number) => {
+    try {
+      setError(null)
+      
+      const response = await apiClient.applications.deleteApplication(applicationId)
+      
+      if (response.success) {
+        setApplications(prev => prev.filter(app => app.id !== applicationId))
+        return response.data
+      } else {
+        throw new Error(response.message || 'Failed to delete application')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete application')
+      throw err
+    }
+  }, [])
+
   return {
     applications,
     isLoading,
@@ -171,5 +189,6 @@ export function useApplications() {
     withdrawApplication,
     updateApplication,
     uploadDocument,
+    deleteApplication,
   }
 } 

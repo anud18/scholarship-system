@@ -124,26 +124,91 @@ async def mock_sso_login(
             detail="Mock SSO is disabled"
         )
     
-    username = request_data.get("username")
-    if not username:
+    nycu_id = request_data.get("nycu_id") or request_data.get("username")  # 支持兩種參數名稱
+    if not nycu_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username is required"
+            detail="NYCU ID is required"
         )
     
     try:
         mock_sso_service = MockSSOService(db)
-        token_response = await mock_sso_service.mock_sso_login(username)
+        token_response = await mock_sso_service.mock_sso_login(nycu_id)
         
         return {
             "success": True,
-            "message": f"Mock SSO login successful for {username}",
+            "message": f"Mock SSO login successful for {nycu_id}",
             "data": {
                 "access_token": token_response.access_token,
                 "token_type": token_response.token_type,
                 "expires_in": token_response.expires_in,
                 "user": token_response.user.model_dump()
             }
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/portal-sso/verify")
+async def portal_sso_verify(
+    request_data: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify portal SSO token and return user data in portal format"""
+    if not settings.enable_mock_sso:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portal SSO is disabled"
+        )
+    
+    nycu_id = request_data.get("nycu_id") or request_data.get("username")  # 支持兩種參數名稱
+    if not nycu_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="NYCU ID is required"
+        )
+    
+    try:
+        mock_sso_service = MockSSOService(db)
+        portal_data = await mock_sso_service.get_portal_sso_data(nycu_id)
+        
+        # Return in exact portal format
+        return {
+            "status": "success",
+            "message": "jwt pass",
+            "data": portal_data
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get("/portal-sso/verify/{username}")
+async def portal_sso_verify_get(
+    username: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get portal SSO data for a specific user (GET method for testing)"""
+    if not settings.enable_mock_sso:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portal SSO is disabled"
+        )
+    
+    try:
+        mock_sso_service = MockSSOService(db)
+        portal_data = await mock_sso_service.get_portal_sso_data(username)
+        
+        # Return in exact portal format
+        return {
+            "status": "success",
+            "message": "jwt pass",
+            "data": portal_data
         }
     except ValueError as e:
         raise HTTPException(
@@ -194,13 +259,13 @@ async def get_developer_profiles(
     
     profiles = [
         {
-            "username": user.username,
+            "username": user.nycu_id,
             "email": user.email,
-            "full_name": user.full_name,
-            "chinese_name": user.chinese_name,
-            "english_name": user.english_name,
+            "full_name": user.name,
+            "chinese_name": user.raw_data.get("chinese_name") if user.raw_data else None,
+            "english_name": user.raw_data.get("english_name") if user.raw_data else None,
             "role": user.role.value,
-            "is_active": user.is_active,
+            "is_active": True,  # All developer users are active
             "created_at": user.created_at.isoformat() if user.created_at else None
         }
         for user in users
@@ -234,8 +299,8 @@ async def quick_setup_developer(
     
     profiles = [
         {
-            "username": user.username,
-            "full_name": user.full_name,
+            "username": user.nycu_id,
+            "full_name": user.name,
             "role": user.role.value
         }
         for user in users
@@ -272,7 +337,7 @@ async def create_custom_profile(
         # Create profile
         profile = DeveloperProfile(
             developer_id=developer_id,
-            full_name=profile_data.get("full_name"),
+            name=profile_data.get("full_name"),  # Keep compatibility with frontend
             chinese_name=profile_data.get("chinese_name"),
             english_name=profile_data.get("english_name"),
             role=role,
@@ -287,9 +352,9 @@ async def create_custom_profile(
             "success": True,
             "message": f"Custom profile created for {developer_id}",
             "data": {
-                "username": user.username,
+                "username": user.nycu_id,
                 "email": user.email,
-                "full_name": user.full_name,
+                "full_name": user.name,
                 "role": user.role.value
             }
         }
@@ -318,8 +383,8 @@ async def create_student_suite(
     
     created_profiles = [
         {
-            "username": user.username,
-            "full_name": user.full_name,
+            "username": user.nycu_id,
+            "full_name": user.name,
             "role": user.role.value,
             "student_type": profiles[i].custom_attributes.get("student_type")
         }
@@ -355,8 +420,8 @@ async def create_staff_suite(
     
     created_profiles = [
         {
-            "username": user.username,
-            "full_name": user.full_name,
+            "username": user.nycu_id,
+            "full_name": user.name,
             "role": user.role.value
         }
         for user in users

@@ -3,7 +3,7 @@ API v1 router aggregation
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, applications, users, admin, scholarships, files, notifications
+from app.api.v1.endpoints import auth, applications, users, admin, scholarships, files, notifications, application_fields
 
 api_router = APIRouter()
 
@@ -14,4 +14,5 @@ api_router.include_router(applications.router, prefix="/applications", tags=["Ap
 api_router.include_router(admin.router, prefix="/admin", tags=["Administration"])
 api_router.include_router(scholarships.router, prefix="/scholarships", tags=["Scholarships"])
 api_router.include_router(files.router, prefix="/files", tags=["Files"])
-api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"]) 
+api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
+api_router.include_router(application_fields.router, prefix="/application-fields", tags=["Application Fields"]) 

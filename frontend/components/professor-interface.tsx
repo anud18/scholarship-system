@@ -17,13 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Search, Eye, Edit, CheckCircle, Users, FileText } from "lucide-react"
 import apiClient from "@/lib/api"
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: "student" | "professor" | "college" | "admin" | "super_admin"
-}
+import { User } from "@/types/user"
 
 interface ProfessorInterfaceProps {
   user: User
@@ -234,11 +228,11 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
                                     <label className="flex items-center gap-2">
                                       <input
                                         type="checkbox"
-                                        value="phd_nstc"
-                                        checked={selectedAwards.includes("phd_nstc")}
-                                        onChange={e => {
-                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd_nstc"])
-                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd_nstc"))
+                                        value="phd"
+                                        checked={selectedAwards.includes("phd")}
+                                        onChange={(e) => {
+                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd"])
+                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd"))
                                         }}
                                       />
                                       國科會博士生獎學金

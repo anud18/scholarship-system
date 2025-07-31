@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
@@ -23,8 +24,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 async def get_current_user(
-    db: AsyncSession = Depends(get_db),
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
 ) -> User:
     """Get current authenticated user"""
     credentials_exception = HTTPException(
@@ -32,25 +33,18 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
     try:
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
-        user_id: Optional[int] = payload.get("sub")
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-        
-    from sqlalchemy import select
+    
     result = await db.execute(select(User).where(User.id == int(user_id)))
     user = result.scalar_one_or_none()
-    
     if user is None:
         raise credentials_exception
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user"
-        )
+    
     return user 

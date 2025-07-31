@@ -5,31 +5,19 @@ Security utilities for authentication and authorization
 from jose import jwt
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.config import settings
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.db.deps import get_db
 from app.models.user import User, UserRole
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # JWT token bearer
 security = HTTPBearer(auto_error=False)
 
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
-    return bool(pwd_context.verify(plain_password, hashed_password))
-
-
-def get_password_hash(password: str) -> str:
-    """Generate password hash"""
-    return pwd_context.hash(password)
+# Note: Password functions removed since this system uses SSO authentication
+# For testing purposes, you can add them back if needed, but they're not used in production
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
@@ -90,22 +78,14 @@ async def get_current_user(
     if result is None:
         raise AuthenticationError("User not found")
     
-    if not result.is_active:
-        raise AuthenticationError("User account is disabled")
     
     return result
 
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
-    """Get current active user"""
-    if not current_user.is_active:
-        raise AuthenticationError("User account is disabled")
-    return current_user
-
 
 def require_role(required_role: UserRole):
     """Role-based access control decorator"""
-    def role_checker(current_user: User = Depends(get_current_active_user)) -> User:
+    def role_checker(current_user: User = Depends(get_current_user)) -> User:
         if not current_user.has_role(required_role):
             raise AuthorizationError(f"Access denied. Required role: {required_role.value}")
         return current_user
@@ -114,7 +94,7 @@ def require_role(required_role: UserRole):
 
 def require_roles(*required_roles: UserRole):
     """Multiple roles access control decorator"""
-    def roles_checker(current_user: User = Depends(get_current_active_user)) -> User:
+    def roles_checker(current_user: User = Depends(get_current_user)) -> User:
         if not any(current_user.has_role(role) for role in required_roles):
             role_names = [role.value for role in required_roles]
             raise AuthorizationError(f"Access denied. Required roles: {', '.join(role_names)}")
@@ -123,42 +103,42 @@ def require_roles(*required_roles: UserRole):
 
 
 # Role-specific dependencies
-def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Require admin or super admin role"""
     if not (current_user.is_admin() or current_user.is_super_admin()):
         raise AuthorizationError("Admin access required")
     return current_user
 
 
-def require_super_admin(current_user: User = Depends(get_current_active_user)) -> User:
+def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
     """Require super admin role only"""
     if not current_user.is_super_admin():
         raise AuthorizationError("Super admin access required")
     return current_user
 
 
-def require_student(current_user: User = Depends(get_current_active_user)) -> User:
+def require_student(current_user: User = Depends(get_current_user)) -> User:
     """Require student role"""
     if not current_user.is_student():
         raise AuthorizationError("Student access required")
     return current_user
 
 
-def require_professor(current_user: User = Depends(get_current_active_user)) -> User:
+def require_professor(current_user: User = Depends(get_current_user)) -> User:
     """Require professor role"""
     if not current_user.is_professor():
         raise AuthorizationError("Professor access required")
     return current_user
 
 
-def require_college(current_user: User = Depends(get_current_active_user)) -> User:
+def require_college(current_user: User = Depends(get_current_user)) -> User:
     """Require college role"""
     if not current_user.is_college():
         raise AuthorizationError("College access required")
     return current_user
 
 
-def require_staff(current_user: User = Depends(get_current_active_user)) -> User:
+def require_staff(current_user: User = Depends(get_current_user)) -> User:
     """Require staff access (admin, college, professor, or super_admin)"""
     if not any([current_user.is_admin(), current_user.is_college(), current_user.is_professor(), current_user.is_super_admin()]):
         raise AuthorizationError("Staff access required")

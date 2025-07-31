@@ -15,12 +15,13 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
-from app.core.security import get_password_hash
+# Note: Password functions removed since system uses SSO authentication
+# from app.core.security import get_password_hash
 from app.db.base import Base
-from app.db.session import get_db
+from app.db.deps import get_db
 from app.main import app
 from app.models.user import User, UserRole
-from app.models.scholarship import Scholarship
+from app.models.scholarship import ScholarshipType
 from app.models.application import Application, ApplicationStatus
 
 # Override settings for testing
@@ -105,7 +106,7 @@ async def test_user(db: AsyncSession) -> User:
         username="testuser",
         full_name="Test User",
         role=UserRole.STUDENT,
-        hashed_password=get_password_hash("testpassword123"),
+        # No password needed for SSO authentication
         is_active=True,
     )
     db.add(user)
@@ -122,7 +123,7 @@ async def test_admin(db: AsyncSession) -> User:
         username="adminuser",
         full_name="Admin User",
         role=UserRole.ADMIN,
-        hashed_password=get_password_hash("adminpassword123"),
+        # No password needed for SSO authentication
         is_active=True,
     )
     db.add(admin)
@@ -139,7 +140,7 @@ async def test_professor(db: AsyncSession) -> User:
         username="profuser",
         full_name="Professor User",
         role=UserRole.PROFESSOR,
-        hashed_password=get_password_hash("profpassword123"),
+        # No password needed for SSO authentication
         is_active=True,
     )
     db.add(professor)
@@ -149,18 +150,18 @@ async def test_professor(db: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def test_scholarship(db: AsyncSession) -> Scholarship:
-    """Create a test scholarship."""
-    scholarship = Scholarship(
+async def test_scholarship(db: AsyncSession) -> ScholarshipType:
+    """Create a test scholarship type."""
+    scholarship = ScholarshipType(
+        code="test_scholarship",
         name="Test Academic Excellence Scholarship",
         description="Test scholarship for academic excellence",
-        type="academic_excellence",
-        amount=5000.00,
-        currency="USD",
-        gpa_requirement=3.8,
-        deadline="2025-12-31T23:59:59",
-        max_recipients=10,
         is_active=True,
+        is_application_period=True,
+        category="undergraduate_freshman",
+        eligible_student_types=["undergraduate"],
+        max_ranking_percent=10.0,
+        gpa_requirement=3.8
     )
     db.add(scholarship)
     await db.commit()
@@ -170,16 +171,19 @@ async def test_scholarship(db: AsyncSession) -> Scholarship:
 
 @pytest_asyncio.fixture
 async def test_application(
-    db: AsyncSession, test_user: User, test_scholarship: Scholarship
+    db: AsyncSession, test_user: User, test_scholarship: ScholarshipType
 ) -> Application:
     """Create a test application."""
     application = Application(
-        student_id=test_user.id,
-        scholarship_id=test_scholarship.id,
-        status=ApplicationStatus.DRAFT,
-        gpa=3.9,
-        personal_statement="This is my test personal statement.",
-        expected_graduation="2025-06-15",
+        user_id=test_user.id,
+        scholarship_type_id=test_scholarship.id,
+        status=ApplicationStatus.DRAFT.value,
+        app_id="TEST-2024-123456",
+        academic_year=2024,
+        semester="first",
+        student_data={"name": "Test Student"},
+        submitted_form_data={"personal_statement": "This is my test personal statement."},
+        agree_terms=True
     )
     db.add(application)
     await db.commit()

@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # Mock Student Database API - DEV/TEST ONLY
+  mock-student-api:
+    build:
+      context: ./mock-student-api
+      dockerfile: Dockerfile
+    container_name: scholarship_mock_student_api
+    ports:
+      - "8080:8080"
+    volumes:
+      - mock_student_data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ENVIRONMENT=development
+    networks:
+      - scholarship_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    profiles:
+      - dev
+      - test
+
+volumes:
+  mock_student_data:
+    driver: local
+
+networks:
+  scholarship_network:
+    external: true

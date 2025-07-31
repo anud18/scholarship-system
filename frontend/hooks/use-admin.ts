@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { apiClient, DashboardStats, Application, NotificationResponse } from '@/lib/api'
+import { apiClient, DashboardStats, Application, NotificationResponse, ScholarshipStats, SubTypeStats } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
+import { useScholarshipPermissions } from './use-scholarship-permissions'
 
 export function useAdminDashboard() {
   const { user, isAuthenticated } = useAuth()
@@ -278,18 +279,61 @@ export function useCollegeApplications() {
 
 export function useScholarshipSpecificApplications() {
   const { user, isAuthenticated } = useAuth()
-  const [applicationsByType, setApplicationsByType] = useState<Record<string, Application[]>>({
-    undergraduate_freshman: [],
-    phd_nstc: [],
-    phd_moe: [],
-    direct_phd: []
-  })
+  const [applicationsByType, setApplicationsByType] = useState<Record<string, Application[]>>({})
+  const [scholarshipTypes, setScholarshipTypes] = useState<string[]>([])
+  const [scholarshipStats, setScholarshipStats] = useState<Record<string, any>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Get user's scholarship permissions
+  const { filterScholarshipsByPermission } = useScholarshipPermissions()
+
+  const fetchScholarshipTypes = useCallback(async () => {
+    if (!isAuthenticated || !user || !['admin', 'super_admin', 'college', 'professor'].includes(user.role)) {
+      return
+    }
+
+    try {
+      const response = await apiClient.admin.getScholarshipStats()
+      if (response.success && response.data) {
+        const types = Object.keys(response.data)
+        
+        // Filter scholarship types based on user permissions
+        // Super admin has access to all scholarships
+        let filteredTypes = types
+        if (user.role === 'admin' || user.role === 'college') {
+          // Create objects with both id and code for filtering
+          const scholarshipObjects = types.map(type => ({ 
+            id: response.data![type].id, // Use the actual scholarship ID
+            code: type // Keep the code for reference
+          }))
+          
+          const filteredObjects = filterScholarshipsByPermission(scholarshipObjects)
+          filteredTypes = filteredObjects.map(obj => obj.code) // Return the codes
+        }
+        
+        setScholarshipTypes(filteredTypes)
+        // Filter stats to only include permitted scholarships
+        const filteredStats: Record<string, any> = {}
+        filteredTypes.forEach(type => {
+          if (response.data![type]) {
+            filteredStats[type] = response.data![type]
+          }
+        })
+        setScholarshipStats(filteredStats)
+        return filteredTypes
+      }
+      return []
+    } catch (err) {
+      console.error('Failed to fetch scholarship types:', err)
+      return []
+    }
+  }, [isAuthenticated, user, filterScholarshipsByPermission])
 
   const fetchApplicationsByType = useCallback(async () => {
     // Only fetch if user is authenticated and has staff privileges (admin, super_admin, college, or professor)
     if (!isAuthenticated || !user || !['admin', 'super_admin', 'college', 'professor'].includes(user.role)) {
+      console.log('User not authenticated or insufficient privileges for scholarship-specific applications')
       return
     }
 
@@ -297,17 +341,32 @@ export function useScholarshipSpecificApplications() {
       setIsLoading(true)
       setError(null)
       
-      const scholarshipTypes = ['undergraduate_freshman', 'phd_nstc', 'phd_moe', 'direct_phd']
+      console.log('Fetching scholarship types...')
+      // First get scholarship types from backend (already filtered by permissions)
+      const types = await fetchScholarshipTypes()
+      console.log('Scholarship types received:', types)
+      
+      if (!types || types.length === 0) {
+        console.log('No scholarship types found, setting empty applications')
+        setApplicationsByType({})
+        return
+      }
+      
       const applications: Record<string, Application[]> = {}
       
       // Fetch applications for each scholarship type
-      for (const type of scholarshipTypes) {
+      for (const type of types) {
         try {
-          const response = await apiClient.applications.getByScholarshipType(type)
+          console.log(`Fetching applications for scholarship type: ${type}`)
+          const response = await apiClient.admin.getApplicationsByScholarship(type)
+          console.log(`Response for ${type}:`, response)
+          
           if (response.success && response.data) {
             applications[type] = response.data
+            console.log(`Found ${response.data.length} applications for ${type}`)
           } else {
             applications[type] = []
+            console.log(`No applications found for ${type}`)
           }
         } catch (typeError) {
           console.error(`Failed to fetch applications for ${type}:`, typeError)
@@ -315,6 +374,7 @@ export function useScholarshipSpecificApplications() {
         }
       }
       
+      console.log('Final applications by type:', applications)
       setApplicationsByType(applications)
     } catch (err) {
       setError('Failed to fetch scholarship-specific applications')
@@ -322,7 +382,7 @@ export function useScholarshipSpecificApplications() {
     } finally {
       setIsLoading(false)
     }
-  }, [isAuthenticated, user])
+  }, [isAuthenticated, user, fetchScholarshipTypes])
 
   const updateApplicationStatus = useCallback(async (
     applicationId: number, 
@@ -358,9 +418,134 @@ export function useScholarshipSpecificApplications() {
 
   return {
     applicationsByType,
+    scholarshipTypes,
+    scholarshipStats,
     isLoading,
     error,
     refetch: fetchApplicationsByType,
+    updateApplicationStatus
+  }
+}
+
+export function useScholarshipReview() {
+  const { user, isAuthenticated } = useAuth()
+  const [scholarshipStats, setScholarshipStats] = useState<Record<string, ScholarshipStats>>({})
+  const [applicationsByScholarship, setApplicationsByScholarship] = useState<Record<string, Application[]>>({})
+  const [subTypeStats, setSubTypeStats] = useState<Record<string, SubTypeStats[]>>({})
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchScholarshipStats = useCallback(async () => {
+    if (!isAuthenticated || !user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      const response = await apiClient.admin.getScholarshipStats()
+      
+      if (response.success && response.data) {
+        setScholarshipStats(response.data)
+      } else {
+        throw new Error(response.message || 'Failed to fetch scholarship stats')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch scholarship stats')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [isAuthenticated, user])
+
+  const fetchApplicationsByScholarship = useCallback(async (
+    scholarshipCode: string,
+    subType?: string,
+    status?: string
+  ) => {
+    if (!isAuthenticated || !user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return
+    }
+
+    try {
+      setError(null)
+      
+      const response = await apiClient.admin.getApplicationsByScholarship(scholarshipCode, subType, status)
+      
+      if (response.success && response.data) {
+        setApplicationsByScholarship(prev => ({
+          ...prev,
+          [scholarshipCode]: response.data || []
+        }))
+      } else {
+        throw new Error(response.message || 'Failed to fetch applications')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch applications')
+    }
+  }, [isAuthenticated, user])
+
+  const fetchSubTypeStats = useCallback(async (scholarshipCode: string) => {
+    if (!isAuthenticated || !user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return
+    }
+
+    try {
+      setError(null)
+      
+      const response = await apiClient.admin.getScholarshipSubTypes(scholarshipCode)
+      
+      if (response.success && response.data) {
+        setSubTypeStats(prev => ({
+          ...prev,
+          [scholarshipCode]: response.data || []
+        }))
+      } else {
+        throw new Error(response.message || 'Failed to fetch sub-type stats')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch sub-type stats')
+    }
+  }, [isAuthenticated, user])
+
+  const updateApplicationStatus = useCallback(async (
+    applicationId: number,
+    status: string,
+    reviewNotes?: string
+  ) => {
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      throw new Error('Insufficient permissions')
+    }
+
+    try {
+      const response = await apiClient.admin.updateApplicationStatus(applicationId, status, reviewNotes)
+      
+      if (response.success && response.data) {
+        // Refresh scholarship stats after update
+        await fetchScholarshipStats()
+        return response.data
+      } else {
+        throw new Error(response.message || 'Failed to update application status')
+      }
+    } catch (error) {
+      console.error('Failed to update application status:', error)
+      throw error
+    }
+  }, [user, fetchScholarshipStats])
+
+  useEffect(() => {
+    fetchScholarshipStats()
+  }, [fetchScholarshipStats])
+
+  return {
+    scholarshipStats,
+    applicationsByScholarship,
+    subTypeStats,
+    isLoading,
+    error,
+    fetchScholarshipStats,
+    fetchApplicationsByScholarship,
+    fetchSubTypeStats,
     updateApplicationStatus
   }
 } 

@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 # Import models to ensure they're registered
 from app.models.notification import NotificationRead
-from app.models.user import User
+from app.models.user import User, UserType, EmployeeStatus
 from app.db.base import Base
 from app.core.config import settings
 
@@ -82,24 +82,26 @@ async def test_notification_service():
             service = NotificationService(session)
             
             # Find or create a test user
-            result = await session.execute(select(User).where(User.username == "test_user"))
+            result = await session.execute(select(User).where(User.nycu_id == "test_user"))
             test_user = result.scalar_one_or_none()
             
             if not test_user:
                 # Create test user
-                from app.core.security import get_password_hash
                 test_user = User(
-                    username="test_user",
+                    nycu_id="test_user",
+                    name="Test User",
                     email="test@example.com",
-                    full_name="Test User",
-                    hashed_password=get_password_hash("test123"),
+                    user_type=UserType.STUDENT,
+                    status=EmployeeStatus.在學,
+                    dept_code="5802",
+                    dept_name="校務資訊組",
                     role=UserRole.STUDENT,
-                    is_active=True
+                    comment="Test user for notification system"
                 )
                 session.add(test_user)
                 await session.commit()
                 await session.refresh(test_user)
-                print(f"✅ Created test user: {test_user.username}")
+                print(f"✅ Created test user: {test_user.nycu_id}")
             
             # Create a system announcement
             system_announcement = await service.createSystemAnnouncement(

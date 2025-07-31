@@ -43,14 +43,27 @@ export interface ApiResponse<T> {
 
 export interface User {
   id: string
+  nycu_id: string
   email: string
-  username: string
-  role: 'student' | 'professor' | 'college' | 'admin' | 'super_admin'
-  full_name: string
   name: string
-  is_active: boolean
+  role: 'student' | 'professor' | 'college' | 'admin' | 'super_admin'
+  user_type?: 'student' | 'employee'
+  status?: '在學' | '畢業' | '在職' | '退休'
+  dept_code?: string
+  dept_name?: string
+  comment?: string
+  last_login_at?: string
   created_at: string
   updated_at: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
+  username?: string
+  full_name?: string
+  is_active?: boolean
 }
 
 export interface Application {

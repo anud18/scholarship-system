@@ -2,12 +2,14 @@
 
 import type React from "react"
 
-import { useState, useCallback, useEffect, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Upload, File, X, CheckCircle, AlertCircle } from "lucide-react"
+import { Upload, File, X, CheckCircle, AlertCircle, Eye } from "lucide-react"
+import { FilePreviewDialog } from "@/components/file-preview-dialog"
+import { Locale } from "@/lib/validators"
 
 interface FileUploadProps {
   onFilesChange: (files: File[]) => void
@@ -16,6 +18,7 @@ interface FileUploadProps {
   maxFiles?: number
   initialFiles?: File[] // 支持初始文件
   fileType?: string // 文件類型標識符
+  locale?: Locale // 添加語言支持
 }
 
 export function FileUpload({
@@ -25,12 +28,17 @@ export function FileUpload({
   maxFiles = 5,
   initialFiles = [],
   fileType = "",
+  locale = "zh",
 }: FileUploadProps) {
-  const [files, setFiles] = useState<File[]>([])
+  const [files, setFiles] = useState<File[]>(initialFiles)
   const [dragActive, setDragActive] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({})
   const [uploadStatus, setUploadStatus] = useState<{ [key: string]: "uploading" | "success" | "error" }>({})
+  const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; type: string } | null>(null)
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
   
+  const inputRef = useRef<HTMLInputElement>(null)
+
   // 為每個組件生成穩定的唯一 ID
   const inputId = useMemo(() => 
     `file-upload-${fileType || 'default'}-${Math.random().toString(36).substr(2, 9)}`, 
@@ -39,7 +47,7 @@ export function FileUpload({
 
   // 檢查文件是否為已上傳的文件
   const isUploadedFile = (file: File) => {
-    return (file as any).isUploaded === true
+    return (file as any).id || (file as any).file_path || (file as any).url
   }
 
   // 初始化和同步外部文件
@@ -154,6 +162,58 @@ export function FileUpload({
     return formatFileSize(file.size)
   }
 
+  // 獲取文件的預覽URL
+  const getFilePreviewUrl = (file: File) => {
+    if (isUploadedFile(file)) {
+      // 如果是已上傳的文件，使用其URL
+      return (file as any).url || (file as any).file_path || URL.createObjectURL(file)
+    }
+    // 如果是本地文件，創建臨時URL
+    return URL.createObjectURL(file)
+  }
+
+  // 獲取文件類型
+  const getFileType = (file: File) => {
+    const filename = file.name.toLowerCase()
+    if (filename.endsWith('.pdf')) {
+      return 'application/pdf'
+    } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].some(ext => filename.endsWith(ext))) {
+      return 'image'
+    }
+    return 'other'
+  }
+
+  // 處理文件預覽
+  const handleFilePreview = (file: File) => {
+    const previewUrl = getFilePreviewUrl(file)
+    const fileType = getFileType(file)
+    
+    setPreviewFile({
+      url: previewUrl,
+      filename: file.name,
+      type: fileType
+    })
+    setIsPreviewDialogOpen(true)
+  }
+
+  // 清理臨時URL
+  const cleanupTempUrl = useCallback((url: string) => {
+    if (url.startsWith('blob:')) {
+      URL.revokeObjectURL(url)
+    }
+  }, [])
+
+  // 組件卸載時清理臨時URL
+  useState(() => {
+    return () => {
+      files.forEach(file => {
+        if (!isUploadedFile(file)) {
+          cleanupTempUrl(URL.createObjectURL(file))
+        }
+      })
+    }
+  })
+
   return (
     <div className="space-y-4">
       <Card
@@ -212,6 +272,15 @@ export function FileUpload({
                 </div>
 
                 <div className="flex items-center space-x-2">
+                  {/* 預覽按鈕 */}
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleFilePreview(file)}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+
                   {(() => {
                     const fileName = `${fileType}_${file.name}`
                     const isUploaded = isUploadedFile(file)
@@ -264,6 +333,14 @@ export function FileUpload({
           ))}
         </div>
       )}
+      
+      {/* 文件預覽對話框 */}
+      <FilePreviewDialog
+        isOpen={isPreviewDialogOpen}
+        onClose={() => setIsPreviewDialogOpen(false)}
+        file={previewFile}
+        locale={locale}
+      />
     </div>
   )
 }

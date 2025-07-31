@@ -20,13 +20,7 @@ import { NationalityFlag } from "@/components/nationality-flag"
 import { getTranslation } from "@/lib/i18n"
 import { Search, Eye, CheckCircle, XCircle, Grid, List, Download, GraduationCap, Clock, Calendar, School, AlertCircle, Loader2 } from "lucide-react"
 import { useCollegeApplications } from "@/hooks/use-admin"
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: "student" | "professor" | "college" | "admin" | "super_admin"
-}
+import { User } from "@/types/user"
 
 interface CollegeDashboardProps {
   user: User

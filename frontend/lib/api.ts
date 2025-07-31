@@ -3,6 +3,8 @@
  * Follows backend camelCase endpoint naming conventions
  */
 
+import { ScholarshipCategory } from '@/types/scholarship'
+
 export interface ApiResponse<T> {
   success: boolean
   message: string
@@ -13,14 +15,27 @@ export interface ApiResponse<T> {
 
 export interface User {
   id: string
+  nycu_id: string  // 改為 nycu_id
   email: string
-  username: string
+  name: string  // 改為 name
   role: 'student' | 'professor' | 'college' | 'admin' | 'super_admin'
-  full_name: string
-  name: string // Added for component compatibility
-  is_active: boolean
+  user_type?: 'student' | 'employee'
+  status?: '在學' | '畢業' | '在職' | '退休'
+  dept_code?: string
+  dept_name?: string
+  comment?: string
+  last_login_at?: string
   created_at: string
   updated_at: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
+  username?: string  // 映射到 nycu_id
+  full_name?: string  // 映射到 name
+  is_active?: boolean  // 所有用戶都視為活躍
 }
 
 export interface Student {
@@ -57,6 +72,7 @@ export interface Application {
   scholarship_type: string
   scholarship_type_zh?: string  // 中文獎學金類型名稱
   status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'withdrawn'
+  is_renewal?: boolean  // 是否為續領申請
   personal_statement?: string
   gpa_requirement_met: boolean
   submitted_at?: string
@@ -64,39 +80,56 @@ export interface Application {
   approved_at?: string
   created_at: string
   updated_at: string
-  files?: ApplicationFile[]  // 關聯的文件
   
-  // Extended properties for dashboard display
+  // 動態表單資料
+  form_data?: Record<string, any>  // 動態表單資料 (前端格式)
+  submitted_form_data?: Record<string, any>  // 後端格式的表單資料，包含整合後的文件資訊
+  meta_data?: Record<string, any>  // 額外的元資料
+  
+  // 後端 ApplicationResponse 實際返回的欄位
+  user_id?: number
+  scholarship_type_id?: number  // 主獎學金ID
+  scholarship_name?: string
+  amount?: number
+  status_name?: string
+  student_name?: string
+  student_no?: string
+  gpa?: number
+  department?: string
+  nationality?: string
+  class_ranking_percent?: number
+  dept_ranking_percent?: number
+  days_waiting?: number
+  scholarship_subtype_list?: string[]
+  agree_terms?: boolean  // 同意條款
+  
+  // Extended properties for dashboard display (保留向後兼容)
   user?: User  // 關聯的使用者資訊
   student?: Student  // 關聯的學生資訊
   scholarship?: ScholarshipType  // 關聯的獎學金資訊
-  
-  // Computed properties for UI
-  amount?: number  // 從 scholarship 獲取
-  gpa?: number  // 從 student 獲取
-  department?: string  // 從 student 獲取
-  nationality?: string  // 從 student 獲取
-  days_waiting?: number  // 計算得出 - 與後端保持一致
 }
 
 export interface ApplicationCreate {
   scholarship_type: string
-  academic_year?: string
-  semester?: string
-  gpa?: number
-  class_ranking_percent?: number
-  dept_ranking_percent?: number
-  completed_terms?: number
-  contact_phone?: string
-  contact_email?: string
-  contact_address?: string
-  bank_account?: string
-  research_proposal?: string
-  budget_plan?: string
-  milestone_plan?: string
+  scholarship_subtype_list?: string[]
+  form_data: {
+    fields: Record<string, {
+      field_id: string
+      field_type: string
+      value: string
+      required: boolean
+    }>
+    documents: Array<{
+      document_id: string
+      document_type: string
+      file_path: string
+      original_filename: string
+      upload_time: string
+    }>
+  }
   agree_terms?: boolean
-  personal_statement?: string
-  expected_graduation_date?: string
+  is_renewal?: boolean  // 是否為續領申請
+  [key: string]: any  // 允許動態欄位
 }
 
 export interface DashboardStats {
@@ -171,66 +204,182 @@ export interface ScholarshipType {
   code: string
   name: string
   name_en?: string
-  description?: string
+  description: string
   description_en?: string
-  amount: number
+  amount: string
   currency: string
-  eligible_student_types?: string[]
-  min_gpa?: number
-  max_ranking_percent?: number
-  max_completed_terms?: number
-  required_documents?: string[]
-  application_start_date?: string
-  application_end_date?: string
-  review_deadline?: string
-  status: string
-  max_applications_per_year?: number
-  requires_professor_recommendation: boolean
-  requires_research_proposal: boolean
-  review_workflow?: any
-  auto_approval_rules?: any
+  application_start_date: string
+  application_end_date: string
+  eligible_sub_types: string[]
+  passed: Array<{
+    rule_id: number
+    rule_name: string
+    rule_type: string
+    tag: string
+    message: string
+    message_en: string
+    sub_type: string | null
+    priority: number
+    is_warning: boolean
+    is_hard_rule: boolean
+  }>
+  warnings: Array<{
+    rule_id: number
+    rule_name: string
+    rule_type: string
+    tag: string
+    message: string
+    message_en: string
+    sub_type: string | null
+    priority: number
+    is_warning: boolean
+    is_hard_rule: boolean
+  }>
+  errors: Array<{
+    rule_id: number
+    rule_name: string
+    rule_type: string
+    tag: string
+    message: string
+    message_en: string
+    sub_type: string | null
+    priority: number
+    is_warning: boolean
+    is_hard_rule: boolean
+  }>
+  created_at: string
+}
+
+export interface ScholarshipRule {
+  id: number
+  scholarship_type_id: number
+  sub_type?: string
+  rule_name: string
+  rule_type: string
+  condition_field: string
+  operator: string
+  expected_value: string
+  error_message: string
+  error_message_en: string
+  is_required: boolean
+  weight: number
+  priority: number
+  is_active: boolean
   created_at: string
   updated_at: string
-  created_by?: number
-  updated_by?: number
 }
 
 // User management types
 export interface UserListResponse {
   id: number
+  nycu_id: string
   email: string
-  username: string
-  full_name: string
-  chinese_name?: string
-  english_name?: string
+  name: string
+  user_type?: string
+  status?: string
+  dept_code?: string
+  dept_name?: string
   role: string
-  is_active: boolean
-  is_verified: boolean
-  student_no?: string
+  comment?: string
   created_at: string
   updated_at?: string
   last_login_at?: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
+  username?: string
+  full_name?: string
+  chinese_name?: string
+  english_name?: string
+  is_active?: boolean
+  is_verified?: boolean
+  student_no?: string
+}
+
+export interface UserResponse {
+  id: number
+  nycu_id: string
+  email: string
+  name: string
+  user_type?: string
+  status?: string
+  dept_code?: string
+  dept_name?: string
+  role: string
+  comment?: string
+  created_at: string
+  updated_at?: string
+  last_login_at?: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
+  username?: string
+  full_name?: string
+  chinese_name?: string
+  english_name?: string
+  is_active?: boolean
+  is_verified?: boolean
+  student_no?: string
+}
+
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  size: number
 }
 
 export interface UserCreate {
+  nycu_id: string
   email: string
-  username: string
-  full_name: string
+  name: string
+  user_type?: 'student' | 'employee'
+  status?: '在學' | '畢業' | '在職' | '退休'
+  dept_code?: string
+  dept_name?: string
+  role: "student" | "professor" | "college" | "admin" | "super_admin"
+  comment?: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
+  username?: string
+  full_name?: string
   chinese_name?: string
   english_name?: string
-  role: "student" | "professor" | "college" | "admin" | "super_admin"
-  password: string
+  password?: string  // 不再需要，但保留向後相容性
   student_no?: string
   is_active?: boolean
 }
 
 export interface UserUpdate {
+  nycu_id?: string
   email?: string
+  name?: string
+  user_type?: 'student' | 'employee'
+  status?: '在學' | '畢業' | '在職' | '退休'
+  dept_code?: string
+  dept_name?: string
+  role?: "student" | "professor" | "college" | "admin" | "super_admin"
+  comment?: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
   username?: string
   full_name?: string
   chinese_name?: string
   english_name?: string
-  role?: "student" | "professor" | "college" | "admin" | "super_admin"
   is_active?: boolean
   is_verified?: boolean
   student_no?: string
@@ -242,6 +391,245 @@ export interface UserStats {
   active_users: number
   inactive_users: number
   recent_registrations: number
+}
+
+// Application Fields Configuration interfaces
+export interface ApplicationField {
+  id: number
+  scholarship_type: string
+  field_name: string
+  field_label: string
+  field_label_en?: string
+  field_type: string
+  is_required: boolean
+  placeholder?: string
+  placeholder_en?: string
+  max_length?: number
+  min_value?: number
+  max_value?: number
+  step_value?: number
+  field_options?: Array<{value: string, label: string, label_en?: string}>
+  display_order: number
+  is_active: boolean
+  help_text?: string
+  help_text_en?: string
+  validation_rules?: Record<string, any>
+  conditional_rules?: Record<string, any>
+  created_at: string
+  updated_at: string
+  created_by?: number
+  updated_by?: number
+}
+
+export interface ApplicationFieldCreate {
+  scholarship_type: string
+  field_name: string
+  field_label: string
+  field_label_en?: string
+  field_type: string
+  is_required?: boolean
+  placeholder?: string
+  placeholder_en?: string
+  max_length?: number
+  min_value?: number
+  max_value?: number
+  step_value?: number
+  field_options?: Array<{value: string, label: string, label_en?: string}>
+  display_order?: number
+  is_active?: boolean
+  help_text?: string
+  help_text_en?: string
+  validation_rules?: Record<string, any>
+  conditional_rules?: Record<string, any>
+}
+
+export interface ApplicationFieldUpdate {
+  field_label?: string
+  field_label_en?: string
+  field_type?: string
+  is_required?: boolean
+  placeholder?: string
+  placeholder_en?: string
+  max_length?: number
+  min_value?: number
+  max_value?: number
+  step_value?: number
+  field_options?: Array<{value: string, label: string, label_en?: string}>
+  display_order?: number
+  is_active?: boolean
+  help_text?: string
+  help_text_en?: string
+  validation_rules?: Record<string, any>
+  conditional_rules?: Record<string, any>
+}
+
+export interface ApplicationDocument {
+  id: number
+  scholarship_type: string
+  document_name: string
+  document_name_en?: string
+  description?: string
+  description_en?: string
+  is_required: boolean
+  accepted_file_types: string[]
+  max_file_size: string
+  max_file_count: number
+  display_order: number
+  is_active: boolean
+  upload_instructions?: string
+  upload_instructions_en?: string
+  validation_rules?: Record<string, any>
+  created_at: string
+  updated_at: string
+  created_by?: number
+  updated_by?: number
+}
+
+export interface ApplicationDocumentCreate {
+  scholarship_type: string
+  document_name: string
+  document_name_en?: string
+  description?: string
+  description_en?: string
+  is_required?: boolean
+  accepted_file_types?: string[]
+  max_file_size?: string
+  max_file_count?: number
+  display_order?: number
+  is_active?: boolean
+  upload_instructions?: string
+  upload_instructions_en?: string
+  validation_rules?: Record<string, any>
+}
+
+export interface ApplicationDocumentUpdate {
+  document_name?: string
+  document_name_en?: string
+  description?: string
+  description_en?: string
+  is_required?: boolean
+  accepted_file_types?: string[]
+  max_file_size?: string
+  max_file_count?: number
+  display_order?: number
+  is_active?: boolean
+  upload_instructions?: string
+  upload_instructions_en?: string
+  validation_rules?: Record<string, any>
+}
+
+export interface ScholarshipFormConfig {
+  scholarship_type: string
+  fields: ApplicationField[]
+  documents: ApplicationDocument[]
+}
+
+export interface FormConfigSaveRequest {
+  fields: Array<{
+    field_name: string
+    field_label: string
+    field_label_en?: string
+    field_type: string
+    is_required?: boolean
+    placeholder?: string
+    placeholder_en?: string
+    max_length?: number
+    min_value?: number
+    max_value?: number
+    step_value?: number
+    field_options?: Array<{value: string, label: string, label_en?: string}>
+    display_order?: number
+    is_active?: boolean
+    help_text?: string
+    help_text_en?: string
+    validation_rules?: Record<string, any>
+    conditional_rules?: Record<string, any>
+  }>
+  documents: Array<{
+    document_name: string
+    document_name_en?: string
+    description?: string
+    description_en?: string
+    is_required?: boolean
+    accepted_file_types?: string[]
+    max_file_size?: string
+    max_file_count?: number
+    display_order?: number
+    is_active?: boolean
+    upload_instructions?: string
+    upload_instructions_en?: string
+    validation_rules?: Record<string, any>
+  }>
+}
+
+export interface ScholarshipStats {
+  id: number
+  name: string
+  name_en?: string
+  total_applications: number
+  pending_review: number
+  avg_wait_days: number
+  sub_types: string[]
+  has_sub_types: boolean
+}
+
+export interface SubTypeStats {
+  sub_type: string
+  total_applications: number
+  pending_review: number
+  avg_wait_days: number
+}
+
+// 新增系統管理相關介面
+export interface Workflow {
+  id: string
+  name: string
+  version: string
+  status: 'active' | 'draft' | 'inactive'
+  lastModified: string
+  steps: number
+  description?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ScholarshipRule {
+  id: string
+  name: string
+  type: string
+  criteria: Record<string, any>
+  active: boolean
+  description?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SystemStats {
+  totalUsers: number
+  activeApplications: number
+  completedReviews: number
+  systemUptime: string
+  avgResponseTime: string
+  storageUsed: string
+  pendingReviews: number
+  totalScholarships: number
+}
+
+export interface ScholarshipPermission {
+  id: number
+  user_id: number
+  scholarship_id: number
+  scholarship_name: string
+  scholarship_name_en?: string
+  comment?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ScholarshipPermissionCreate {
+  user_id: number
+  scholarship_id: number
+  comment?: string
 }
 
 class ApiClient {
@@ -432,10 +820,10 @@ class ApiClient {
       return this.request('/auth/mock-sso/users')
     },
 
-    mockSSOLogin: async (username: string): Promise<ApiResponse<{ access_token: string; token_type: string; expires_in: number; user: User }>> => {
+    mockSSOLogin: async (nycu_id: string): Promise<ApiResponse<{ access_token: string; token_type: string; expires_in: number; user: User }>> => {
       return this.request('/auth/mock-sso/login', {
         method: 'POST',
-        body: JSON.stringify({ username }),
+        body: JSON.stringify({ nycu_id }),
       })
     },
   }
@@ -470,7 +858,6 @@ class ApiClient {
       size?: number
       role?: string
       search?: string
-      is_active?: boolean
     }) => this.request<PaginatedResponse<UserListResponse>>('/users', {
       method: 'GET',
       params
@@ -493,23 +880,13 @@ class ApiClient {
       body: JSON.stringify(userData)
     }),
 
-    // Delete user (soft delete)
+    // Delete user (hard delete)
     delete: (userId: number) => this.request<{ success: boolean; message: string; data: { user_id: number } }>(`/users/${userId}`, {
       method: 'DELETE'
     }),
 
-    // Activate user
-    activate: (userId: number) => this.request<{ success: boolean; message: string; data: { user_id: number } }>(`/users/${userId}/activate`, {
-      method: 'POST'
-    }),
-
-    // Deactivate user
-    deactivate: (userId: number) => this.request<{ success: boolean; message: string; data: { user_id: number } }>(`/users/${userId}/deactivate`, {
-      method: 'POST'
-    }),
-
-    // Reset user password
-    resetPassword: (userId: number) => this.request<{ user_id: number; temporary_password: string }>(`/users/${userId}/reset-password`, {
+    // Reset user password (not supported in SSO model)
+    resetPassword: (userId: number) => this.request<{ success: boolean; message: string; data: { user_id: number } }>(`/users/${userId}/reset-password`, {
       method: 'POST'
     }),
 
@@ -529,9 +906,42 @@ class ApiClient {
       return this.request(`/scholarships/${id}`)
     },
     
-    getAll: async (): Promise<ApiResponse<ScholarshipType[]>> => {
+    getAll: async (): Promise<ApiResponse<any[]>> => {
       return this.request('/scholarships')
-    }
+    },
+    
+    // Get combined scholarships
+    getCombined: async (): Promise<ApiResponse<ScholarshipType[]>> => {
+      return this.request('/scholarships/combined/list')
+    },
+    
+    // Create combined PhD scholarship
+    createCombinedPhd: async (data: {
+      name: string
+      name_en: string
+      description: string
+      description_en: string
+      category: ScholarshipCategory
+      sub_scholarships: Array<{
+        code: string
+        name: string
+        name_en: string
+        description: string
+        description_en: string
+        sub_type: 'nstc' | 'moe'
+        amount: number
+        min_gpa?: number
+        max_ranking_percent?: number
+        required_documents?: string[]
+        application_start_date?: string
+        application_end_date?: string
+      }>
+    }): Promise<ApiResponse<ScholarshipType>> => {
+      return this.request('/scholarships/combined/phd', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      })
+    },
   }
 
   // Application management endpoints
@@ -559,8 +969,9 @@ class ApiClient {
       return this.request(`/applications/review/list${queryString ? `?${queryString}` : ''}`)
     },
 
-    createApplication: async (applicationData: ApplicationCreate): Promise<ApiResponse<Application>> => {
-      return this.request('/applications/', {
+    createApplication: async (applicationData: ApplicationCreate, isDraft: boolean = false): Promise<ApiResponse<Application>> => {
+      const url = isDraft ? '/applications/?is_draft=true' : '/applications/'
+      return this.request(url, {
         method: 'POST',
         body: JSON.stringify(applicationData)
       })
@@ -601,6 +1012,12 @@ class ApiClient {
       })
     },
 
+    deleteApplication: async (applicationId: number): Promise<ApiResponse<{ success: boolean; message: string }>> => {
+      return this.request(`/applications/${applicationId}`, {
+        method: 'DELETE',
+      })
+    },
+
     withdrawApplication: async (applicationId: number): Promise<ApiResponse<Application>> => {
       return this.request(`/applications/${applicationId}/withdraw`, {
         method: 'POST',
@@ -624,7 +1041,7 @@ class ApiClient {
 
     // 新增暫存申請功能
     saveApplicationDraft: async (applicationData: ApplicationCreate): Promise<ApiResponse<Application>> => {
-      const response = await this.request('/applications/draft/', {
+      const response = await this.request('/applications/?is_draft=true', {
         method: 'POST',
         body: JSON.stringify(applicationData),
       })
@@ -766,7 +1183,7 @@ class ApiClient {
     },
 
     updateEmailTemplate: async (template: EmailTemplate): Promise<ApiResponse<EmailTemplate>> => {
-      return this.request(`/admin/email-template`, {
+      return this.request('/admin/email-template', {
         method: 'PUT',
         body: JSON.stringify(template),
       })
@@ -824,9 +1241,186 @@ class ApiClient {
         method: 'DELETE',
       })
     },
+
+    // Scholarship management endpoints
+    getScholarshipStats: async (): Promise<ApiResponse<Record<string, ScholarshipStats>>> => {
+      return this.request('/admin/scholarships/stats')
+    },
+
+    getApplicationsByScholarship: async (
+      scholarshipCode: string,
+      subType?: string,
+      status?: string
+    ): Promise<ApiResponse<Application[]>> => {
+      const params = new URLSearchParams()
+      if (subType) params.append('sub_type', subType)
+      if (status) params.append('status', status)
+      
+      const queryString = params.toString()
+      return this.request(`/admin/scholarships/${scholarshipCode}/applications${queryString ? `?${queryString}` : ''}`)
+    },
+
+    getScholarshipSubTypes: async (scholarshipCode: string): Promise<ApiResponse<SubTypeStats[]>> => {
+      return this.request(`/admin/scholarships/${scholarshipCode}/sub-types`)
+    },
+
+    getSubTypeTranslations: async (): Promise<ApiResponse<Record<string, Record<string, string>>>> => {
+      return this.request('/admin/scholarships/sub-type-translations')
+    },
+
+    // === 系統管理相關 API === //
+    
+    // 工作流程管理
+    getWorkflows: async (): Promise<ApiResponse<Workflow[]>> => {
+      return this.request('/admin/workflows')
+    },
+
+    createWorkflow: async (workflow: Omit<Workflow, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<Workflow>> => {
+      return this.request('/admin/workflows', {
+        method: 'POST',
+        body: JSON.stringify(workflow),
+      })
+    },
+
+    updateWorkflow: async (id: string, workflow: Partial<Workflow>): Promise<ApiResponse<Workflow>> => {
+      return this.request(`/admin/workflows/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(workflow),
+      })
+    },
+
+    deleteWorkflow: async (id: string): Promise<ApiResponse<{ message: string }>> => {
+      return this.request(`/admin/workflows/${id}`, {
+        method: 'DELETE',
+      })
+    },
+
+    // 獎學金規則管理
+    getScholarshipRules: async (): Promise<ApiResponse<ScholarshipRule[]>> => {
+      return this.request('/admin/scholarship-rules')
+    },
+
+    createScholarshipRule: async (rule: Omit<ScholarshipRule, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<ScholarshipRule>> => {
+      return this.request('/admin/scholarship-rules', {
+        method: 'POST',
+        body: JSON.stringify(rule),
+      })
+    },
+
+    updateScholarshipRule: async (id: string, rule: Partial<ScholarshipRule>): Promise<ApiResponse<ScholarshipRule>> => {
+      return this.request(`/admin/scholarship-rules/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(rule),
+      })
+    },
+
+    deleteScholarshipRule: async (id: string): Promise<ApiResponse<{ message: string }>> => {
+      return this.request(`/admin/scholarship-rules/${id}`, {
+        method: 'DELETE',
+      })
+    },
+
+    // 系統統計
+    getSystemStats: async (): Promise<ApiResponse<SystemStats>> => {
+      return this.request('/admin/system-stats')
+    },
+
+    // 獎學金權限管理
+    getScholarshipPermissions: async (userId?: number): Promise<ApiResponse<ScholarshipPermission[]>> => {
+      const params = userId ? `?user_id=${userId}` : ''
+      return this.request(`/admin/scholarship-permissions${params}`)
+    },
+
+    // 獲取當前用戶的獎學金權限
+    getCurrentUserScholarshipPermissions: async (): Promise<ApiResponse<ScholarshipPermission[]>> => {
+      return this.request('/admin/scholarship-permissions/current-user')
+    },
+
+    createScholarshipPermission: async (permission: ScholarshipPermissionCreate): Promise<ApiResponse<ScholarshipPermission>> => {
+      return this.request('/admin/scholarship-permissions', {
+        method: 'POST',
+        body: JSON.stringify(permission),
+      })
+    },
+
+    updateScholarshipPermission: async (id: number, permission: Partial<ScholarshipPermissionCreate>): Promise<ApiResponse<ScholarshipPermission>> => {
+      return this.request(`/admin/scholarship-permissions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(permission),
+      })
+    },
+
+    deleteScholarshipPermission: async (id: number): Promise<ApiResponse<{ message: string }>> => {
+      return this.request(`/admin/scholarship-permissions/${id}`, {
+        method: 'DELETE',
+      })
+    },
+
+    // 獲取所有獎學金列表（用於權限管理）
+    getAllScholarshipsForPermissions: async (): Promise<ApiResponse<Array<{ id: number; name: string; name_en?: string; code: string }>>> => {
+      return this.request('/admin/scholarships/all-for-permissions')
+    },
+  }
+
+  // Application Fields Configuration
+  applicationFields = {
+    // Form configuration
+    getFormConfig: (scholarshipType: string, includeInactive: boolean = false) => 
+      this.request<ScholarshipFormConfig>(`/application-fields/form-config/${scholarshipType}?include_inactive=${includeInactive}`),
+    
+    saveFormConfig: (scholarshipType: string, config: FormConfigSaveRequest) => 
+      this.request<ScholarshipFormConfig>(`/application-fields/form-config/${scholarshipType}`, {
+        method: 'POST',
+        body: JSON.stringify(config)
+      }),
+    
+    // Fields management
+    getFields: (scholarshipType: string) => 
+      this.request<ApplicationField[]>(`/application-fields/fields/${scholarshipType}`),
+    
+    createField: (fieldData: ApplicationFieldCreate) => 
+      this.request<ApplicationField>('/application-fields/fields', {
+        method: 'POST',
+        body: JSON.stringify(fieldData)
+      }),
+    
+    updateField: (fieldId: number, fieldData: ApplicationFieldUpdate) => 
+      this.request<ApplicationField>(`/application-fields/fields/${fieldId}`, {
+        method: 'PUT',
+        body: JSON.stringify(fieldData)
+      }),
+    
+    deleteField: (fieldId: number) => 
+      this.request<boolean>(`/application-fields/fields/${fieldId}`, {
+        method: 'DELETE'
+      }),
+    
+    // Documents management
+    getDocuments: (scholarshipType: string) => 
+      this.request<ApplicationDocument[]>(`/application-fields/documents/${scholarshipType}`),
+    
+    createDocument: (documentData: ApplicationDocumentCreate) => 
+      this.request<ApplicationDocument>('/application-fields/documents', {
+        method: 'POST',
+        body: JSON.stringify(documentData)
+      }),
+    
+    updateDocument: (documentId: number, documentData: ApplicationDocumentUpdate) => 
+      this.request<ApplicationDocument>(`/application-fields/documents/${documentId}`, {
+        method: 'PUT',
+        body: JSON.stringify(documentData)
+      }),
+    
+    deleteDocument: (documentId: number) => 
+      this.request<boolean>(`/application-fields/documents/${documentId}`, {
+        method: 'DELETE'
+      }),
   }
 }
 
 // Create and export a singleton instance
 export const apiClient = new ApiClient()
-export default apiClient 
+export default apiClient
+
+// Alias for backward compatibility
+export const api = apiClient 

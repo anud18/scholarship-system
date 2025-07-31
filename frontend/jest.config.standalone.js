@@ -48,6 +48,7 @@ module.exports = {
   
   // Test configuration
   testMatch: [
+    '<rootDir>/components/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/**/*.(test|spec).{js,jsx,ts,tsx}'
   ],

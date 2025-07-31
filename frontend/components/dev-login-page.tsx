@@ -12,13 +12,15 @@ import { useAuth } from "@/hooks/use-auth";
 
 interface MockUser {
   id: string;
-  username: string;
-  full_name: string;
-  chinese_name?: string;
-  english_name?: string;
+  nycu_id: string;  // 改為 nycu_id
+  name: string;  // 改為 name
   email: string;
   role: "student" | "professor" | "college" | "admin" | "super_admin";
   description: string;
+  raw_data?: {
+    chinese_name?: string;
+    english_name?: string;
+  };
 }
 
 const roleIcons = {
@@ -124,15 +126,10 @@ export function DevLoginPage() {
   }, [router]);
 
   const handleUserLogin = async (user: MockUser) => {
-    console.log('Starting login for user:', user);
-    setSelectedUser(user.id);
-    setIsLoggingIn(true);
-    setError(null);
-
+    console.log('Calling mock SSO login API with nycu_id:', user.nycu_id);
+    
     try {
-      console.log('Calling mock SSO login API with username:', user.username);
-      // Use the existing mock SSO login API
-      const response = await api.auth.mockSSOLogin(user.username);
+      const response = await api.auth.mockSSOLogin(user.nycu_id);
       console.log('Mock SSO login response:', response);
       
       if (response.success && response.data) {
@@ -276,7 +273,7 @@ export function DevLoginPage() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       {roleIcons[user.role]}
-                      <span className="font-medium text-sm">{user.username}</span>
+                      <span className="font-medium text-sm">{user.nycu_id}</span>
                     </div>
                     <Badge className={roleColors[user.role]}>
                       {roleLabels[user.role]}
@@ -285,9 +282,9 @@ export function DevLoginPage() {
                   
                   <div className="space-y-1">
                     <p className="text-sm font-medium">
-                      {user.chinese_name && user.english_name 
-                        ? `${user.chinese_name} (${user.english_name})`
-                        : user.full_name
+                      {user.raw_data?.chinese_name && user.raw_data?.english_name 
+                        ? `${user.raw_data.chinese_name} (${user.raw_data.english_name})`
+                        : user.name
                       }
                     </p>
                     <p className="text-xs text-gray-500">{user.email}</p>

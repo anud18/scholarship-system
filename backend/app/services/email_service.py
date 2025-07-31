@@ -72,7 +72,7 @@ class EmailService:
         professor = getattr(application, 'professor', None)
         context = {
             "app_id": application.app_id,
-            "professor_name": getattr(professor, 'full_name', '') if professor else '',
+            "professor_name": getattr(professor, 'name', '') if professor else '',
             "student_name": getattr(application, 'student_name', ''),
             "scholarship_type": getattr(application, 'scholarship_type', ''),
             "submit_date": application.submitted_at.strftime('%Y-%m-%d') if getattr(application, 'submitted_at', None) else '',

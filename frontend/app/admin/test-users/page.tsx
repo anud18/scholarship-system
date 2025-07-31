@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import apiClient, { UserListResponse, UserStats } from '@/lib/api'
+import { apiClient, UserListResponse, UserStats } from '@/lib/api'
 
 export default function TestUsersPage() {
   const [users, setUsers] = useState<UserListResponse[]>([])
@@ -55,16 +55,25 @@ export default function TestUsersPage() {
   const testCreateUser = async () => {
     try {
       console.log('🧪 測試創建用戶...')
-      const userData = {
-        email: `test-${Date.now()}@example.com`,
-        username: `test-${Date.now()}`,
-        full_name: '測試用戶',
-        chinese_name: '測試用戶',
-        role: 'student' as const,
-        password: 'password123'
-      }
+      const newUser = {
+        nycu_id: `test-${Date.now()}`,
+        name: '測試用戶',
+        email: `test${Date.now()}@example.com`,
+        role: 'student',
+        user_type: 'student',
+        status: '在學',
+        dept_code: '5802',
+        dept_name: '校務資訊組',
+        comment: 'Test user',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        raw_data: {
+          chinese_name: '測試用戶',
+          english_name: 'Test User'
+        }
+      };
       
-      const response = await apiClient.users.create(userData)
+      const response = await apiClient.users.create(newUser)
       console.log('📥 創建用戶響應:', response)
       
       if (response.success) {
@@ -160,15 +169,15 @@ export default function TestUsersPage() {
                   <div key={user.id} className="p-4 border rounded-lg">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <p className="font-medium">{user.full_name}</p>
+                        <p className="font-medium">{user.name}</p>
                         <p className="text-sm text-gray-600">{user.email}</p>
-                        <p className="text-sm text-gray-600">@{user.username}</p>
+                        <p className="text-sm text-gray-600">@{user.nycu_id}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">角色: {user.role}</p>
-                        <p className="text-sm text-gray-600">狀態: {user.is_active ? '啟用' : '停用'}</p>
-                        {user.student_no && (
-                          <p className="text-sm text-gray-600">學號: {user.student_no}</p>
+                        <p className="text-sm text-gray-600">狀態: {user.status}</p>
+                        {user.raw_data?.chinese_name && (
+                          <p className="text-sm text-gray-600">中文姓名: {user.raw_data.chinese_name}</p>
                         )}
                       </div>
                       <div>

@@ -112,120 +112,99 @@ class EnrollTypeResponse(EnrollTypeBase):
 
 # === 學生資料相關 Schemas ===
 
-class StudentContactBase(BaseModel):
-    """學生聯絡資料基礎 schema"""
-    cellphone: Optional[str] = Field(None, description="手機號碼")
-    email: Optional[str] = Field(None, description="電子郵件")
-    zipCode: Optional[str] = Field(None, description="郵遞區號")
-    address: Optional[str] = Field(None, description="地址")
-
-class StudentContactCreate(StudentContactBase):
-    """學生聯絡資料建立 schema"""
-    studentId: int = Field(..., description="學生ID")
-
-class StudentContactUpdate(StudentContactBase):
-    """學生聯絡資料更新 schema"""
-    pass
-
-class StudentContactResponse(StudentContactBase):
-    """學生聯絡資料回應 schema"""
-    studentId: int
-    
-    class Config:
-        from_attributes = True
-
-
-class StudentAcademicRecordBase(BaseModel):
-    """學籍資料基礎 schema"""
-    degree: Optional[int] = Field(None, description="學位ID")
-    studyingStatus: Optional[int] = Field(None, description="學籍狀態ID")
-    schoolIdentity: Optional[int] = Field(None, description="學校身份ID")
-    termCount: Optional[int] = Field(None, description="修習學期數")
-    depId: Optional[int] = Field(None, description="系所ID")
-    academyId: Optional[int] = Field(None, description="學院ID")
-    enrollTypeId: Optional[int] = Field(None, description="入學管道ID")
-    enrollYear: Optional[int] = Field(None, description="入學年度")
-    enrollTerm: Optional[int] = Field(None, description="入學學期", ge=1, le=2)
-    highestSchoolName: Optional[str] = Field(None, description="最高學歷學校名稱")
-    nationality: Optional[int] = Field(None, description="國籍", ge=1, le=2)
-
-class StudentAcademicRecordCreate(StudentAcademicRecordBase):
-    """學籍資料建立 schema"""
-    studentId: int = Field(..., description="學生ID")
-
-class StudentAcademicRecordUpdate(StudentAcademicRecordBase):
-    """學籍資料更新 schema"""
-    pass
-
-class StudentAcademicRecordResponse(StudentAcademicRecordBase):
-    """學籍資料回應 schema"""
-    id: int
-    studentId: int
-    createdAt: datetime
-    
-    # 關聯資料
-    degreeRef: Optional[DegreeResponse] = None
-    studyingStatusRef: Optional[StudyingStatusResponse] = None
-    schoolIdentityRef: Optional[SchoolIdentityResponse] = None
-    department: Optional[DepartmentResponse] = None
-    academy: Optional[AcademyResponse] = None
-    enrollType: Optional[EnrollTypeResponse] = None
-    
-    class Config:
-        from_attributes = True
-
-
 class StudentBase(BaseModel):
-    """學生基礎 schema"""
-    stdNo: str = Field(..., description="學號")
-    stdCode: Optional[str] = Field(None, description="學生代碼")
-    pid: Optional[str] = Field(None, description="身分證字號")
-    cname: Optional[str] = Field(None, description="中文姓名")
-    ename: Optional[str] = Field(None, description="英文姓名")
-    sex: Optional[str] = Field(None, description="性別", pattern="^[MF]$")
-    birthDate: Optional[date] = Field(None, description="出生日期")
+    """學生基礎 schema - 更新版本"""
+    # 學籍資料
+    std_stdno: Optional[str] = Field(None, description="學號代碼")
+    std_stdcode: str = Field(..., description="學號 (nycu_id)")
+    std_pid: Optional[str] = Field(None, description="身分證字號")
+    std_cname: str = Field(..., description="中文姓名")
+    std_ename: str = Field(..., description="英文姓名")
+    std_degree: str = Field(..., description="攻讀學位：1:博士, 2:碩士, 3:學士")
+    std_studingstatus: Optional[str] = Field(None, description="在學狀態")
+    std_sex: Optional[str] = Field(None, description="性別: 1:男, 2:女")
+    std_enrollyear: Optional[str] = Field(None, description="入學學年度 (民國年)")
+    std_enrollterm: Optional[str] = Field(None, description="入學學期 (第一或第二)")
+    std_termcount: Optional[int] = Field(None, description="在學學期數")
+
+    # 國籍與身份
+    std_nation: Optional[str] = Field(None, description="1: 中華民國 2: 其他")
+    std_schoolid: Optional[str] = Field(None, description="在學身份 (數字代碼)")
+    std_identity: Optional[str] = Field(None, description="陸生、僑生、外籍生等")
+
+    # 系所與學院
+    std_depno: Optional[str] = Field(None, description="系所代碼")
+    std_depname: Optional[str] = Field(None, description="系所名稱")
+    std_aca_no: Optional[str] = Field(None, description="學院代碼")
+    std_aca_cname: Optional[str] = Field(None, description="學院名稱")
+
+    # 學歷背景
+    std_highestschname: Optional[str] = Field(None, description="原就讀系所／畢業學校")
+    
+    # 聯絡資訊
+    com_cellphone: Optional[str] = Field(None, description="手機號碼")
+    com_email: Optional[str] = Field(None, description="電子郵件")
+    com_commzip: Optional[str] = Field(None, description="郵遞區號")
+    com_commadd: Optional[str] = Field(None, description="地址")
+
+    # 入學日期
+    std_enrolled_date: Optional[date] = Field(None, description="入學日期")
+
+    # 匯款資訊
+    std_bank_account: Optional[str] = Field(None, description="銀行帳號")
+
+    # 其他備註
+    notes: Optional[str] = Field(None, description="備註")
 
 class StudentCreate(StudentBase):
     """學生建立 schema"""
-    identityIds: Optional[List[int]] = Field(default=[], description="身份ID列表")
+    pass
 
 class StudentUpdate(BaseModel):
     """學生更新 schema"""
-    stdCode: Optional[str] = None
-    pid: Optional[str] = None
-    cname: Optional[str] = None
-    ename: Optional[str] = None
-    sex: Optional[str] = Field(None, pattern="^[MF]$")
-    birthDate: Optional[date] = None
-    identityIds: Optional[List[int]] = None
-
-class StudentTermRecordResponse(BaseModel):
-    """學生學期成績記錄回應 schema"""
-    id: int
-    studentId: int
-    academicYear: str
-    semester: str
-    studyStatus: str
-    averageScore: Optional[str] = None
-    gpa: Optional[str] = None
-    semesterGpa: Optional[str] = None
-    classRankingPercent: Optional[str] = None
-    deptRankingPercent: Optional[str] = None
-    completedTerms: Optional[int] = None
-    createdAt: datetime
-    updatedAt: datetime
-    
-    class Config:
-        from_attributes = True
+    std_stdno: Optional[str] = None
+    std_pid: Optional[str] = None
+    std_cname: Optional[str] = None
+    std_ename: Optional[str] = None
+    std_degree: Optional[str] = None
+    std_studingstatus: Optional[str] = None
+    std_sex: Optional[str] = None
+    std_enrollyear: Optional[str] = None
+    std_enrollterm: Optional[str] = None
+    std_termcount: Optional[int] = None
+    std_nation: Optional[str] = None
+    std_schoolid: Optional[str] = None
+    std_identity: Optional[str] = None
+    std_depno: Optional[str] = None
+    std_depname: Optional[str] = None
+    std_aca_no: Optional[str] = None
+    std_aca_cname: Optional[str] = None
+    std_highestschname: Optional[str] = None
+    com_cellphone: Optional[str] = None
+    com_email: Optional[str] = None
+    com_commzip: Optional[str] = None
+    com_commadd: Optional[str] = None
+    std_enrolled_date: Optional[date] = None
+    std_bank_account: Optional[str] = None
+    notes: Optional[str] = None
 
 class StudentResponse(StudentBase):
     """學生回應 schema"""
     id: int
     
-    # 關聯資料
-    identities: List[IdentityResponse] = []
-    academicRecords: List[StudentAcademicRecordResponse] = []
-    contacts: Optional[StudentContactResponse] = None
+    @property
+    def displayName(self) -> str:
+        """取得顯示名稱"""
+        return str(self.std_cname or self.std_ename or self.std_stdcode or "")
+    
+    def get_student_type(self) -> str:
+        """取得學生類型"""
+        if self.std_degree == "1":
+            return "phd"
+        elif self.std_degree == "2":
+            return "master"
+        else:
+            return "undergraduate"
     
     class Config:
         from_attributes = True
@@ -233,33 +212,19 @@ class StudentResponse(StudentBase):
 
 class StudentDetailResponse(StudentResponse):
     """學生詳細資料回應 schema"""
-    termRecords: List[StudentTermRecordResponse] = []
-    
-    @property
-    def displayName(self) -> str:
-        """取得顯示名稱"""
-        return str(self.cname or self.ename or self.stdNo or "")
-    
-    @property
-    def currentAcademicRecord(self) -> Optional[StudentAcademicRecordResponse]:
-        """取得目前學籍資料"""
-        if self.academicRecords:
-            return max(self.academicRecords, key=lambda x: x.createdAt)
-        return None
+    pass
 
-
-# === 查詢參數 Schemas ===
 
 class StudentSearchParams(BaseModel):
     """學生查詢參數 schema"""
-    stdNo: Optional[str] = None
-    cname: Optional[str] = None
-    ename: Optional[str] = None
-    degreeId: Optional[int] = None
-    academyId: Optional[int] = None
-    departmentId: Optional[int] = None
-    studyingStatusId: Optional[int] = None
-    enrollYear: Optional[int] = None
+    std_stdcode: Optional[str] = None
+    std_cname: Optional[str] = None
+    std_ename: Optional[str] = None
+    std_degree: Optional[str] = None
+    std_aca_no: Optional[str] = None
+    std_depno: Optional[str] = None
+    std_studingstatus: Optional[str] = None
+    std_enrollyear: Optional[str] = None
     
     # 分頁參數
     page: int = Field(1, ge=1, description="頁碼")

@@ -27,31 +27,86 @@ interface WhitelistStudent {
   reason: string
   addedAt: string
   addedBy: string
+  scholarshipType?: string
 }
 
-export function WhitelistManagement() {
+interface WhitelistManagementProps {
+  scholarshipType?: string
+  title?: string
+}
+
+export function WhitelistManagement({ scholarshipType = "undergraduate_freshman", title = "白名單管理" }: WhitelistManagementProps) {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // 白名單學生資料 (模擬資料) - 改為狀態變數
   const [whitelistStudents, setWhitelistStudents] = useState<WhitelistStudent[]>([
     {
-      id: "wl_001",
-      studentId: "B10901001",
+      id: "wl_undergrad_001",
+      studentId: "U1120001",
       studentName: "張小明",
       department: "資訊工程學系",
-      gpa: 3.25,
+      gpa: 3.85,
       reason: "特殊才能表現優異",
       addedAt: "2025-06-01",
       addedBy: "系統管理員",
+      scholarshipType: "undergraduate_freshman"
     },
     {
-      id: "wl_002",
-      studentId: "B10901002",
-      studentName: "李小華",
+      id: "wl_undergrad_002",
+      studentId: "U1120002",
+      studentName: "李美玲",
       department: "電機工程學系",
-      gpa: 3.3,
+      gpa: 3.92,
       reason: "國際競賽獲獎",
       addedAt: "2025-06-02",
       addedBy: "系統管理員",
+      scholarshipType: "undergraduate_freshman"
     },
+    {
+      id: "wl_undergrad_003",
+      studentId: "U1120003",
+      studentName: "王建國",
+      department: "電子工程學系",
+      gpa: 3.78,
+      reason: "學術表現優異",
+      addedAt: "2025-06-03",
+      addedBy: "系統管理員",
+      scholarshipType: "undergraduate_freshman"
+    }
   ])
+
+  const handleAddToWhitelist = async (studentId: string) => {
+    try {
+      setIsLoading(true)
+      // TODO: 實現 API 調用
+      // await api.admin.addToWhitelist({
+      //   scholarshipType: "undergraduate_freshman",
+      //   studentId
+      // })
+      console.log('學生已加入白名單:', studentId)
+    } catch (error) {
+      setError('加入白名單失敗')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRemoveFromWhitelist = async (studentId: string) => {
+    try {
+      setIsLoading(true)
+      // TODO: 實現 API 調用
+      // await api.admin.removeFromWhitelist({
+      //   scholarshipType: "undergraduate_freshman",
+      //   studentId
+      // })
+      console.log('學生已從白名單移除:', studentId)
+    } catch (error) {
+      setError('移除白名單失敗')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const [newStudent, setNewStudent] = useState({
     studentId: "",
@@ -65,7 +120,7 @@ export function WhitelistManagement() {
 
   const handleAddStudent = () => {
     const student: WhitelistStudent = {
-      id: `wl_${Date.now()}`,
+      id: `wl_${scholarshipType}_${Date.now()}`,
       studentId: newStudent.studentId,
       studentName: newStudent.studentName,
       department: newStudent.department,
@@ -73,15 +128,16 @@ export function WhitelistManagement() {
       reason: newStudent.reason,
       addedAt: new Date().toISOString().split("T")[0],
       addedBy: "系統管理員",
+      scholarshipType: scholarshipType,
     }
 
-    setWhitelistStudents([...whitelistStudents, student])
+    setWhitelistStudents(prev => [...prev, student])
     setNewStudent({ studentId: "", studentName: "", department: "", gpa: "", reason: "" })
     setIsAddDialogOpen(false)
   }
 
   const handleRemoveStudent = (id: string) => {
-    setWhitelistStudents(whitelistStudents.filter((s) => s.id !== id))
+    setWhitelistStudents(prev => prev.filter((s) => s.id !== id))
   }
 
   const handleBatchImport = () => {
@@ -99,7 +155,7 @@ export function WhitelistManagement() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
-          學士班新生獎學金白名單管理
+          {title}
         </CardTitle>
         <CardDescription>管理可申請獎學金的學生白名單 - 僅限白名單內的學生才能申請</CardDescription>
       </CardHeader>

@@ -15,22 +15,27 @@ from app.models.student import (
     
     # 學生資料模型
     Student,
-    StudentAcademicRecord,
-    StudentContact,
-    StudentTermRecord,
     
     # Enum 類別
     StudentType,
-    StudyStatus,
-    
-    # 多對多關聯表
-    student_identities
+    StudyStatus
 )
 from app.models.scholarship import ScholarshipType, ScholarshipRule
-from app.models.application import Application, ApplicationStatus, ApplicationReview
+from app.models.enums import Semester, SubTypeSelectionMode, CycleType
+from app.models.application import (
+    Application, 
+    ApplicationStatus, 
+    ApplicationReview, 
+    ProfessorReview, 
+    ProfessorReviewItem,
+    ApplicationFile,
+    ReviewStatus,
+    FileType
+)
 from app.models.notification import Notification, NotificationType
 from app.models.audit_log import AuditLog, AuditAction
 from app.models.system_setting import SystemSetting
+from app.models.application_field import ApplicationField, ApplicationDocument, FieldType
 
 __all__ = [
     "User",
@@ -45,17 +50,28 @@ __all__ = [
     "Department",
     "EnrollType",
     "Student",
-    "StudentAcademicRecord",
-    "StudentContact",
-    "StudentTermRecord",
     "StudentType",
     "StudyStatus",
-    "student_identities",
     
     # Application models
     "Application",
     "ApplicationStatus",
     "ApplicationReview",
+    "ProfessorReview",
+    "ProfessorReviewItem",
+    "ApplicationFile",
+    "ReviewStatus",
+    "FileType",
+    
+    # Shared enums
+    "Semester",
+    "SubTypeSelectionMode",
+    "CycleType",
+    
+    # Application Field models
+    "ApplicationField",
+    "ApplicationDocument",
+    "FieldType",
     
     # Scholarship models
     "ScholarshipType",

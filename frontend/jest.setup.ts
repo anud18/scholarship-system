@@ -4,8 +4,72 @@ import React from 'react'
 // Make React available globally
 global.React = React
 
+// Set up environment variables
+process.env.NODE_ENV = 'test'
+process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8000'
+process.env.NEXTAUTH_SECRET = 'test-secret'
+process.env.NEXTAUTH_URL = 'http://localhost:3000'
+
 // Load environment setup
 require('./jest.env.js')
+
+// Mock Next.js router
+jest.mock('next/router', () => ({
+  useRouter() {
+    return {
+      route: '/',
+      pathname: '/',
+      query: {},
+      asPath: '/',
+      push: jest.fn(() => Promise.resolve(true)),
+      replace: jest.fn(() => Promise.resolve(true)),
+      reload: jest.fn(),
+      back: jest.fn(),
+      prefetch: jest.fn(() => Promise.resolve()),
+      beforePopState: jest.fn(),
+      events: {
+        on: jest.fn(),
+        off: jest.fn(),
+        emit: jest.fn(),
+      },
+      isFallback: false,
+      isLocaleDomain: true,
+      isReady: true,
+      defaultLocale: 'en',
+      domainLocales: [],
+      isPreview: false,
+    }
+  },
+}))
+
+// Mock Next.js navigation
+jest.mock('next/navigation', () => ({
+  useRouter() {
+    return {
+      push: jest.fn(),
+      replace: jest.fn(),
+      prefetch: jest.fn(),
+      back: jest.fn(),
+      forward: jest.fn(),
+      refresh: jest.fn(),
+    }
+  },
+  useSearchParams() {
+    return new URLSearchParams()
+  },
+  usePathname() {
+    return '/'
+  },
+}))
+
+// Mock Next.js Image component
+jest.mock('next/image', () => ({
+  __esModule: true,
+  default: function MockImage(props: any) {
+    // eslint-disable-next-line jsx-a11y/alt-text
+    return require('react').createElement('img', props)
+  },
+}))
 
 // API mocking is handled by __mocks__ directory structure
 // Individual test files can override specific mocks as needed
@@ -87,4 +151,13 @@ const localStorageMock = {
   length: 0,
   key: jest.fn(),
 }
-global.localStorage = localStorageMock as any 
+global.localStorage = localStorageMock as any
+
+// Mock fetch for API calls
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve({}),
+  })
+) as jest.Mock 

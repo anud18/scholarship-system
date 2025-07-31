@@ -12,21 +12,36 @@ import { User, Shield, Crown, GraduationCap, BookOpen, AlertTriangle, Users } fr
 import { apiClient as api } from "@/lib/api";
 
 interface MockUser {
-  username: string;
+  nycu_id: string;  // 改為 nycu_id
   email: string;
-  full_name: string;
-  chinese_name: string;
-  english_name: string;
+  name: string;  // 改為 name
+  raw_data?: {
+    chinese_name?: string;
+    english_name?: string;
+  };
   role: string;
   description: string;
 }
 
-interface DeveloperProfile {
-  username: string;
+interface MockUserResponse {
+  nycu_id: string;  // 改為 nycu_id
   email: string;
-  full_name: string;
-  chinese_name: string;
-  english_name: string;
+  name: string;  // 改為 name
+  raw_data?: {
+    chinese_name?: string;
+    english_name?: string;
+  };
+  role: string;
+}
+
+interface DeveloperProfile {
+  nycu_id: string;  // 改為 nycu_id
+  email: string;
+  name: string;  // 改為 name
+  raw_data?: {
+    chinese_name?: string;
+    english_name?: string;
+  };
   role: string;
   developer_id: string;
 }
@@ -111,12 +126,11 @@ export function MockSSOLogin() {
     }
   };
 
-  const handleMockLogin = async (username: string) => {
+  const handleMockLogin = async (nycu_id: string) => {
+    setLoginLoading(nycu_id);
+    
     try {
-      setLoginLoading(username);
-      setError(null);
-      
-      const response = await api.auth.mockSSOLogin(username);
+      const response = await api.auth.mockSSOLogin(nycu_id);
       
       if (response.success && response.data) {
         // Store token and user data
@@ -140,27 +154,22 @@ export function MockSSOLogin() {
 
 
   const renderUserCard = (user: MockUser | DeveloperProfile) => (
-    <Card key={user.username} className="border border-gray-200 hover:border-gray-300 transition-colors">
-      <CardHeader className="pb-3">
+    <Card key={user.nycu_id} className="border border-gray-200 hover:border-gray-300 transition-colors">
+      <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {roleIcons[user.role as keyof typeof roleIcons]}
-            <span className="font-medium text-sm">{user.username}</span>
+            <span className="font-medium text-sm">{user.nycu_id}</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Badge className={roleColors[user.role as keyof typeof roleColors]}>
-              {user.role}
-            </Badge>
-            {'developer_id' in user && (
-              <Badge variant="outline" className="text-xs">
-                dev:{user.developer_id}
-              </Badge>
-            )}
-          </div>
+          <Badge variant="outline">{user.role}</Badge>
         </div>
+        
         <div className="space-y-1">
-          <p className="text-sm font-medium">{user.chinese_name}</p>
-          <p className="text-xs text-gray-600">{user.english_name}</p>
+          <p className="text-sm font-medium">
+            {user.raw_data?.chinese_name && user.raw_data?.english_name 
+              ? `${user.raw_data.chinese_name} (${user.raw_data.english_name})`
+              : user.name
+            }
+          </p>
           <p className="text-xs text-gray-500">{user.email}</p>
         </div>
       </CardHeader>
@@ -170,12 +179,12 @@ export function MockSSOLogin() {
           <p className="text-xs text-gray-600 mb-3">{user.description}</p>
         )}
         <Button
-          onClick={() => handleMockLogin(user.username)}
-          disabled={loginLoading === user.username}
+          onClick={() => handleMockLogin(user.nycu_id)}
+          disabled={loginLoading === user.nycu_id}
           className="w-full"
           size="sm"
         >
-          {loginLoading === user.username ? "Logging in..." : "Login as this user"}
+          {loginLoading === user.nycu_id ? "Logging in..." : "Login as this user"}
         </Button>
       </CardContent>
     </Card>

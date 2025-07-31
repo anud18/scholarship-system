@@ -4,6 +4,8 @@ MinIO file storage service
 
 import io
 import uuid
+import hashlib
+import time
 import logging
 from datetime import timedelta
 from typing import Optional, Tuple
@@ -72,9 +74,14 @@ class MinIOService:
                     detail=f"File type '{file_extension}' not allowed. Allowed types: {settings.allowed_file_types}"
                 )
             
-            # Generate unique object name
-            unique_id = str(uuid.uuid4())
-            object_name = f"applications/{application_id}/{file_type}/{unique_id}_{file.filename}"
+            # Generate unique object name using timestamp + hash + UUID for maximum uniqueness
+            timestamp = int(time.time() * 1000000)  # Microsecond precision
+            file_content_hash = hashlib.sha256(file_content).hexdigest()[:16]  # First 16 chars of hash
+            unique_id = str(uuid.uuid4())[:8]  # First 8 chars of UUID
+            file_extension = file.filename.split('.')[-1].lower() if file.filename else ''
+            
+            # Format: timestamp_hash_uuid.extension
+            object_name = f"applications/{application_id}/{file_type}/{timestamp}_{file_content_hash}_{unique_id}.{file_extension}"
             
             # Upload to MinIO
             self.client.put_object(

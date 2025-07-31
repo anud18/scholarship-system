@@ -32,14 +32,6 @@ export const translations = {
       sysadmin: "系統管理員",
     },
 
-    // 獎學金類型
-    scholarships: {
-      undergraduate_freshman: "學士班新生獎學金",
-      phd_nstc: "國科會博士生獎學金",
-      phd_moe: "教育部博士生獎學金",
-      direct_phd: "逕博獎學金"
-    },
-
     // 狀態
     status: {
       draft: "草稿",
@@ -122,6 +114,34 @@ export const translations = {
       AUS: "澳洲",
       OTHER: "其他",
     },
+
+    eligibility_tags: {
+      // Basic eligibility
+      "博士生": "博士生",
+      "碩士生": "碩士生",
+      "學士生": "學士生",
+      "在學生": "在學生",
+      "非在職生": "非在職生",
+      "非陸生": "非陸生",
+      "中華民國國籍": "中華民國國籍",
+      "三年級以下": "三年級以下",
+      "一般生": "一般生",
+      "逕博生": "逕讀博士生",
+      "第一學年": "第一學年"
+    },
+    rule_types: {
+      "nstc": "國科會",
+      "moe_1w": "教育部(1萬)",
+      "moe_2w": "教育部(2萬)"
+    },
+    scholarship_sections: {
+      "eligible_programs": "可申請項目",
+      "eligibility": "申請資格",
+      "period": "申請期間",
+      "fields": "申請欄位",
+      "required_docs": "必要文件",
+      "optional_docs": "選填文件"
+    }
   },
 
   en: {
@@ -149,16 +169,6 @@ export const translations = {
       reviewer: "Reviewer",
       admin: "Administrator",
       sysadmin: "System Administrator",
-    },
-
-    // Scholarship Types
-    scholarships: {
-      undergraduate_freshman: "Undergraduate Freshman Scholarship",
-      phd_nstc: "PhD Research Scholarship",
-      phd_moe: "MOE PhD Scholarship",
-      direct_phd: "Direct PhD Scholarship",
-      phd_nsc: "NSC PhD Research Scholarship",
-      academic_excellence: "Academic Excellence Scholarship",
     },
 
     // Status
@@ -243,6 +253,34 @@ export const translations = {
       AUS: "Australia",
       OTHER: "Other",
     },
+
+    eligibility_tags: {
+      // Basic eligibility
+      "碩士生": "Master Student",
+      "學士生": "Undergraduate Student",
+      "博士生": "PhD Student",
+      "在學生": "Current Student",
+      "非在職生": "Full-time Student",
+      "非陸生": "Non-Mainland Student",
+      "中華民國國籍": "ROC Nationality",
+      "三年級以下": "Below 3rd Year",
+      "一般生": "Regular Student",
+      "逕博生": "Direct PhD Student",
+      "第一學年": "First Academic Year"
+    },
+    rule_types: {
+      "nstc": "NSTC",
+      "moe_1w": "MOE (10K)",
+      "moe_2w": "MOE (20K)"
+    },
+    scholarship_sections: {
+      "eligible_programs": "Eligible Programs",
+      "eligibility": "Eligibility",
+      "period": "Application Period",
+      "fields": "Required Fields",
+      "required_docs": "Required Documents",
+      "optional_docs": "Optional Documents"
+    }
   },
 }
 
@@ -255,16 +293,4 @@ export function getTranslation(locale: 'zh' | 'en', key: string): string {
   }
   
   return value || key
-}
-
-// Utility function to get Chinese scholarship type name by code
-export function getScholarshipTypeZh(scholarshipType: string): string {
-  const scholarshipTypeMap: Record<string, string> = {
-    "undergraduate_freshman": "學士班新生獎學金",
-    "phd_nstc": "國科會博士生獎學金", 
-    "phd_moe": "教育部博士生獎學金",
-    "direct_phd": "逕博獎學金"
-  }
-  
-  return scholarshipTypeMap[scholarshipType] || scholarshipType
 }

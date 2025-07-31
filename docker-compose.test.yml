@@ -78,6 +78,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: scholarship_backend_test
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     environment:
@@ -97,7 +98,7 @@ services:
       ENABLE_MOCK_SSO: "true"
       MOCK_SSO_DOMAIN: dev.university.edu
     volumes:
-      - ./backend/uploads:/app/uploads
+      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -114,14 +115,20 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: builder
     container_name: scholarship_frontend_test
+    command: npm run dev
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: http://140.113.207.40:8000
       NODE_ENV: development
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
     depends_on:
       - backend
     networks:

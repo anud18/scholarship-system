@@ -6,7 +6,7 @@ from typing import Optional
 import urllib.parse
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,6 +17,7 @@ from app.core.security import get_current_user, verify_token
 from app.models.user import User, UserRole
 from app.models.application import ApplicationFile, Application
 from app.services.minio_service import minio_service
+from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -43,10 +44,14 @@ async def get_file_proxy(
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # Get user from database
-        user_result = await db.get(User, user_id)
-        if not user_result or not user_result.is_active:
-            raise HTTPException(status_code=401, detail="User not found or inactive")
+        # Get user from token
+        auth_service = AuthService(db)
+        user_result = await auth_service.get_user_by_id(user_id)
+        if not user_result:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid user"
+            )
         
         current_user = user_result
         
@@ -68,12 +73,21 @@ async def get_file_proxy(
         # Check access permissions
         application = file_record.application
         
-        # Students can only access their own files
-        if current_user.role == UserRole.STUDENT and application.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
-        
-        # Staff (admin/college) can access any file
-        if current_user.role not in [UserRole.STUDENT, UserRole.ADMIN, UserRole.COLLEGE]:
+        # Check access permissions based on role
+        if current_user.role == UserRole.STUDENT:
+            # Students can only access their own files
+            if application.user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif current_user.role == UserRole.PROFESSOR:
+            # Professors can access files from their students
+            # TODO: Add professor-student relationship check when implemented
+            # For now, allow professors to access all files
+            pass
+        elif current_user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            # College, Admin, and Super Admin can access any file
+            pass
+        else:
+            # Other roles are not allowed
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Get file stream from MinIO
@@ -136,10 +150,14 @@ async def download_file_proxy(
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # Get user from database
-        user_result = await db.get(User, user_id)
-        if not user_result or not user_result.is_active:
-            raise HTTPException(status_code=401, detail="User not found or inactive")
+        # Get user from token
+        auth_service = AuthService(db)
+        user_result = await auth_service.get_user_by_id(user_id)
+        if not user_result:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid user"
+            )
         
         current_user = user_result
         
@@ -160,7 +178,22 @@ async def download_file_proxy(
         
         # Check access permissions
         application = file_record.application
-        if current_user.role == UserRole.STUDENT and application.user_id != current_user.id:
+        
+        # Check access permissions based on role
+        if current_user.role == UserRole.STUDENT:
+            # Students can only access their own files
+            if application.user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif current_user.role == UserRole.PROFESSOR:
+            # Professors can access files from their students
+            # TODO: Add professor-student relationship check when implemented
+            # For now, allow professors to access all files
+            pass
+        elif current_user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            # College, Admin, and Super Admin can access any file
+            pass
+        else:
+            # Other roles are not allowed
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Get file stream from MinIO
