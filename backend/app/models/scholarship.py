@@ -109,6 +109,7 @@ class ScholarshipType(Base):
     
     # 關聯
     rules = relationship("ScholarshipRule", back_populates="scholarship_type", cascade="all, delete-orphan")
+    applications = relationship("Application", foreign_keys="[Application.scholarship_type_id]")
     sub_type_configs = relationship("ScholarshipSubTypeConfig", back_populates="scholarship_type", cascade="all, delete-orphan")
     admins = relationship("AdminScholarship", back_populates="scholarship")
     creator = relationship("User", foreign_keys=[created_by])
@@ -254,6 +255,53 @@ class ScholarshipType(Base):
             
         # 檢查學生是否在白名單中
         return student_id in self.whitelist_student_ids
+    
+    def get_main_type_from_code(self) -> str:
+        """Extract main scholarship type from code"""
+        if "UNDERGRADUATE_FRESHMAN" in self.code.upper():
+            return "UNDERGRADUATE_FRESHMAN"
+        elif "DIRECT_PHD" in self.code.upper():
+            return "DIRECT_PHD"
+        elif "PHD" in self.code.upper():
+            return "PHD"
+        return "GENERAL"
+    
+    def get_sub_type_from_code(self) -> str:
+        """Extract sub scholarship type from code"""
+        if "NSTC" in self.code.upper():
+            return "NSTC"
+        elif "MOE_1W" in self.code.upper():
+            return "MOE_1W"
+        elif "MOE_2W" in self.code.upper():
+            return "MOE_2W"
+        return "GENERAL"
+    
+    def can_student_apply(self, student_id: int, semester: str) -> tuple[bool, str]:
+        """Check if student can apply for this scholarship"""
+        # Check if scholarship is active
+        if not self.is_active:
+            return False, "獎學金目前未開放申請"
+        
+        # Check application period
+        if not self.is_application_period:
+            return False, "目前不在申請期間內"
+        
+        # Check whitelist
+        if not self.is_student_in_whitelist(student_id):
+            return False, "您不在此獎學金的申請名單中"
+        
+        # Check if student already has an application for this semester
+        from sqlalchemy.orm import Session
+        # This would need to be implemented with proper session management
+        # existing_app = session.query(Application).filter(
+        #     Application.student_id == student_id,
+        #     Application.scholarship_type_id == self.id,
+        #     Application.semester == semester
+        # ).first()
+        # if existing_app:
+        #     return False, "您已經在本學期申請過此獎學金"
+        
+        return True, ""
 
     def validate_sub_type_list(self) -> bool:
         """Validate sub_type_list against ScholarshipSubType enum"""

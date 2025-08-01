@@ -31,6 +31,29 @@ class ApplicationStatus(enum.Enum):
     RENEWAL_PENDING = "renewal_pending"
     RENEWAL_REVIEWED = "renewal_reviewed"
     MANUAL_EXCLUDED = "manual_excluded"
+    PROFESSOR_REVIEW = "professor_review"
+    WITHDRAWN = "withdrawn"
+
+
+class ScholarshipMainType(enum.Enum):
+    """Main scholarship types for issue #10"""
+    UNDERGRADUATE_FRESHMAN = "UNDERGRADUATE_FRESHMAN"
+    PHD = "PHD"
+    DIRECT_PHD = "DIRECT_PHD"
+
+
+class ScholarshipSubType(enum.Enum):
+    """Sub scholarship types for issue #10"""
+    GENERAL = "GENERAL"
+    NSTC = "NSTC"
+    MOE_1W = "MOE_1W"
+    MOE_2W = "MOE_2W"
+
+
+class ReviewCycle(enum.Enum):
+    """Review cycle types"""
+    SEMESTER = "SEMESTER"
+    MONTHLY = "MONTHLY"
 
 
 class ReviewStatus(enum.Enum):
@@ -73,17 +96,26 @@ class Application(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     
-    # 獎學金類型
-    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)  # 主獎學金ID
+    # 獎學金類型 - Enhanced for issue #10
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True)  # Reference to ScholarshipType
+    scholarship_type = Column(String(50), nullable=False)  # Backward compatibility
+    scholarship_name = Column(String(200))
+    amount = Column(Numeric(10, 2))
     scholarship_subtype_list = Column(JSON, nullable=False, default=[])
     sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), nullable=False)
+    
+    # New fields for comprehensive scholarship system (Issue #10)
+    main_scholarship_type = Column(String(50))  # UNDERGRADUATE_FRESHMAN, PHD, DIRECT_PHD
+    sub_scholarship_type = Column(String(50), default="GENERAL")  # GENERAL, NSTC, MOE_1W, MOE_2W
+    is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
+    previous_application_id = Column(Integer, ForeignKey("applications.id"))
+    priority_score = Column(Integer, default=0)
+    review_deadline = Column(DateTime(timezone=True))
+    decision_date = Column(DateTime(timezone=True))
     
     # 申請狀態
     status = Column(String(50), default=ApplicationStatus.DRAFT.value)
     status_name = Column(String(100))
-    
-    # 續領申請標識
-    is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
     
     # 學期資訊 (申請當時的學期)
     academic_year = Column(Integer, nullable=False)  # 民國年，例如 113
@@ -123,8 +155,10 @@ class Application(Base):
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     final_approver = relationship("User", foreign_keys=[final_approver_id])
     
-    # 獎學金關聯
+    # Enhanced relationships for issue #10
+    scholarship_type_ref = relationship("ScholarshipType", foreign_keys=[scholarship_type_id], overlaps="applications")
     scholarship = relationship("ScholarshipType", foreign_keys=[scholarship_type_id])
+    previous_application = relationship("Application", remote_side=[id])
     
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
@@ -159,6 +193,47 @@ class Application(Base):
             ApplicationStatus.UNDER_REVIEW.value,
             ApplicationStatus.RECOMMENDED.value
         ])
+    
+    @property
+    def is_overdue(self) -> bool:
+        """Check if application review is overdue"""
+        if not self.review_deadline:
+            return False
+        return bool(datetime.now().replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
+    
+    def calculate_priority_score(self) -> int:
+        """Calculate priority score based on business rules for issue #10"""
+        score = self.priority_score or 0
+        
+        # Renewal applications get higher priority
+        if self.is_renewal:
+            score += 100
+            
+        # Add score based on submission time (earlier = higher priority)
+        if self.submitted_at:
+            from datetime import datetime, timezone
+            days_since_submission = (datetime.now(timezone.utc) - self.submitted_at).days
+            score += max(0, 30 - days_since_submission)
+            
+        return score
+    
+    def get_main_type_enum(self) -> Optional['ScholarshipMainType']:
+        """Get main scholarship type as enum"""
+        if self.main_scholarship_type:
+            try:
+                return ScholarshipMainType(self.main_scholarship_type)
+            except ValueError:
+                return None
+        return None
+    
+    def get_sub_type_enum(self) -> Optional['ScholarshipSubType']:
+        """Get sub scholarship type as enum"""
+        if self.sub_scholarship_type:
+            try:
+                return ScholarshipSubType(self.sub_scholarship_type)
+            except ValueError:
+                return ScholarshipSubType.GENERAL
+        return ScholarshipSubType.GENERAL
     
     @property
     def academic_term_label(self) -> str:

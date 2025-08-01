@@ -135,3 +135,10 @@ MIME_TYPE_MAPPING = {
     "doc": "application/msword",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 }
+
+# Development scholarship settings
+DEV_SCHOLARSHIP_SETTINGS = {
+    "ALWAYS_OPEN_APPLICATION": True,
+    "BYPASS_WHITELIST": True,
+    "MOCK_APPLICATION_PERIOD": True,
+}

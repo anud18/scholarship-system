@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
+from app.middleware.schema_validation_middleware import SchemaValidationMiddleware
 
 # Import routers
 from app.api.v1.api import api_router
@@ -66,6 +67,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+
+# Add schema validation middleware (development only)
+if settings.debug:
+    app.add_middleware(SchemaValidationMiddleware)
 
 
 # Request tracing middleware

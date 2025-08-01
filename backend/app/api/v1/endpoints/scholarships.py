@@ -80,7 +80,7 @@ async def get_scholarship_eligibility(
 ):
     """Get scholarships that the current student is eligible for"""
     from app.services.application_service import get_student_from_user
-    from app.services.scholarship_service import get_eligible_scholarships
+    from app.services.scholarship_service import ScholarshipService
     
     student = await get_student_from_user(current_user, db)
     if not student:
@@ -89,8 +89,41 @@ async def get_scholarship_eligibility(
             detail=f"Student profile not found for user {current_user.nycu_id}"
         )
 
-    eligible_scholarships = await get_eligible_scholarships(student, db, include_validation_details=False)
-    return eligible_scholarships
+    scholarship_service = ScholarshipService(db)
+    eligible_scholarships = await scholarship_service.get_eligible_scholarships(student)
+    
+    # Convert ScholarshipType objects to EligibleScholarshipResponse
+    response_data = []
+    for scholarship in eligible_scholarships:
+        response_item = EligibleScholarshipResponse(
+            id=scholarship.id,
+            code=scholarship.code,
+            name=scholarship.name,
+            name_en=scholarship.name_en or scholarship.name,
+            eligible_sub_types=scholarship.sub_type_list or ["general"],
+            category=scholarship.category,
+            academic_year=scholarship.academic_year,
+            semester=scholarship.semester.value if hasattr(scholarship.semester, 'value') else scholarship.semester,
+            application_cycle=scholarship.application_cycle.value if hasattr(scholarship.application_cycle, 'value') else scholarship.application_cycle,
+            description=scholarship.description,
+            description_en=scholarship.description_en,
+            amount=scholarship.amount,
+            currency=scholarship.currency,
+            application_start_date=scholarship.application_start_date,
+            application_end_date=scholarship.application_end_date,
+            professor_review_start=scholarship.professor_review_start,
+            professor_review_end=scholarship.professor_review_end,
+            college_review_start=scholarship.college_review_start,
+            college_review_end=scholarship.college_review_end,
+            sub_type_selection_mode=scholarship.sub_type_selection_mode.value if hasattr(scholarship.sub_type_selection_mode, 'value') else scholarship.sub_type_selection_mode,
+            passed=[],  # TODO: Implement rule validation
+            warnings=[],  # TODO: Implement rule validation
+            errors=[],  # TODO: Implement rule validation
+            created_at=scholarship.created_at
+        )
+        response_data.append(response_item)
+    
+    return response_data
     
 @router.get("/{scholarship_id}", response_model=ScholarshipTypeResponse)
 async def get_scholarship_detail(
