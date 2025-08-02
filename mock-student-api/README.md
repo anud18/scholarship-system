@@ -184,14 +184,39 @@ python main.py
 The API includes sample data for testing:
 
 ### Available Students
+
+#### Undergraduate Students
 - **313612215** - 陳弘穎 (CHEN,HUNG-YING) - 電機工程學系, 大學生
+
+#### Master's Students  
 - **123456789** - 李美麗 (LEE,MEI-LI) - 資訊工程學系, 碩士生
 
+#### PhD Students - Comprehensive Test Scenarios
+- **D11142001** - 王志明 (WANG,CHIH-MING) - 電機工程學系, 博士 (一般入學)
+- **D11042002** - 林雅婷 (LIN,YA-TING) - 資訊工程學系, 博士 (大學逕博, 原住民)
+- **D10942003** - 張偉傑 (CHANG,WEI-CHIEH) - 物理學系, 博士 (碩士逕博)
+- **D11242004** - 陳思穎 (CHEN,SZU-YING) - 化學系, 博士 (一般入學)
+- **D10842005** - 劉建國 (LIU,CHIEN-KUO) - 機械工程學系, 博士 (已畢業)
+- **D11342006** - 黃詩涵 (HUANG,SHIH-HAN) - 生命科學系, 博士 (在職生)
+- **D11142007** - 吳承翰 (WU,CHENG-HAN) - 數學系, 博士 (休學)
+- **D11242008** - 趙文華 (CHAO,WEN-HUA) - 經濟學系, 博士 (僑生)
+- **D10942009** - 許美玲 (HSU,MEI-LING) - 材料科學工程學系, 博士 (應畢)
+- **D11042010** - 楊國強 (YANG,KUO-CHIANG) - 化學工程學系, 博士 (延畢)
+- **D11342011** - 蔡佩君 (TSAI,PEI-CHUN) - 人類學研究所, 博士 (其他身分)
+- **D10842012** - 李俊傑 (LEE,CHUN-CHIEH) - 核子工程與科學研究所, 博士 (在職生)
+- **D11142013** - 陳雅純 (CHEN,YA-CHUN) - 統計學研究所, 博士 (原住民)
+- **D11242014** - 王建民 (WANG,CHIEN-MIN) - 動力機械工程學系, 博士
+- **D10942015** - 張雅芳 (CHANG,YA-FANG) - 外國語文學系, 博士 (陸生)
+
 ### Sample Data Features
-- Realistic Chinese academic system structure
-- Multiple semester records per student
-- Proper academic progression data
+- Realistic Chinese academic system structure based on init_db rules
+- 15+ PhD students covering diverse scenarios for scholarship testing
+- Multiple enrollment types (1-12) and identity types (1-30)
+- Various study statuses: 在學(1), 應畢(2), 延畢(3), 休學(4), 畢業(11)
+- Multiple colleges: 工學院, 理學院, 資訊學院, 人文社會學院
+- Multiple semester records per student with academic progression
 - All required fields from university specification
+- Covers scholarship eligibility scenarios: non-mainland Chinese, regular students, etc.
 
 ## Code Reference Tables
 
