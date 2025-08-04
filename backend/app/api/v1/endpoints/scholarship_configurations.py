@@ -250,7 +250,7 @@ async def get_matrix_quota_status(
                         Application.scholarship_type_id == phd_scholarship.id,
                         Application.academic_year == academic_year,
                         Application.status == ApplicationStatus.APPROVED,
-                        Student.dept_code == college
+                        Student.std_aca_no == college
                     )
                 )
                 
@@ -272,7 +272,7 @@ async def get_matrix_quota_status(
                     and_(
                         Application.scholarship_type_id == phd_scholarship.id,
                         Application.academic_year == academic_year,
-                        Student.dept_code == college
+                        Student.std_aca_no == college
                     )
                 )
                 if semester:
@@ -474,8 +474,8 @@ async def get_colleges(
     
     try:
         # Get unique college codes from student data or configurations
-        stmt = select(distinct(Student.dept_code)).where(
-            Student.dept_code.isnot(None)
+        stmt = select(distinct(Student.std_aca_no)).where(
+            Student.std_aca_no.isnot(None)
         )
         result = await db.execute(stmt)
         college_codes = result.scalars().all()
