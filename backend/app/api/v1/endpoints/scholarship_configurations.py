@@ -87,9 +87,7 @@ async def get_available_semesters(
             try:
                 mode_enum = QuotaManagementMode(quota_management_mode)
                 conditions.append(ScholarshipConfiguration.quota_management_mode == mode_enum)
-                print(f"DEBUG: Filtering by quota_management_mode: {mode_enum}")
             except ValueError:
-                print(f"DEBUG: Invalid quota management mode: {quota_management_mode}")
                 return ApiResponse(
                     success=False,
                     message=f"Invalid quota management mode: {quota_management_mode}",
@@ -173,7 +171,7 @@ async def get_matrix_quota_status(
         if not accessible_scholarship_ids:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No accessible scholarships found"
+                detail="未找到可存取的獎學金"
             )
             
         phd_stmt = select(ScholarshipType).where(
@@ -241,10 +239,41 @@ async def get_matrix_quota_status(
             for college in college_codes:
                 total_quota = sub_type_quotas.get(college, 0)
                 
-                # TODO: Get actual usage from applications
-                # For now, using 0 as placeholder - implement actual usage calculation
-                used = 0  # Placeholder
-                applications = 0  # Placeholder
+                # Get actual usage from applications
+                usage_stmt = select(func.count(Application.id)).where(
+                    and_(
+                        Application.scholarship_type_id == phd_scholarship.id,
+                        Application.academic_year == academic_year,
+                        Application.status.in_([ApplicationStatus.APPROVED]),
+                        # Match college based on student's department
+                        Application.student_id.in_(
+                            select(Student.id).where(Student.dept_code == college)
+                        )
+                    )
+                )
+                
+                # If semester-based, also filter by semester
+                if semester:
+                    usage_stmt = usage_stmt.where(Application.semester == semester)
+                
+                usage_result = await db.execute(usage_stmt)
+                used = usage_result.scalar() or 0
+                
+                # Get total applications count for this sub-type and college
+                apps_stmt = select(func.count(Application.id)).where(
+                    and_(
+                        Application.scholarship_type_id == phd_scholarship.id,
+                        Application.academic_year == academic_year,
+                        Application.student_id.in_(
+                            select(Student.id).where(Student.dept_code == college)
+                        )
+                    )
+                )
+                if semester:
+                    apps_stmt = apps_stmt.where(Application.semester == semester)
+                
+                apps_result = await db.execute(apps_stmt)
+                applications = apps_result.scalar() or 0
                 
                 phd_quotas[sub_type][college] = {
                     "total_quota": total_quota,
@@ -297,25 +326,28 @@ async def update_matrix_quota(
 ):
     """Update matrix quota for specific sub-type and college"""
     
-    print(f"DEBUG: update_matrix_quota called with sub_type={sub_type}, college={college}, new_quota={new_quota}, academic_year={academic_year}")
     
     if new_quota < 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Quota cannot be negative"
+            detail="配額不能為負數"
+        )
+    
+    if new_quota > 1000:  # Reasonable upper bound for scholarship quotas
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="配額數值過大（最大值：1000）"
         )
     
     try:
         # Get accessible scholarship IDs
         accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
-        print(f"DEBUG: accessible_scholarship_ids = {accessible_scholarship_ids}")
         
         # Find PhD scholarship
         if not accessible_scholarship_ids:
-            print("DEBUG: No accessible scholarships found")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="No accessible scholarships found"
+                detail="未找到可存取的獎學金"
             )
             
         phd_stmt = select(ScholarshipType).where(
@@ -326,13 +358,11 @@ async def update_matrix_quota(
         )
         phd_result = await db.execute(phd_stmt)
         phd_scholarship = phd_result.scalar_one_or_none()
-        print(f"DEBUG: phd_scholarship found = {phd_scholarship is not None}")
         
         if not phd_scholarship:
-            print("DEBUG: PhD scholarship not found or not accessible")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to manage PhD scholarship quotas"
+                detail="您沒有管理博士獎學金配額的權限"
             )
         
         # Get the configuration for the specified academic year, or the most recent if not specified
@@ -413,9 +443,9 @@ async def update_matrix_quota(
         
     except Exception as e:
         await db.rollback()
-        print(f"DEBUG: Exception in update_matrix_quota: {type(e).__name__}: {str(e)}")
-        import traceback
-        print(f"DEBUG: Traceback: {traceback.format_exc()}")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update matrix quota: {str(e)}"
@@ -437,31 +467,16 @@ async def get_colleges(
         result = await db.execute(stmt)
         college_codes = result.scalars().all()
         
-        # Build college list (this could be enhanced with a proper college table)
-        colleges = []
-        college_name_mapping = {
-            "E": "電機學院",
-            "C": "資訊學院", 
-            "I": "工學院",
-            "S": "理學院",
-            "B": "工程生物學院",
-            "O": "光電學院",
-            "D": "半導體學院",
-            "1": "醫學院",
-            "6": "生醫工學院",
-            "7": "生命科學院",
-            "M": "管理學院",
-            "A": "人社院",
-            "K": "客家學院"
-        }
+        # Build college list using centralized mappings
+        from app.core.college_mappings import get_all_colleges, is_valid_college_code
         
+        colleges = []
         for code in sorted(college_codes):
-            if code and code in college_name_mapping:
-                colleges.append({
-                    "code": code,
-                    "name": college_name_mapping[code],
-                    "name_en": f"College of {code}"  # Simplified English name
-                })
+            if code and is_valid_college_code(code):
+                college_info = get_all_colleges()
+                college_data = next((c for c in college_info if c["code"] == code), None)
+                if college_data:
+                    colleges.append(college_data)
         
         return ApiResponse(
             success=True,

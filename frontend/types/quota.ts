@@ -129,7 +129,10 @@ export interface MatrixCellProps {
   isLoading: boolean
 }
 
-// College mappings for display
+// Import centralized college mappings
+import { getCollegeName } from '@/lib/college-mappings'
+
+// Legacy mapping for backwards compatibility - use getCollegeName() instead
 export const COLLEGE_MAPPINGS: Record<string, string> = {
   'E': '電機學院',
   'C': '資訊學院',
