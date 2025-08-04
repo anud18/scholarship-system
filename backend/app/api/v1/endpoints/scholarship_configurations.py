@@ -239,16 +239,18 @@ async def get_matrix_quota_status(
             for college in college_codes:
                 total_quota = sub_type_quotas.get(college, 0)
                 
-                # Get actual usage from applications
-                usage_stmt = select(func.count(Application.id)).where(
+                # Get actual usage from applications using JOIN instead of subquery
+                from sqlalchemy import join
+                
+                # Count approved applications with join to student table
+                usage_stmt = select(func.count(Application.id)).select_from(
+                    join(Application, Student, Application.student_id == Student.id)
+                ).where(
                     and_(
                         Application.scholarship_type_id == phd_scholarship.id,
                         Application.academic_year == academic_year,
-                        Application.status.in_([ApplicationStatus.APPROVED]),
-                        # Match college based on student's department
-                        Application.student_id.in_(
-                            select(Student.id).where(Student.dept_code == college)
-                        )
+                        Application.status == ApplicationStatus.APPROVED,
+                        Student.dept_code == college
                     )
                 )
                 
@@ -256,24 +258,32 @@ async def get_matrix_quota_status(
                 if semester:
                     usage_stmt = usage_stmt.where(Application.semester == semester)
                 
-                usage_result = await db.execute(usage_stmt)
-                used = usage_result.scalar() or 0
+                try:
+                    usage_result = await db.execute(usage_stmt)
+                    used = usage_result.scalar() or 0
+                except Exception as usage_error:
+                    print(f"DEBUG: Error in usage query: {usage_error}")
+                    used = 0
                 
-                # Get total applications count for this sub-type and college
-                apps_stmt = select(func.count(Application.id)).where(
+                # Get total applications count using JOIN
+                apps_stmt = select(func.count(Application.id)).select_from(
+                    join(Application, Student, Application.student_id == Student.id)
+                ).where(
                     and_(
                         Application.scholarship_type_id == phd_scholarship.id,
                         Application.academic_year == academic_year,
-                        Application.student_id.in_(
-                            select(Student.id).where(Student.dept_code == college)
-                        )
+                        Student.dept_code == college
                     )
                 )
                 if semester:
                     apps_stmt = apps_stmt.where(Application.semester == semester)
                 
-                apps_result = await db.execute(apps_stmt)
-                applications = apps_result.scalar() or 0
+                try:
+                    apps_result = await db.execute(apps_stmt)
+                    applications = apps_result.scalar() or 0
+                except Exception as apps_error:
+                    print(f"DEBUG: Error in applications query: {apps_error}")
+                    applications = 0
                 
                 phd_quotas[sub_type][college] = {
                     "total_quota": total_quota,
@@ -309,6 +319,9 @@ async def get_matrix_quota_status(
             detail=f"Invalid period format: {period}"
         )
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in get_matrix_quota_status: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve matrix quota status: {str(e)}"
