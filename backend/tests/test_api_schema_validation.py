@@ -89,7 +89,7 @@ class TestAPISchemaValidation:
         
         async def mock_get_eligible_scholarships(student):
             from app.models.scholarship import ScholarshipType, ScholarshipStatus
-            from app.models.enums import Semester, CycleType, SubTypeSelectionMode
+            from app.models.enums import Semester, ApplicationCycle, SubTypeSelectionMode
             
             # Return a properly structured ScholarshipType object
             scholarship = ScholarshipType()
@@ -100,7 +100,7 @@ class TestAPISchemaValidation:
             scholarship.category = "undergraduate_freshman"
             scholarship.academic_year = 113
             scholarship.semester = Semester.FIRST
-            scholarship.application_cycle = CycleType.SEMESTER
+            scholarship.application_cycle = ApplicationCycle.SEMESTER
             scholarship.sub_type_list = ["general"]
             scholarship.sub_type_selection_mode = SubTypeSelectionMode.SINGLE
             scholarship.amount = Decimal("10000.00")

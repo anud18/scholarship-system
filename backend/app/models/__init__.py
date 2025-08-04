@@ -20,8 +20,8 @@ from app.models.student import (
     StudentType,
     StudyStatus
 )
-from app.models.scholarship import ScholarshipType, ScholarshipRule
-from app.models.enums import Semester, SubTypeSelectionMode, CycleType
+from app.models.scholarship import ScholarshipType, ScholarshipRule, ScholarshipConfiguration
+from app.models.enums import Semester, SubTypeSelectionMode, ApplicationCycle, QuotaManagementMode
 from app.models.application import (
     Application, 
     ApplicationStatus, 
@@ -66,7 +66,8 @@ __all__ = [
     # Shared enums
     "Semester",
     "SubTypeSelectionMode",
-    "CycleType",
+    "ApplicationCycle",
+    "QuotaManagementMode",
     
     # Application Field models
     "ApplicationField",
@@ -76,6 +77,7 @@ __all__ = [
     # Scholarship models
     "ScholarshipType",
     "ScholarshipRule",
+    "ScholarshipConfiguration",
     
     # Other models
     "Notification",

@@ -1346,7 +1346,42 @@ async def get_scholarship_permissions(
     
     print(f"DEBUG: get_scholarship_permissions called by user {current_user.id} ({current_user.role})")
     
-    # Build query
+    # Special handling for super_admin when filtering by user_id
+    if user_id:
+        # Check if the filtered user is a super_admin
+        target_user_stmt = select(User).where(User.id == user_id)
+        target_user_result = await db.execute(target_user_stmt)
+        target_user = target_user_result.scalar_one_or_none()
+        
+        if target_user and target_user.role == UserRole.SUPER_ADMIN:
+            print(f"DEBUG: Target user {user_id} is SUPER_ADMIN, returning all scholarships")
+            # Super admin has access to all scholarships
+            from app.models.scholarship import ScholarshipType
+            all_scholarships_stmt = select(ScholarshipType)
+            all_scholarships_result = await db.execute(all_scholarships_stmt)
+            all_scholarships = all_scholarships_result.scalars().all()
+            
+            permission_list = []
+            for idx, scholarship in enumerate(all_scholarships):
+                permission_list.append({
+                    "id": -(idx + 1),  # Negative ID to indicate virtual permission
+                    "user_id": user_id,
+                    "scholarship_id": scholarship.id,
+                    "scholarship_name": scholarship.name,
+                    "scholarship_name_en": scholarship.name_en,
+                    "comment": "Super admin has automatic access to all scholarships",
+                    "created_at": target_user.created_at.isoformat(),
+                    "updated_at": target_user.updated_at.isoformat()
+                })
+            
+            print(f"DEBUG: Returning {len(permission_list)} virtual permissions for super_admin")
+            return ApiResponse(
+                success=True,
+                message=f"Retrieved {len(permission_list)} scholarship permissions (super admin has access to all)",
+                data=permission_list
+            )
+    
+    # Build query for regular permissions
     stmt = select(AdminScholarship).options(
         selectinload(AdminScholarship.admin),
         selectinload(AdminScholarship.scholarship)
@@ -1376,6 +1411,32 @@ async def get_scholarship_permissions(
             "created_at": permission.assigned_at.isoformat(),
             "updated_at": permission.assigned_at.isoformat()
         })
+    
+    # If no user_id filter and current user is SUPER_ADMIN, also include virtual permissions for all scholarships
+    if not user_id and current_user.role == UserRole.SUPER_ADMIN:
+        print(f"DEBUG: Current user is SUPER_ADMIN with no filter, adding virtual permissions")
+        from app.models.scholarship import ScholarshipType
+        all_scholarships_stmt = select(ScholarshipType)
+        all_scholarships_result = await db.execute(all_scholarships_stmt)
+        all_scholarships = all_scholarships_result.scalars().all()
+        
+        # Add virtual permissions for scholarships not already in the list
+        existing_scholarship_ids = {perm["scholarship_id"] for perm in permission_list}
+        
+        for idx, scholarship in enumerate(all_scholarships):
+            if scholarship.id not in existing_scholarship_ids:
+                permission_list.append({
+                    "id": -(idx + 1000),  # Negative ID to indicate virtual permission
+                    "user_id": current_user.id,
+                    "scholarship_id": scholarship.id,
+                    "scholarship_name": scholarship.name,
+                    "scholarship_name_en": scholarship.name_en,
+                    "comment": "Super admin has automatic access to all scholarships",
+                    "created_at": current_user.created_at.isoformat(),
+                    "updated_at": current_user.updated_at.isoformat()
+                })
+        
+        print(f"DEBUG: Added virtual permissions, total now: {len(permission_list)}")
     
     print(f"DEBUG: Returning {len(permission_list)} permissions")
     
@@ -1444,7 +1505,7 @@ async def create_scholarship_permission(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create new scholarship permission (admin only)"""
+    """Create new scholarship permission (admin can only assign scholarships they have permission for)"""
     
     print(f"DEBUG: Received permission_data: {permission_data}")
     
@@ -1456,6 +1517,13 @@ async def create_scholarship_permission(
     
     if not user_id or not scholarship_id:
         raise HTTPException(status_code=400, detail="user_id and scholarship_id are required")
+    
+    # Check if admin is trying to modify their own permissions (not allowed)
+    if current_user.role == UserRole.ADMIN and user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Admin users cannot modify their own permissions"
+        )
     
     # Check if user exists
     user_stmt = select(User).where(User.id == user_id)
@@ -1472,6 +1540,21 @@ async def create_scholarship_permission(
     
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
+    
+    # Check if current user has permission for this scholarship (admin role only)
+    if current_user.role == UserRole.ADMIN:
+        permission_check_stmt = select(AdminScholarship).where(
+            AdminScholarship.admin_id == current_user.id,
+            AdminScholarship.scholarship_id == scholarship_id
+        )
+        permission_check_result = await db.execute(permission_check_stmt)
+        has_permission = permission_check_result.scalar_one_or_none()
+        
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to assign this scholarship"
+            )
     
     # Check if permission already exists
     existing_stmt = select(AdminScholarship).where(
@@ -1562,12 +1645,14 @@ async def delete_scholarship_permission(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete scholarship permission (admin only)"""
+    """Delete scholarship permission (admin can only delete permissions for scholarships they manage, and cannot delete their own permissions)"""
     
     print(f"DEBUG: Attempting to delete permission {permission_id}")
     
     # Check if permission exists
-    stmt = select(AdminScholarship).where(AdminScholarship.id == permission_id)
+    stmt = select(AdminScholarship).options(
+        selectinload(AdminScholarship.scholarship)
+    ).where(AdminScholarship.id == permission_id)
     result = await db.execute(stmt)
     permission = result.scalar_one_or_none()
     
@@ -1576,6 +1661,28 @@ async def delete_scholarship_permission(
         raise HTTPException(status_code=404, detail="Permission not found")
     
     print(f"DEBUG: Found permission {permission_id} for admin {permission.admin_id}, scholarship {permission.scholarship_id}")
+    
+    # Check if admin is trying to delete their own permissions (not allowed)
+    if current_user.role == UserRole.ADMIN and permission.admin_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin users cannot delete their own permissions"
+        )
+    
+    # Check if current user has permission for this scholarship (admin role only)
+    if current_user.role == UserRole.ADMIN:
+        permission_check_stmt = select(AdminScholarship).where(
+            AdminScholarship.admin_id == current_user.id,
+            AdminScholarship.scholarship_id == permission.scholarship_id
+        )
+        permission_check_result = await db.execute(permission_check_stmt)
+        has_permission = permission_check_result.scalar_one_or_none()
+        
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to manage this scholarship"
+            )
     
     # Delete permission
     await db.delete(permission)

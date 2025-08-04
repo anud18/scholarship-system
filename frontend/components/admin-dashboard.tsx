@@ -101,55 +101,6 @@ export function AdminDashboard({
         </div>
       </div>
 
-      {/* Quick Navigation */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => onTabChange?.('main')}>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <FileText className="h-5 w-5 text-blue-600" />
-              審核管理
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-600 mb-3">管理獎學金申請案件，進行審核與核准作業</p>
-            <Badge variant="outline" className="text-blue-600 border-blue-300">
-              點擊進入
-            </Badge>
-          </CardContent>
-        </Card>
-
-        {(user.role === "admin" || user.role === "super_admin") && (
-          <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => onTabChange?.('admin')}>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-                系統管理
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600 mb-3">管理系統設定、用戶權限與獎學金類型</p>
-              <Badge variant="outline" className="text-green-600 border-green-300">
-                點擊進入
-              </Badge>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card className="hover:shadow-md transition-shadow">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Clock className="h-5 w-5 text-orange-600" />
-              統計概覽
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-600 mb-3">查看系統統計數據與申請趨勢</p>
-            <Badge variant="outline" className="text-orange-600 border-orange-300">
-              當前頁面
-            </Badge>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* 開發者調試工具欄 */}
       {process.env.NODE_ENV === 'development' && (

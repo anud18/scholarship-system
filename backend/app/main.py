@@ -62,7 +62,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -110,6 +110,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         field = " -> ".join(str(x) for x in error["loc"])
         message = error["msg"]
         errors.append(f"{field}: {message}")
+    
+    # Log detailed error for debugging
+    print(f"[VALIDATION ERROR] Path: {request.url.path}")
+    print(f"[VALIDATION ERROR] Method: {request.method}")
+    print(f"[VALIDATION ERROR] Headers: {dict(request.headers)}")
+    print(f"[VALIDATION ERROR] Errors: {exc.errors()}")
+    print(f"[VALIDATION ERROR] Body: {await request.body() if request.method in ['POST', 'PUT', 'PATCH'] else 'N/A'}")
     
     return JSONResponse(
         status_code=422,
