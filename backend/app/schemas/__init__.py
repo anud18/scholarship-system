@@ -6,7 +6,7 @@ from .application import (
 )
 from .scholarship import (
     ScholarshipTypeResponse, ScholarshipRuleResponse, 
-    SemesterEnum, CycleTypeEnum, SubTypeSelectionModeEnum
+    SemesterEnum, ApplicationCycleEnum, SubTypeSelectionModeEnum
 )
 from .notification import NotificationResponse
 from .common import MessageResponse, PaginationParams, PaginatedResponse
@@ -22,7 +22,7 @@ __all__ = [
     "ApplicationCreate", "ApplicationUpdate", "ApplicationResponse",
     "ApplicationFileResponse", "ApplicationReviewCreate", "ApplicationReviewResponse",
     "ScholarshipTypeResponse", "ScholarshipRuleResponse",
-    "SemesterEnum", "CycleTypeEnum", "SubTypeSelectionModeEnum",
+    "SemesterEnum", "ApplicationCycleEnum", "SubTypeSelectionModeEnum",
     "NotificationResponse",
     "MessageResponse", "PaginationParams", "PaginatedResponse",
     "SystemSettingCreate", "SystemSettingUpdate", "SystemSettingResponse",

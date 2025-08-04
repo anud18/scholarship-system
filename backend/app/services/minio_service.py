@@ -68,10 +68,10 @@ class MinIOService:
             
             # Validate file type
             file_extension = file.filename.split('.')[-1].lower() if file.filename else ''
-            if file_extension not in settings.allowed_file_types:
+            if file_extension not in settings.allowed_file_types_list:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"File type '{file_extension}' not allowed. Allowed types: {settings.allowed_file_types}"
+                    detail=f"File type '{file_extension}' not allowed. Allowed types: {', '.join(settings.allowed_file_types_list)}"
                 )
             
             # Generate unique object name using timestamp + hash + UUID for maximum uniqueness

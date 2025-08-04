@@ -14,6 +14,7 @@ import { Settings, Users, FileText, Database, Upload, Download, Play, Pause, Edi
 import apiClient, { EmailTemplate, NotificationResponse, AnnouncementCreate, AnnouncementUpdate, UserListResponse, UserStats, UserCreate, Workflow, ScholarshipRule, SystemStats, ScholarshipPermission } from "@/lib/api"
 import { UserEditModal } from "@/components/user-edit-modal"
 import { Modal } from "@/components/ui/modal"
+import { QuotaManagement } from "@/components/quota-management"
 
 
 
@@ -124,6 +125,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     size: 10,
     total: 0,
   });
+
+  // 當前用戶的獎學金權限
+  const [currentUserScholarshipPermissions, setCurrentUserScholarshipPermissions] = useState<ScholarshipPermission[]>([])
+  const [hasQuotaPermission, setHasQuotaPermission] = useState(false)
 
   // 使用者管理相關狀態
   const [users, setUsers] = useState<UserListResponse[]>([]);
@@ -407,6 +412,42 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     setAnnouncementForm({ title: '', message: '', notification_type: 'info', priority: 'normal' });
   };
 
+  // 載入當前用戶的獎學金權限
+  useEffect(() => {
+    const fetchCurrentUserPermissions = async () => {
+      // Super admin has all permissions - no need to check database
+      if (user.role === 'super_admin') {
+        setHasQuotaPermission(true);
+        setCurrentUserScholarshipPermissions([]); // Not needed for super admin
+        return;
+      }
+      
+      // For regular admin, check if they have any scholarship permissions
+      if (user.role === 'admin') {
+        try {
+          const response = await apiClient.admin.getCurrentUserScholarshipPermissions();
+          if (response.success && response.data) {
+            setCurrentUserScholarshipPermissions(response.data);
+            // Check if user has any scholarship permissions (needed for quota management)
+            setHasQuotaPermission(response.data.length > 0);
+          } else {
+            setHasQuotaPermission(false);
+          }
+        } catch (error) {
+          console.error('Failed to fetch user scholarship permissions:', error);
+          setHasQuotaPermission(false);
+        }
+      } else {
+        // College and professor users don't have quota management access
+        setHasQuotaPermission(false);
+      }
+    };
+
+    if (user) {
+      fetchCurrentUserPermissions();
+    }
+  }, [user]);
+
   // 載入系統公告
   useEffect(() => {
     // 檢查用戶是否已認證且具有管理員權限
@@ -421,10 +462,16 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     setUsersError(null);
     
     try {
+      // 根據當前使用者角色決定請求哪些角色
+      let rolesParam = 'college,admin,super_admin,professor';
+      if (user.role === 'admin') {
+        rolesParam = 'college,admin,professor'; // admin 使用者不能看到 super_admin
+      }
+      
       const params: any = {
         page: userPagination.page,
         size: userPagination.size,
-        roles: 'college,admin,super_admin,professor' // 包含教授角色，因為新用戶預設為教授
+        roles: rolesParam
       };
       
       if (userSearch) params.search = userSearch;
@@ -433,9 +480,17 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       const response = await apiClient.users.getAll(params);
       
       if (response.success && response.data) {
-        // 先過濾出管理角色和教授的使用者
-        const managementUsers = (response.data.items || []).filter((user: any) => 
-          ['college', 'admin', 'super_admin', 'professor'].includes(user.role)
+        // 根據當前使用者角色決定顯示哪些使用者
+        let allowedRoles = ['college', 'admin', 'super_admin', 'professor'];
+        
+        // 如果當前使用者是 admin，則不顯示 super_admin 使用者
+        if (user.role === 'admin') {
+          allowedRoles = ['college', 'admin', 'professor'];
+        }
+        
+        // 先過濾出允許的角色使用者
+        const managementUsers = (response.data.items || []).filter((targetUser: any) => 
+          allowedRoles.includes(targetUser.role)
         );
         
         // 對使用者列表進行角色排序
@@ -895,9 +950,12 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       </div>
 
       <Tabs defaultValue="dashboard" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className={`grid w-full ${hasQuotaPermission ? 'grid-cols-8' : 'grid-cols-7'}`}>
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
           <TabsTrigger value="users">使用者權限</TabsTrigger>
+          {hasQuotaPermission && (
+            <TabsTrigger value="quota">名額管理</TabsTrigger>
+          )}
           <TabsTrigger value="rules">審核規則</TabsTrigger>
           <TabsTrigger value="announcements">系統公告</TabsTrigger>
           <TabsTrigger value="email">郵件模板管理</TabsTrigger>
@@ -1523,6 +1581,12 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
             onPermissionChange={handlePermissionChange}
           />
         </TabsContent>
+
+        {hasQuotaPermission && (
+          <TabsContent value="quota" className="space-y-4">
+            <QuotaManagement />
+          </TabsContent>
+        )}
 
         <TabsContent value="announcements" className="space-y-4">
 

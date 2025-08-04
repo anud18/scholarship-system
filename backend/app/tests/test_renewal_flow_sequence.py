@@ -5,7 +5,7 @@ Test renewal flow sequence - ensuring renewal process completes before general p
 import pytest
 from datetime import datetime, timezone, timedelta
 from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipCategory
-from app.models.enums import Semester, SubTypeSelectionMode, CycleType
+from app.models.enums import Semester, SubTypeSelectionMode, ApplicationCycle
 
 
 class TestRenewalFlowSequence:

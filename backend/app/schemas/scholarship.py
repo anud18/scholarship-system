@@ -25,7 +25,7 @@ class SemesterEnum(str, Enum):
     SECOND = "second"
 
 
-class CycleTypeEnum(str, Enum):
+class ApplicationCycleEnum(str, Enum):
     SEMESTER = "semester"
     YEARLY = "yearly"
 
@@ -50,9 +50,7 @@ class ScholarshipTypeBase(BaseModel):
     description: Optional[str] = None
     description_en: Optional[str] = None
     category: ScholarshipCategoryEnum
-    academic_year: int
-    semester: SemesterEnum
-    application_cycle: CycleTypeEnum = CycleTypeEnum.SEMESTER
+    application_cycle: ApplicationCycleEnum = ApplicationCycleEnum.SEMESTER
     sub_type_list: Optional[List[str]] = None  # ["nstc", "moe_1w", "moe_2w"]
     amount: Decimal
     currency: str = "TWD"
@@ -94,11 +92,6 @@ class ScholarshipTypeBase(BaseModel):
             raise ValueError("Amount must be greater than 0")
         return v
     
-    @validator('academic_year')
-    def validate_academic_year(cls, v):
-        if v < 100 or v > 200:  # 民國100年到200年
-            raise ValueError("Academic year must be between 100 and 200")
-        return v
     
     @validator('professor_review_end')
     def validate_professor_review_period(cls, v, values):
@@ -124,9 +117,7 @@ class ScholarshipTypeUpdate(BaseModel):
     name_en: Optional[str] = None
     description: Optional[str] = None
     description_en: Optional[str] = None
-    academic_year: Optional[int] = None
-    semester: Optional[SemesterEnum] = None
-    application_cycle: Optional[CycleTypeEnum] = None
+    application_cycle: Optional[ApplicationCycleEnum] = None
     amount: Optional[Decimal] = None
     currency: Optional[str] = None
     whitelist_enabled: Optional[bool] = None
@@ -215,9 +206,7 @@ class EligibleScholarshipResponse(BaseModel):
     name_en: str
     eligible_sub_types: List[str]
     category: str
-    academic_year: int
-    semester: SemesterEnum
-    application_cycle: CycleTypeEnum
+    application_cycle: ApplicationCycleEnum
     description: Optional[str] = None
     description_en: Optional[str] = None
     amount: Decimal

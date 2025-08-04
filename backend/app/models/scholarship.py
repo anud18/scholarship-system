@@ -3,15 +3,14 @@ Scholarship type and rule models
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Text, JSON, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Text, JSON, ForeignKey, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
-from decimal import Decimal
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 from app.db.base_class import Base
-from app.models.enums import Semester, SubTypeSelectionMode, CycleType
+from app.models.enums import Semester, SubTypeSelectionMode, ApplicationCycle, QuotaManagementMode
 
 
 class ScholarshipStatus(enum.Enum):
@@ -59,44 +58,11 @@ class ScholarshipType(Base):
     sub_type_list = Column(JSON, default=[ScholarshipSubType.GENERAL.value]) # ["nstc", "moe_1w", "moe_2w"]
     sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), default=SubTypeSelectionMode.SINGLE, nullable=False)
     
-    # 學年度與學期設定
-    academic_year = Column(Integer, nullable=False)  # 民國年，如 113 表示 113 學年度
-    semester = Column(Enum(Semester), nullable=False)
-    application_cycle = Column(Enum(CycleType), default=CycleType.SEMESTER, nullable=False)
-    
-    # 金額設定
-    amount = Column(Numeric(10, 2), nullable=False)
-    currency = Column(String(10), default="TWD")
-    
+    # 申請週期設定
+    application_cycle = Column(Enum(ApplicationCycle, values_callable=lambda obj: [e.value for e in obj]), default=ApplicationCycle.SEMESTER, nullable=False)
+
     # 白名單設定
     whitelist_enabled = Column(Boolean, default=False)  # 是否啟用白名單
-    whitelist_student_ids = Column(JSON, default=[])  # 白名單學生ID列表
-    
-    # 申請時間
-    # 續領申請期間（優先處理）
-    renewal_application_start_date = Column(DateTime(timezone=True), nullable=True)
-    renewal_application_end_date = Column(DateTime(timezone=True), nullable=True)
-    
-    # 一般申請期間（續領處理完畢後）
-    application_start_date = Column(DateTime(timezone=True), nullable=True)
-    application_end_date = Column(DateTime(timezone=True), nullable=True)
-
-    # 續領審查期間
-    renewal_professor_review_start = Column(DateTime(timezone=True), nullable=True)
-    renewal_professor_review_end = Column(DateTime(timezone=True), nullable=True)
-    renewal_college_review_start = Column(DateTime(timezone=True), nullable=True)
-    renewal_college_review_end = Column(DateTime(timezone=True), nullable=True)
-
-    # 一般申請審查期間
-    requires_professor_recommendation = Column(Boolean, default=False)
-    professor_review_start = Column(DateTime(timezone=True), nullable=True)
-    professor_review_end = Column(DateTime(timezone=True), nullable=True)
-
-    requires_college_review = Column(Boolean, default=False)
-    college_review_start = Column(DateTime(timezone=True), nullable=True)
-    college_review_end = Column(DateTime(timezone=True), nullable=True)
-
-    review_deadline = Column(DateTime(timezone=True), nullable=True)
 
     # 狀態與設定
     status = Column(String(20), default=ScholarshipStatus.ACTIVE.value)
@@ -123,63 +89,6 @@ class ScholarshipType(Base):
         """Check if scholarship type is active"""
         return bool(self.status == ScholarshipStatus.ACTIVE.value)
     
-    @property
-    def is_application_period(self) -> bool:
-        """Check if within application period (renewal or general)"""
-        now = datetime.now(timezone.utc)
-        
-        # 檢查續領申請期間
-        if self.is_renewal_application_period:
-            return True
-            
-        # 檢查一般申請期間
-        if not self.application_start_date or not self.application_end_date:
-            return False
-        return bool(self.application_start_date <= now <= self.application_end_date)
-    
-    @property
-    def is_renewal_application_period(self) -> bool:
-        """Check if within renewal application period"""
-        now = datetime.now(timezone.utc)
-        if not self.renewal_application_start_date or not self.renewal_application_end_date:
-            return False
-        return bool(self.renewal_application_start_date <= now <= self.renewal_application_end_date)
-    
-    @property
-    def is_general_application_period(self) -> bool:
-        """Check if within general application period"""
-        now = datetime.now(timezone.utc)
-        if not self.application_start_date or not self.application_end_date:
-            return False
-        return bool(self.application_start_date <= now <= self.application_end_date)
-    
-    @property
-    def current_application_type(self) -> Optional[str]:
-        """Get current application type: 'renewal' or 'general' or None"""
-        if self.is_renewal_application_period:
-            return "renewal"
-        elif self.is_general_application_period:
-            return "general"
-        return None
-    
-    @property
-    def academic_year_label(self) -> str:
-        """Get academic year label for display"""
-        return f"{self.academic_year}學年度 {self.get_semester_label()}"
-    
-    def get_semester_label(self) -> str:
-        """Get semester label"""
-        return {
-            Semester.FIRST: "第一學期",
-            Semester.SECOND: "第二學期",
-        }.get(self.semester, "")
-    
-    def is_renewal_professor_review_period(self) -> bool:
-        """Check if within renewal professor review period"""
-        now = datetime.now(timezone.utc)
-        if not self.renewal_professor_review_start or not self.renewal_professor_review_end:
-            return False
-        return bool(self.renewal_professor_review_start <= now <= self.renewal_professor_review_end)
     
     def is_renewal_college_review_period(self) -> bool:
         """Check if within renewal college review period"""
@@ -351,9 +260,6 @@ class ScholarshipType(Base):
         
         return translations
     
-    def get_semester_key(self) -> str:
-        """Get unique key for this scholarship semester (for application limit checking)"""
-        return f"{self.academic_year}_{self.semester.value}"
     
     def can_student_apply(self, student_id: int, existing_applications: List['Application'], is_renewal: bool = None) -> bool:
         """
@@ -497,12 +403,11 @@ class ScholarshipSubTypeConfig(Base):
         return self.name_en or self.name
     
     @property
-    def effective_amount(self) -> Optional[Decimal]:
+    def effective_amount(self) -> Optional[int]:
         """Get effective amount (sub-type specific or fallback to main scholarship)"""
         if self.amount is not None:
             return self.amount
-        elif self.scholarship_type:
-            return self.scholarship_type.amount
+        # Note: ScholarshipType no longer has amount field - this should come from configuration
         return None
 
 class ScholarshipRule(Base):
@@ -561,3 +466,468 @@ class ScholarshipRule(Base):
         if not self.scholarship_type or not self.scholarship_type.sub_type_list:
             return False
         return self.sub_type in self.scholarship_type.sub_type_list
+
+
+class ScholarshipConfiguration(Base):
+    """
+    動態獎學金配置表
+    
+    This table stores dynamic configuration settings for scholarships,
+    including application cycles, quota management, and other characteristics
+    that can be modified without changing the core scholarship type structure.
+    Each configuration is unique per scholarship type and cycle (e.g., "113-1", "113-2", "114" for academic year)
+    """
+    __tablename__ = "scholarship_configurations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
+    
+    # 週期識別 - 作為唯一標識符
+    academic_year = Column(Integer, nullable=False, index=True)  # 民國年，如 113 表示 113 學年度
+    semester = Column(Enum(Semester), nullable=True, index=True)  # 學期制獎學金需要，學年制可為 NULL
+    
+    # 基本配置資訊
+    config_name = Column(String(200), nullable=False)  # 配置名稱
+    config_code = Column(String(50), unique=True, index=True, nullable=False)  # 配置代碼
+    description = Column(Text)  # 配置描述
+    description_en = Column(Text)  # 英文描述
+    
+    # 配額限制配置
+    has_quota_limit = Column(Boolean, default=False, nullable=False)  # 是否有配額限制
+    has_college_quota = Column(Boolean, default=False, nullable=False)  # 是否有學院配額
+    quota_management_mode = Column(Enum(QuotaManagementMode), default=QuotaManagementMode.NONE, nullable=False)
+    
+    # 配額詳細設定
+    total_quota = Column(Integer, nullable=True)  # 總配額數量
+    college_quota_config = Column(JSON, nullable=True)  # 學院配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
+    quota_allocation_rules = Column(JSON, nullable=True)  # 配額分配規則
+    
+    # 金額設定 (從 ScholarshipType 移至此處)
+    amount = Column(Integer, nullable=False)  # 獎學金金額（整數）
+    currency = Column(String(10), default="TWD")
+    
+    whitelist_student_ids = Column(JSON, default={})  # 白名單學生ID列表，依子獎學金區分 {"general": [1, 2, 3]}
+    
+    # 申請時間 (從 ScholarshipType 移至此處)
+    # 續領申請期間（優先處理）
+    renewal_application_start_date = Column(DateTime(timezone=True), nullable=True)
+    renewal_application_end_date = Column(DateTime(timezone=True), nullable=True)
+    
+    # 一般申請期間（續領處理完畢後）
+    application_start_date = Column(DateTime(timezone=True), nullable=True)
+    application_end_date = Column(DateTime(timezone=True), nullable=True)
+
+    # 續領審查期間 (從 ScholarshipType 移至此處)
+    renewal_professor_review_start = Column(DateTime(timezone=True), nullable=True)
+    renewal_professor_review_end = Column(DateTime(timezone=True), nullable=True)
+    renewal_college_review_start = Column(DateTime(timezone=True), nullable=True)
+    renewal_college_review_end = Column(DateTime(timezone=True), nullable=True)
+
+    # 一般申請審查期間 (從 ScholarshipType 移至此處)
+    requires_professor_recommendation = Column(Boolean, default=False)
+    professor_review_start = Column(DateTime(timezone=True), nullable=True)
+    professor_review_end = Column(DateTime(timezone=True), nullable=True)
+
+    requires_college_review = Column(Boolean, default=False)
+    college_review_start = Column(DateTime(timezone=True), nullable=True)
+    college_review_end = Column(DateTime(timezone=True), nullable=True)
+
+    review_deadline = Column(DateTime(timezone=True), nullable=True)
+    
+    # 狀態與有效性
+    is_active = Column(Boolean, default=True, nullable=False)
+    effective_start_date = Column(DateTime(timezone=True), nullable=True)  # 生效開始日期
+    effective_end_date = Column(DateTime(timezone=True), nullable=True)  # 生效結束日期
+    
+    # 版本控制
+    version = Column(String(20), default="1.0")  # 配置版本
+    previous_config_id = Column(Integer, ForeignKey("scholarship_configurations.id"), nullable=True)
+    
+    # 時間戳記
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(Integer, ForeignKey("users.id"))
+    updated_by = Column(Integer, ForeignKey("users.id"))
+    
+    # 關聯
+    scholarship_type = relationship("ScholarshipType", backref="configurations")
+    previous_config = relationship("ScholarshipConfiguration", remote_side=[id])
+    creator = relationship("User", foreign_keys=[created_by])
+    updater = relationship("User", foreign_keys=[updated_by])
+    
+    # 唯一性約束：每個獎學金類型在每個學年度/學期只能有一個配置
+    __table_args__ = (
+        UniqueConstraint('scholarship_type_id', 'academic_year', 'semester', name='uq_scholarship_config_type_year_semester'),
+    )
+
+    def __repr__(self):
+        return f"<ScholarshipConfiguration(id={self.id}, config_code={self.config_code}, name={self.config_name})>"
+    
+    @property
+    def cycle(self) -> str:
+        """Get cycle string representation for compatibility"""
+        if self.semester:
+            return f"{self.academic_year}-{self.semester.value}"
+        return str(self.academic_year)
+    
+    @property
+    def academic_year_label(self) -> str:
+        """Get academic year label for display"""
+        if self.semester:
+            semester_label = {
+                Semester.FIRST: "第一學期",
+                Semester.SECOND: "第二學期",
+            }.get(self.semester, "")
+            return f"{self.academic_year}學年度 {semester_label}"
+        return f"{self.academic_year}學年度"
+    
+    @property
+    def is_effective(self) -> bool:
+        """Check if configuration is currently effective"""
+        now = datetime.now(timezone.utc)
+        
+        if not self.is_active:
+            return False
+            
+        if self.effective_start_date and now < self.effective_start_date:
+            return False
+            
+        if self.effective_end_date and now > self.effective_end_date:
+            return False
+            
+        return True
+    
+    def get_quota_for_college(self, college_code: str) -> Optional[int]:
+        """Get quota allocation for specific college (simple mode)"""
+        if not self.has_college_quota or not self.college_quota_config:
+            return None
+        return self.college_quota_config.get(college_code)
+    
+    def get_matrix_quota(self, sub_type: str, college_code: str) -> Optional[int]:
+        """Get quota allocation for specific sub-type and college (matrix mode)"""
+        if not self.has_college_quota or not self.college_quota_config:
+            return None
+        
+        sub_type_quotas = self.college_quota_config.get(sub_type, {})
+        return sub_type_quotas.get(college_code)
+    
+    def set_matrix_quota(self, sub_type: str, college_code: str, quota: int) -> None:
+        """Set quota allocation for specific sub-type and college"""
+        if not self.college_quota_config:
+            self.college_quota_config = {}
+        
+        if sub_type not in self.college_quota_config:
+            self.college_quota_config[sub_type] = {}
+        
+        self.college_quota_config[sub_type][college_code] = quota
+    
+    def get_sub_type_total_quota(self, sub_type: str) -> int:
+        """Get total quota for a specific sub-type across all colleges"""
+        if not self.has_college_quota or not self.college_quota_config:
+            return 0
+        
+        sub_type_quotas = self.college_quota_config.get(sub_type, {})
+        return sum(sub_type_quotas.values())
+    
+    def get_college_total_quota(self, college_code: str) -> int:
+        """Get total quota for a specific college across all sub-types"""
+        if not self.has_college_quota or not self.college_quota_config:
+            return 0
+        
+        total = 0
+        for sub_type_quotas in self.college_quota_config.values():
+            total += sub_type_quotas.get(college_code, 0)
+        return total
+    
+    def get_matrix_quota_summary(self) -> Dict[str, Any]:
+        """Get complete matrix quota summary"""
+        if not self.has_college_quota or not self.college_quota_config:
+            return {"sub_types": {}, "colleges": {}, "grand_total": 0}
+        
+        # Calculate totals by sub-type
+        sub_type_totals = {}
+        for sub_type in self.college_quota_config:
+            sub_type_totals[sub_type] = self.get_sub_type_total_quota(sub_type)
+        
+        # Calculate totals by college
+        all_colleges = set()
+        for sub_type_quotas in self.college_quota_config.values():
+            all_colleges.update(sub_type_quotas.keys())
+        
+        college_totals = {}
+        for college_code in all_colleges:
+            college_totals[college_code] = self.get_college_total_quota(college_code)
+        
+        # Calculate grand total
+        grand_total = sum(sub_type_totals.values())
+        
+        return {
+            "matrix": self.college_quota_config,
+            "sub_type_totals": sub_type_totals,
+            "college_totals": college_totals,
+            "grand_total": grand_total
+        }
+    
+    def get_total_available_quota(self) -> int:
+        """Get total available quota considering all restrictions"""
+        if not self.has_quota_limit:
+            return -1  # Unlimited
+            
+        if self.quota_management_mode == QuotaManagementMode.NONE:
+            return -1  # Unlimited
+            
+        return self.total_quota or 0
+    
+    def validate_quota_config(self) -> List[str]:
+        """Validate quota configuration and return list of errors"""
+        errors = []
+        
+        if self.has_quota_limit and not self.total_quota:
+            errors.append("總配額不能為空當啟用配額限制時")
+            
+        if self.has_college_quota and not self.college_quota_config:
+            errors.append("學院配額配置不能為空當啟用學院配額時")
+            
+        if self.has_college_quota and self.college_quota_config:
+            # For matrix structure: {sub_type: {college: quota}}
+            college_total = sum(
+                sum(college_quotas.values()) 
+                for college_quotas in self.college_quota_config.values()
+                if isinstance(college_quotas, dict)
+            )
+            if self.total_quota and college_total > self.total_quota:
+                errors.append(f"學院配額總和 ({college_total}) 超過總配額 ({self.total_quota})")
+                
+        return errors
+    
+    
+    def export_config(self) -> Dict[str, Any]:
+        """Export configuration as dictionary for backup/migration"""
+        return {
+            "config_code": self.config_code,
+            "config_name": self.config_name,
+            "description": self.description,
+            "description_en": self.description_en,
+            "academic_year": self.academic_year,
+            "semester": self.semester.value if self.semester else None,
+            "has_quota_limit": self.has_quota_limit,
+            "has_college_quota": self.has_college_quota,
+            "quota_management_mode": self.quota_management_mode.value if self.quota_management_mode else None,
+            "total_quota": self.total_quota,
+            "college_quota_config": self.college_quota_config,
+            "quota_allocation_rules": self.quota_allocation_rules,
+            "version": self.version,
+            "is_active": self.is_active,
+            "effective_start_date": self.effective_start_date.isoformat() if self.effective_start_date else None,
+            "effective_end_date": self.effective_end_date.isoformat() if self.effective_end_date else None,
+            "amount": self.amount,  # Already integer
+            "currency": self.currency,
+            "whitelist_student_ids": self.whitelist_student_ids,
+        }
+    
+    # Time-related methods moved from ScholarshipType
+    @property
+    def is_application_period(self) -> bool:
+        """Check if within application period (renewal or general)"""
+        now = datetime.now(timezone.utc)
+        
+        # 檢查續領申請期間
+        if self.is_renewal_application_period:
+            return True
+            
+        # 檢查一般申請期間
+        if not self.application_start_date or not self.application_end_date:
+            return False
+        return bool(self.application_start_date <= now <= self.application_end_date)
+    
+    @property
+    def is_renewal_application_period(self) -> bool:
+        """Check if within renewal application period"""
+        now = datetime.now(timezone.utc)
+        if not self.renewal_application_start_date or not self.renewal_application_end_date:
+            return False
+        return bool(self.renewal_application_start_date <= now <= self.renewal_application_end_date)
+    
+    @property
+    def is_general_application_period(self) -> bool:
+        """Check if within general application period"""
+        now = datetime.now(timezone.utc)
+        if not self.application_start_date or not self.application_end_date:
+            return False
+        return bool(self.application_start_date <= now <= self.application_end_date)
+    
+    @property
+    def current_application_type(self) -> Optional[str]:
+        """Get current application type: 'renewal' or 'general' or None"""
+        if self.is_renewal_application_period:
+            return "renewal"
+        elif self.is_general_application_period:
+            return "general"
+        return None
+    
+    def is_renewal_professor_review_period(self) -> bool:
+        """Check if within renewal professor review period"""
+        now = datetime.now(timezone.utc)
+        if not self.renewal_professor_review_start or not self.renewal_professor_review_end:
+            return False
+        return bool(self.renewal_professor_review_start <= now <= self.renewal_professor_review_end)
+    
+    def is_renewal_college_review_period(self) -> bool:
+        """Check if within renewal college review period"""
+        now = datetime.now(timezone.utc)
+        if not self.renewal_college_review_start or not self.renewal_college_review_end:
+            return False
+        return bool(self.renewal_college_review_start <= now <= self.renewal_college_review_end)
+    
+    def is_professor_review_period(self) -> bool:
+        """Check if within professor review period (renewal or general)"""
+        now = datetime.now(timezone.utc)
+        
+        # 檢查續領教授審查期間
+        if self.is_renewal_professor_review_period():
+            return True
+            
+        # 檢查一般教授審查期間
+        if not self.professor_review_start or not self.professor_review_end:
+            return False
+        return bool(self.professor_review_start <= now <= self.professor_review_end)
+    
+    def is_college_review_period(self) -> bool:
+        """Check if within college review period (renewal or general)"""
+        now = datetime.now(timezone.utc)
+        
+        # 檢查續領學院審查期間
+        if self.is_renewal_college_review_period():
+            return True
+            
+        # 檢查一般學院審查期間
+        if not self.college_review_start or not self.college_review_end:
+            return False
+        return bool(self.college_review_start <= now <= self.college_review_end)
+    
+    def get_current_review_stage(self) -> Optional[str]:
+        """Get current review stage: 'renewal_professor', 'renewal_college', 'general_professor', 'general_college' or None"""
+        now = datetime.now(timezone.utc)
+        
+        # 續領階段
+        if self.is_renewal_professor_review_period():
+            return "renewal_professor"
+        elif self.is_renewal_college_review_period():
+            return "renewal_college"
+        
+        # 一般申請階段
+        elif self.is_professor_review_period() and not self.is_renewal_professor_review_period():
+            return "general_professor"
+        elif self.is_college_review_period() and not self.is_renewal_college_review_period():
+            return "general_college"
+        
+        return None
+    
+    def is_student_in_whitelist(self, student_id: int, sub_type: str = None) -> bool:
+        """Check if student is in whitelist for specific sub-scholarship type"""
+        # 如果未啟用白名單，則不限制申請（返回True表示通過檢查）
+        if not hasattr(self.scholarship_type, 'whitelist_enabled') or not self.scholarship_type.whitelist_enabled:
+            return True  # 未啟用白名單時，所有學生都可申請
+        
+        # 如果啟用白名單但配置為空，則無人可申請
+        if not self.whitelist_student_ids:
+            return False  # 啟用白名單但配置為空，無人可申請
+        
+        # 如果未指定子類型，檢查是否在任何子類型的白名單中
+        if sub_type is None:
+            for sub_list in self.whitelist_student_ids.values():
+                if student_id in sub_list:
+                    return True
+            return False
+            
+        # 檢查學生是否在特定子類型的白名單中
+        sub_whitelist = self.whitelist_student_ids.get(sub_type, [])
+        return student_id in sub_whitelist
+    
+    def add_student_to_whitelist(self, student_id: int, sub_type: str) -> None:
+        """Add student to whitelist for specific sub-scholarship type"""
+        if not self.whitelist_student_ids:
+            self.whitelist_student_ids = {}
+        
+        if sub_type not in self.whitelist_student_ids:
+            self.whitelist_student_ids[sub_type] = []
+        
+        if student_id not in self.whitelist_student_ids[sub_type]:
+            self.whitelist_student_ids[sub_type].append(student_id)
+    
+    def remove_student_from_whitelist(self, student_id: int, sub_type: str = None) -> bool:
+        """Remove student from whitelist. If sub_type is None, remove from all sub-types"""
+        if not self.whitelist_student_ids:
+            return False
+        
+        removed = False
+        if sub_type is None:
+            # Remove from all sub-types
+            for sub_list in self.whitelist_student_ids.values():
+                if student_id in sub_list:
+                    sub_list.remove(student_id)
+                    removed = True
+        else:
+            # Remove from specific sub-type
+            if sub_type in self.whitelist_student_ids and student_id in self.whitelist_student_ids[sub_type]:
+                self.whitelist_student_ids[sub_type].remove(student_id)
+                removed = True
+        
+        return removed
+    
+    def get_whitelist_for_subtype(self, sub_type: str) -> List[int]:
+        """Get whitelist student IDs for specific sub-scholarship type"""
+        return self.whitelist_student_ids.get(sub_type, [])
+    
+    def get_all_whitelisted_students(self) -> Dict[str, List[int]]:
+        """Get all whitelisted students organized by sub-type"""
+        return dict(self.whitelist_student_ids) if self.whitelist_student_ids else {}
+    
+    def get_application_timeline(self) -> Dict[str, Dict[str, datetime]]:
+        """Get complete application timeline"""
+        timeline = {
+            "renewal": {
+                "application_start": self.renewal_application_start_date,
+                "application_end": self.renewal_application_end_date,
+                "professor_review_start": self.renewal_professor_review_start,
+                "professor_review_end": self.renewal_professor_review_end,
+                "college_review_start": self.renewal_college_review_start,
+                "college_review_end": self.renewal_college_review_end,
+            },
+            "general": {
+                "application_start": self.application_start_date,
+                "application_end": self.application_end_date,
+                "professor_review_start": self.professor_review_start,
+                "professor_review_end": self.professor_review_end,
+                "college_review_start": self.college_review_start,
+                "college_review_end": self.college_review_end,
+            }
+        }
+        return timeline
+    
+    def get_next_deadline(self) -> Optional[datetime]:
+        """Get the next upcoming deadline"""
+        now = datetime.now(timezone.utc)
+        deadlines = []
+        
+        # Collect all deadlines
+        if self.renewal_application_end_date and self.renewal_application_end_date > now:
+            deadlines.append(("續領申請截止", self.renewal_application_end_date))
+        if self.renewal_professor_review_end and self.renewal_professor_review_end > now:
+            deadlines.append(("續領教授審查截止", self.renewal_professor_review_end))
+        if self.renewal_college_review_end and self.renewal_college_review_end > now:
+            deadlines.append(("續領學院審查截止", self.renewal_college_review_end))
+        if self.application_end_date and self.application_end_date > now:
+            deadlines.append(("一般申請截止", self.application_end_date))
+        if self.professor_review_end and self.professor_review_end > now:
+            deadlines.append(("一般教授審查截止", self.professor_review_end))
+        if self.college_review_end and self.college_review_end > now:
+            deadlines.append(("一般學院審查截止", self.college_review_end))
+        if self.review_deadline and self.review_deadline > now:
+            deadlines.append(("總審查截止", self.review_deadline))
+        
+        if not deadlines:
+            return None
+        
+        # Return the earliest deadline
+        return min(deadlines, key=lambda x: x[1])[1]

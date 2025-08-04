@@ -240,12 +240,8 @@ class ApplicationFieldService:
             
         except Exception as e:
             print(f"❌ Error getting form config for {scholarship_type}: {str(e)}")
-            # 返回空的配置而不是拋出異常
-            return ScholarshipFormConfigResponse(
-                scholarship_type=scholarship_type,
-                fields=[],
-                documents=[]
-            )
+            # Re-raise the exception instead of returning empty config
+            raise e
     
     async def save_scholarship_form_config(
         self, 

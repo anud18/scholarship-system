@@ -3,7 +3,7 @@ Student models for academic information with normalized database design
 """
 
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, SmallInteger, Text, Table, UniqueConstraint, ForeignKeyConstraint
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, SmallInteger, Text, Table, UniqueConstraint, ForeignKeyConstraint, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -53,7 +53,7 @@ class Academy(Base):
     __tablename__ = "academies"
 
     id = Column(Integer, primary_key=True)
-    code = Column(String(10), unique=True)
+    code = Column(String(10), unique=True, nullable=False)
     name = Column(String(100), nullable=False)
 
 
