@@ -217,7 +217,7 @@ async def get_matrix_quota_status(
                 detail="No matrix quota configuration found"
             )
         
-        # Get application usage data
+        # Get application usage data with single aggregated query (fixes N+1 problem)
         phd_quotas = {}
         grand_total_quota = 0
         grand_total_used = 0
@@ -232,6 +232,43 @@ async def get_matrix_quota_status(
                 college_codes.update(sub_type_quotas.keys())
         college_codes = sorted(list(college_codes))
         
+        # Single aggregated query to get all usage data at once
+        from sqlalchemy import join, case
+        
+        usage_stmt = select(
+            Student.std_aca_no.label('college'),
+            func.count(Application.id).label('total_applications'),
+            func.count(case((Application.status == ApplicationStatus.APPROVED, 1))).label('approved_count')
+        ).select_from(
+            join(Application, Student, Application.student_id == Student.id)
+        ).where(
+            and_(
+                Application.scholarship_type_id == phd_scholarship.id,
+                Application.academic_year == academic_year,
+                Student.std_aca_no.in_(college_codes)  # Only query for relevant colleges
+            )
+        ).group_by(Student.std_aca_no)
+        
+        # If semester-based, also filter by semester
+        if semester:
+            usage_stmt = usage_stmt.where(Application.semester == semester)
+        
+        # Execute single query and build usage lookup
+        try:
+            usage_result = await db.execute(usage_stmt)
+            usage_data = {}
+            for row in usage_result:
+                usage_data[row.college] = {
+                    'used': row.approved_count,
+                    'applications': row.total_applications
+                }
+        except Exception as usage_error:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in aggregated usage query: {usage_error}", exc_info=True)
+            usage_data = {}
+        
+        # Build quota matrix using pre-fetched usage data
         for sub_type in sub_types:
             phd_quotas[sub_type] = {}
             sub_type_quotas = matrix_quotas.get(sub_type, {})
@@ -239,51 +276,10 @@ async def get_matrix_quota_status(
             for college in college_codes:
                 total_quota = sub_type_quotas.get(college, 0)
                 
-                # Get actual usage from applications using JOIN instead of subquery
-                from sqlalchemy import join
-                
-                # Count approved applications with join to student table
-                usage_stmt = select(func.count(Application.id)).select_from(
-                    join(Application, Student, Application.student_id == Student.id)
-                ).where(
-                    and_(
-                        Application.scholarship_type_id == phd_scholarship.id,
-                        Application.academic_year == academic_year,
-                        Application.status == ApplicationStatus.APPROVED,
-                        Student.std_aca_no == college
-                    )
-                )
-                
-                # If semester-based, also filter by semester
-                if semester:
-                    usage_stmt = usage_stmt.where(Application.semester == semester)
-                
-                try:
-                    usage_result = await db.execute(usage_stmt)
-                    used = usage_result.scalar() or 0
-                except Exception as usage_error:
-                    print(f"DEBUG: Error in usage query: {usage_error}")
-                    used = 0
-                
-                # Get total applications count using JOIN
-                apps_stmt = select(func.count(Application.id)).select_from(
-                    join(Application, Student, Application.student_id == Student.id)
-                ).where(
-                    and_(
-                        Application.scholarship_type_id == phd_scholarship.id,
-                        Application.academic_year == academic_year,
-                        Student.std_aca_no == college
-                    )
-                )
-                if semester:
-                    apps_stmt = apps_stmt.where(Application.semester == semester)
-                
-                try:
-                    apps_result = await db.execute(apps_stmt)
-                    applications = apps_result.scalar() or 0
-                except Exception as apps_error:
-                    print(f"DEBUG: Error in applications query: {apps_error}")
-                    applications = 0
+                # Get usage from pre-fetched data
+                college_usage = usage_data.get(college, {'used': 0, 'applications': 0})
+                used = college_usage['used']
+                applications = college_usage['applications']
                 
                 phd_quotas[sub_type][college] = {
                     "total_quota": total_quota,
