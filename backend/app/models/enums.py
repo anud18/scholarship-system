@@ -18,7 +18,15 @@ class SubTypeSelectionMode(enum.Enum):
     HIERARCHICAL = "hierarchical"  # 需依序選取：A → AB → ABC
 
 
-class CycleType(enum.Enum):
-    """Application cycle type enum"""
+class ApplicationCycle(enum.Enum):
+    """Application cycle/period type enum"""
     SEMESTER = "semester"
-    YEARLY = "yearly" 
+    YEARLY = "yearly"
+
+
+class QuotaManagementMode(enum.Enum):
+    """Quota management mode enum"""
+    NONE = "none"                    # 無配額限制
+    SIMPLE = "simple"                # 簡單總配額
+    COLLEGE_BASED = "college_based"  # 學院分配配額
+    MATRIX_BASED = "matrix_based"    # 矩陣配額管理 (子類型×學院)

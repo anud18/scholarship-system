@@ -58,10 +58,11 @@ class ScholarshipService:
     
     async def get_eligible_scholarships(self, student: Student) -> List[ScholarshipType]:
         """Get scholarships that the student is eligible for"""
-        # Get all active scholarships
+        # Get all active scholarships with their current configurations
+        from sqlalchemy.orm import selectinload
         stmt = select(ScholarshipType).where(
             ScholarshipType.status == ScholarshipStatus.ACTIVE.value
-        )
+        ).options(selectinload(ScholarshipType.configurations))
         result = await self.db.execute(stmt)
         scholarships = result.scalars().all()
         
@@ -86,15 +87,27 @@ class ScholarshipService:
         for scholarship in scholarships:
             try:
                 logger.info(f"\nChecking eligibility for scholarship: {scholarship.name}")
-                logger.info(f"Application period: {scholarship.application_start_date} to {scholarship.application_end_date}")
+                
+                # Get current active configuration for this scholarship
+                current_config = None
+                for config in scholarship.configurations:
+                    if config.is_active:
+                        current_config = config
+                        break
+                
+                if current_config:
+                    logger.info(f"Application period: {current_config.application_start_date} to {current_config.application_end_date}")
+                else:
+                    logger.info("No active configuration found for this scholarship")
+                
                 logger.info(f"Current time: {datetime.now(timezone.utc)}")
                 logger.info(f"Scholarship category: {scholarship.category}")
                 
                 # Check if scholarship is in application period
                 current_time = datetime.now(timezone.utc)
                 in_application_period = True
-                if scholarship.application_start_date and scholarship.application_end_date:
-                    in_application_period = scholarship.application_start_date <= current_time <= scholarship.application_end_date
+                if current_config and current_config.application_start_date and current_config.application_end_date:
+                    in_application_period = current_config.application_start_date <= current_time <= current_config.application_end_date
                 
                 if not self._should_bypass_application_period() and not in_application_period:
                     logger.info(f"Skipping {scholarship.name}: Not in application period")
