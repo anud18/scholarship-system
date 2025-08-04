@@ -29,6 +29,16 @@ case "$1" in
     "status")
         echo "Checking service status..."
         docker compose ps || true
+        echo ""
+        echo "Service URLs:"
+        echo "- Frontend: http://localhost:3000"
+        echo "- Backend API: http://localhost:8000"
+        echo "- Mock Student API: http://localhost:8080"
+        echo "- PgAdmin: http://localhost:8081"
+        echo "- MinIO Console: http://localhost:9001"
+        echo ""
+        echo "Mock Student API Health Check:"
+        curl -s http://localhost:8080/health | jq . || echo "Mock Student API not responding"
         ;;
     *)
         echo "Usage: $0 {start|stop|status}"

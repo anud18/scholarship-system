@@ -294,7 +294,7 @@ def test_api():
     account = "scholarship"
     
     # Create request
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
     request_data = {
         "account": account,
         "action": "qrySoaaScholarshipStudent",

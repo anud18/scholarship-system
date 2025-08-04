@@ -25,7 +25,7 @@ services:
     image: dpage/pgadmin4
     container_name: scholarship_pgadmin_test
     ports:
-      - "8080:80"
+      - "8081:80"
     environment:
       PGADMIN_DEFAULT_EMAIL: test@test.com
       PGADMIN_DEFAULT_PASSWORD: test123
@@ -87,7 +87,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: test-secret-key-for-docker-testing-only
       DEBUG: "true"
-      CORS_ORIGINS: '["*"]'
+      CORS_ORIGINS: "*"
       ENVIRONMENT: development
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
@@ -97,6 +97,9 @@ services:
       # Mock SSO Configuration for Testing
       ENABLE_MOCK_SSO: "true"
       MOCK_SSO_DOMAIN: dev.university.edu
+      # Mock Student API Configuration
+      STUDENT_API_URL: http://mock-student-api:8080
+      STUDENT_API_HMAC_KEY: 4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
     volumes:
       - ./backend:/app
     depends_on:
@@ -105,6 +108,29 @@ services:
       redis:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      mock-student-api:
+        condition: service_started
+    networks:
+      - scholarship_test_network
+    restart: unless-stopped
+
+  # Mock Student API (University System Mock)
+  mock-student-api:
+    build:
+      context: ./mock-student-api
+      dockerfile: Dockerfile
+    container_name: scholarship_mock_student_api_test
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      MOCK_HMAC_KEY_HEX: 4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
+      STRICT_TIME_CHECK: "false"  # Relaxed for testing
+      STRICT_ENCODE_CHECK: "false"
+      TIME_TOLERANCE_MINUTES: "30"  # Extended tolerance for testing
+    depends_on:
+      postgres:
         condition: service_healthy
     networks:
       - scholarship_test_network
@@ -125,12 +151,15 @@ services:
       NODE_ENV: development
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
+      # Mock Student API URL for development
+      MOCK_STUDENT_API_URL: http://mock-student-api:8080
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     depends_on:
       - backend
+      - mock-student-api
     networks:
       - scholarship_test_network
     restart: unless-stopped

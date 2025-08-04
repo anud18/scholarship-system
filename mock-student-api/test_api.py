@@ -9,7 +9,7 @@ import hashlib
 import hmac
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 import os
 
@@ -21,6 +21,8 @@ class HMACAPIClient:
         self.base_url = base_url
         self.hmac_key_hex = hmac_key_hex or "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
         self.account = "scholarship"
+        print(f"Testing API at: {self.base_url}")
+        print(f"Database integration: This will test against real student data from the scholarship database")
     
     def _generate_hmac_signature(self, request_body: str, timestamp: str) -> str:
         """Generate HMAC-SHA256 signature for API request"""
@@ -41,8 +43,8 @@ class HMACAPIClient:
     
     def _make_authenticated_request(self, endpoint: str, request_data: Dict[str, Any]) -> requests.Response:
         """Make authenticated request to API endpoint"""
-        # Generate timestamp (YYYYMMDDHHMMSS)
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        # Generate timestamp (YYYYMMDDHHMMSS) - UTC
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         
         # Create compact JSON (no spaces)
         request_body = json.dumps(request_data, separators=(',', ':'), ensure_ascii=False)
@@ -203,7 +205,7 @@ def test_invalid_hmac_signature():
     print("🔍 Testing invalid HMAC signature rejection...")
     
     # Create request with invalid signature
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     request_data = {
         "account": "scholarship",
         "action": "qrySoaaScholarshipStudent",
@@ -246,7 +248,7 @@ def test_invalid_account():
         "stdcode": "313612215"
     }
     
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     request_body = json.dumps(request_data, separators=(',', ':'), ensure_ascii=False)
     signature = client._generate_hmac_signature(request_body, timestamp)
     authorization = f"HMAC-SHA256:{timestamp}:scholarship:{signature}"
@@ -281,7 +283,7 @@ def test_invalid_action():
         "stdcode": "313612215"
     }
     
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     request_body = json.dumps(request_data, separators=(',', ':'), ensure_ascii=False)
     signature = client._generate_hmac_signature(request_body, timestamp)
     authorization = f"HMAC-SHA256:{timestamp}:scholarship:{signature}"
