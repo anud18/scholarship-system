@@ -41,3 +41,19 @@ export function isValidCollegeCode(code: string): boolean {
 export function getCollegeCodes(): string[] {
   return Object.keys(COLLEGE_MAPPINGS).sort()
 }
+
+// Sub-type mappings for scholarship categories
+export const SUBTYPE_MAPPINGS: Record<string, string> = {
+  'nstc': '國科會',
+  'moe_1w': '教育部一萬',
+  'moe_2w': '教育部兩萬',
+  'general': '一般',
+}
+
+export function getSubTypeName(code: string): string {
+  return SUBTYPE_MAPPINGS[code] || code
+}
+
+export function getSubTypeCodes(): string[] {
+  return Object.keys(SUBTYPE_MAPPINGS)
+}

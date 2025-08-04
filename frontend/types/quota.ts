@@ -129,32 +129,8 @@ export interface MatrixCellProps {
   isLoading: boolean
 }
 
-// Import centralized college mappings
-import { getCollegeName } from '@/lib/college-mappings'
-
-// Legacy mapping for backwards compatibility - use getCollegeName() instead
-export const COLLEGE_MAPPINGS: Record<string, string> = {
-  'E': '電機學院',
-  'C': '資訊學院',
-  'I': '工學院',
-  'S': '理學院',
-  'B': '工程生物學院',
-  'O': '光電學院',
-  'D': '半導體學院',
-  '1': '醫學院',
-  '6': '生醫工學院',
-  '7': '生命科學院',
-  'M': '管理學院',
-  'A': '人社院',
-  'K': '客家學院'
-}
-
-// Sub-type mappings for display
-export const SUBTYPE_MAPPINGS: Record<string, string> = {
-  'nstc': '國科會',
-  'moe_1w': '教育部一萬',
-  'moe_2w': '教育部兩萬'
-}
+// College and sub-type mappings have been moved to @/lib/college-mappings
+// Use getCollegeName() and getSubTypeName() functions instead of hardcoded mappings
 
 // Helper function to calculate warning level
 export function getWarningLevel(usagePercentage: number): QuotaUsageStats['warningLevel'] {

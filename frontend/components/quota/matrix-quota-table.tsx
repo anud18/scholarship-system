@@ -20,11 +20,10 @@ import { useToast } from '@/components/ui/use-toast'
 import {
   MatrixQuotaData,
   QuotaCell,
-  COLLEGE_MAPPINGS,
-  SUBTYPE_MAPPINGS,
   getWarningLevel,
   getWarningColor,
 } from '@/types/quota'
+import { getCollegeName, getCollegeCodes, getSubTypeName, getSubTypeCodes } from '@/lib/college-mappings'
 import { quotaApi } from '@/services/api/quotaApi'
 
 interface MatrixQuotaTableProps {
@@ -57,8 +56,11 @@ export function MatrixQuotaTable({
     setLocalData(data)
   }, [data])
 
-  const colleges = Object.keys(COLLEGE_MAPPINGS)
-  const subTypes = Object.keys(SUBTYPE_MAPPINGS)
+  // Get colleges and sub-types from the actual data, fallback to static lists if no data
+  const colleges = localData && Object.keys(localData.phd_quotas).length > 0 
+    ? Array.from(new Set(Object.values(localData.phd_quotas).flatMap(subtypeData => Object.keys(subtypeData)))).sort()
+    : getCollegeCodes()
+  const subTypes = localData ? Object.keys(localData.phd_quotas) : getSubTypeCodes()
 
   const handleEditStart = (subType: string, college: string, currentValue: number) => {
     if (readOnly) return
@@ -126,7 +128,7 @@ export function MatrixQuotaTable({
 
         toast({
           title: '更新成功',
-          description: `${SUBTYPE_MAPPINGS[editingCell.subType]} - ${COLLEGE_MAPPINGS[editingCell.college]}: ${response.data.old_quota} → ${response.data.new_quota}`,
+          description: `${getSubTypeName(editingCell.subType)} - ${getCollegeName(editingCell.college)}: ${response.data.old_quota} → ${response.data.new_quota}`,
         })
       } else {
         throw new Error(response.message || '更新失敗')
@@ -213,7 +215,7 @@ export function MatrixQuotaTable({
             {colleges.map(college => (
               <TableHead key={college} className="text-center min-w-[100px]">
                 <div className="flex flex-col">
-                  <span className="font-medium">{COLLEGE_MAPPINGS[college]}</span>
+                  <span className="font-medium">{getCollegeName(college)}</span>
                   <span className="text-xs text-gray-500">({college})</span>
                 </div>
               </TableHead>
@@ -228,7 +230,7 @@ export function MatrixQuotaTable({
               <TableRow key={subType}>
                 <TableCell className="font-medium sticky left-0 bg-white z-10">
                   <div className="flex flex-col">
-                    <span>{SUBTYPE_MAPPINGS[subType]}</span>
+                    <span>{getSubTypeName(subType)}</span>
                     <span className="text-xs text-gray-500">({subType})</span>
                   </div>
                 </TableCell>
