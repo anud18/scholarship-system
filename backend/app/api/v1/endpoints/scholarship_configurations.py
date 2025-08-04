@@ -235,10 +235,13 @@ async def get_matrix_quota_status(
         # Single aggregated query to get all usage data at once
         from sqlalchemy import join, case
         
+        # Store the enum value to ensure it's properly converted to string
+        approved_status = ApplicationStatus.APPROVED.value
+        
         usage_stmt = select(
             Student.std_aca_no.label('college'),
             func.count(Application.id).label('total_applications'),
-            func.count(case((Application.status == ApplicationStatus.APPROVED, 1))).label('approved_count')
+            func.count(case((Application.status == approved_status, 1), else_=None)).label('approved_count')
         ).select_from(
             join(Application, Student, Application.student_id == Student.id)
         ).where(
