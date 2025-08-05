@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     enable_mock_sso: bool = True
     mock_sso_domain: str = "dev.university.edu"
     
+    # Student API Configuration
+    student_api_enabled: bool = True
+    student_api_base_url: str = "http://localhost:8080"  # Mock API in development
+    student_api_account: str = "scholarship"
+    student_api_hmac_key: str = "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"  # Mock key for development
+    student_api_timeout: float = 10.0
+    student_api_encode_type: Optional[str] = "UTF-8"
+    
     @field_validator("database_url", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:

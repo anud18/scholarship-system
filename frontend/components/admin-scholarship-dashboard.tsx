@@ -23,11 +23,13 @@ import {
   GraduationCap,
   Star,
   TrendingUp,
-  RefreshCw
+  RefreshCw,
+  Calendar
 } from "lucide-react"
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin"
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
 import { AdminScholarshipManagementInterface } from "@/components/admin-scholarship-management-interface"
+import { SemesterSelector } from "@/components/semester-selector"
 import { Locale } from "@/lib/validators"
 import { apiClient } from "@/lib/api"
 
@@ -242,6 +244,11 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   const [statusFilter, setStatusFilter] = useState("all")
   const [showApplicationDetail, setShowApplicationDetail] = useState(false)
   const [selectedApplicationForDetail, setSelectedApplicationForDetail] = useState<DashboardApplication | null>(null)
+  
+  // 學期選擇相關狀態
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>()
+  const [selectedSemester, setSelectedSemester] = useState<string>()
+  const [selectedCombination, setSelectedCombination] = useState<string>()
 
   // 動態獲取各類型申請資料
   const getApplicationsByType = (type: string) => {
@@ -269,9 +276,12 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
     }
   }, [scholarshipTypes, activeTab])
   
-  // 當獎學金類型改變時，重置子類型選擇
+  // 當獎學金類型改變時，重置子類型選擇和學期選擇
   useEffect(() => {
     setSelectedSubTypes([])
+    setSelectedAcademicYear(undefined)
+    setSelectedSemester(undefined)
+    setSelectedCombination(undefined)
   }, [activeTab])
 
   // 載入子類型翻譯
@@ -303,6 +313,18 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
     // 狀態篩選
     if (statusFilter !== "all") {
       filtered = filtered.filter(app => app.status === statusFilter)
+    }
+
+    // 學期篩選
+    if (selectedAcademicYear) {
+      filtered = filtered.filter(app => {
+        const appYear = app.academic_year ? parseInt(app.academic_year) : null
+        return appYear === selectedAcademicYear
+      })
+    }
+
+    if (selectedSemester) {
+      filtered = filtered.filter(app => app.semester === selectedSemester)
     }
 
     // 搜尋篩選
@@ -350,6 +372,21 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
       console.error('Failed to update application status:', error)
       alert('更新申請狀態失敗')
     }
+  }
+
+  // 處理學期選擇器變更
+  const handleAcademicYearChange = (year: number) => {
+    setSelectedAcademicYear(year)
+  }
+
+  const handleSemesterChange = (semester: string) => {
+    setSelectedSemester(semester)
+  }
+
+  const handleCombinationChange = (combination: string, academicYear: number, semester: string | null) => {
+    setSelectedCombination(combination)
+    setSelectedAcademicYear(academicYear)
+    setSelectedSemester(semester || undefined)
   }
 
   // 渲染統計卡片
@@ -890,6 +927,69 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
 
         {scholarshipTypes.map((type) => (
           <TabsContent key={type} value={type} className="space-y-6">
+            {/* 學期選擇器 */}
+            <Card className="bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                  <Calendar className="h-5 w-5 text-green-600" />
+                  學期篩選
+                </CardTitle>
+                <CardDescription className="text-sm text-gray-600">
+                  選擇要查看的學年學期，可以篩選對應時期的申請案件
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <SemesterSelector
+                    mode="combined"
+                    scholarshipCode={type}
+                    showStatistics={false}
+                    selectedAcademicYear={selectedAcademicYear}
+                    selectedSemester={selectedSemester}
+                    selectedCombination={selectedCombination}
+                    onAcademicYearChange={handleAcademicYearChange}
+                    onSemesterChange={handleSemesterChange}
+                    onCombinationChange={handleCombinationChange}
+                    className="flex-1"
+                  />
+                  {(selectedAcademicYear || selectedSemester || selectedCombination) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedAcademicYear(undefined)
+                        setSelectedSemester(undefined)
+                        setSelectedCombination(undefined)
+                      }}
+                      className="ml-4 text-gray-600 hover:text-gray-800"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      清除篩選
+                    </Button>
+                  )}
+                </div>
+                
+                {/* 顯示當前篩選狀態 */}
+                {(selectedAcademicYear || selectedSemester) && (
+                  <div className="mt-4 p-3 bg-white rounded-lg border border-green-200">
+                    <div className="text-sm text-gray-600">
+                      <span className="font-medium">當前篩選: </span>
+                      {selectedAcademicYear && (
+                        <Badge variant="outline" className="mr-2">
+                          學年: {selectedAcademicYear}
+                        </Badge>
+                      )}
+                      {selectedSemester && (
+                        <Badge variant="outline" className="mr-2">
+                          學期: {selectedSemester}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            
             {renderSubTypeTabs(getApplicationsByType(type))}
           </TabsContent>
         ))}

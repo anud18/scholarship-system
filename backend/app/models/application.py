@@ -14,7 +14,6 @@ from app.models.scholarship import SubTypeSelectionMode
 
 if TYPE_CHECKING:
     from app.models.user import User
-    from app.models.student import Student
 
 
 class ApplicationStatus(enum.Enum):
@@ -94,7 +93,7 @@ class Application(Base):
     
     # 申請人資訊
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    # student_id removed - student data now comes from external API via student_data JSON field
     
     # 獎學金類型 - Enhanced for issue #10
     scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True)  # Reference to ScholarshipType
@@ -150,7 +149,7 @@ class Application(Base):
     
     # 關聯
     student = relationship("User", foreign_keys=[user_id], back_populates="applications")
-    studentProfile = relationship("Student", foreign_keys=[student_id], back_populates="applications")
+    # studentProfile relationship removed - student data accessed via external API
     professor = relationship("User", foreign_keys=[professor_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     final_approver = relationship("User", foreign_keys=[final_approver_id])
@@ -164,11 +163,12 @@ class Application(Base):
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
     professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
 
-    # 唯一約束：確保每個學生在每個學年、學期、獎學金組合下只能有一個申請
+    # 唯一約束：確保每個用戶在每個學年、學期、獎學金組合下只能有一個申請
+    # Use user_id instead of student_id since students are now from external API
     __table_args__ = (
         UniqueConstraint(
-            'student_id', 'scholarship_type_id', 'academic_year', 'semester',
-            name='uq_student_scholarship_academic_term'
+            'user_id', 'scholarship_type_id', 'academic_year', 'semester',
+            name='uq_user_scholarship_academic_term'
         ),
     )
 

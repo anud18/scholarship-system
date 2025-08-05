@@ -15,7 +15,7 @@ from app.core.security import require_admin, get_current_user
 from app.models.user import User, AdminScholarship, UserRole
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
 from app.models.application import Application, ApplicationStatus
-from app.models.student import Student
+# Student model removed - student data now fetched from external API
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester
 from app.schemas.response import ApiResponse
 
@@ -58,6 +58,7 @@ async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> L
 
 @router.get("/available-semesters", response_model=ApiResponse)
 async def get_available_semesters(
+    scholarship_code: Optional[str] = Query(None, description="Filter periods by specific scholarship code"),
     quota_management_mode: Optional[str] = Query(None, description="Filter periods by quota management mode (e.g., 'matrix')"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -80,6 +81,26 @@ async def get_available_semesters(
             ScholarshipConfiguration.is_active == True,
             ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids)
         ]
+        
+        # If scholarship_code filter is provided, add it to conditions
+        if scholarship_code:
+            scholarship_stmt = select(ScholarshipType.id).where(
+                and_(
+                    ScholarshipType.code == scholarship_code,
+                    ScholarshipType.id.in_(accessible_scholarship_ids)
+                )
+            )
+            scholarship_result = await db.execute(scholarship_stmt)
+            scholarship_id = scholarship_result.scalar_one_or_none()
+            
+            if not scholarship_id:
+                return ApiResponse(
+                    success=True,
+                    message=f"No accessible scholarship found with code: {scholarship_code}",
+                    data=[]
+                )
+            
+            conditions.append(ScholarshipConfiguration.scholarship_type_id == scholarship_id)
         
         # If quota_management_mode filter is provided, add it to conditions
         if quota_management_mode:
@@ -232,44 +253,32 @@ async def get_matrix_quota_status(
                 college_codes.update(sub_type_quotas.keys())
         college_codes = sorted(list(college_codes))
         
+        # TODO: Reimplement usage query with student_data JSON field instead of Student model
         # Single aggregated query to get all usage data at once
-        from sqlalchemy import join, case
+        # from sqlalchemy import join, case
         
-        # Store the enum value to ensure it's properly converted to string
-        approved_status = ApplicationStatus.APPROVED.value
+        # # Store the enum value to ensure it's properly converted to string
+        # approved_status = ApplicationStatus.APPROVED.value
         
-        usage_stmt = select(
-            Student.std_aca_no.label('college'),
-            func.count(Application.id).label('total_applications'),
-            func.count(case((Application.status == approved_status, 1), else_=None)).label('approved_count')
-        ).select_from(
-            join(Application, Student, Application.student_id == Student.id)
-        ).where(
-            and_(
-                Application.scholarship_type_id == phd_scholarship.id,
-                Application.academic_year == academic_year,
-                Student.std_aca_no.in_(college_codes)  # Only query for relevant colleges
-            )
-        ).group_by(Student.std_aca_no)
+        # TODO: Need to extract college from student_data JSON field instead of Student.std_aca_no
+        # This query needs to be rewritten to work with JSON data
+        usage_data = []  # Temporary empty data
         
-        # If semester-based, also filter by semester
-        if semester:
-            usage_stmt = usage_stmt.where(Application.semester == semester)
-        
-        # Execute single query and build usage lookup
-        try:
-            usage_result = await db.execute(usage_stmt)
-            usage_data = {}
-            for row in usage_result:
-                usage_data[row.college] = {
-                    'used': row.approved_count,
-                    'applications': row.total_applications
-                }
-        except Exception as usage_error:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error in aggregated usage query: {usage_error}", exc_info=True)
-            usage_data = {}
+        # # Execute single query and build usage lookup
+        # TODO: Implement usage data collection from student_data JSON field
+        # try:
+        #     usage_result = await db.execute(usage_stmt)
+        #     usage_data = {}
+        #     for row in usage_result:
+        #         usage_data[row.college] = {
+        #             'used': row.approved_count,
+        #             'applications': row.total_applications
+        #         }
+        # except Exception as usage_error:
+        #     import logging
+        #     logger = logging.getLogger(__name__)
+        #     logger.error(f"Error in aggregated usage query: {usage_error}", exc_info=True)
+        usage_data = {}  # Temporary empty data
         
         # Build quota matrix using pre-fetched usage data
         for sub_type in sub_types:

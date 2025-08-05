@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 import logging
 from decimal import Decimal
 from app.models.scholarship import ScholarshipType, ScholarshipStatus
-from app.models.student import Student
+# Student model removed - student data now fetched from external API
 from app.core.exceptions import ValidationError
 from app.core.config import settings, DEV_SCHOLARSHIP_SETTINGS
 from typing import List, Union, Optional, Dict, Any, Tuple
@@ -56,112 +56,13 @@ class ScholarshipService:
         return (self._is_dev_mode() and 
                 DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False))
     
-    async def get_eligible_scholarships(self, student: Student) -> List[ScholarshipType]:
-        """Get scholarships that the student is eligible for"""
-        # Get all active scholarships with their current configurations
-        from sqlalchemy.orm import selectinload
-        stmt = select(ScholarshipType).where(
-            ScholarshipType.status == ScholarshipStatus.ACTIVE.value
-        ).options(selectinload(ScholarshipType.configurations))
-        result = await self.db.execute(stmt)
-        scholarships = result.scalars().all()
-        
-        logger.info(f"Found {len(scholarships)} active scholarships")
-        
-        # Get student type from the student model
-        from app.models.student import StudentType
-        student_type = student.get_student_type()
-        
-        # Use student's term count (if available) or default to reasonable value
-        completed_terms = student.std_termcount or 1
-        
-        # For now, we'll need to get GPA from external API or use default
-        # This would be replaced with actual API call in production
-        student_gpa = Decimal("3.0")  # Default GPA - should be fetched from student API
-        
-        logger.info(f"Student {student.std_stdcode} has {completed_terms} completed terms")
-        logger.info(f"Student type: {student_type.value}")
-        logger.info(f"Student GPA: {student_gpa}")
-        
-        eligible_scholarships = []
-        for scholarship in scholarships:
-            try:
-                logger.info(f"\nChecking eligibility for scholarship: {scholarship.name}")
-                
-                # Get current active configuration for this scholarship
-                current_config = None
-                for config in scholarship.configurations:
-                    if config.is_active:
-                        current_config = config
-                        break
-                
-                if current_config:
-                    logger.info(f"Application period: {current_config.application_start_date} to {current_config.application_end_date}")
-                else:
-                    logger.info("No active configuration found for this scholarship")
-                
-                logger.info(f"Current time: {datetime.now(timezone.utc)}")
-                logger.info(f"Scholarship category: {scholarship.category}")
-                
-                # Check if scholarship is in application period
-                current_time = datetime.now(timezone.utc)
-                in_application_period = True
-                if current_config and current_config.application_start_date and current_config.application_end_date:
-                    in_application_period = current_config.application_start_date <= current_time <= current_config.application_end_date
-                
-                if not self._should_bypass_application_period() and not in_application_period:
-                    logger.info(f"Skipping {scholarship.name}: Not in application period")
-                    continue
-                elif self._should_bypass_application_period():
-                    logger.info(f"DEV MODE: Bypassing application period check for {scholarship.name}")
-                    
-                # Check student type eligibility based on category
-                # Map scholarship categories to student types that can apply
-                eligible_for_category = True  # Default to eligible
-                
-                if scholarship.category == 'undergraduate_freshman':
-                    # Only undergraduate students can apply for undergraduate scholarships
-                    if student_type.value.lower() not in ['undergraduate', 'undergraduate_freshman']:
-                        eligible_for_category = False
-                elif scholarship.category == 'phd':
-                    # PhD and graduate students can apply for PhD scholarships
-                    if student_type.value.lower() not in ['phd', 'graduate', 'master']:
-                        eligible_for_category = False
-                elif scholarship.category == 'direct_phd':
-                    # Only direct PhD students can apply
-                    if student_type.value.lower() not in ['direct_phd', 'phd']:
-                        eligible_for_category = False
-                
-                if not eligible_for_category and not self._should_bypass_application_period():
-                    logger.info(f"Skipping {scholarship.name}: Student type {student_type.value} not eligible for category {scholarship.category}")
-                    continue
-                
-                # Check whitelist eligibility - PRIMARY REQUIREMENT
-                if not self._should_bypass_whitelist():
-                    if scholarship.whitelist_enabled:
-                        # If whitelist is enabled, student must be in the whitelist
-                        if not scholarship.whitelist_student_ids or student.id not in scholarship.whitelist_student_ids:
-                            logger.info(f"Skipping {scholarship.name}: Student {student.std_stdcode} not in whitelist (whitelist enabled but student not found)")
-                            continue
-                        else:
-                            logger.info(f"Student {student.std_stdcode} found in whitelist for {scholarship.name}")
-                    else:
-                        logger.info(f"Scholarship {scholarship.name}: Whitelist not enabled, allowing all students")
-                elif self._should_bypass_whitelist():
-                    logger.info(f"DEV MODE: Bypassing whitelist check for {scholarship.name}")
-                
-                # For now, we'll skip complex term count requirements since we don't have external API integration yet
-                logger.info(f"Student has {completed_terms} completed terms")
-                
-                # If all checks pass, add to eligible scholarships
-                logger.info(f"Scholarship {scholarship.name} is eligible!")
-                eligible_scholarships.append(scholarship)
-            except ValidationError as e:
-                logger.error(f"Validation error for scholarship {scholarship.name}: {str(e)}")
-                continue
-        
-        logger.info(f"Found {len(eligible_scholarships)} eligible scholarships")
-        return eligible_scholarships
+    # TODO: Refactor this method to work with external API student data
+    # async def get_eligible_scholarships(self, student_data: Dict[str, Any]) -> List[ScholarshipType]:
+    #     """Get scholarships that the student is eligible for"""
+    #     # TODO: Implement student eligibility checking with external API data
+    #     # This method needs to be refactored to work with student_data from external API
+    #     # instead of Student model
+    #     return []
 
 
 class ScholarshipApplicationService:
@@ -170,18 +71,19 @@ class ScholarshipApplicationService:
     def __init__(self, db: Session):
         self.db = db
     
-    def create_application(
-        self,
-        user_id: int,
-        student_id: int,
-        scholarship_type_id: int,
-        scholarship_type_code: str,
-        semester: str,
-        academic_year: str,
-        application_data: Dict[str, Any],
-        is_renewal: bool = False,
-        previous_application_id: Optional[int] = None
-    ) -> Tuple[Application, str]:
+    # TODO: Refactor this method to work with external API student data
+    # def create_application(
+    #     self,
+    #     user_id: int,
+    #     # student_id: int,  # Removed - student data now from external API
+    #     scholarship_type_id: int,
+    #     scholarship_type_code: str,
+    #     semester: str,
+    #     academic_year: str,
+    #     application_data: Dict[str, Any],
+    #     is_renewal: bool = False,
+    #     previous_application_id: Optional[int] = None
+    # ) -> Tuple[Application, str]:
         """Create a new scholarship application using existing schema"""
         
         # Validate eligibility

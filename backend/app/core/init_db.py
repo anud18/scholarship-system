@@ -11,10 +11,8 @@ from typing import List
 from app.db.session import async_engine, AsyncSessionLocal
 from app.models.user import User, UserRole, UserType, EmployeeStatus
 from app.models.student import (
-    # 查詢表
+    # 查詢表 (Reference data only)
     Degree, Identity, StudyingStatus, SchoolIdentity, Academy, Department, EnrollType,
-    # 學生資料
-    Student,
 )
 
 from app.db.base_class import Base
@@ -172,177 +170,178 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
     return created_users
 
 
-async def createTestStudents(session: AsyncSession, users: List[User]) -> None:
-    """Create test student data with new normalized structure"""
-    
-    print("🎓 Creating test student data...")
-    
-    student_users = [user for user in users if user.role == UserRole.STUDENT]
-
-    # 修正 degree: 1=博士, 2=碩士, 3=學士
-    student_data = {
-        "stu_under": {
-            "std_pid": "A123456789",
-            "std_sex": "1",  # 1:男, 2:女
-            "std_degree": "3",  # 學士
-            "std_identity": "1", # 一般生
-            "std_studingstatus": "1", # 在學
-            "std_schoolid": "1", # 一般生
-            "std_termcount": 2,
-            "std_depno": "CS",
-            "std_depname": "資訊工程學系",
-            "std_aca_no": "EE",
-            "std_aca_cname": "電機資訊學院",
-            "std_enrollterm": "1", # 大學個人申請
-            "std_enrollyear": "112",
-            "std_highestschname": "台北市立建國高級中學",
-            "std_nation": "1", # 中華民國
-            "com_cellphone": "0912345678",
-            "com_email": "stu_under@nycu.edu.tw",
-            "com_commzip": "30010",
-            "com_commadd": "新竹市東區大學路1001號",
-            "std_enrolled_date": date(2023, 9, 1),
-            "std_bank_account": "1234567890",
-            "notes": "學士班新生"
-        },
-        "stu_phd": {
-            "std_pid": "B123456789",
-            "std_sex": "1",  # 1:男, 2:女
-            "std_degree": "1", # 博士
-            "std_identity": "1", # 一般生
-            "std_studingstatus": "1", # 在學
-            "std_schoolid": "1", # 一般生
-            "std_termcount": 1,
-            "std_depno": "CS",
-            "std_depname": "資訊工程學系",
-            "std_aca_no": "EE",
-            "std_aca_cname": "電機資訊學院",
-            "std_enrollterm": "1", # 招生考試一般生
-            "std_enrollyear": "112",
-            "std_highestschname": "國立交通大學",
-            "std_nation": "1", # 中華民國
-            "com_cellphone": "0912345678",
-            "com_email": "stu_phd@nycu.edu.tw",
-            "com_commzip": "30010",
-            "com_commadd": "新竹市東區大學路1001號",
-            "std_enrolled_date": date(2023, 9, 1),
-            "std_bank_account": "1234567890",
-            "notes": "博士生"
-        },
-        "stu_direct": {
-            "std_pid": "C123456789",
-            "std_sex": "2",  # 1:男, 2:女
-            "std_degree": "1", # 博士
-            "std_identity": "1", # 一般生
-            "std_studingstatus": "1", # 在學
-            "std_schoolid": "1", # 一般生
-            "std_termcount": 1,
-            "std_depno": "CS",
-            "std_depname": "資訊工程學系",
-            "std_aca_no": "EE",
-            "std_aca_cname": "電機資訊學院",
-            "std_enrollterm": "1", # 第一學期
-            "std_enrollyear": "112",
-            "std_highestschname": "國立陽明交通大學",
-            "std_nation": "1", # 中華民國
-            "com_cellphone": "0912345678",
-            "com_email": "stu_direct@nycu.edu.tw",
-            "com_commzip": "30010",
-            "com_commadd": "新竹市東區大學路1001號",
-            "std_enrolled_date": date(2023, 9, 1),
-            "std_bank_account": "1234567890",
-            "notes": "逕讀博士生"
-        },
-        "stu_master": {
-            "std_pid": "D123456789",
-            "std_sex": "2",  # 1:男, 2:女
-            "std_degree": "2", # 碩士
-            "std_identity": "1", # 一般生
-            "std_studingstatus": "1", # 在學
-            "std_schoolid": "1", # 一般生
-            "std_termcount": 1,
-            "std_depno": "CS",
-            "std_depname": "資訊工程學系",
-            "std_aca_no": "EE",
-            "std_aca_cname": "電機資訊學院",
-            "std_enrollterm": "1", # 一般考試
-            "std_enrollyear": "112",
-            "std_highestschname": "國立台灣大學",
-            "std_nation": "1", # 中華民國
-            "com_cellphone": "0912345678",
-            "com_email": "stu_master@nycu.edu.tw",
-            "com_commzip": "30010",
-            "com_commadd": "新竹市東區大學路1001號",
-            "std_enrolled_date": date(2023, 9, 1),
-            "std_bank_account": "1234567890",
-            "notes": "碩士生"
-        },
-        "phd_china": {
-            "std_pid": "E123456789",
-            "std_sex": "1",  # 1:男, 2:女
-            "std_degree": "1", # 博士
-            "std_identity": "17", # 陸生
-            "std_studingstatus": "1", # 在學
-            "std_schoolid": "1", # 一般生
-            "std_termcount": 1,
-            "std_depno": "CS",
-            "std_depname": "資訊工程學系",
-            "std_aca_no": "EE",
-            "std_aca_cname": "電機資訊學院",
-            "std_enrollterm": "1", # 第一學期
-            "std_enrollyear": "112",
-            "std_highestschname": "國立清華大學",
-            "std_nation": "2", # 非中華民國國籍
-            "com_cellphone": "0912345678",
-            "com_email": "phd_china@nycu.edu.tw",
-            "com_commzip": "30010",
-            "com_commadd": "新竹市東區大學路1001號",
-            "std_enrolled_date": date(2023, 9, 1),
-            "std_bank_account": "1234567890",
-            "notes": "陸生博士生"
-        }
-    }
-
-    for user in student_users:
-        student_info = student_data[user.nycu_id]
-
-        result = await session.execute(select(Student).where(Student.std_pid == student_info["std_pid"]))
-        existing = result.scalar_one_or_none()
-        
-        if not existing:
-            student = Student(
-                std_stdcode=user.nycu_id,
-                std_cname=user.name,
-                std_ename=user.name,
-                std_degree=student_info.get("std_degree", "3"),  # Default to undergraduate
-                std_sex=student_info.get("std_sex", "1"),
-                std_pid=student_info.get("std_pid"),
-                std_studingstatus=student_info.get("std_studingstatus", "1"),
-                std_enrollyear=student_info.get("std_enrollyear"),
-                std_enrollterm=student_info.get("std_enrollterm"),
-                std_termcount=student_info.get("std_termcount"),
-                std_nation=student_info.get("std_nation", "1"),
-                std_schoolid=student_info.get("std_schoolid", "1"),
-                std_identity=student_info.get("std_identity"),
-                std_depno=student_info.get("std_depno"),
-                std_depname=student_info.get("std_depname"),
-                std_aca_no=student_info.get("std_aca_no"),
-                std_aca_cname=student_info.get("std_aca_cname"),
-                std_highestschname=student_info.get("std_highestschname"),
-                com_cellphone=student_info.get("com_cellphone"),
-                com_email=student_info.get("com_email"),
-                com_commzip=student_info.get("com_commzip"),
-                com_commadd=student_info.get("com_commadd"),
-                std_enrolled_date=student_info.get("std_enrolled_date"),
-                std_bank_account=student_info.get("std_bank_account"),
-                notes=student_info.get("notes")
-            )
-            session.add(student)
-        
-        await session.commit()
-        print(f"✅ Student {user.nycu_id} created successfully!")
-
-    print("✅ Test student data created successfully!")
+# Student data creation removed - students are now fetched from external API
+# async def createTestStudents(session: AsyncSession, users: List[User]) -> None:
+#     """Create test student data with new normalized structure"""
+#     
+#     print("🎓 Creating test student data...")
+#     
+#     student_users = [user for user in users if user.role == UserRole.STUDENT]
+# 
+#     # 修正 degree: 1=博士, 2=碩士, 3=學士
+#     student_data = {
+#        "stu_under": {
+#            "std_pid": "A123456789",
+#            "std_sex": "1",  # 1:男, 2:女
+#            "std_degree": "3",  # 學士
+#            "std_identity": "1", # 一般生
+#            "std_studingstatus": "1", # 在學
+#            "std_schoolid": "1", # 一般生
+#            "std_termcount": 2,
+#            "std_depno": "CS",
+#            "std_depname": "資訊工程學系",
+#            "std_aca_no": "EE",
+#            "std_aca_cname": "電機資訊學院",
+#            "std_enrollterm": "1", # 大學個人申請
+#            "std_enrollyear": "112",
+#            "std_highestschname": "台北市立建國高級中學",
+#            "std_nation": "1", # 中華民國
+#            "com_cellphone": "0912345678",
+#            "com_email": "stu_under@nycu.edu.tw",
+#            "com_commzip": "30010",
+#            "com_commadd": "新竹市東區大學路1001號",
+#            "std_enrolled_date": date(2023, 9, 1),
+#            "std_bank_account": "1234567890",
+#            "notes": "學士班新生"
+#        },
+#        "stu_phd": {
+#            "std_pid": "B123456789",
+#            "std_sex": "1",  # 1:男, 2:女
+#            "std_degree": "1", # 博士
+#            "std_identity": "1", # 一般生
+#            "std_studingstatus": "1", # 在學
+#            "std_schoolid": "1", # 一般生
+#            "std_termcount": 1,
+#            "std_depno": "CS",
+#            "std_depname": "資訊工程學系",
+#            "std_aca_no": "EE",
+#            "std_aca_cname": "電機資訊學院",
+#            "std_enrollterm": "1", # 招生考試一般生
+#            "std_enrollyear": "112",
+#            "std_highestschname": "國立交通大學",
+#            "std_nation": "1", # 中華民國
+#            "com_cellphone": "0912345678",
+#            "com_email": "stu_phd@nycu.edu.tw",
+#            "com_commzip": "30010",
+#            "com_commadd": "新竹市東區大學路1001號",
+#            "std_enrolled_date": date(2023, 9, 1),
+#            "std_bank_account": "1234567890",
+#            "notes": "博士生"
+#        },
+#        "stu_direct": {
+#            "std_pid": "C123456789",
+#            "std_sex": "2",  # 1:男, 2:女
+#            "std_degree": "1", # 博士
+#            "std_identity": "1", # 一般生
+#            "std_studingstatus": "1", # 在學
+#            "std_schoolid": "1", # 一般生
+#            "std_termcount": 1,
+#            "std_depno": "CS",
+#            "std_depname": "資訊工程學系",
+#            "std_aca_no": "EE",
+#            "std_aca_cname": "電機資訊學院",
+#            "std_enrollterm": "1", # 第一學期
+#            "std_enrollyear": "112",
+#            "std_highestschname": "國立陽明交通大學",
+#            "std_nation": "1", # 中華民國
+#            "com_cellphone": "0912345678",
+#            "com_email": "stu_direct@nycu.edu.tw",
+#            "com_commzip": "30010",
+#            "com_commadd": "新竹市東區大學路1001號",
+#            "std_enrolled_date": date(2023, 9, 1),
+#            "std_bank_account": "1234567890",
+#            "notes": "逕讀博士生"
+#        },
+#        "stu_master": {
+#            "std_pid": "D123456789",
+#            "std_sex": "2",  # 1:男, 2:女
+#            "std_degree": "2", # 碩士
+#            "std_identity": "1", # 一般生
+#            "std_studingstatus": "1", # 在學
+#            "std_schoolid": "1", # 一般生
+#            "std_termcount": 1,
+#            "std_depno": "CS",
+#            "std_depname": "資訊工程學系",
+#            "std_aca_no": "EE",
+#            "std_aca_cname": "電機資訊學院",
+#            "std_enrollterm": "1", # 一般考試
+#            "std_enrollyear": "112",
+#            "std_highestschname": "國立台灣大學",
+#            "std_nation": "1", # 中華民國
+#            "com_cellphone": "0912345678",
+#            "com_email": "stu_master@nycu.edu.tw",
+#            "com_commzip": "30010",
+#            "com_commadd": "新竹市東區大學路1001號",
+#            "std_enrolled_date": date(2023, 9, 1),
+#            "std_bank_account": "1234567890",
+#            "notes": "碩士生"
+#        },
+#        "phd_china": {
+#            "std_pid": "E123456789",
+#            "std_sex": "1",  # 1:男, 2:女
+#            "std_degree": "1", # 博士
+#            "std_identity": "17", # 陸生
+#            "std_studingstatus": "1", # 在學
+#            "std_schoolid": "1", # 一般生
+#            "std_termcount": 1,
+#            "std_depno": "CS",
+#            "std_depname": "資訊工程學系",
+#            "std_aca_no": "EE",
+#            "std_aca_cname": "電機資訊學院",
+#            "std_enrollterm": "1", # 第一學期
+#            "std_enrollyear": "112",
+#            "std_highestschname": "國立清華大學",
+#            "std_nation": "2", # 非中華民國國籍
+#            "com_cellphone": "0912345678",
+#            "com_email": "phd_china@nycu.edu.tw",
+#            "com_commzip": "30010",
+#            "com_commadd": "新竹市東區大學路1001號",
+#            "std_enrolled_date": date(2023, 9, 1),
+#            "std_bank_account": "1234567890",
+#            "notes": "陸生博士生"
+#        }
+#    }
+#
+#    for user in student_users:
+#        student_info = student_data[user.nycu_id]
+#
+#        result = await session.execute(select(Student).where(Student.std_pid == student_info["std_pid"]))
+#        existing = result.scalar_one_or_none()
+#        
+#        if not existing:
+#            student = Student(
+#                std_stdcode=user.nycu_id,
+#                std_cname=user.name,
+#                std_ename=user.name,
+#                std_degree=student_info.get("std_degree", "3"),  # Default to undergraduate
+#                std_sex=student_info.get("std_sex", "1"),
+#                std_pid=student_info.get("std_pid"),
+#                std_studingstatus=student_info.get("std_studingstatus", "1"),
+#                std_enrollyear=student_info.get("std_enrollyear"),
+#                std_enrollterm=student_info.get("std_enrollterm"),
+#                std_termcount=student_info.get("std_termcount"),
+#                std_nation=student_info.get("std_nation", "1"),
+#                std_schoolid=student_info.get("std_schoolid", "1"),
+#                std_identity=student_info.get("std_identity"),
+#                std_depno=student_info.get("std_depno"),
+#                std_depname=student_info.get("std_depname"),
+#                std_aca_no=student_info.get("std_aca_no"),
+#                std_aca_cname=student_info.get("std_aca_cname"),
+#                std_highestschname=student_info.get("std_highestschname"),
+#                com_cellphone=student_info.get("com_cellphone"),
+#                com_email=student_info.get("com_email"),
+#                com_commzip=student_info.get("com_commzip"),
+#                com_commadd=student_info.get("com_commadd"),
+#                std_enrolled_date=student_info.get("std_enrolled_date"),
+#                std_bank_account=student_info.get("std_bank_account"),
+#                notes=student_info.get("notes")
+#            )
+#            session.add(student)
+#        
+#        await session.commit()
+#        print(f"✅ Student {user.nycu_id} created successfully!")
+#
+#    print("✅ Test student data created successfully!")
 
 
 async def createTestScholarships(session: AsyncSession) -> None:
@@ -350,17 +349,12 @@ async def createTestScholarships(session: AsyncSession) -> None:
     
     print("🎓 Creating test scholarship data...")
     
-    # 獲取學生ID用於白名單
+    # Since students are now fetched from external API, we'll use user IDs for scholarships
     result = await session.execute(select(User).where(User.role == UserRole.STUDENT))
     student_users = result.scalars().all()
     
-    # 獲取對應的學生資料
-    student_ids = []
-    for user in student_users:
-        result = await session.execute(select(Student).where(Student.std_stdcode == user.nycu_id))
-        student = result.scalar_one_or_none()
-        if student:
-            student_ids.append(student.id)
+    # Use user IDs instead of student IDs (students are now in external API)
+    student_ids = [user.id for user in student_users]
         
     # ==== 基本獎學金 ====
     scholarships_data = [
@@ -1011,6 +1005,11 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                 "application_end_date": end_date - timedelta(days=365),
                 "renewal_application_start_date": renewal_start - timedelta(days=365),
                 "renewal_application_end_date": renewal_end - timedelta(days=365),
+
+                "renewal_professor_review_start": end_date - timedelta(days=365) + timedelta(days=1),
+                "renewal_professor_review_end": end_date - timedelta(days=365) + timedelta(days=10),
+                "renewal_college_review_start": end_date - timedelta(days=365) + timedelta(days=11),
+                "renewal_college_review_end": end_date - timedelta(days=365) + timedelta(days=21),
                 
                 # 審查時間設定
                 "requires_professor_recommendation": True,
@@ -1065,6 +1064,11 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                 "application_end_date": end_date,
                 "renewal_application_start_date": renewal_start,
                 "renewal_application_end_date": renewal_end,
+
+                "renewal_professor_review_start": end_date + timedelta(days=1),
+                "renewal_professor_review_end": end_date + timedelta(days=10),
+                "renewal_college_review_start": end_date + timedelta(days=11),
+                "renewal_college_review_end": end_date + timedelta(days=21),
                 
                 # 審查時間設定
                 "requires_professor_recommendation": True,
@@ -1122,7 +1126,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                 "renewal_application_end_date": renewal_end,
                 
                 # 審查時間設定
-                "requires_professor_recommendation": True,
+                "requires_professor_recommendation": False,
                 "professor_review_start": end_date + timedelta(days=1),
                 "professor_review_end": end_date + timedelta(days=14),
                 "requires_college_review": True,
@@ -1829,8 +1833,8 @@ async def initDatabase() -> None:
         # Create test users
         users = await createTestUsers(session)
         
-        # Create test students
-        await createTestStudents(session, users)
+        # Student data creation removed - students are now fetched from external API
+        # await createTestStudents(session, users)
         
         # Create test scholarships
         await createTestScholarships(session)

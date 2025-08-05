@@ -1,45 +1,153 @@
-# Mock Student Database API
+# Mock Student Database API with HMAC-SHA256 Authentication
 
 ⚠️ **DEVELOPMENT/TESTING ONLY** ⚠️
 
-A Docker-based mock API that simulates the student database for development and testing purposes. **This should NEVER be used in production environments.**
+A Docker-based mock API that simulates the university's student information system with HMAC-SHA256 authentication for development and testing purposes. **This should NEVER be used in production environments.**
 
 ## Features
 
-- RESTful API with realistic mock student data
-- Multiple semester records per student showing academic progression
-- Comprehensive student information matching the production schema
-- Docker containerized for easy deployment
-- SQLite database with automatically generated sample data
-- API documentation with Swagger/OpenAPI
+- **HMAC-SHA256 Authentication** - Full signature verification compatible with university API
+- **Exact API Endpoints** - `/getsoaascholarshipstudent` and `/getsoaascholarshipstudentterm`
+- **Strict/Loose Verification Modes** - Configurable time and encoding validation
+- **Realistic Sample Data** - Chinese academic system with sample student `313612215`
+- **Complete Error Handling** - Proper authentication rejection and validation
+- **Docker Containerized** - Easy deployment and testing
+
+## Authentication
+
+### HMAC-SHA256 Signature Verification
+
+The API implements the university's authentication specification:
+
+```
+Authorization: HMAC-SHA256:<TIME>:<ACCOUNT>:<SIGNATURE_HEX>
+Content-Type: application/json;charset=UTF-8
+ENCODE_TYPE: UTF-8
+```
+
+**Signature Calculation:**
+1. **Message** = `<TIME>` + `<REQUEST_JSON>` (no spaces, compact JSON)
+2. **Signature** = `HMAC-SHA256(key=HEX_BYTES, msg=Message)` → lowercase hex
+3. **Time Format** = `YYYYMMDDHHMMSS` (14 digits)
+
+### Environment Configuration
+
+```bash
+# HMAC key (hex format)
+MOCK_HMAC_KEY_HEX=4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
+
+# Verification modes
+STRICT_TIME_CHECK=true          # Enable ±5 minute time validation
+STRICT_ENCODE_CHECK=false       # Require ENCODE_TYPE header
+TIME_TOLERANCE_MINUTES=5        # Time tolerance in minutes
+```
 
 ## API Endpoints
 
-### Student Information
-- `GET /api/students/{student_id}` - Get complete student information
-- `GET /api/students` - List students with pagination
+### POST `/getsoaascholarshipstudent`
+Get student basic information
 
-### Semester Information
-- `GET /api/students/{student_id}/semesters` - Get all semester records for a student
-- `GET /api/students/{student_id}/semesters?year={year}&term={term}` - Filter by year/term
-- `GET /api/semesters?student_id={student_id}` - Alternative endpoint format
-- `GET /api/students/{student_id}/semesters/{year}/{term}` - Get specific semester
+**Request:**
+```json
+{
+  "account": "scholarship",
+  "action": "qrySoaaScholarshipStudent", 
+  "stdcode": "313612215"
+}
+```
 
-### Utility
-- `GET /` - API information and endpoint list
-- `GET /health` - Health check endpoint
+**Response (200):**
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": [
+    {
+      "std_stdno": "A123456789",
+      "std_stdcode": "313612215",
+      "std_pid": "S125410615",
+      "std_cname": "陳弘穎",
+      "std_ename": "CHEN,HUNG-YING",
+      "std_degree": "3",
+      "std_studingstatus": "1",
+      "std_nation": "1",
+      "std_schoolid": "1",
+      "std_identity": "1",
+      "std_termcount": "3",
+      "std_depno": "EECS01",
+      "dep_depname": "電機工程學系",
+      "std_academyno": "I",
+      "aca_cname": "工學院",
+      "std_enrolltype": "1",
+      "std_directmemo": "",
+      "std_highestschname": "逢甲大學",
+      "com_cellphone": "0900000000",
+      "com_email": "user@example.com",
+      "com_commzip": "300",
+      "com_commadd": "新竹市東區大學路100號",
+      "std_sex": "1",
+      "std_enrollyear": "113",
+      "std_enrollterm": "1",
+      "std_enrolldate": "2024-09"
+    }
+  ]
+}
+```
+
+### POST `/getsoaascholarshipstudentterm`
+Get student semester information
+
+**Request:**
+```json
+{
+  "account": "scholarship",
+  "action": "qrySoaaScholarshipStudentTerm",
+  "stdcode": "313612215",
+  "trmyear": "113",
+  "trmterm": "2"
+}
+```
+
+**Response (200):**
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": [
+    {
+      "trm_year": "113",
+      "trm_term": "2", 
+      "trm_stdno": "313612215",
+      "trm_studystatus": "1",
+      "trm_ascore": "86.3",
+      "trm_termcount": "3",
+      "trm_grade": "1",
+      "trm_degree": "3",
+      "trm_academyname": "工學院",
+      "trm_depname": "電機工程學系",
+      "trm_ascore_gpa": "3.8",
+      "trm_stdascore": "85.1",
+      "trm_placingsrate": "20.3",
+      "trm_depplacingrate": "25.6"
+    }
+  ]
+}
+```
+
+### Utility Endpoints
+- `GET /` - API information and configuration
+- `GET /health` - Health check with authentication status
 - `GET /docs` - Interactive API documentation (Swagger UI)
 
 ## Quick Start
 
 ### Using Docker Compose (Recommended)
 
-For development environment:
 ```bash
 # Start the main application services first
 docker-compose up -d
 
-# Then start the mock student API for development
+# Then start the mock student API for development  
 docker-compose -f docker-compose.dev.yml up -d mock-student-api
 ```
 
@@ -56,7 +164,10 @@ The API will be available at `http://localhost:8080`
 ```bash
 cd mock-student-api
 docker build -t mock-student-api .
-docker run -p 8080:8080 -v $(pwd)/data:/app/data mock-student-api
+docker run -p 8080:8080 \
+  -e MOCK_HMAC_KEY_HEX=4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a \
+  -e STRICT_TIME_CHECK=true \
+  mock-student-api
 ```
 
 ### Local Development
@@ -64,138 +175,190 @@ docker run -p 8080:8080 -v $(pwd)/data:/app/data mock-student-api
 ```bash
 cd mock-student-api
 pip install -r requirements.txt
+export MOCK_HMAC_KEY_HEX=4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
 python main.py
 ```
 
 ## Sample Data
 
-The API automatically generates 100 mock students with:
+The API includes sample data for testing:
 
-- Realistic Chinese and English names
-- Various degree programs (PhD, Master's, Bachelor's)
-- Multiple academic departments and colleges
-- Progressive semester records showing academic history
-- Different student statuses and identity types
-- Contact information and enrollment details
+### Available Students
 
-### Student Information Schema
+#### Undergraduate Students
+- **313612215** - 陳弘穎 (CHEN,HUNG-YING) - 電機工程學系, 大學生
 
-```json
-{
-  "std_stdno": "123456789",
-  "std_stdcode": "123456789", 
-  "std_pid": "A123456789",
-  "std_cname": "王小明",
-  "std_ename": "Ming Wang",
-  "std_degree": 2,
-  "std_studingstatus": 1,
-  "std_nation1": "ROC",
-  "std_nation2": null,
-  "std_schoolid": 1,
-  "std_identity": 1,
-  "std_termcount": 4,
-  "std_depno": "CS",
-  "dep_depname": "資訊工程學系",
-  "std_academyno": "EECS",
-  "aca_cname": "電機資訊學院",
-  "std_enrolltype": 1,
-  "std_directmemo": null,
-  "std_highestschname": "台灣大學電機系",
-  "com_cellphone": "0912345678",
-  "com_email": "ming.wang@gmail.com",
-  "com_commzip": "106",
-  "com_commadd": "台北市中正區中山路123號",
-  "std_sex": 1,
-  "std_enrollyear": 112,
-  "std_enrollterm": 1,
-  "enrollment_date": "2023-09-01"
-}
-```
+#### Master's Students  
+- **123456789** - 李美麗 (LEE,MEI-LI) - 資訊工程學系, 碩士生
 
-### Semester Records Schema
+#### PhD Students - Comprehensive Test Scenarios
+- **D11142001** - 王志明 (WANG,CHIH-MING) - 電機工程學系, 博士 (一般入學)
+- **D11042002** - 林雅婷 (LIN,YA-TING) - 資訊工程學系, 博士 (大學逕博, 原住民)
+- **D10942003** - 張偉傑 (CHANG,WEI-CHIEH) - 物理學系, 博士 (碩士逕博)
+- **D11242004** - 陳思穎 (CHEN,SZU-YING) - 化學系, 博士 (一般入學)
+- **D10842005** - 劉建國 (LIU,CHIEN-KUO) - 機械工程學系, 博士 (已畢業)
+- **D11342006** - 黃詩涵 (HUANG,SHIH-HAN) - 生命科學系, 博士 (在職生)
+- **D11142007** - 吳承翰 (WU,CHENG-HAN) - 數學系, 博士 (休學)
+- **D11242008** - 趙文華 (CHAO,WEN-HUA) - 經濟學系, 博士 (僑生)
+- **D10942009** - 許美玲 (HSU,MEI-LING) - 材料科學工程學系, 博士 (應畢)
+- **D11042010** - 楊國強 (YANG,KUO-CHIANG) - 化學工程學系, 博士 (延畢)
+- **D11342011** - 蔡佩君 (TSAI,PEI-CHUN) - 人類學研究所, 博士 (其他身分)
+- **D10842012** - 李俊傑 (LEE,CHUN-CHIEH) - 核子工程與科學研究所, 博士 (在職生)
+- **D11142013** - 陳雅純 (CHEN,YA-CHUN) - 統計學研究所, 博士 (原住民)
+- **D11242014** - 王建民 (WANG,CHIEN-MIN) - 動力機械工程學系, 博士
+- **D10942015** - 張雅芳 (CHANG,YA-FANG) - 外國語文學系, 博士 (陸生)
 
-```json
-{
-  "student_id": "123456789",
-  "semesters": [
-    {
-      "trm_year": 112,
-      "trm_term": 1,
-      "trm_stdno": "123456789",
-      "trm_studystatus": 1,
-      "trm_ascore": 85.5,
-      "trm_termcount": 1,
-      "grade_level": 1,
-      "trm_degree": 2,
-      "trm_academyname": "電機資訊學院",
-      "trm_depname": "資訊工程學系",
-      "trm_ascore_gpa": 3.4,
-      "trm_stdascore": 85.5,
-      "trm_placingsrate": 15,
-      "trm_depplacingrate": 45
-    }
-  ]
-}
-```
+### Sample Data Features
+- Realistic Chinese academic system structure based on init_db rules
+- 15+ PhD students covering diverse scenarios for scholarship testing
+- Multiple enrollment types (1-12) and identity types (1-30)
+- Various study statuses: 在學(1), 應畢(2), 延畢(3), 休學(4), 畢業(11)
+- Multiple colleges: 工學院, 理學院, 資訊學院, 人文社會學院
+- Multiple semester records per student with academic progression
+- All required fields from university specification
+- Covers scholarship eligibility scenarios: non-mainland Chinese, regular students, etc.
 
-## Reference Data
+## Code Reference Tables
 
-### Degree Types (`std_degree`)
-- `1`: PhD (博士)
-- `2`: Master's (碩士) 
-- `3`: Bachelor's (大學)
+### Degree Types (`std_degree`, `trm_degree`)
+- `1` - 博士 (PhD)
+- `2` - 碩士 (Master's)  
+- `3` - 大學 (Bachelor's)
 
 ### Study Status (`std_studingstatus`, `trm_studystatus`)
-- `1`: Enrolled (在學)
-- `2`: Should Graduate (應畢)
-- `3`: Extended Study (延畢)
-- `4`: Leave of Absence (休學)
-- `11`: Graduated (畢業)
+- `1` - 在學 (Enrolled)
+- `2` - 應畢 (Should Graduate)
+- `3` - 延畢 (Extended Study)
+- `4` - 休學 (Leave of Absence)
+- `11` - 畢業 (Graduated)
 
-### Student Identity Categories (`std_identity`)
-- `1`: Regular (一般生)
-- `2`: Indigenous (原住民)
-- `3`: Overseas Chinese with ROC citizenship (僑生)
-- `17`: Mainland Chinese student (陸生)
-- `30`: Other (其他)
+### Student Identity (`std_identity`)
+- `1` - 一般生 (Regular)
+- `2` - 原住民 (Indigenous)
+- `3` - 僑生 (Overseas Chinese)
+- `17` - 陸生 (Mainland Chinese)
+- `30` - 其他 (Other)
+
+### School Identity (`std_schoolid`)
+- `1` - 一般生 (Regular Student)
+- `2` - 在職生 (Working Student)
+- `3` - 選讀學分 (Credit Student)
 
 ### Gender (`std_sex`)
-- `1`: Male (男)
-- `2`: Female (女)
+- `1` - 男 (Male)
+- `2` - 女 (Female)
 
 ## Testing the API
 
+### Automated Test Suite
 ```bash
-# Get student information
-curl http://localhost:8080/api/students/123456789
+# Install test dependencies
+pip install requests
 
-# Get semester records
-curl http://localhost:8080/api/students/123456789/semesters
-
-# Filter by year and term
-curl "http://localhost:8080/api/students/123456789/semesters?year=113&term=1"
-
-# Health check
-curl http://localhost:8080/health
-
-# List students
-curl http://localhost:8080/api/students
+# Run comprehensive tests
+python test_api.py
 ```
+
+### Manual Testing with curl
+```bash
+# Generate HMAC signature (using sample key)
+TIME=$(date +%Y%m%d%H%M%S)
+ACCOUNT="scholarship"
+BODY='{"account":"scholarship","action":"qrySoaaScholarshipStudent","stdcode":"313612215"}'
+MESSAGE="${TIME}${BODY}"
+KEY="4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
+
+# Calculate signature (requires openssl)
+SIGNATURE=$(echo -n "$MESSAGE" | openssl dgst -sha256 -mac HMAC -macopt hexkey:$KEY | cut -d' ' -f2)
+
+# Make authenticated request
+curl -X POST http://localhost:8080/getsoaascholarshipstudent \
+  -H "Authorization: HMAC-SHA256:$TIME:$ACCOUNT:$SIGNATURE" \
+  -H "Content-Type: application/json;charset=UTF-8" \
+  -H "ENCODE_TYPE: UTF-8" \
+  -d "$BODY"
+```
+
+### Test Client Example (Python)
+```python
+import hashlib
+import hmac
+import json
+import requests
+from datetime import datetime
+
+def test_api():
+    # Configuration
+    base_url = "http://localhost:8080"
+    hmac_key_hex = "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
+    account = "scholarship"
+    
+    # Create request
+    timestamp = datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
+    request_data = {
+        "account": account,
+        "action": "qrySoaaScholarshipStudent",
+        "stdcode": "313612215"
+    }
+    request_body = json.dumps(request_data, separators=(',', ':'))
+    
+    # Generate signature
+    message = timestamp + request_body
+    hmac_key = bytes.fromhex(hmac_key_hex)
+    signature = hmac.new(hmac_key, message.encode('utf-8'), hashlib.sha256).hexdigest()
+    
+    # Make request
+    headers = {
+        "Authorization": f"HMAC-SHA256:{timestamp}:{account}:{signature}",
+        "Content-Type": "application/json;charset=UTF-8",
+        "ENCODE_TYPE": "UTF-8"
+    }
+    
+    response = requests.post(f"{base_url}/getsoaascholarshipstudent", 
+                           data=request_body, headers=headers)
+    print(response.json())
+
+test_api()
+```
+
+## Error Responses
+
+### Authentication Errors
+- **401** - HMAC signature verification failed
+- **422** - Missing required headers
+
+### Validation Errors  
+- **400** - Invalid account or action
+- **404** - Student or term data not found
+
+### Server Errors
+- **500** - Internal server error
 
 ## Development Notes
 
-- The database is automatically initialized with sample data on first run
-- Data is persisted in the `data/` directory
-- No real personal information is stored - all data is generated
-- Each student has realistic semester progression showing academic history
-- API includes proper error handling and validation
-- All endpoints return appropriate HTTP status codes
+- All data is mock/fake - no real personal information
+- HMAC key should be different in production
+- Time validation can be disabled for testing (`STRICT_TIME_CHECK=false`)
+- Compact JSON format required (no spaces) for signature calculation
+- All string fields returned as strings (not numbers) per university API spec
+- Supports both strict and loose verification modes for development flexibility
 
-## Configuration
+## Security Configuration
 
-Environment variables:
-- `PYTHONUNBUFFERED=1` - For proper Docker logging
+### Development Mode (Default)
+```bash
+STRICT_TIME_CHECK=true
+STRICT_ENCODE_CHECK=false
+TIME_TOLERANCE_MINUTES=5
+```
+
+### Testing Mode (Relaxed)
+```bash
+STRICT_TIME_CHECK=false
+STRICT_ENCODE_CHECK=false
+TIME_TOLERANCE_MINUTES=60
+```
 
 ## API Documentation
 
-Visit `http://localhost:8080/docs` for interactive Swagger UI documentation.
+Visit `http://localhost:8080/docs` for interactive Swagger UI documentation with authentication examples.

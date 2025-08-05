@@ -13,6 +13,10 @@ from app.models.student import (
     Degree, Identity, StudyingStatus, SchoolIdentity, 
     Academy, Department, EnrollType
 )
+from app.models.application import Application
+from app.models.enums import Semester, ApplicationCycle
+from app.models.scholarship import ScholarshipType
+from sqlalchemy import func, distinct
 
 router = APIRouter()
 
@@ -220,10 +224,15 @@ async def get_all_reference_data(
 async def get_available_semesters() -> dict:
     """Get available semester and academic year options for dynamic generation"""
     from datetime import datetime
+    from app.models.enums import Semester
     
     # Get current Taiwan academic year (民國年)
     current_year = datetime.now().year
+    current_month = datetime.now().month
     taiwan_year = current_year - 1911
+    
+    # Determine current semester (8月以前為第二學期，8月以後為第一學期)
+    current_semester = Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
     
     # Generate academic years: current - 2 to current + 2
     academic_years = []
@@ -231,21 +240,259 @@ async def get_available_semesters() -> dict:
         year = taiwan_year + year_offset
         academic_years.append({
             "value": year,
-            "label": f"{year}學年度",
-            "label_en": f"AY{year}",
+            "label": f"{year}學年",
+            "label_en": f"Academic Year {year + 1911}-{year + 1912}",
             "is_current": year_offset == 0
         })
     
-    # Semester options
+    # Semester options using system enums
     semesters = [
-        {"value": 1, "label": "第一學期", "label_en": "First Semester"},
-        {"value": 2, "label": "第二學期", "label_en": "Second Semester"},
-        {"value": 3, "label": "暑期", "label_en": "Summer"}
+        {
+            "value": Semester.FIRST.value, 
+            "label": "第一學期", 
+            "label_en": "First Semester",
+            "is_current": current_semester == Semester.FIRST.value
+        },
+        {
+            "value": Semester.SECOND.value, 
+            "label": "第二學期", 
+            "label_en": "Second Semester",
+            "is_current": current_semester == Semester.SECOND.value
+        }
     ]
     
     return {
         "academic_years": academic_years,
         "semesters": semesters,
         "current_academic_year": taiwan_year,
+        "current_semester": current_semester,
         "current_western_year": current_year
+    }
+
+
+@router.get("/semester-academic-year-combinations")
+async def get_semester_academic_year_combinations(
+    include_statistics: bool = Query(False, description="Include application statistics"),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get semester and academic year combinations with optional statistics"""
+    from datetime import datetime
+    
+    # Get current info
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    taiwan_year = current_year - 1911
+    current_semester = Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
+    
+    combinations = []
+    
+    # Generate combinations for the last 3 years and next 2 years
+    for year_offset in range(-2, 3):
+        year = taiwan_year + year_offset
+        
+        for semester in [Semester.FIRST.value, Semester.SECOND.value]:
+            semester_label = "第一學期" if semester == Semester.FIRST.value else "第二學期"
+            semester_label_en = "First Semester" if semester == Semester.FIRST.value else "Second Semester"
+            
+            combination = {
+                "value": f"{year}-{semester}",
+                "academic_year": year,
+                "semester": semester,
+                "label": f"{year}學年{semester_label}",
+                "label_en": f"Academic Year {year + 1911}-{year + 1912} {semester_label_en}",
+                "is_current": year == taiwan_year and semester == current_semester,
+                "sort_order": year * 10 + (1 if semester == Semester.FIRST.value else 2)
+            }
+            
+            # Add statistics if requested
+            if include_statistics:
+                count_result = await session.execute(
+                    select(func.count(Application.id)).where(
+                        and_(
+                            Application.academic_year == year,
+                            Application.semester == semester
+                        )
+                    )
+                )
+                combination["application_count"] = count_result.scalar() or 0
+            
+            combinations.append(combination)
+    
+    # Sort by year and semester (newest first)
+    combinations.sort(key=lambda x: x["sort_order"], reverse=True)
+    
+    return {
+        "combinations": combinations,
+        "current_combination": f"{taiwan_year}-{current_semester}",
+        "total_combinations": len(combinations)
+    }
+
+
+@router.get("/active-academic-periods")
+async def get_active_academic_periods(
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get academic periods that have actual application data"""
+    
+    # Get distinct academic year/semester combinations that have applications
+    stmt = select(
+        Application.academic_year,
+        Application.semester,
+        func.count(Application.id).label('application_count'),
+        func.min(Application.created_at).label('first_application'),
+        func.max(Application.created_at).label('last_application')
+    ).where(
+        and_(
+            Application.academic_year.is_not(None),
+            Application.semester.is_not(None)
+        )
+    ).group_by(
+        Application.academic_year,
+        Application.semester
+    ).order_by(
+        Application.academic_year.desc(),
+        Application.semester
+    )
+    
+    result = await session.execute(stmt)
+    active_periods = []
+    
+    for row in result:
+        semester_label = "第一學期" if row.semester == Semester.FIRST.value else "第二學期"
+        semester_label_en = "First Semester" if row.semester == Semester.FIRST.value else "Second Semester"
+        
+        active_periods.append({
+            "value": f"{row.academic_year}-{row.semester}",
+            "academic_year": row.academic_year,
+            "semester": row.semester,
+            "label": f"{row.academic_year}學年{semester_label}",
+            "label_en": f"Academic Year {row.academic_year + 1911}-{row.academic_year + 1912} {semester_label_en}",
+            "application_count": row.application_count,
+            "first_application": row.first_application.isoformat() if row.first_application else None,
+            "last_application": row.last_application.isoformat() if row.last_application else None
+        })
+    
+    return {
+        "active_periods": active_periods,
+        "total_periods": len(active_periods)
+    }
+
+
+@router.get("/scholarship-periods")
+async def get_scholarship_periods(
+    scholarship_id: Optional[int] = Query(None, description="Scholarship type ID"),
+    scholarship_code: Optional[str] = Query(None, description="Scholarship type code"),
+    application_cycle: Optional[str] = Query(None, description="Application cycle filter (semester/yearly)"),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get appropriate academic periods based on scholarship application cycle"""
+    from datetime import datetime
+    
+    # Get current info
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    taiwan_year = current_year - 1911
+    current_semester = Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
+    
+    # Get scholarship info if specified
+    scholarship_cycle = None
+    scholarship_name = None
+    
+    if scholarship_id or scholarship_code:
+        stmt = select(ScholarshipType)
+        if scholarship_id:
+            stmt = stmt.where(ScholarshipType.id == scholarship_id)
+        elif scholarship_code:
+            stmt = stmt.where(ScholarshipType.code == scholarship_code)
+        
+        result = await session.execute(stmt)
+        scholarship = result.scalar_one_or_none()
+        
+        if scholarship:
+            scholarship_cycle = scholarship.application_cycle
+            scholarship_name = scholarship.name
+    
+    # Use provided cycle or detected cycle
+    cycle = application_cycle or (scholarship_cycle.value if scholarship_cycle else ApplicationCycle.SEMESTER.value)
+    
+    periods = []
+    
+    if cycle == ApplicationCycle.YEARLY.value:
+        # 學年制：只顯示學年選項
+        for year_offset in range(-3, 3):
+            year = taiwan_year + year_offset
+            periods.append({
+                "value": f"{year}",
+                "academic_year": year,
+                "semester": None,
+                "label": f"{year}學年",
+                "label_en": f"Academic Year {year + 1911}-{year + 1912}",
+                "is_current": year == taiwan_year,
+                "cycle": "yearly",
+                "sort_order": year
+            })
+    else:
+        # 學期制：顯示學年學期組合
+        for year_offset in range(-2, 3):
+            year = taiwan_year + year_offset
+            
+            for semester in [Semester.FIRST.value, Semester.SECOND.value]:
+                semester_label = "第一學期" if semester == Semester.FIRST.value else "第二學期"
+                semester_label_en = "First Semester" if semester == Semester.FIRST.value else "Second Semester"
+                
+                periods.append({
+                    "value": f"{year}-{semester}",
+                    "academic_year": year,
+                    "semester": semester,
+                    "label": f"{year}學年{semester_label}",
+                    "label_en": f"Academic Year {year + 1911}-{year + 1912} {semester_label_en}",
+                    "is_current": year == taiwan_year and semester == current_semester,
+                    "cycle": "semester",
+                    "sort_order": year * 10 + (1 if semester == Semester.FIRST.value else 2)
+                })
+    
+    # Sort periods (newest first)
+    periods.sort(key=lambda x: x["sort_order"], reverse=True)
+    
+    return {
+        "periods": periods,
+        "cycle": cycle,
+        "scholarship_name": scholarship_name,
+        "current_period": f"{taiwan_year}-{current_semester}" if cycle == ApplicationCycle.SEMESTER.value else f"{taiwan_year}",
+        "total_periods": len(periods)
+    }
+
+
+@router.get("/scholarship-types-with-cycles")
+async def get_scholarship_types_with_cycles(
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get all scholarship types with their application cycles"""
+    
+    stmt = select(ScholarshipType).where(ScholarshipType.status == "active")
+    result = await session.execute(stmt)
+    scholarships = result.scalars().all()
+    
+    scholarship_info = []
+    cycle_counts = {"semester": 0, "yearly": 0}
+    
+    for scholarship in scholarships:
+        cycle = scholarship.application_cycle.value if scholarship.application_cycle else ApplicationCycle.SEMESTER.value
+        cycle_counts[cycle] += 1
+        
+        scholarship_info.append({
+            "id": scholarship.id,
+            "code": scholarship.code,
+            "name": scholarship.name,
+            "name_en": scholarship.name_en,
+            "category": scholarship.category,
+            "application_cycle": cycle,
+            "cycle_label": "學年制" if cycle == ApplicationCycle.YEARLY.value else "學期制",
+            "cycle_label_en": "Yearly" if cycle == ApplicationCycle.YEARLY.value else "Semester"
+        })
+    
+    return {
+        "scholarships": scholarship_info,
+        "cycle_counts": cycle_counts,
+        "total_scholarships": len(scholarship_info)
     }

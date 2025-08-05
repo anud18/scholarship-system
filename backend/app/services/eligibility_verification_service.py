@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_
 
 from app.models.scholarship import ScholarshipType, ScholarshipRule
-from app.models.student import Student, StudentType
+# Student model removed - student data now fetched from external API
+# StudentType enum removed - use database lookup instead
 from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.models.user import User
+from app.services.student_service import StudentService
 
 import logging
 
@@ -23,6 +25,7 @@ class EligibilityVerificationService:
     
     def __init__(self, db: Session):
         self.db = db
+        self.student_service = StudentService()
     
     def verify_student_eligibility(
         self, 
@@ -420,7 +423,7 @@ class EligibilityVerificationService:
         
         return True, details
     
-    def _determine_student_type(self, student: Student) -> StudentType:
+    def _determine_student_type(self, student: Student) -> str:
         """Determine student type based on student data"""
         return student.get_student_type()
     

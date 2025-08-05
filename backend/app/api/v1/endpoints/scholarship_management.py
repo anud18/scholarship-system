@@ -13,7 +13,8 @@ from app.core.security import require_admin, require_staff, require_student, get
 from app.models.user import User
 from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.schemas.response import ApiResponse
-from app.services.scholarship_service import ScholarshipApplicationService, ScholarshipQuotaService
+# TODO: Temporarily disabled due to Student model refactoring
+# from app.services.scholarship_service import ScholarshipApplicationService, ScholarshipQuotaService
 
 router = APIRouter()
 

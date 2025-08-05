@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProgressTimeline } from "@/components/progress-timeline"
+import SemesterSelector from "@/components/semester-selector"
 import { 
   Calendar, 
   Clock, 
@@ -13,7 +14,8 @@ import {
   Loader2,
   Award,
   GraduationCap,
-  UserCheck
+  UserCheck,
+  Filter
 } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import { User } from "@/types/user"
@@ -38,6 +40,7 @@ interface ScholarshipTimelineData {
   nameEn?: string
   academicYear: number
   semester: string
+  applicationCycle: 'semester' | 'yearly'  // 新增申請週期
   currentStage: string
   timeline: {
     renewal: {
@@ -65,27 +68,62 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>("")
   
+  // 學期選擇狀態
+  const [selectedCombination, setSelectedCombination] = useState<string>()
+  const [currentAcademicYear, setCurrentAcademicYear] = useState<number>()
+  const [currentSemester, setCurrentSemester] = useState<string>()
+  
   // Get user's scholarship permissions
   const { filterScholarshipsByPermission, isLoading: permissionsLoading } = useScholarshipPermissions()
 
+  // 處理學期選擇變更
+  const handleSemesterChange = async (combination: string, academicYear: number, semester: string | null) => {
+    setSelectedCombination(combination);
+    setCurrentAcademicYear(academicYear);
+    setCurrentSemester(semester || 'first');
+    
+    // 重新載入該學期的獎學金時間軸資料
+    // 對於學年制獎學金，不傳遞學期參數
+    await fetchScholarshipTimelines(academicYear, semester);
+  };
+
+  // 重置篩選
+  const resetFilter = () => {
+    setSelectedCombination(undefined);
+    setCurrentAcademicYear(undefined);
+    setCurrentSemester(undefined);
+    fetchScholarshipTimelines();
+  };
+
   // 獲取獎學金時間軸數據
-  const fetchScholarshipTimelines = async () => {
+  const fetchScholarshipTimelines = async (academicYear?: number, semester?: string) => {
     try {
       setIsLoading(true)
       setError(null)
       
       console.log('ScholarshipTimeline: Starting fetch for user:', user.role, user.id)
       
+      // 建構查詢參數
+      const queryParams = new URLSearchParams();
+      if (academicYear) queryParams.append('academic_year', academicYear.toString());
+      if (semester && semester !== 'null') queryParams.append('semester', semester);
+      
       // 根據用戶角色獲取不同的獎學金列表
       let response
       if (user.role === "super_admin") {
         // Super admin 可以看到所有獎學金
-        console.log('ScholarshipTimeline: Fetching all scholarships for super_admin')
-        response = await apiClient.scholarships.getAll()
+        console.log('ScholarshipTimeline: Fetching all scholarships for super_admin', { academicYear, semester })
+        
+        // 構建帶參數的 URL
+        const url = queryParams.toString() ? `/scholarships?${queryParams.toString()}` : '/scholarships';
+        response = await apiClient.request(url);
       } else if (user.role === "admin" || user.role === "college") {
         // Admin 和 College 可以看到他們有權限的獎學金
-        console.log('ScholarshipTimeline: Fetching scholarships for admin/college user')
-        response = await apiClient.scholarships.getAll()
+        console.log('ScholarshipTimeline: Fetching scholarships for admin/college user', { academicYear, semester })
+        
+        // 構建帶參數的 URL
+        const url = queryParams.toString() ? `/scholarships?${queryParams.toString()}` : '/scholarships';
+        response = await apiClient.request(url);
       } else {
         // 其他角色不顯示此功能
         console.log('ScholarshipTimeline: User role not eligible for timeline:', user.role)
@@ -101,15 +139,19 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
         const filteredScholarships = filterScholarshipsByPermission(response.data)
         console.log('ScholarshipTimeline: Filtered scholarships based on permissions:', filteredScholarships)
         
-        const timelineData: ScholarshipTimelineData[] = filteredScholarships.map((scholarship: any) => ({
-          id: scholarship.id,
-          code: scholarship.code,
-          name: scholarship.name,
-          nameEn: scholarship.name_en,
-          academicYear: scholarship.academic_year || 113,
-          semester: scholarship.semester || "first",
-          currentStage: getCurrentStage(scholarship),
-          timeline: {
+        const timelineData: ScholarshipTimelineData[] = filteredScholarships.map((scholarship: any) => {
+          console.log(`ScholarshipTimeline: Processing ${scholarship.name}, application_cycle:`, scholarship.application_cycle)
+          
+          return {
+            id: scholarship.id,
+            code: scholarship.code,
+            name: scholarship.name,
+            nameEn: scholarship.name_en,
+            academicYear: scholarship.academic_year || 113,
+            semester: scholarship.semester || "first",
+            applicationCycle: scholarship.application_cycle || 'semester',  // 從API獲取申請週期
+            currentStage: getCurrentStage(scholarship),
+            timeline: {
             renewal: {
               applicationStart: scholarship.renewal_application_start_date,
               applicationEnd: scholarship.renewal_application_end_date,
@@ -127,7 +169,8 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
               collegeReviewEnd: scholarship.college_review_end,
             }
           }
-        }))
+          }
+        })
 
         setScholarships(timelineData)
         if (timelineData.length > 0 && !activeTab) {
@@ -207,6 +250,9 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
   const generateTimelineSteps = (scholarship: ScholarshipTimelineData): TimelineStep[] => {
     const steps: TimelineStep[] = []
     const now = new Date()
+    
+    // 如果有選擇特定學期，需要根據該學期的資料來生成時間軸
+    // 這裡可以根據 currentAcademicYear 和 currentSemester 來過濾或調整時間軸
 
     // 續領申請階段
     if (scholarship.timeline.renewal.applicationStart && scholarship.timeline.renewal.applicationEnd) {
@@ -451,12 +497,54 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
 
           {scholarships.map((scholarship) => (
             <TabsContent key={scholarship.code} value={scholarship.code} className="space-y-4">
+              {/* 學期選擇器 - 根據該獎學金的申請週期顯示 */}
+              <div className="p-4 bg-nycu-blue-50 rounded-lg">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-nycu-navy-700">
+                    <Filter className="h-4 w-4" />
+                    時間篩選：
+                  </div>
+                  <SemesterSelector
+                    mode="combined"
+                    scholarshipCode={scholarship.code}
+                    selectedCombination={selectedCombination}
+                    onCombinationChange={handleSemesterChange}
+                    className="flex-1"
+                  />
+                  
+                  {selectedCombination && (
+                    <button
+                      onClick={resetFilter}
+                      className="px-3 py-1 text-xs bg-nycu-blue-100 hover:bg-nycu-blue-200 text-nycu-navy-700 rounded transition-colors"
+                    >
+                      重置
+                    </button>
+                  )}
+                </div>
+                
+                {selectedCombination && (
+                  <div className="mt-3 text-sm text-nycu-navy-600">
+                    <strong>當前篩選：</strong> {currentAcademicYear}學年
+                    {scholarship.applicationCycle === 'semester' && currentSemester && currentSemester !== 'null' ? 
+                      (currentSemester === 'first' ? '度 第一學期' : '度 第二學期') : '度'
+                    }
+                  </div>
+                )}
+              </div>
+
               {/* 獎學金基本信息 */}
               <div className="flex items-center justify-between p-4 bg-nycu-blue-50 rounded-lg">
                 <div>
                   <h3 className="font-semibold text-nycu-navy-800">{scholarship.name}</h3>
                   <p className="text-sm text-nycu-navy-600">
-                    {scholarship.academicYear}學年度 {scholarship.semester === "first" ? "第一學期" : "第二學期"}
+                    {selectedCombination ? 
+                      `${currentAcademicYear}學年度${scholarship.applicationCycle === 'semester' && currentSemester && currentSemester !== 'null' ? 
+                        (currentSemester === 'first' ? ' 第一學期' : ' 第二學期') : ''
+                      }` :
+                      `${scholarship.academicYear}學年度${scholarship.applicationCycle === 'semester' ? 
+                        (scholarship.semester === "first" ? " 第一學期" : " 第二學期") : ''
+                      }`
+                    }
                   </p>
                 </div>
                 <Badge className={getStageStatusColor(scholarship.currentStage)}>

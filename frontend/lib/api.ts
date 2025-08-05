@@ -1360,6 +1360,12 @@ class ApiClient {
     getAllScholarshipsForPermissions: async (): Promise<ApiResponse<Array<{ id: number; name: string; name_en?: string; code: string }>>> => {
       return this.request('/admin/scholarships/all-for-permissions')
     },
+
+    // 獲取 ScholarshipConfiguration 中實際配置的學期
+    getAvailableSemesters: async (scholarshipCode?: string): Promise<ApiResponse<string[]>> => {
+      const params = scholarshipCode ? `?scholarship_code=${encodeURIComponent(scholarshipCode)}` : ''
+      return this.request(`/scholarship-configurations/available-semesters${params}`)
+    },
   }
 
   // Application Fields Configuration

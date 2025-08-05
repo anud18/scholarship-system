@@ -11,7 +11,7 @@ from sqlalchemy import and_, or_, func
 from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
-from app.models.student import Student
+# Student model removed - student data now fetched from external API
 from app.services.scholarship_notification_service import ScholarshipNotificationService
 from app.services.eligibility_verification_service import EligibilityVerificationService
 
@@ -92,7 +92,7 @@ class BulkApprovalService:
                     results["successful_approvals"].append({
                         "application_id": application.id,
                         "app_id": application.app_id,
-                        "student_id": application.student_id,
+                        "student_id": application.student_data.get('student_id') if application.student_data else None,
                         "previous_status": old_status,
                         "new_status": application.status,
                         "approved_at": application.approved_at.isoformat(),
@@ -181,7 +181,7 @@ class BulkApprovalService:
                     results["successful_rejections"].append({
                         "application_id": application.id,
                         "app_id": application.app_id,
-                        "student_id": application.student_id,
+                        "student_id": application.student_data.get('student_id') if application.student_data else None,
                         "previous_status": old_status,
                         "rejected_at": application.decision_date.isoformat(),
                         "rejection_reason": rejection_reason
@@ -292,7 +292,7 @@ class BulkApprovalService:
                     auto_approved.append({
                         "application_id": application.id,
                         "app_id": application.app_id,
-                        "student_id": application.student_id,
+                        "student_id": application.student_data.get('student_id') if application.student_data else None,
                         "priority_score": application.priority_score,
                         "is_renewal": application.is_renewal,
                         "auto_approved_at": application.approved_at.isoformat()

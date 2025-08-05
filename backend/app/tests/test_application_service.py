@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.application_service import ApplicationService, get_student_from_user
 from app.models.user import User, UserRole
-from app.models.student import Student, StudentType
+from app.models.student import Student
 from app.models.application import Application, ApplicationStatus, Semester
 from app.models.scholarship import ScholarshipType
 from app.schemas.application import ApplicationCreate, ApplicationUpdate, ApplicationFormData
@@ -65,7 +65,7 @@ class TestApplicationService:
         student = Mock(spec=Student)
         student.id = 1
         student.std_stdcode = "112550001"
-        student.get_student_type.return_value = StudentType.UNDERGRADUATE
+        student.get_student_type.return_value = "undergraduate"
         return student
 
     def test_serialize_for_json(self, service):
