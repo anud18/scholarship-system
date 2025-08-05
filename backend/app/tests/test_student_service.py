@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.student_service import StudentService
-from app.models.student import Student, StudentType
+from app.models.student import Student
 from app.core.exceptions import NotFoundError
 
 
@@ -51,7 +51,7 @@ class TestStudentService:
         student.std_enrolled_date = date(2023, 9, 1)
         student.std_bank_account = "1234567890123456"
         student.notes = "Test notes"
-        student.get_student_type.return_value = StudentType.UNDERGRADUATE
+        student.get_student_type.return_value = "undergraduate"
         return student
 
     @pytest.fixture
@@ -103,7 +103,7 @@ class TestStudentService:
         assert result["id"] == mock_student.id
         assert result["std_stdcode"] == mock_student.std_stdcode
         assert result["std_cname"] == mock_student.std_cname
-        assert result["student_type"] == StudentType.UNDERGRADUATE.value
+        assert result["student_type"] == "undergraduate"
         assert result["std_enrolled_date"] == mock_student.std_enrolled_date.isoformat()
 
     @pytest.mark.asyncio
@@ -122,7 +122,7 @@ class TestStudentService:
             # Verify result structure
             assert result["id"] == mock_student.id
             assert result["std_stdcode"] == mock_student.std_stdcode
-            assert result["student_type"] == StudentType.UNDERGRADUATE.value
+            assert result["student_type"] == "undergraduate"
 
     @pytest.mark.asyncio
     async def test_get_student_snapshot_handles_none_date(self, service, mock_student):
@@ -342,7 +342,7 @@ class TestStudentService:
         student.std_enrolled_date = None  # None date
         student.notes = ""  # Empty string
         student.com_cellphone = "0912345678"
-        student.get_student_type.return_value = StudentType.GRADUATE
+        student.get_student_type.return_value = "master"
         
         # Set all other required fields to avoid AttributeError
         for field in [
@@ -360,5 +360,5 @@ class TestStudentService:
         assert result["std_termcount"] is None
         assert result["std_enrolled_date"] is None
         assert result["notes"] == ""
-        assert result["student_type"] == StudentType.GRADUATE.value
+        assert result["student_type"] == "master"
         assert result["std_cname"] == "測試學生"  # Unicode support

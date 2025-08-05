@@ -16,27 +16,27 @@ from app.core.exceptions import (
     BusinessLogicError, AuthorizationError
 )
 from app.models.user import User, UserRole
-from app.models.student import Student, StudentType
+from app.models.student import get_student_type_from_degree
 from app.models.application import Application, ApplicationStatus, ApplicationReview, ProfessorReview, ProfessorReviewItem, Semester
 from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
 from app.schemas.application import (
     ApplicationCreate, ApplicationUpdate, ApplicationResponse,
     ApplicationListResponse, ApplicationStatusUpdate,
-    ApplicationReviewCreate, ApplicationReviewResponse, ApplicationFormData
+    ApplicationReviewCreate, ApplicationReviewResponse, ApplicationFormData,
+    StudentDataSchema, StudentFinancialInfo, SupervisorInfo
 )
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
 
 
-async def get_student_from_user(user: User, db: AsyncSession) -> Optional[Student]:
-    """Get student record from user"""
+async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
+    """Get student data from external API using user's nycu_id"""
     if user.role != UserRole.STUDENT or not user.nycu_id:
         return None
     
-    stmt = select(Student).where(Student.std_stdcode == user.nycu_id)
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+    student_service = StudentService()
+    return await student_service.get_student_basic_info(user.nycu_id)
 
 
 class ApplicationService:
@@ -45,7 +45,7 @@ class ApplicationService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.emailService = EmailService()
-        self.student_service = StudentService(db)
+        self.student_service = StudentService()
     
     def _serialize_for_json(self, data: Any) -> Any:
         """Serialize data for JSON response"""
@@ -67,7 +67,7 @@ class ApplicationService:
     
     async def _validate_student_eligibility(
         self, 
-        student: Student, 
+        student_data: Dict[str, Any], 
         scholarship_type: str,
         application_data: ApplicationCreate
     ) -> None:
@@ -88,17 +88,17 @@ class ApplicationService:
         
         # Check student type eligibility  
         eligible_types: List[str] = scholarship.eligible_student_types or []
-        student_type = student.get_student_type().value
+        student_type = self.student_service.get_student_type_from_data(student_data)
         if eligible_types and student_type not in eligible_types:
             raise ValidationError(f"Student type {student_type} is not eligible for this scholarship")
         
-        # Check whitelist eligibility (only for scholarships with whitelist enabled)
-        if not scholarship.is_student_in_whitelist(student.id):
-            if scholarship.whitelist_enabled:
+        # Check whitelist eligibility using user ID instead of student ID
+        # Since students are now external, whitelist should use user IDs
+        user_id = application_data.user_id if hasattr(application_data, 'user_id') else None
+        if user_id and scholarship.whitelist_enabled:
+            # Check if user is in whitelist (whitelist now contains user IDs)
+            if not scholarship.is_user_in_whitelist(user_id):
                 raise ValidationError("您不在此獎學金的白名單內，僅限預先核准的學生申請")
-            else:
-                # This should not happen with correct model logic, but kept as safety check
-                raise ValidationError("申請資格驗證失敗，請聯繫管理員")
         
         # Optional: Check ranking requirement for undergraduate students (keeping as additional validation)
         if student_type == "undergraduate" and scholarship.max_ranking_percent:
@@ -120,10 +120,10 @@ class ApplicationService:
         if not scholarship:
             raise NotFoundError("Scholarship type", scholarship_type)
         
-        # Check for existing applications
+        # Check for existing applications (using user_id since student_id removed)
         stmt = select(Application).where(
             and_(
-                Application.student_id == student.id,
+                Application.user_id == user_id,
                 Application.scholarship_type_id == scholarship.id,
                 Application.status.in_([
                     ApplicationStatus.SUBMITTED.value,
@@ -140,26 +140,22 @@ class ApplicationService:
     async def create_application(
         self,
         user_id: int,
-        student_id: int,
+        student_code: str,  # User's nycu_id for fetching student data
         application_data: ApplicationCreate,
         is_draft: bool = False
     ) -> Application:
         """Create a new application (draft or submitted)"""
-        print(f"[Debug] Starting application creation for user_id={user_id}, student_id={student_id}, is_draft={is_draft}")
+        print(f"[Debug] Starting application creation for user_id={user_id}, student_code={student_code}, is_draft={is_draft}")
         print(f"[Debug] Application data received: {application_data.dict(exclude_none=True)}")
         
-        # Get user and student
+        # Get user
         stmt = select(User).where(User.id == user_id)
         result = await self.db.execute(stmt)
         user = result.scalar_one()
         
-        stmt = select(Student).where(Student.id == student_id)
-        result = await self.db.execute(stmt)
-        student = result.scalar_one()
-        
-        # Get student snapshot
-        print(f"[Debug] Fetching student snapshot for student_id={student_id}")
-        student_snapshot = await self.student_service.get_student_snapshot(student)
+        # Get student data from external API
+        print(f"[Debug] Fetching student data for student_code={student_code}")
+        student_snapshot = await self.student_service.get_student_snapshot(student_code)
         print(f"[Debug] Student snapshot: {student_snapshot}")
         
         # Get scholarship type
@@ -185,7 +181,7 @@ class ApplicationService:
         application = Application(
             app_id=app_id,
             user_id=user_id,
-            student_id=student_id,
+            # student_id removed - student data is now in student_data JSON field
             scholarship_type_id=scholarship.id,
             scholarship_subtype_list=application_data.scholarship_subtype_list,
             sub_type_selection_mode=scholarship.sub_type_selection_mode or "single",
@@ -278,7 +274,7 @@ class ApplicationService:
                 id=application.id,
                 app_id=application.app_id,
                 user_id=application.user_id,
-                student_id=application.student_id,
+                student_id=application.student_data.get('student_id') if application.student_data else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 scholarship_subtype_list=application.scholarship_subtype_list or [],
@@ -378,7 +374,7 @@ class ApplicationService:
                 id=application.id,
                 app_id=application.app_id,
                 user_id=application.user_id,
-                student_id=application.student_id,
+                student_id=application.student_data.get('student_id') if application.student_data else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 status=application.status,
@@ -512,6 +508,67 @@ class ApplicationService:
         
         return application
     
+    async def update_student_data(
+        self,
+        application_id: int,
+        student_data_update: StudentDataSchema,
+        current_user: User,
+        refresh_from_api: bool = False
+    ) -> Application:
+        """更新申請中的學生資料
+        
+        Args:
+            application_id: 申請ID
+            student_data_update: 要更新的學生資料
+            current_user: 當前用戶
+            refresh_from_api: 是否重新從外部API獲取基本學生資料
+        """
+        
+        # 取得申請
+        application = await self.get_application_by_id(application_id, current_user)
+        if not application:
+            raise NotFoundError(f"Application {application_id} not found")
+        
+        # 檢查權限
+        if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.COLLEGE]:
+            if application.user_id != current_user.id:
+                raise AuthorizationError("You can only update your own application data")
+        
+        # 檢查是否可以編輯
+        if application.status not in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value]:
+            raise ValidationError("Cannot update student data for submitted applications")
+        
+        # 獲取當前學生資料
+        current_student_data = application.student_data or {}
+        
+        # 如果需要，重新從外部API獲取基本學生資料
+        if refresh_from_api and current_user.nycu_id:
+            fresh_api_data = await self.student_service.get_student_snapshot(current_user.nycu_id)
+            if fresh_api_data:
+                # 合併API資料，但保留用戶輸入的資料
+                current_student_data.update(fresh_api_data)
+        
+        # 合併用戶更新的資料
+        update_dict = student_data_update.model_dump(exclude_none=True)
+        for field, value in update_dict.items():
+            if field in ['financial_info', 'supervisor_info']:
+                # 對於嵌套對象，進行深度合併
+                if value:
+                    if field not in current_student_data:
+                        current_student_data[field] = {}
+                    current_student_data[field].update(value)
+            else:
+                # 對於普通欄位，直接更新
+                current_student_data[field] = value
+        
+        # 更新到資料庫
+        application.student_data = current_student_data
+        
+        await self.db.commit()
+        await self.db.refresh(application)
+        
+        return application
+    
     async def submit_application(
         self,
         application_id: int,
@@ -618,7 +675,7 @@ class ApplicationService:
             'id': application.id,
             'app_id': application.app_id,
             'user_id': application.user_id,
-            'student_id': application.student_id,
+            'student_id': application.student_data.get('student_id') if application.student_data else None,
             'scholarship_type_id': application.scholarship_type_id,
             'scholarship_subtype_list': application.scholarship_subtype_list,
             'status': application.status,
@@ -749,7 +806,7 @@ class ApplicationService:
                 id=application.id,
                 app_id=application.app_id,
                 user_id=application.user_id,
-                student_id=application.student_id,
+                student_id=application.student_data.get('student_id') if application.student_data else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 status=application.status,
@@ -1120,7 +1177,7 @@ class ApplicationService:
                 id=application.id,
                 app_id=application.app_id,
                 user_id=application.user_id,
-                student_id=application.student_id,
+                student_id=application.student_data.get('student_id') if application.student_data else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 status=application.status,

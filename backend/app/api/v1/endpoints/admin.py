@@ -17,7 +17,7 @@ from app.schemas.notification import NotificationResponse, NotificationCreate, N
 from app.core.security import require_admin, get_current_user
 from app.models.user import User, UserRole
 from app.models.application import Application, ApplicationStatus
-from app.models.student import Student
+# Student model removed - student data now fetched from external API
 from app.models.notification import Notification
 from app.services.system_setting_service import SystemSettingService, EmailTemplateService
 from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipSubType
@@ -81,7 +81,7 @@ async def get_all_applications(
             "id": app.id,
             "app_id": app.app_id,
             "user_id": app.user_id,
-            "student_id": app.student_id,
+            # "student_id": app.student_id,  # Removed - student data now from external API
             "scholarship_type": scholarship_type.code if scholarship_type else "unknown",
             "scholarship_type_id": app.scholarship_type_id or (scholarship_type.id if scholarship_type else None),
             "scholarship_type_zh": scholarship_type.name if scholarship_type else "Unknown Scholarship",
@@ -402,7 +402,7 @@ async def get_recent_applications(
             "id": app.id,
             "app_id": app.app_id,
             "user_id": app.user_id,
-            "student_id": app.student_id,
+            # "student_id": app.student_id,  # Removed - student data now from external API
             "scholarship_type": scholarship_type.code if scholarship_type else "unknown",
             "scholarship_type_id": app.scholarship_type_id or (scholarship_type.id if scholarship_type else None),
             "scholarship_type_zh": scholarship_type_zh.get(
@@ -957,7 +957,7 @@ async def get_applications_by_scholarship(
             "id": app.id,
             "app_id": app.app_id,
             "user_id": app.user_id,
-            "student_id": app.student_id,
+            # "student_id": app.student_id,  # Removed - student data now from external API
             "scholarship_type": scholarship.code,
             "scholarship_type_id": app.scholarship_type_id or scholarship.id,
             "scholarship_type_zh": scholarship.name,

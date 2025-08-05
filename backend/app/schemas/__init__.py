@@ -1,8 +1,9 @@
 from .user import UserCreate, UserUpdate, UserResponse, UserLogin
-from .student import StudentCreate, StudentUpdate, StudentResponse
+# Student schemas removed - student data now handled via external API
 from .application import (
     ApplicationCreate, ApplicationUpdate, ApplicationResponse, 
-    ApplicationFileResponse, ApplicationReviewCreate, ApplicationReviewResponse
+    ApplicationFileResponse, ApplicationReviewCreate, ApplicationReviewResponse,
+    StudentDataSchema, StudentFinancialInfo, SupervisorInfo
 )
 from .scholarship import (
     ScholarshipTypeResponse, ScholarshipRuleResponse, 
@@ -18,9 +19,10 @@ from .settings import (
 
 __all__ = [
     "UserCreate", "UserUpdate", "UserResponse", "UserLogin",
-    "StudentCreate", "StudentUpdate", "StudentResponse",
+    # Student schemas removed - student data now handled via external API
     "ApplicationCreate", "ApplicationUpdate", "ApplicationResponse",
     "ApplicationFileResponse", "ApplicationReviewCreate", "ApplicationReviewResponse",
+    "StudentDataSchema", "StudentFinancialInfo", "SupervisorInfo",
     "ScholarshipTypeResponse", "ScholarshipRuleResponse",
     "SemesterEnum", "ApplicationCycleEnum", "SubTypeSelectionModeEnum",
     "NotificationResponse",

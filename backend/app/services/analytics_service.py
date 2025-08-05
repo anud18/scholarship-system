@@ -11,7 +11,7 @@ import json
 
 from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.models.scholarship import ScholarshipType
-from app.models.student import Student
+# Student model removed - student data now fetched from external API
 from app.models.user import User
 
 import logging

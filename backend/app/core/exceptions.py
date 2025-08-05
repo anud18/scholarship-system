@@ -129,6 +129,17 @@ class EmailError(ScholarshipException):
         )
 
 
+class ServiceUnavailableError(ScholarshipException):
+    """Service unavailable error exception"""
+    
+    def __init__(self, message: str = "Service temporarily unavailable"):
+        super().__init__(
+            message=message,
+            status_code=503,
+            error_code="SERVICE_UNAVAILABLE"
+        )
+
+
 # Exception handler for custom exceptions
 async def scholarship_exception_handler(request: Request, exc: ScholarshipException) -> JSONResponse:
     """Handle custom scholarship exceptions"""

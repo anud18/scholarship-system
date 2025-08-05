@@ -193,9 +193,9 @@ class ScholarshipConfigurationService:
                         break
                 
                 elif rule_type == "maximum_applications":
-                    # Check if student has too many applications
+                    # Check if student has too many applications (using user_id now)
                     student_app_count = self.db.query(Application).filter(
-                        Application.student_id == application.student_id
+                        Application.user_id == application.user_id
                     ).count()
                     
                     if student_app_count > threshold:

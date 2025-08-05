@@ -4,7 +4,7 @@ Import all models here for easy access
 
 from app.models.user import User, UserRole
 from app.models.student import (
-    # 查詢表模型
+    # 查詢表模型 (Reference data only)
     Degree,
     Identity, 
     StudyingStatus,
@@ -13,12 +13,8 @@ from app.models.student import (
     Department,
     EnrollType,
     
-    # 學生資料模型
-    Student,
-    
-    # Enum 類別
-    StudentType,
-    StudyStatus
+    # Helper functions
+    get_student_type_from_degree
 )
 from app.models.scholarship import ScholarshipType, ScholarshipRule, ScholarshipConfiguration
 from app.models.enums import Semester, SubTypeSelectionMode, ApplicationCycle, QuotaManagementMode
@@ -41,7 +37,7 @@ __all__ = [
     "User",
     "UserRole",
     
-    # Student models
+    # Student reference data models
     "Degree",
     "Identity", 
     "StudyingStatus",
@@ -49,9 +45,7 @@ __all__ = [
     "Academy",
     "Department",
     "EnrollType",
-    "Student",
-    "StudentType",
-    "StudyStatus",
+    "get_student_type_from_degree",
     
     # Application models
     "Application",

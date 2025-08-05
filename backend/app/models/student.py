@@ -1,17 +1,18 @@
 """
-Student models for academic information with normalized database design
+Student reference data models for lookup tables only.
+Student data is now fetched from external API instead of storing locally.
 """
 
-from typing import Optional
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, SmallInteger, Text, Table, UniqueConstraint, ForeignKeyConstraint, Boolean
+from sqlalchemy import Column, Integer, String, SmallInteger, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.ext.asyncio import AsyncSession
 import enum
 
 from app.db.base_class import Base
 
 
-# === 查詢表模型 ===
+# === 參考資料表 (Reference Data Tables) ===
+# These lookup tables are kept for scholarship configuration and reference purposes
 
 class Degree(Base):
     """學位表"""
@@ -71,7 +72,7 @@ class EnrollType(Base):
     __tablename__ = "enroll_types"
 
     degreeId = Column(SmallInteger, ForeignKey("degrees.id"), primary_key=True)
-    code = Column(SmallInteger, primary_key=True)
+    code = Column(SmallInteger, primary_key=True)  
     name = Column(String(100), nullable=False)
     name_en = Column(String(100), nullable=False)
 
@@ -87,100 +88,41 @@ class EnrollType(Base):
         return f"<EnrollType(id={self.id}, name={self.name}, degree={self.degreeId})>"
 
 
-# === 主要學生資料表 ===
+# === 學生資料處理輔助函數 ===
+# Helper functions for student data processing
 
-class Student(Base):
-    """學生基本資料表 - 更新版本"""
-    __tablename__ = "students"
-
-    id = Column(Integer, primary_key=True, index=True)
+async def get_student_type_from_degree(degree_code: str, session: AsyncSession) -> str:
+    """
+    Get student type based on degree code from database
     
-    # 學籍資料
-    std_stdno = Column(String(20), unique=True, index=True, nullable=True)  # 學號代碼 (目前不知道用途 先保留)
-    std_stdcode = Column(String(20), unique=True, index=True, nullable=False)  # 學號 (nycu_id)
-    std_pid = Column(String(20), nullable=True)  # 身分證字號
-    std_cname = Column(String(50), nullable=False)  # 中文姓名
-    std_ename = Column(String(50), nullable=False)  # 英文姓名
-    std_degree = Column(String(1), nullable=False)  # 攻讀學位：1:博士, 2:碩士, 3:學士
-    std_studingstatus = Column(String(1), nullable=True)  # 在學狀態
-    std_sex = Column(String(1), nullable=True)  # 性別: 1:男, 2:女
-    std_enrollyear = Column(String(4), nullable=True)  # 入學學年度 (民國年)
-    std_enrollterm = Column(String(1), nullable=True)  # 入學學期 (第一或第二)
-    std_termcount = Column(Integer, nullable=True)  # 在學學期數
-
-    # 國籍與身份
-    std_nation = Column(String(20), nullable=True)    # 1: 中華民國 2: 其他
-    std_schoolid = Column(String(10), nullable=True)  # 在學身份 (數字代碼)
-    std_identity = Column(String(20), nullable=True)  # 陸生、僑生、外籍生等
-
-    # 系所與學院
-    std_depno = Column(String(20), nullable=True)  # 系所代碼
-    std_depname = Column(String(100), nullable=True)  # 系所名稱
-    std_aca_no = Column(String(20), nullable=True)  # 學院代碼
-    std_aca_cname = Column(String(100), nullable=True)  # 學院名稱
-
-    # 學歷背景
-    std_highestschname = Column(String(100), nullable=True)  # 原就讀系所／畢業學校
-    
-    # 聯絡資訊
-    com_cellphone = Column(String(20), nullable=True)
-    com_email = Column(String(100), nullable=True)
-    com_commzip = Column(String(10), nullable=True)
-    com_commadd = Column(String(200), nullable=True)
-
-    # 入學日期（可由 enrollyear + term 推算）
-    std_enrolled_date = Column(Date, nullable=True)
-
-    # 匯款資訊
-    std_bank_account = Column(String(50), nullable=True)
-
-    # 其他備註
-    notes = Column(String(255), nullable=True)
-
-    # 關聯
-    applications = relationship("Application", back_populates="studentProfile")
-
-    def __repr__(self):
-        return f"<Student(id={self.id}, std_stdcode={self.std_stdcode}, std_cname={self.std_cname})>"
-
-    @property
-    def displayName(self) -> str:
-        """Get student display name"""
-        return str(self.std_cname or self.std_ename or self.std_stdcode or "")
-    
-    def get_student_type(self) -> "StudentType":
-        """
-        Get student type based on degree
+    Args:
+        degree_code: Degree code from external API (1:博士, 2:碩士, 3:學士)
+        session: Database session
         
-        Returns:
-            StudentType: The student type based on degree
-        """
-        if self.std_degree == "1":
-            return StudentType.PHD
-        elif self.std_degree == "2":
-            return StudentType.MASTER
+    Returns:
+        str: The student type name from database
+    """
+    from sqlalchemy import select
+    
+    # Convert string degree_code to int for database lookup
+    try:
+        degree_id = int(degree_code)
+    except (ValueError, TypeError):
+        # Default to undergraduate if invalid code
+        degree_id = 3
+    
+    # Query database for degree name
+    result = await session.execute(select(Degree).where(Degree.id == degree_id))
+    degree = result.scalar_one_or_none()
+    
+    if degree:
+        # Return English equivalent for consistency
+        if degree.name == "博士":
+            return "phd"
+        elif degree.name == "碩士":
+            return "master"
         else:
-            return StudentType.UNDERGRADUATE
-
-
-# === 移除學期成績記錄相關模型 ===
-# 根據文件說明，學期資料不再需要存儲，將由 API 或學校學籍資料庫取得
-
-
-class StudentType(enum.Enum):
-    """Student type enum"""
-    UNDERGRADUATE = "undergraduate"  # 學士
-    MASTER = "master"  # 碩士
-    PHD = "phd"  # 博士
-
-
-class StudyStatus(enum.Enum):
-    """Study status enum"""
-    ACTIVE = "1"     # 在學
-    EXTENDED = "2"   # 延畢
-    LEAVE = "3"      # 休學
-    DROPOUT = "4"    # 退學
-    TRANSFER = "5"   # 轉學離校
-    DEATH = "9"      # 死亡
-    GRADUATE = "10"  # 畢業
-    INCOMPLETE = "11" # 修業未畢 
+            return "undergraduate"
+    else:
+        # Fallback to undergraduate if degree not found
+        return "undergraduate"

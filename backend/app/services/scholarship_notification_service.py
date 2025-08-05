@@ -10,8 +10,9 @@ from sqlalchemy import and_, or_
 
 from app.models.application import Application, ApplicationStatus
 from app.models.user import User
-from app.models.student import Student
+# Student model removed - student data now fetched from external API
 from app.services.email_service import EmailService
+from app.services.student_service import StudentService
 from app.core.config import settings
 
 import logging
@@ -25,17 +26,24 @@ class ScholarshipNotificationService:
     def __init__(self, db: Session):
         self.db = db
         self.email_service = EmailService()
+        self.student_service = StudentService()
     
     async def send_application_submitted_notification(self, application: Application) -> bool:
         """Send notification when application is submitted"""
         try:
-            # Get student and user information
-            student = self.db.query(Student).filter(Student.id == application.student_id).first()
+            # Get student data from external API and user information
             user = self.db.query(User).filter(User.id == application.user_id).first()
-            
-            if not student or not user:
-                logger.error(f"Student or user not found for application {application.id}")
+            if not user:
+                logger.error(f"User not found for application {application.id}")
                 return False
+
+            # Get student data from snapshot or external API
+            student_data = application.student_data
+            if not student_data:
+                logger.error(f"Student data not found for application {application.id}")
+                return False
+            
+            student_name = student_data.get('name', 'N/A')
             
             # Prepare email content
             subject = f"Scholarship Application Submitted - {application.app_id}"
@@ -45,7 +53,7 @@ class ScholarshipNotificationService:
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #2c5282;">Scholarship Application Submitted Successfully</h2>
                 
-                <p>Dear {student.name},</p>
+                <p>Dear {student_name},</p>
                 
                 <p>Your scholarship application has been successfully submitted and received for review.</p>
                 
@@ -110,11 +118,17 @@ class ScholarshipNotificationService:
     async def send_status_change_notification(self, application: Application, old_status: str, new_status: str) -> bool:
         """Send notification when application status changes"""
         try:
-            student = self.db.query(Student).filter(Student.id == application.student_id).first()
             user = self.db.query(User).filter(User.id == application.user_id).first()
-            
-            if not student or not user:
+            if not user:
                 return False
+
+            # Get student data from snapshot
+            student_data = application.student_data
+            if not student_data:
+                logger.error(f"Student data not found for application {application.id}")
+                return False
+            
+            student_name = student_data.get('name', 'N/A')
             
             # Determine notification content based on status
             status_messages = {
@@ -152,7 +166,7 @@ class ScholarshipNotificationService:
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: {status_info['color']};">{status_info['title']}</h2>
                 
-                <p>Dear {student.name},</p>
+                <p>Dear {student_name},</p>
                 
                 <p>{status_info['message']}</p>
                 
@@ -213,12 +227,18 @@ class ScholarshipNotificationService:
             
             for application in applications:
                 try:
-                    student = self.db.query(Student).filter(Student.id == application.student_id).first()
                     user = self.db.query(User).filter(User.id == application.user_id).first()
-                    
-                    if not student or not user:
+                    if not user:
                         failed_count += 1
                         continue
+
+                    # Get student data from snapshot
+                    student_data = application.student_data
+                    if not student_data:
+                        failed_count += 1
+                        continue
+                    
+                    student_name = student_data.get('name', 'N/A')
                     
                     days_remaining = (application.review_deadline - datetime.now(timezone.utc)).days
                     
@@ -228,7 +248,7 @@ class ScholarshipNotificationService:
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                         <h2 style="color: #ed8936;">Review Deadline Reminder</h2>
                         
-                        <p>Dear {student.name},</p>
+                        <p>Dear {student_name},</p>
                         
                         <p>This is a reminder that your scholarship application review deadline is approaching.</p>
                         
@@ -280,10 +300,14 @@ class ScholarshipNotificationService:
     async def send_professor_review_request(self, application: Application, professor_user: User) -> bool:
         """Send email to professor requesting review"""
         try:
-            student = self.db.query(Student).filter(Student.id == application.student_id).first()
-            
-            if not student:
+            # Get student data from snapshot
+            student_data = application.student_data
+            if not student_data:
+                logger.error(f"Student data not found for application {application.id}")
                 return False
+            
+            student_name = student_data.get('name', 'N/A')
+            student_no = student_data.get('student_id', 'N/A')
             
             subject = f"Professor Review Request - {application.app_id}"
             
@@ -298,8 +322,8 @@ class ScholarshipNotificationService:
                 <div style="background-color: #f7fafc; padding: 20px; border-left: 4px solid #4299e1; margin: 20px 0;">
                     <h3 style="margin-top: 0; color: #2d3748;">Application Details:</h3>
                     <ul style="margin: 10px 0;">
-                        <li><strong>Student:</strong> {student.name}</li>
-                        <li><strong>Student ID:</strong> {student.stdNo}</li>
+                        <li><strong>Student:</strong> {student_name}</li>
+                        <li><strong>Student ID:</strong> {student_no}</li>
                         <li><strong>Application ID:</strong> {application.app_id}</li>
                         <li><strong>Scholarship Type:</strong> {application.scholarship_type}</li>
                         <li><strong>Application Status:</strong> {application.status.replace('_', ' ').title()}</li>

@@ -10,13 +10,15 @@ from pydantic import ValidationError
 from app.db.deps import get_db
 from app.schemas.application import (
     ApplicationCreate, ApplicationUpdate, ApplicationResponse,
-    ApplicationListResponse, ApplicationStatusUpdate, DashboardStats, ApplicationReviewCreate, ProfessorReviewCreate
+    ApplicationListResponse, ApplicationStatusUpdate, DashboardStats, ApplicationReviewCreate, ProfessorReviewCreate,
+    StudentDataSchema, StudentFinancialInfo, SupervisorInfo
 )
 from app.schemas.common import MessageResponse
 from app.services.application_service import ApplicationService
 from app.services.minio_service import minio_service
 from app.core.security import get_current_user, require_student, require_staff
 from app.models.user import User
+from app.core.exceptions import NotFoundError, ValidationError, AuthorizationError
 
 router = APIRouter()
 
@@ -370,4 +372,65 @@ async def get_college_applications_for_review(
         current_user, 
         status or 'submitted',  # Default to submitted for college review
         scholarship_type
-    ) 
+    )
+
+
+@router.put("/{application_id}/student-data", response_model=MessageResponse)
+async def update_student_data(
+    application_id: int,
+    student_data: StudentDataSchema,
+    refresh_from_api: bool = Query(False, description="是否重新從外部API獲取基本學生資料"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """更新申請的學生相關資料 (銀行帳號、指導教授資訊等)"""
+    service = ApplicationService(db)
+    
+    try:
+        await service.update_student_data(
+            application_id=application_id,
+            student_data_update=student_data,
+            current_user=current_user,
+            refresh_from_api=refresh_from_api
+        )
+        return MessageResponse(message="學生資料更新成功")
+    except (NotFoundError, ValidationError, AuthorizationError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST if isinstance(e, ValidationError) 
+                       else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError)
+                       else status.HTTP_403_FORBIDDEN,
+            detail=str(e)
+        )
+
+
+@router.get("/{application_id}/student-data", response_model=StudentDataSchema)
+async def get_student_data(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """取得申請的學生相關資料"""
+    from sqlalchemy import select
+    from app.models.application import Application
+    
+    # 檢查申請是否存在
+    stmt = select(Application).where(Application.id == application_id)
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    
+    if not application:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found"
+        )
+    
+    # 檢查權限 (學生只能看自己的，管理員可以看所有)
+    if current_user.role not in ['admin', 'super_admin', 'college'] and application.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    # 回傳學生資料
+    student_data = application.student_data or {}
+    return StudentDataSchema(**student_data) 

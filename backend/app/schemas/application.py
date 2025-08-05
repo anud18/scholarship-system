@@ -9,19 +9,59 @@ from pydantic import BaseModel, Field, ConfigDict, validator
 from app.models.application import ApplicationStatus, ReviewStatus, FileType
 
 
+class StudentFinancialInfo(BaseModel):
+    """Student financial information schema"""
+    bank_postal_account: Optional[str] = Field(None, description="銀行或郵局帳號")
+    bank_book_photo_url: Optional[str] = Field(None, description="銀行或郵局帳簿封面照片URL")
+    bank_name: Optional[str] = Field(None, description="銀行或郵局名稱")
+    account_holder_name: Optional[str] = Field(None, description="帳戶戶名")
+
+
+class SupervisorInfo(BaseModel):
+    """Supervisor information schema"""
+    supervisor_employee_id: Optional[str] = Field(None, description="指導教授工號")
+    supervisor_email: Optional[str] = Field(None, description="指導教授email")
+    supervisor_name: Optional[str] = Field(None, description="指導教授姓名")
+    supervisor_department: Optional[str] = Field(None, description="指導教授所屬系所")
+
+
+class StudentDataSchema(BaseModel):
+    """Comprehensive student data schema for applications"""
+    # Basic student info (from external API)
+    student_id: Optional[str] = Field(None, description="學號")
+    name: Optional[str] = Field(None, description="姓名")
+    email: Optional[str] = Field(None, description="Email")
+    department: Optional[str] = Field(None, description="系所")
+    degree: Optional[str] = Field(None, description="學位")
+    
+    # Financial information (user input)
+    financial_info: Optional[StudentFinancialInfo] = Field(None, description="金融帳戶資訊")
+    
+    # Supervisor information (user input)
+    supervisor_info: Optional[SupervisorInfo] = Field(None, description="指導教授資訊")
+    
+    # Contact information (user input)
+    contact_phone: Optional[str] = Field(None, description="聯絡電話")
+    contact_address: Optional[str] = Field(None, description="聯絡地址")
+    
+    # Academic information (from external API + user input)
+    gpa: Optional[float] = Field(None, description="GPA")
+    class_ranking: Optional[int] = Field(None, description="班級排名")
+    class_total: Optional[int] = Field(None, description="班級總人數")
+    dept_ranking: Optional[int] = Field(None, description="系所排名")
+    dept_total: Optional[int] = Field(None, description="系所總人數")
+
+
 class ApplicationBase(BaseModel):
     """Base application schema"""
     scholarship_type: str = Field(..., description="Scholarship type code")
     academic_year: str = Field(..., description="Academic year")
     semester: str = Field(..., description="Semester")
-    gpa: Optional[Decimal] = Field(None, description="GPA")
-    class_ranking_percent: Optional[Decimal] = Field(None, description="Class ranking percentage")
-    dept_ranking_percent: Optional[Decimal] = Field(None, description="Department ranking percentage")
-    completed_terms: Optional[int] = Field(None, description="Number of completed terms")
-    contact_phone: Optional[str] = Field(None, description="Contact phone")
-    contact_email: Optional[str] = Field(None, description="Contact email")
-    contact_address: Optional[str] = Field(None, description="Contact address")
-    bank_account: Optional[str] = Field(None, description="Bank account")
+    
+    # Student data (combines external API data + user input)
+    student_data: Optional[StudentDataSchema] = Field(None, description="完整學生資料")
+    
+    # Application-specific data
     research_proposal: Optional[str] = Field(None, description="Research proposal")
     budget_plan: Optional[str] = Field(None, description="Budget plan")
     milestone_plan: Optional[str] = Field(None, description="Milestone plan")
