@@ -724,25 +724,16 @@ class ApiClient {
     }
 
     try {
-      console.log(`Making API request: ${options.method || 'GET'} ${url}`)
-      if (options.params) {
-        console.log('Query parameters:', options.params)
-      }
       const response = await fetch(url, config)
       
-      // Log response details for debugging
-      console.log(`Response status: ${response.status} ${response.statusText}`)
-      console.log(`Response headers:`, Object.fromEntries(response.headers.entries()))
       
       let data: any
       const contentType = response.headers.get('content-type')
       
       if (contentType && contentType.includes('application/json')) {
         data = await response.json()
-        console.log('Response data:', data)
       } else {
         const text = await response.text()
-        console.log('Non-JSON response:', text)
         throw new Error(`Expected JSON response but got ${contentType}: ${text}`)
       }
 
@@ -764,7 +755,6 @@ class ApiClient {
         throw new Error(data.message || data.detail || `HTTP error! status: ${response.status}`)
       }
 
-      console.log(`API request successful: ${options.method || 'GET'} ${url}`)
       
       // Handle different response formats from backend
       if (data && typeof data === 'object') {
@@ -1365,12 +1355,10 @@ class ApiClient {
       rule_ids?: number[];
       overwrite_existing?: boolean;
     }): Promise<ApiResponse<ScholarshipRule[]>> => {
-      console.log('[API] Sending copy rules request:', copyRequest);
       const response = await this.request('/admin/scholarship-rules/copy', {
         method: 'POST',
         body: JSON.stringify(copyRequest),
       });
-      console.log('[API] Copy rules response:', response);
       return response;
     },
 
@@ -1471,7 +1459,6 @@ class ApiClient {
       code: string;
       category?: string;
       application_cycle?: string;
-      amount?: number;
       status?: string;
     }>>> => {
       return this.request('/admin/scholarships/my-scholarships')

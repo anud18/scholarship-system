@@ -1352,7 +1352,6 @@ async def get_scholarship_permissions(
 ):
     """Get scholarship permissions (admin only)"""
     
-    print(f"DEBUG: get_scholarship_permissions called by user {current_user.id} ({current_user.role})")
     
     # Special handling for super_admin when filtering by user_id
     if user_id:
@@ -1362,7 +1361,6 @@ async def get_scholarship_permissions(
         target_user = target_user_result.scalar_one_or_none()
         
         if target_user and target_user.role == UserRole.SUPER_ADMIN:
-            print(f"DEBUG: Target user {user_id} is SUPER_ADMIN, returning all scholarships")
             # Super admin has access to all scholarships
             from app.models.scholarship import ScholarshipType
             all_scholarships_stmt = select(ScholarshipType)
@@ -1382,7 +1380,6 @@ async def get_scholarship_permissions(
                     "updated_at": target_user.updated_at.isoformat()
                 })
             
-            print(f"DEBUG: Returning {len(permission_list)} virtual permissions for super_admin")
             return ApiResponse(
                 success=True,
                 message=f"Retrieved {len(permission_list)} scholarship permissions (super admin has access to all)",
@@ -1397,14 +1394,10 @@ async def get_scholarship_permissions(
     
     if user_id:
         stmt = stmt.where(AdminScholarship.admin_id == user_id)
-        print(f"DEBUG: Filtering by user_id: {user_id}")
     
     result = await db.execute(stmt)
     permissions = result.scalars().all()
     
-    print(f"DEBUG: Found {len(permissions)} permissions in database")
-    for perm in permissions:
-        print(f"DEBUG: Permission - ID: {perm.id}, Admin: {perm.admin_id}, Scholarship: {perm.scholarship_id}")
     
     # Convert to response format
     permission_list = []
@@ -1422,7 +1415,6 @@ async def get_scholarship_permissions(
     
     # If no user_id filter and current user is SUPER_ADMIN, also include virtual permissions for all scholarships
     if not user_id and current_user.role == UserRole.SUPER_ADMIN:
-        print(f"DEBUG: Current user is SUPER_ADMIN with no filter, adding virtual permissions")
         from app.models.scholarship import ScholarshipType
         all_scholarships_stmt = select(ScholarshipType)
         all_scholarships_result = await db.execute(all_scholarships_stmt)
@@ -1444,9 +1436,7 @@ async def get_scholarship_permissions(
                     "updated_at": current_user.updated_at.isoformat()
                 })
         
-        print(f"DEBUG: Added virtual permissions, total now: {len(permission_list)}")
     
-    print(f"DEBUG: Returning {len(permission_list)} permissions")
     
     return ApiResponse(
         success=True,
@@ -1515,13 +1505,11 @@ async def create_scholarship_permission(
 ):
     """Create new scholarship permission (admin can only assign scholarships they have permission for)"""
     
-    print(f"DEBUG: Received permission_data: {permission_data}")
     
     user_id = permission_data.get("user_id")
     scholarship_id = permission_data.get("scholarship_id")
     comment = permission_data.get("comment", "")
     
-    print(f"DEBUG: user_id={user_id}, scholarship_id={scholarship_id}, comment={comment}")
     
     if not user_id or not scholarship_id:
         raise HTTPException(status_code=400, detail="user_id and scholarship_id are required")
@@ -1564,7 +1552,6 @@ async def create_scholarship_permission(
         raise HTTPException(status_code=409, detail="Permission already exists")
     
     # Create new permission
-    print(f"DEBUG: Creating AdminScholarship with admin_id={user_id}, scholarship_id={scholarship_id}")
     
     new_permission = AdminScholarship(
         admin_id=user_id,
@@ -1575,7 +1562,6 @@ async def create_scholarship_permission(
     await db.commit()
     await db.refresh(new_permission)
     
-    print(f"DEBUG: Successfully created permission with id={new_permission.id}")
     
     return ApiResponse(
         success=True,
@@ -1643,7 +1629,6 @@ async def delete_scholarship_permission(
 ):
     """Delete scholarship permission (admin can only delete permissions for scholarships they manage, and cannot delete their own permissions)"""
     
-    print(f"DEBUG: Attempting to delete permission {permission_id}")
     
     # Check if permission exists
     stmt = select(AdminScholarship).options(
@@ -1653,10 +1638,8 @@ async def delete_scholarship_permission(
     permission = result.scalar_one_or_none()
     
     if not permission:
-        print(f"DEBUG: Permission {permission_id} not found")
         raise HTTPException(status_code=404, detail="Permission not found")
     
-    print(f"DEBUG: Found permission {permission_id} for admin {permission.admin_id}, scholarship {permission.scholarship_id}")
     
     # Check if admin is trying to delete their own permissions (not allowed)
     if current_user.role == UserRole.ADMIN and permission.admin_id == current_user.id:
@@ -1672,7 +1655,6 @@ async def delete_scholarship_permission(
     await db.delete(permission)
     await db.commit()
     
-    print(f"DEBUG: Successfully deleted permission {permission_id}")
     
     return ApiResponse(
         success=True,
@@ -1720,14 +1702,18 @@ async def get_my_scholarships(
 ):
     """Get scholarships that the current user has permission to manage"""
     
+    logger.info(f"get_my_scholarships called by user {current_user.id} role {current_user.role}")
+    
     if current_user.is_super_admin():
         # Super admins can see all scholarships
+        logger.info("User is super admin, getting all active scholarships")
         stmt = select(ScholarshipType).where(
             ScholarshipType.status == ScholarshipStatus.ACTIVE.value
         ).order_by(ScholarshipType.name)
         
         result = await db.execute(stmt)
         scholarships = result.scalars().all()
+        logger.info(f"Found {len(scholarships)} active scholarships for super admin")
     else:
         # Regular admins can only see assigned scholarships
         stmt = select(ScholarshipType).join(
@@ -1748,10 +1734,9 @@ async def get_my_scholarships(
             "name": scholarship.name,
             "name_en": scholarship.name_en,
             "code": scholarship.code,
-            "category": scholarship.category.value if scholarship.category else None,
+            "category": scholarship.category,  # category is already a string, not an enum
             "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else None,
-            "amount": float(scholarship.amount) if scholarship.amount else 0,
-            "status": scholarship.status.value if scholarship.status else None
+            "status": scholarship.status  # status is also a string, not an enum in this model
         })
     
     return ApiResponse(
