@@ -677,7 +677,7 @@ export default function UserProfileManagement() {
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="advisor_name">指導教授姓名</Label>
+                  <Label htmlFor="advisor_name">指導教授 姓名</Label>
                   <Input
                     id="advisor_name"
                     placeholder="例：王小明"
@@ -702,7 +702,7 @@ export default function UserProfileManagement() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="advisor_nycu_id">指導教授學校工號</Label>
+                  <Label htmlFor="advisor_nycu_id">指導教授 學校工號</Label>
                   <Input
                     id="advisor_nycu_id"
                     placeholder="例：professor123"
