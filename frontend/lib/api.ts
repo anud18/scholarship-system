@@ -1463,6 +1463,20 @@ class ApiClient {
       return this.request('/admin/scholarships/all-for-permissions')
     },
 
+    // 獲取當前用戶有權限管理的獎學金列表
+    getMyScholarships: async (): Promise<ApiResponse<Array<{ 
+      id: number; 
+      name: string; 
+      name_en?: string; 
+      code: string;
+      category?: string;
+      application_cycle?: string;
+      amount?: number;
+      status?: string;
+    }>>> => {
+      return this.request('/admin/scholarships/my-scholarships')
+    },
+
     // 獲取 ScholarshipConfiguration 中實際配置的學期
     getAvailableSemesters: async (scholarshipCode?: string): Promise<ApiResponse<string[]>> => {
       const params = scholarshipCode ? `?scholarship_code=${encodeURIComponent(scholarshipCode)}` : ''

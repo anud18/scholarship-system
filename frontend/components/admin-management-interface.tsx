@@ -989,14 +989,15 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const fetchScholarshipTypes = async () => {
     setLoadingScholarshipTypes(true);
     try {
-      const response = await apiClient.request('/scholarships', {
-        method: 'GET'
-      });
+      // Use the new API that returns only scholarships the user has permission to manage
+      const response = await apiClient.admin.getMyScholarships();
       if (response.success && response.data) {
         setScholarshipTypes(response.data);
       }
     } catch (error) {
       console.error('Failed to fetch scholarship types:', error);
+      // Fallback to empty array so UI doesn't break
+      setScholarshipTypes([]);
     } finally {
       setLoadingScholarshipTypes(false);
     }

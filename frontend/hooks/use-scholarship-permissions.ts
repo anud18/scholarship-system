@@ -3,9 +3,21 @@ import { apiClient } from '@/lib/api'
 import { ScholarshipPermission } from '@/lib/api'
 import { useAuth } from './use-auth'
 
+interface AllowedScholarship {
+  id: number
+  name: string
+  name_en?: string
+  code: string
+  category?: string
+  application_cycle?: string
+  amount?: number
+  status?: string
+}
+
 export function useScholarshipPermissions() {
   const { user, isAuthenticated } = useAuth()
   const [permissions, setPermissions] = useState<ScholarshipPermission[]>([])
+  const [allowedScholarships, setAllowedScholarships] = useState<AllowedScholarship[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -15,20 +27,15 @@ export function useScholarshipPermissions() {
     if (!isAuthenticated || !user) {
       console.log('useScholarshipPermissions: User not authenticated')
       setPermissions([])
+      setAllowedScholarships([])
       return
     }
 
-    // Super admin has access to all scholarships by default
-    if (user.role === 'super_admin') {
-      console.log('useScholarshipPermissions: Super admin - access to all scholarships')
-      setPermissions([]) // Empty array means access to all
-      return
-    }
-
-    // Admin and college roles need specific permissions
-    if (!['admin', 'college'].includes(user.role)) {
+    // Only admin, college, and super_admin roles can have scholarship permissions
+    if (!['admin', 'college', 'super_admin'].includes(user.role)) {
       console.log('useScholarshipPermissions: User role not eligible for permissions:', user.role)
       setPermissions([])
+      setAllowedScholarships([])
       return
     }
 
@@ -36,21 +43,33 @@ export function useScholarshipPermissions() {
       setIsLoading(true)
       setError(null)
       
-      console.log('useScholarshipPermissions: Fetching permissions from API...')
-      const response = await apiClient.admin.getCurrentUserScholarshipPermissions()
+      console.log('useScholarshipPermissions: Fetching allowed scholarships from API...')
+      const response = await apiClient.admin.getMyScholarships()
       console.log('useScholarshipPermissions: API response:', response)
       
       if (response.success && response.data) {
-        console.log('useScholarshipPermissions: Setting permissions:', response.data)
-        setPermissions(response.data)
+        console.log('useScholarshipPermissions: Setting allowed scholarships:', response.data)
+        setAllowedScholarships(response.data)
+        
+        // Convert to permission format for backward compatibility
+        const permissionList = response.data.map(scholarship => ({
+          id: scholarship.id,
+          admin_id: Number(user.id),
+          scholarship_id: scholarship.id,
+          scholarship_name: scholarship.name,
+          assigned_at: new Date().toISOString()
+        }))
+        setPermissions(permissionList)
       } else {
-        console.log('useScholarshipPermissions: No permissions data, setting empty array')
+        console.log('useScholarshipPermissions: No scholarship data, setting empty array')
         setPermissions([])
+        setAllowedScholarships([])
       }
     } catch (err) {
-      console.error('Failed to fetch scholarship permissions:', err)
-      setError('Failed to fetch scholarship permissions')
+      console.error('Failed to fetch allowed scholarships:', err)
+      setError('Failed to fetch allowed scholarships')
       setPermissions([])
+      setAllowedScholarships([])
     } finally {
       setIsLoading(false)
     }
@@ -65,31 +84,31 @@ export function useScholarshipPermissions() {
     
     // Admin and college roles need specific permissions
     if (['admin', 'college'].includes(user.role)) {
-      // If permissions array is empty, it means no specific permissions assigned
-      if (permissions.length === 0) return false
+      // If allowedScholarships array is empty, it means no specific permissions assigned
+      if (allowedScholarships.length === 0) return false
       
-      return permissions.some(permission => 
-        permission.scholarship_id === Number(scholarshipId)
+      return allowedScholarships.some(scholarship => 
+        scholarship.id === Number(scholarshipId)
       )
     }
     
     return false
-  }, [user, permissions])
+  }, [user, allowedScholarships])
 
   // Get allowed scholarship IDs for the current user
   const getAllowedScholarshipIds = useCallback((): number[] => {
     if (!user) return []
     
-    // Super admin has access to all scholarships
+    // Super admin has access to all scholarships (return empty array to indicate "all")
     if (user.role === 'super_admin') return []
     
     // Admin and college roles need specific permissions
     if (['admin', 'college'].includes(user.role)) {
-      return permissions.map(permission => permission.scholarship_id)
+      return allowedScholarships.map(scholarship => scholarship.id)
     }
     
     return []
-  }, [user, permissions])
+  }, [user, allowedScholarships])
 
   // Filter scholarships based on user permissions
   const filterScholarshipsByPermission = useCallback(<T extends { id: number | string }>(scholarships: T[]): T[] => {
@@ -129,16 +148,23 @@ export function useScholarshipPermissions() {
     return []
   }, [user, getAllowedScholarshipIds])
 
+  // Get allowed scholarships directly (new method)
+  const getAllowedScholarships = useCallback((): AllowedScholarship[] => {
+    return allowedScholarships
+  }, [allowedScholarships])
+
   useEffect(() => {
     fetchPermissions()
   }, [fetchPermissions])
 
   return {
     permissions,
+    allowedScholarships,
     isLoading,
     error,
     hasPermission,
     getAllowedScholarshipIds,
+    getAllowedScholarships,
     filterScholarshipsByPermission,
     refetch: fetchPermissions
   }

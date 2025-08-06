@@ -1713,6 +1713,54 @@ async def get_all_scholarships_for_permissions(
     )
 
 
+@router.get("/scholarships/my-scholarships", response_model=ApiResponse[List[Dict[str, Any]]])
+async def get_my_scholarships(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get scholarships that the current user has permission to manage"""
+    
+    if current_user.is_super_admin():
+        # Super admins can see all scholarships
+        stmt = select(ScholarshipType).where(
+            ScholarshipType.status == ScholarshipStatus.ACTIVE.value
+        ).order_by(ScholarshipType.name)
+        
+        result = await db.execute(stmt)
+        scholarships = result.scalars().all()
+    else:
+        # Regular admins can only see assigned scholarships
+        stmt = select(ScholarshipType).join(
+            AdminScholarship, ScholarshipType.id == AdminScholarship.scholarship_id
+        ).where(
+            AdminScholarship.admin_id == current_user.id,
+            ScholarshipType.status == ScholarshipStatus.ACTIVE.value
+        ).order_by(ScholarshipType.name)
+        
+        result = await db.execute(stmt)
+        scholarships = result.scalars().all()
+    
+    # Convert to response format
+    scholarship_list = []
+    for scholarship in scholarships:
+        scholarship_list.append({
+            "id": scholarship.id,
+            "name": scholarship.name,
+            "name_en": scholarship.name_en,
+            "code": scholarship.code,
+            "category": scholarship.category.value if scholarship.category else None,
+            "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else None,
+            "amount": float(scholarship.amount) if scholarship.amount else 0,
+            "status": scholarship.status.value if scholarship.status else None
+        })
+    
+    return ApiResponse(
+        success=True,
+        message=f"Retrieved {len(scholarship_list)} scholarships for current user",
+        data=scholarship_list
+    )
+
+
 # ============================
 # Scholarship Rules Management
 # ============================
