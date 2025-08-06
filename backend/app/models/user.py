@@ -108,6 +108,20 @@ class User(Base):
     def can_assign_roles(self) -> bool:
         """Check if user can assign roles to others"""
         return self.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]
+    
+    def has_scholarship_permission(self, scholarship_type_id: int) -> bool:
+        """Check if user has permission to manage a specific scholarship"""
+        # Super admins have access to all scholarships
+        if self.is_super_admin():
+            return True
+        
+        # Check if this admin has been assigned to this scholarship
+        if self.is_admin():
+            return any(admin_scholarship.scholarship_id == scholarship_type_id 
+                      for admin_scholarship in self.admin_scholarships)
+        
+        # Other roles don't have scholarship management permissions
+        return False
 
 
 class AdminScholarship(Base):

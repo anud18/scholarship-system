@@ -417,6 +417,7 @@ class ScholarshipRule(Base):
     This table stores the validation rules for scholarship applications.
     Each rule defines a specific condition that must be met for eligibility,
     such as GPA requirements, ranking criteria, or nationality restrictions.
+    Rules can be contextualized by academic year and semester for period-specific requirements.
     """
     __tablename__ = "scholarship_rules"
 
@@ -424,6 +425,15 @@ class ScholarshipRule(Base):
     scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
     # 如果獎學金類型沒有子類型，則為 None，此規則為通用規則，適用於所有子類型
     sub_type = Column(String(50), nullable=True, default=None) 
+    
+    # Academic context - rules can be specific to academic year and semester
+    academic_year = Column(Integer, nullable=True, index=True)  # 民國年，如 113 表示 113 學年度
+    semester = Column(Enum(Semester), nullable=True, index=True)  # 學期，學年制可為 NULL
+    
+    # Rule template information
+    is_template = Column(Boolean, default=False, nullable=False)  # 是否為規則模板
+    template_name = Column(String(100), nullable=True)  # 模板名稱
+    template_description = Column(Text)  # 模板描述
     
     # 規則基本資訊
     rule_name = Column(String(100), nullable=False)
@@ -445,13 +455,19 @@ class ScholarshipRule(Base):
     
     # 狀態
     is_active = Column(Boolean, default=True)
+    is_initial_enabled = Column(Boolean, default=True, nullable=False)  # 初領是否啟用
+    is_renewal_enabled = Column(Boolean, default=True, nullable=False)  # 續領是否啟用
     
     # 時間戳記
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(Integer, ForeignKey("users.id"))
+    updated_by = Column(Integer, ForeignKey("users.id"))
     
     # 關聯
     scholarship_type = relationship("ScholarshipType", back_populates="rules")
+    creator = relationship("User", foreign_keys=[created_by])
+    updater = relationship("User", foreign_keys=[updated_by])
 
     def __repr__(self):
         return f"<ScholarshipRule(id={self.id}, rule_name={self.rule_name}, rule_type={self.rule_type}, scholarship_type_id={self.scholarship_type_id}, sub_type={self.sub_type})>"
@@ -466,6 +482,64 @@ class ScholarshipRule(Base):
         if not self.scholarship_type or not self.scholarship_type.sub_type_list:
             return False
         return self.sub_type in self.scholarship_type.sub_type_list
+    
+    @property
+    def academic_period_label(self) -> str:
+        """Get academic period label for display"""
+        if self.is_template:
+            return "模板"
+        if not self.academic_year:
+            return "通用"
+        if self.semester:
+            semester_label = {
+                Semester.FIRST: "第一學期",
+                Semester.SECOND: "第二學期",
+            }.get(self.semester, "")
+            return f"{self.academic_year}學年度 {semester_label}"
+        return f"{self.academic_year}學年度"
+    
+    def is_applicable_to_period(self, academic_year: int, semester: Optional[Semester] = None) -> bool:
+        """Check if this rule is applicable to the given academic period"""
+        # Templates are not applicable to specific periods
+        if self.is_template:
+            return False
+        
+        # Universal rules (no academic context) apply to all periods
+        if not self.academic_year:
+            return True
+        
+        # Check academic year match
+        if self.academic_year != academic_year:
+            return False
+        
+        # Check semester match (None means yearly rule)
+        if self.semester is None:  # Yearly rule
+            return True
+        
+        return self.semester == semester
+    
+    def create_copy_for_period(self, academic_year: int, semester: Optional[Semester] = None) -> 'ScholarshipRule':
+        """Create a copy of this rule for a different academic period"""
+        return ScholarshipRule(
+            scholarship_type_id=self.scholarship_type_id,
+            sub_type=self.sub_type,
+            academic_year=academic_year,
+            semester=semester,
+            is_template=False,  # Copies are not templates
+            rule_name=self.rule_name,
+            rule_type=self.rule_type,
+            tag=self.tag,
+            description=self.description,
+            condition_field=self.condition_field,
+            operator=self.operator,
+            expected_value=self.expected_value,
+            message=self.message,
+            message_en=self.message_en,
+            is_hard_rule=self.is_hard_rule,
+            is_warning=self.is_warning,
+            priority=self.priority,
+            is_active=self.is_active
+        )
 
 
 class ScholarshipConfiguration(Base):

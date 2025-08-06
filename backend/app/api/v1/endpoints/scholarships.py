@@ -144,10 +144,10 @@ async def get_scholarship_eligibility(
     current_user: User = Depends(get_current_user)
 ):
     """Get scholarships that the current student is eligible for"""
-    from app.services.application_service import get_student_from_user
+    from app.services.application_service import get_student_data_from_user
     from app.services.scholarship_service import ScholarshipService
     
-    student = await get_student_from_user(current_user, db)
+    student = await get_student_data_from_user(current_user)
     if not student:
         raise HTTPException(
             status_code=404, 

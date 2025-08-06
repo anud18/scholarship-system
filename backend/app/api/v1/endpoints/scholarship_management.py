@@ -27,14 +27,14 @@ async def create_comprehensive_application(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a comprehensive scholarship application with all new features"""
-    from app.services.application_service import get_student_from_user
+    from app.services.application_service import get_student_data_from_user
     from sqlalchemy.orm import sessionmaker
     
     # Convert AsyncSession to regular Session for our service
     sync_session = sessionmaker(bind=db.bind)()
     
     try:
-        student = await get_student_from_user(current_user, db)
+        student = await get_student_data_from_user(current_user)
         if not student:
             raise HTTPException(status_code=404, detail="Student profile not found")
         
@@ -42,7 +42,7 @@ async def create_comprehensive_application(
         
         application, message = service.create_application(
             user_id=current_user.id,
-            student_id=student.id,
+            student_id=current_user.id,
             scholarship_type_id=application_data["scholarship_type_id"],
             scholarship_type_code=application_data["scholarship_type_code"],
             semester=application_data["semester"],

@@ -208,6 +208,7 @@ export interface ScholarshipType {
   description_en?: string
   amount: string
   currency: string
+  application_cycle: 'semester' | 'yearly'
   application_start_date: string
   application_end_date: string
   eligible_sub_types: string[]
@@ -254,17 +255,29 @@ export interface ScholarshipRule {
   id: number
   scholarship_type_id: number
   sub_type?: string
+  academic_year?: number
+  semester?: string
+  is_template?: boolean
+  template_name?: string
+  template_description?: string
   rule_name: string
   rule_type: string
+  tag?: string
+  description?: string
   condition_field: string
   operator: string
   expected_value: string
-  error_message: string
-  error_message_en: string
-  is_required: boolean
-  weight: number
+  message?: string
+  message_en?: string
+  is_hard_rule: boolean
+  is_warning: boolean
   priority: number
   is_active: boolean
+  is_initial_enabled: boolean   // 初領是否啟用
+  is_renewal_enabled: boolean   // 續領是否啟用
+  created_by?: number
+  updated_by?: number
+  academic_period_label?: string
   created_at: string
   updated_at: string
 }
@@ -593,16 +606,6 @@ export interface Workflow {
   updated_at: string
 }
 
-export interface ScholarshipRule {
-  id: string
-  name: string
-  type: string
-  criteria: Record<string, any>
-  active: boolean
-  description?: string
-  created_at: string
-  updated_at: string
-}
 
 export interface SystemStats {
   totalUsers: number
@@ -711,25 +714,16 @@ class ApiClient {
     }
 
     try {
-      console.log(`Making API request: ${options.method || 'GET'} ${url}`)
-      if (options.params) {
-        console.log('Query parameters:', options.params)
-      }
       const response = await fetch(url, config)
       
-      // Log response details for debugging
-      console.log(`Response status: ${response.status} ${response.statusText}`)
-      console.log(`Response headers:`, Object.fromEntries(response.headers.entries()))
       
       let data: any
       const contentType = response.headers.get('content-type')
       
       if (contentType && contentType.includes('application/json')) {
         data = await response.json()
-        console.log('Response data:', data)
       } else {
         const text = await response.text()
-        console.log('Non-JSON response:', text)
         throw new Error(`Expected JSON response but got ${contentType}: ${text}`)
       }
 
@@ -751,7 +745,6 @@ class ApiClient {
         throw new Error(data.message || data.detail || `HTTP error! status: ${response.status}`)
       }
 
-      console.log(`API request successful: ${options.method || 'GET'} ${url}`)
       
       // Handle different response formats from backend
       if (data && typeof data === 'object') {
@@ -1296,8 +1289,30 @@ class ApiClient {
     },
 
     // 獎學金規則管理
-    getScholarshipRules: async (): Promise<ApiResponse<ScholarshipRule[]>> => {
-      return this.request('/admin/scholarship-rules')
+    getScholarshipRules: async (filters?: {
+      scholarship_type_id?: number;
+      academic_year?: number;
+      semester?: string;
+      sub_type?: string;
+      rule_type?: string;
+      is_template?: boolean;
+      is_active?: boolean;
+      tag?: string;
+    }): Promise<ApiResponse<ScholarshipRule[]>> => {
+      const queryParams = new URLSearchParams();
+      if (filters) {
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            queryParams.append(key, String(value));
+          }
+        });
+      }
+      const queryString = queryParams.toString();
+      return this.request(`/admin/scholarship-rules${queryString ? `?${queryString}` : ''}`);
+    },
+
+    getScholarshipRule: async (id: number): Promise<ApiResponse<ScholarshipRule>> => {
+      return this.request(`/admin/scholarship-rules/${id}`);
     },
 
     createScholarshipRule: async (rule: Omit<ScholarshipRule, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<ScholarshipRule>> => {
@@ -1307,17 +1322,82 @@ class ApiClient {
       })
     },
 
-    updateScholarshipRule: async (id: string, rule: Partial<ScholarshipRule>): Promise<ApiResponse<ScholarshipRule>> => {
+    updateScholarshipRule: async (id: number, rule: Partial<ScholarshipRule>): Promise<ApiResponse<ScholarshipRule>> => {
       return this.request(`/admin/scholarship-rules/${id}`, {
         method: 'PUT',
         body: JSON.stringify(rule),
       })
     },
 
-    deleteScholarshipRule: async (id: string): Promise<ApiResponse<{ message: string }>> => {
+    deleteScholarshipRule: async (id: number): Promise<ApiResponse<{ message: string }>> => {
       return this.request(`/admin/scholarship-rules/${id}`, {
         method: 'DELETE',
       })
+    },
+
+    // 規則複製和批量操作
+    copyRulesBetweenPeriods: async (copyRequest: {
+      source_academic_year?: number;
+      source_semester?: string;
+      target_academic_year: number;
+      target_semester?: string;
+      scholarship_type_ids?: number[];
+      rule_ids?: number[];
+      overwrite_existing?: boolean;
+    }): Promise<ApiResponse<ScholarshipRule[]>> => {
+      const response = await this.request('/admin/scholarship-rules/copy', {
+        method: 'POST',
+        body: JSON.stringify(copyRequest),
+      });
+      return response;
+    },
+
+    bulkRuleOperation: async (operation: {
+      operation: string;
+      rule_ids: number[];
+      parameters?: Record<string, any>;
+    }): Promise<ApiResponse<{ operation: string; affected_rules: number; details: string[] }>> => {
+      return this.request('/admin/scholarship-rules/bulk-operation', {
+        method: 'POST',
+        body: JSON.stringify(operation),
+      });
+    },
+
+    // 規則模板管理
+    getRuleTemplates: async (scholarship_type_id?: number): Promise<ApiResponse<ScholarshipRule[]>> => {
+      const queryParams = scholarship_type_id ? `?scholarship_type_id=${scholarship_type_id}` : '';
+      return this.request(`/admin/scholarship-rules/templates${queryParams}`);
+    },
+
+    createRuleTemplate: async (templateRequest: {
+      template_name: string;
+      template_description?: string;
+      scholarship_type_id: number;
+      rule_ids: number[];
+    }): Promise<ApiResponse<ScholarshipRule[]>> => {
+      return this.request('/admin/scholarship-rules/create-template', {
+        method: 'POST',
+        body: JSON.stringify(templateRequest),
+      });
+    },
+
+    applyRuleTemplate: async (templateRequest: {
+      template_id: number;
+      scholarship_type_id: number;
+      academic_year: number;
+      semester?: string;
+      overwrite_existing?: boolean;
+    }): Promise<ApiResponse<ScholarshipRule[]>> => {
+      return this.request('/admin/scholarship-rules/apply-template', {
+        method: 'POST',
+        body: JSON.stringify(templateRequest),
+      });
+    },
+
+    deleteRuleTemplate: async (templateName: string, scholarshipTypeId: number): Promise<ApiResponse<{ message: string }>> => {
+      return this.request(`/admin/scholarship-rules/templates/${encodeURIComponent(templateName)}?scholarship_type_id=${scholarshipTypeId}`, {
+        method: 'DELETE',
+      });
     },
 
     // 系統統計
@@ -1361,10 +1441,28 @@ class ApiClient {
       return this.request('/admin/scholarships/all-for-permissions')
     },
 
+    // 獲取當前用戶有權限管理的獎學金列表
+    getMyScholarships: async (): Promise<ApiResponse<Array<{ 
+      id: number; 
+      name: string; 
+      name_en?: string; 
+      code: string;
+      category?: string;
+      application_cycle?: string;
+      status?: string;
+    }>>> => {
+      return this.request('/admin/scholarships/my-scholarships')
+    },
+
     // 獲取 ScholarshipConfiguration 中實際配置的學期
     getAvailableSemesters: async (scholarshipCode?: string): Promise<ApiResponse<string[]>> => {
       const params = scholarshipCode ? `?scholarship_code=${encodeURIComponent(scholarshipCode)}` : ''
       return this.request(`/scholarship-configurations/available-semesters${params}`)
+    },
+
+    // 獲取可用年份
+    getAvailableYears: async (): Promise<ApiResponse<number[]>> => {
+      return this.request('/admin/scholarships/available-years')
     },
   }
 

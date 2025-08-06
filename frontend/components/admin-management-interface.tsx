@@ -9,12 +9,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Settings, Users, FileText, Database, Upload, Download, Play, Pause, Edit, Plus, Mail, Save, Eye, MessageSquare, AlertCircle, Trash2, RefreshCw, Clock, Timer, X } from "lucide-react"
+import { Settings, Users, FileText, Database, Upload, Download, Play, Pause, Edit, Plus, Mail, Save, Eye, MessageSquare, AlertCircle, Trash2, RefreshCw, Clock, Timer, X, Copy, FileCode, CheckSquare, Square, Trash, TestTube, MoreVertical } from "lucide-react"
 import apiClient, { EmailTemplate, NotificationResponse, AnnouncementCreate, AnnouncementUpdate, UserListResponse, UserStats, UserCreate, Workflow, ScholarshipRule, SystemStats, ScholarshipPermission } from "@/lib/api"
 import { UserEditModal } from "@/components/user-edit-modal"
 import { Modal } from "@/components/ui/modal"
 import { QuotaManagement } from "@/components/quota-management"
+import { ScholarshipRuleModal } from "@/components/scholarship-rule-modal"
+import { AdminRuleManagement } from "@/components/admin-rule-management"
 
 
 
@@ -88,6 +91,17 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const [scholarshipRules, setScholarshipRules] = useState<ScholarshipRule[]>([])
   const [loadingRules, setLoadingRules] = useState(false)
   const [rulesError, setRulesError] = useState<string | null>(null)
+  const [selectedRule, setSelectedRule] = useState<ScholarshipRule | null>(null)
+  const [showRuleDetails, setShowRuleDetails] = useState(false)
+  const [showRuleForm, setShowRuleForm] = useState(false)
+  const [editingRule, setEditingRule] = useState<ScholarshipRule | null>(null)
+  const [ruleFormLoading, setRuleFormLoading] = useState(false)
+  const [selectedScholarshipTab, setSelectedScholarshipTab] = useState("scholarship-1")
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState(114)
+  const [selectedSemester, setSelectedSemester] = useState<string | null>("first")
+  const [ruleTypeFilter, setRuleTypeFilter] = useState<"initial" | "renewal" | "all">("all")
+  const [scholarshipTypes, setScholarshipTypes] = useState<any[]>([])
+  const [loadingScholarshipTypes, setLoadingScholarshipTypes] = useState(false)
 
   // 系統統計狀態
   const [systemStats, setSystemStats] = useState<SystemStats>({
@@ -845,6 +859,200 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     }
   };
 
+  // 處理查看規則詳情
+  const handleViewRuleDetails = (rule: ScholarshipRule) => {
+    setSelectedRule(rule);
+    setShowRuleDetails(true);
+  };
+
+  // 處理新增規則
+  const handleCreateRule = () => {
+    setEditingRule(null);
+    setShowRuleForm(true);
+  };
+
+  // 處理編輯規則
+  const handleEditRule = (rule: ScholarshipRule) => {
+    setEditingRule(rule);
+    setShowRuleForm(true);
+  };
+
+  // 處理規則表單提交
+  const handleRuleSubmit = async (ruleData: Partial<ScholarshipRule>) => {
+    setRuleFormLoading(true);
+    try {
+      if (editingRule) {
+        // 更新規則
+        const response = await apiClient.admin.updateScholarshipRule(editingRule.id, ruleData);
+        if (response.success) {
+          await fetchScholarshipRules(); // 重新載入規則列表
+          setShowRuleForm(false);
+          setEditingRule(null);
+        } else {
+          throw new Error(response.message || '更新規則失敗');
+        }
+      } else {
+        // 建立新規則
+        const response = await apiClient.admin.createScholarshipRule(ruleData);
+        if (response.success) {
+          await fetchScholarshipRules(); // 重新載入規則列表
+          setShowRuleForm(false);
+        } else {
+          throw new Error(response.message || '建立規則失敗');
+        }
+      }
+    } catch (error) {
+      console.error('規則操作失敗:', error);
+      alert(`操作失敗: ${error instanceof Error ? error.message : '未知錯誤'}`);
+    } finally {
+      setRuleFormLoading(false);
+    }
+  };
+
+  // 處理刪除規則
+  const handleDeleteRule = async (rule: ScholarshipRule) => {
+    if (!confirm(`確定要刪除規則「${rule.rule_name}」嗎？此操作無法復原。`)) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.admin.deleteScholarshipRule(rule.id);
+      if (response.success) {
+        await fetchScholarshipRules(); // 重新載入規則列表
+      } else {
+        throw new Error(response.message || '刪除規則失敗');
+      }
+    } catch (error) {
+      console.error('刪除規則失敗:', error);
+      alert(`刪除失敗: ${error instanceof Error ? error.message : '未知錯誤'}`);
+    }
+  };
+
+  // 處理複製規則
+  const handleCopyRule = async (rule: ScholarshipRule) => {
+    const copyData = {
+      ...rule,
+      rule_name: `${rule.rule_name} (複製)`,
+      id: undefined,
+      created_at: undefined,
+      updated_at: undefined,
+      created_by: undefined,
+      updated_by: undefined
+    };
+    setEditingRule(copyData as ScholarshipRule);
+    setShowRuleForm(true);
+  };
+
+  // 處理切換初領狀態
+  const handleToggleInitialEnabled = async (rule: ScholarshipRule, enabled: boolean) => {
+    try {
+      const response = await apiClient.admin.updateScholarshipRule(rule.id, {
+        is_initial_enabled: enabled
+      });
+      if (response.success) {
+        await fetchScholarshipRules();
+      }
+    } catch (error) {
+      console.error('更新初領狀態失敗:', error);
+    }
+  };
+
+  // 處理切換續領狀態
+  const handleToggleRenewalEnabled = async (rule: ScholarshipRule, enabled: boolean) => {
+    try {
+      const response = await apiClient.admin.updateScholarshipRule(rule.id, {
+        is_renewal_enabled: enabled
+      });
+      if (response.success) {
+        await fetchScholarshipRules();
+      }
+    } catch (error) {
+      console.error('更新續領狀態失敗:', error);
+    }
+  };
+
+  // 處理切換整體狀態
+  const handleToggleActive = async (rule: ScholarshipRule, active: boolean) => {
+    try {
+      const response = await apiClient.admin.updateScholarshipRule(rule.id, {
+        is_active: active
+      });
+      if (response.success) {
+        await fetchScholarshipRules();
+      }
+    } catch (error) {
+      console.error('更新規則狀態失敗:', error);
+    }
+  };
+
+  // 獲取獎學金類型列表
+  const fetchScholarshipTypes = async () => {
+    setLoadingScholarshipTypes(true);
+    try {
+      // Use the new API that returns only scholarships the user has permission to manage
+      const response = await apiClient.admin.getMyScholarships();
+      if (response.success && response.data) {
+        setScholarshipTypes(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch scholarship types:', error);
+      // Fallback to empty array so UI doesn't break
+      setScholarshipTypes([]);
+    } finally {
+      setLoadingScholarshipTypes(false);
+    }
+  };
+
+  // 根據獎學金 tab 和篩選條件過濾規則
+  const getFilteredRules = () => {
+    let filtered = [...scholarshipRules];
+    
+    // 根據選擇的獎學金 tab 過濾
+    if (selectedScholarshipTab !== 'templates') {
+      const scholarshipId = parseInt(selectedScholarshipTab.replace('scholarship-', ''));
+      filtered = filtered.filter(rule => rule.scholarship_type_id === scholarshipId);
+    } else {
+      // 只顯示模板
+      filtered = filtered.filter(rule => rule.is_template === true);
+    }
+    
+    // 根據學年度和學期過濾
+    filtered = filtered.filter(rule => {
+      if (rule.academic_year && rule.academic_year !== selectedAcademicYear) {
+        return false;
+      }
+      // 確保學期值正確對應
+      if (rule.semester) {
+        const ruleSemester = rule.semester;
+        if (ruleSemester !== selectedSemester) {
+          return false;
+        }
+      }
+      return true;
+    });
+    
+    // 根據初領/續領過濾
+    if (ruleTypeFilter !== 'all') {
+      filtered = filtered.filter(rule => {
+        if (ruleTypeFilter === 'initial') {
+          return rule.is_initial_enabled;
+        } else if (ruleTypeFilter === 'renewal') {
+          return rule.is_renewal_enabled;
+        }
+        return true;
+      });
+    }
+    
+    // 按優先級排序 (數字越小優先級越高，1 在最上面)
+    return filtered.sort((a, b) => a.priority - b.priority);
+  };
+
+  // 組件載入時獲取資料
+  useEffect(() => {
+    fetchScholarshipTypes();
+    fetchScholarshipRules();
+  }, []);
+
   // 獲取系統統計
   const fetchSystemStats = async () => {
     setLoadingStats(true);
@@ -1178,79 +1386,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         </TabsContent>
 
         <TabsContent value="rules" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">審核規則設定</h3>
-            <Button>
-              <Plus className="h-4 w-4 mr-1" />
-              新增規則
-            </Button>
-          </div>
-
-          {loadingRules ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="flex items-center gap-3">
-                <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
-                <span className="text-nycu-navy-600">載入審核規則中...</span>
-              </div>
-            </div>
-          ) : rulesError ? (
-            <div className="text-center py-12">
-              <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
-              <p className="text-lg font-medium text-red-600 mb-2">載入審核規則失敗</p>
-              <p className="text-sm text-gray-600 mb-4">{rulesError}</p>
-              <Button 
-                onClick={fetchScholarshipRules}
-                variant="outline"
-                className="border-red-300 text-red-600 hover:bg-red-50"
-              >
-                重試
-              </Button>
-            </div>
-          ) : scholarshipRules.length > 0 ? (
-            <div className="grid gap-4">
-              {scholarshipRules.map((rule) => (
-                <Card key={rule.id}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">{rule.name}</CardTitle>
-                      <div className="flex items-center gap-2">
-                        <Switch checked={rule.active} />
-                        <Badge variant="outline">{rule.type}</Badge>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <Label>規則條件 (JSON)</Label>
-                      <Textarea value={JSON.stringify(rule.criteria, null, 2)} rows={3} className="font-mono text-sm" />
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <Button variant="outline" size="sm">
-                        <Edit className="h-4 w-4 mr-1" />
-                        編輯
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        測試規則
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <FileText className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg font-medium">尚無審核規則</p>
-              <p className="text-sm mt-2 mb-4">點擊「新增規則」開始建立審核規則</p>
-              <Button 
-                onClick={fetchScholarshipRules}
-                variant="outline"
-                size="sm"
-              >
-                重新載入
-              </Button>
-            </div>
-          )}
+          <AdminRuleManagement scholarshipTypes={scholarshipTypes} />
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">

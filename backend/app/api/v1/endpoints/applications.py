@@ -39,8 +39,8 @@ async def create_application(
         
         # Get student profile from user
         print("[API Debug] Fetching student profile")
-        from app.services.application_service import get_student_from_user
-        student = await get_student_from_user(current_user, db)
+        from app.services.application_service import get_student_data_from_user
+        student = await get_student_data_from_user(current_user)
         
         if not student:
             print(f"[API Error] Student profile not found for user: {current_user.id}")
@@ -54,7 +54,7 @@ async def create_application(
                 }
             }
             
-        print(f"[API Debug] Found student profile: {student.id}")
+        print(f"[API Debug] Found student profile: {student.get('std_stdcode', 'unknown')}")
         
         # Validate scholarship type exists
         if not application_data.scholarship_type:
@@ -102,7 +102,7 @@ async def create_application(
         print(f"[API Debug] Creating application (draft: {is_draft})")
         result = await service.create_application(
             user_id=current_user.id,
-            student_id=student.id,
+            student_id=current_user.id,  # Use user.id as student_id since they're the same
             application_data=application_data,
             is_draft=is_draft
         )
