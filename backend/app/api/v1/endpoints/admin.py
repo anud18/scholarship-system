@@ -7,8 +7,9 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, update, delete
+from sqlalchemy import select, func, desc, update, delete, or_, and_
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
 logger = logging.getLogger(__name__)
 
@@ -2010,6 +2011,118 @@ async def delete_scholarship_rule(
     )
 
 
+async def _copy_rules_in_batches(
+    db: AsyncSession,
+    base_stmt: Select,
+    copy_request: RuleCopyRequest,
+    target_semester_enum,
+    current_user: User,
+    total_rules: int,
+    batch_size: int
+) -> ApiResponse[List[ScholarshipRuleResponse]]:
+    """Process rule copying in batches to manage memory usage for large datasets"""
+    
+    all_new_rules = []
+    total_skipped = 0
+    processed_count = 0
+    
+    # Optimized duplicate check function
+    def rule_exists_in_target(source_rule):
+        exists_query = select(1).where(
+            ScholarshipRule.academic_year == copy_request.target_academic_year,
+            ScholarshipRule.semester == target_semester_enum,
+            ScholarshipRule.scholarship_type_id == source_rule.scholarship_type_id,
+            ScholarshipRule.rule_name == source_rule.rule_name,
+            ScholarshipRule.rule_type == source_rule.rule_type,
+            ScholarshipRule.condition_field == source_rule.condition_field,
+            ScholarshipRule.operator == source_rule.operator,
+            ScholarshipRule.expected_value == source_rule.expected_value,
+            ScholarshipRule.sub_type == source_rule.sub_type,
+            ScholarshipRule.is_template == False
+        ).exists()
+        return select(exists_query)
+    
+    # Process in batches
+    offset = 0
+    
+    while offset < total_rules:
+        # Get current batch
+        batch_stmt = base_stmt.offset(offset).limit(batch_size)
+        batch_result = await db.execute(batch_stmt)
+        batch_rules = batch_result.scalars().all()
+        
+        if not batch_rules:
+            break
+            
+        # Check permissions for batch
+        scholarship_type_ids = set(rule.scholarship_type_id for rule in batch_rules)
+        for scholarship_type_id in scholarship_type_ids:
+            check_scholarship_permission(current_user, scholarship_type_id)
+        
+        # Process batch
+        batch_new_rules = []
+        batch_skipped = 0
+        
+        for source_rule in batch_rules:
+            # Check for duplicates if not overwriting
+            if not copy_request.overwrite_existing:
+                exists_result = await db.execute(rule_exists_in_target(source_rule))
+                if exists_result.scalar():
+                    batch_skipped += 1
+                    continue
+            
+            # Create copy
+            new_rule = source_rule.create_copy_for_period(
+                copy_request.target_academic_year,
+                target_semester_enum
+            )
+            new_rule.created_by = current_user.id
+            new_rule.updated_by = current_user.id
+            batch_new_rules.append(new_rule)
+        
+        # Bulk insert batch
+        if batch_new_rules:
+            db.add_all(batch_new_rules)
+            await db.commit()
+            all_new_rules.extend(batch_new_rules)
+        
+        total_skipped += batch_skipped
+        processed_count += len(batch_rules)
+        offset += batch_size
+    
+    # Load relationships for response
+    if all_new_rules:
+        rule_ids = [rule.id for rule in all_new_rules]
+        refreshed_rules_stmt = select(ScholarshipRule).options(
+            selectinload(ScholarshipRule.scholarship_type),
+            selectinload(ScholarshipRule.creator),
+            selectinload(ScholarshipRule.updater)
+        ).where(ScholarshipRule.id.in_(rule_ids))
+        
+        refreshed_result = await db.execute(refreshed_rules_stmt)
+        refreshed_rules = refreshed_result.scalars().all()
+        
+        rule_responses = []
+        for rule in refreshed_rules:
+            rule_response = ScholarshipRuleResponse.model_validate(rule)
+            rule_response.academic_period_label = rule.academic_period_label
+            rule_responses.append(rule_response)
+    else:
+        rule_responses = []
+    
+    # Build response message
+    if total_skipped > 0:
+        message = f"Successfully copied {len(all_new_rules)} rules in batches. Skipped {total_skipped} duplicates."
+    else:
+        message = f"Successfully copied {len(all_new_rules)} rules in batches."
+    
+    return ApiResponse(
+        success=True,
+        message=message,
+        data=rule_responses
+    )
+
+
 @router.post("/scholarship-rules/copy", response_model=ApiResponse[List[ScholarshipRuleResponse]])
 async def copy_rules_between_periods(
     copy_request: RuleCopyRequest,
@@ -2040,20 +2153,47 @@ async def copy_rules_between_periods(
     # Exclude templates
     stmt = stmt.where(ScholarshipRule.is_template == False)
     
-    result = await db.execute(stmt)
-    source_rules = result.scalars().all()
+    # Get count first to decide on batch processing approach
+    count_stmt = select(func.count(ScholarshipRule.id))
+    if copy_request.rule_ids:
+        count_stmt = count_stmt.where(ScholarshipRule.id.in_(copy_request.rule_ids))
+    else:
+        count_stmt = count_stmt.where(
+            ScholarshipRule.scholarship_type_id == copy_request.source_scholarship_type_id,
+            ScholarshipRule.academic_year == copy_request.source_academic_year
+        )
+        if copy_request.source_semester:
+            count_stmt = count_stmt.where(ScholarshipRule.semester == copy_request.source_semester)
     
-    if not source_rules:
+    count_stmt = count_stmt.where(ScholarshipRule.is_template == False)
+    count_result = await db.execute(count_stmt)
+    total_rules = count_result.scalar()
+    
+    if total_rules == 0:
         return ApiResponse(
             success=True,
             message="No rules found to copy",
             data=[]
         )
     
-    # Check permissions for all scholarship types involved
-    scholarship_type_ids = set(rule.scholarship_type_id for rule in source_rules)
-    for scholarship_type_id in scholarship_type_ids:
-        check_scholarship_permission(current_user, scholarship_type_id)
+    # For large datasets (>500 rules), use batch processing to avoid memory issues
+    BATCH_SIZE = 500
+    use_batch_processing = total_rules > BATCH_SIZE
+    
+    if use_batch_processing:
+        # Process in batches for large datasets
+        return await _copy_rules_in_batches(
+            db, stmt, copy_request, target_semester_enum, current_user, total_rules, BATCH_SIZE
+        )
+    else:
+        # Process all at once for smaller datasets
+        result = await db.execute(stmt)
+        source_rules = result.scalars().all()
+        
+        # Check permissions for all scholarship types involved
+        scholarship_type_ids = set(rule.scholarship_type_id for rule in source_rules)
+        for scholarship_type_id in scholarship_type_ids:
+            check_scholarship_permission(current_user, scholarship_type_id)
     
     # Prepare target semester enum (already an enum from schema)
     target_semester_enum = copy_request.target_semester
@@ -2062,73 +2202,31 @@ async def copy_rules_between_periods(
     new_rules = []
     skipped_rules = 0
     
-    # Bulk duplicate check to avoid N+1 queries
-    existing_rules_set = set()
-    if not copy_request.overwrite_existing and source_rules:
-        # Create tuples of unique identifiers for all source rules
-        rule_identifiers = [
-            (
-                source_rule.scholarship_type_id,
-                source_rule.rule_name,
-                source_rule.rule_type,
-                source_rule.condition_field,
-                source_rule.operator,
-                source_rule.expected_value,
-                source_rule.sub_type
-            )
-            for source_rule in source_rules
-        ]
-        
-        # Single query to check for all potential duplicates
-        existing_stmt = select(ScholarshipRule).where(
+    # Optimized duplicate check using EXISTS subquery for better performance with large datasets
+    def rule_exists_in_target(source_rule):
+        """Check if a rule already exists in the target period using EXISTS subquery"""
+        exists_query = select(1).where(
             ScholarshipRule.academic_year == copy_request.target_academic_year,
             ScholarshipRule.semester == target_semester_enum,
-            ScholarshipRule.is_template == False,  # Exclude templates
-            or_(*[
-                and_(
-                    ScholarshipRule.scholarship_type_id == identifier[0],
-                    ScholarshipRule.rule_name == identifier[1],
-                    ScholarshipRule.rule_type == identifier[2],
-                    ScholarshipRule.condition_field == identifier[3],
-                    ScholarshipRule.operator == identifier[4],
-                    ScholarshipRule.expected_value == identifier[5],
-                    ScholarshipRule.sub_type == identifier[6]
-                )
-                for identifier in rule_identifiers
-            ])
-        )
+            ScholarshipRule.scholarship_type_id == source_rule.scholarship_type_id,
+            ScholarshipRule.rule_name == source_rule.rule_name,
+            ScholarshipRule.rule_type == source_rule.rule_type,
+            ScholarshipRule.condition_field == source_rule.condition_field,
+            ScholarshipRule.operator == source_rule.operator,
+            ScholarshipRule.expected_value == source_rule.expected_value,
+            ScholarshipRule.sub_type == source_rule.sub_type,
+            ScholarshipRule.is_template == False  # Exclude templates
+        ).exists()
         
-        existing_result = await db.execute(existing_stmt)
-        existing_rules = existing_result.scalars().all()
-        
-        # Create set of existing rule identifiers for O(1) lookup
-        existing_rules_set = {
-            (
-                rule.scholarship_type_id,
-                rule.rule_name,
-                rule.rule_type,
-                rule.condition_field,
-                rule.operator,
-                rule.expected_value,
-                rule.sub_type
-            )
-            for rule in existing_rules
-        }
+        return select(exists_query)
     
     for source_rule in source_rules:
-        # Check if rule already exists using the pre-built set
+        # Check if rule already exists using EXISTS subquery (more memory efficient)
         if not copy_request.overwrite_existing:
-            rule_identifier = (
-                source_rule.scholarship_type_id,
-                source_rule.rule_name,
-                source_rule.rule_type,
-                source_rule.condition_field,
-                source_rule.operator,
-                source_rule.expected_value,
-                source_rule.sub_type
-            )
+            exists_result = await db.execute(rule_exists_in_target(source_rule))
+            rule_exists = exists_result.scalar()
             
-            if rule_identifier in existing_rules_set:
+            if rule_exists:
                 # Skip this rule as it already exists
                 skipped_rules += 1
                 continue
