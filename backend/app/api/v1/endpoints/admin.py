@@ -2058,30 +2058,77 @@ async def copy_rules_between_periods(
     # Prepare target semester enum (already an enum from schema)
     target_semester_enum = copy_request.target_semester
     
-    # Create copies with duplicate checking
+    # Create copies with bulk duplicate checking for better performance
     new_rules = []
     skipped_rules = 0
     
+    # Bulk duplicate check to avoid N+1 queries
+    existing_rules_set = set()
+    if not copy_request.overwrite_existing and source_rules:
+        # Create tuples of unique identifiers for all source rules
+        rule_identifiers = [
+            (
+                source_rule.scholarship_type_id,
+                source_rule.rule_name,
+                source_rule.rule_type,
+                source_rule.condition_field,
+                source_rule.operator,
+                source_rule.expected_value,
+                source_rule.sub_type
+            )
+            for source_rule in source_rules
+        ]
+        
+        # Single query to check for all potential duplicates
+        existing_stmt = select(ScholarshipRule).where(
+            ScholarshipRule.academic_year == copy_request.target_academic_year,
+            ScholarshipRule.semester == target_semester_enum,
+            ScholarshipRule.is_template == False,  # Exclude templates
+            or_(*[
+                and_(
+                    ScholarshipRule.scholarship_type_id == identifier[0],
+                    ScholarshipRule.rule_name == identifier[1],
+                    ScholarshipRule.rule_type == identifier[2],
+                    ScholarshipRule.condition_field == identifier[3],
+                    ScholarshipRule.operator == identifier[4],
+                    ScholarshipRule.expected_value == identifier[5],
+                    ScholarshipRule.sub_type == identifier[6]
+                )
+                for identifier in rule_identifiers
+            ])
+        )
+        
+        existing_result = await db.execute(existing_stmt)
+        existing_rules = existing_result.scalars().all()
+        
+        # Create set of existing rule identifiers for O(1) lookup
+        existing_rules_set = {
+            (
+                rule.scholarship_type_id,
+                rule.rule_name,
+                rule.rule_type,
+                rule.condition_field,
+                rule.operator,
+                rule.expected_value,
+                rule.sub_type
+            )
+            for rule in existing_rules
+        }
+    
     for source_rule in source_rules:
-        # Check for existing identical rule in target period (if not overwriting)
+        # Check if rule already exists using the pre-built set
         if not copy_request.overwrite_existing:
-            existing_stmt = select(ScholarshipRule).where(
-                ScholarshipRule.academic_year == copy_request.target_academic_year,
-                ScholarshipRule.semester == target_semester_enum,
-                ScholarshipRule.scholarship_type_id == source_rule.scholarship_type_id,
-                ScholarshipRule.rule_name == source_rule.rule_name,
-                ScholarshipRule.rule_type == source_rule.rule_type,
-                ScholarshipRule.condition_field == source_rule.condition_field,
-                ScholarshipRule.operator == source_rule.operator,
-                ScholarshipRule.expected_value == source_rule.expected_value,
-                ScholarshipRule.sub_type == source_rule.sub_type,
-                ScholarshipRule.is_template == False  # Exclude templates
+            rule_identifier = (
+                source_rule.scholarship_type_id,
+                source_rule.rule_name,
+                source_rule.rule_type,
+                source_rule.condition_field,
+                source_rule.operator,
+                source_rule.expected_value,
+                source_rule.sub_type
             )
             
-            existing_result = await db.execute(existing_stmt)
-            existing_rule = existing_result.scalar_one_or_none()
-            
-            if existing_rule:
+            if rule_identifier in existing_rules_set:
                 # Skip this rule as it already exists
                 skipped_rules += 1
                 continue
