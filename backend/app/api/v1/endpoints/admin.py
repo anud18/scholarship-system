@@ -21,7 +21,7 @@ from app.schemas.scholarship import (
     RuleCopyRequest, RuleTemplateRequest, ApplyTemplateRequest, BulkRuleOperation
 )
 from app.schemas.notification import NotificationResponse, NotificationCreate, NotificationUpdate
-from app.core.security import require_admin, get_current_user
+from app.core.security import require_admin, get_current_user, check_scholarship_permission
 from app.models.user import User, UserRole
 from app.models.application import Application, ApplicationStatus
 # Student model removed - student data now fetched from external API
@@ -1549,20 +1549,8 @@ async def create_scholarship_permission(
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
     
-    # Check if current user has permission for this scholarship (admin role only)
-    if current_user.role == UserRole.ADMIN:
-        permission_check_stmt = select(AdminScholarship).where(
-            AdminScholarship.admin_id == current_user.id,
-            AdminScholarship.scholarship_id == scholarship_id
-        )
-        permission_check_result = await db.execute(permission_check_stmt)
-        has_permission = permission_check_result.scalar_one_or_none()
-        
-        if not has_permission:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to assign this scholarship"
-            )
+    # Check if current user has permission for this scholarship
+    check_scholarship_permission(current_user, scholarship_id)
     
     # Check if permission already exists
     existing_stmt = select(AdminScholarship).where(
@@ -1677,20 +1665,8 @@ async def delete_scholarship_permission(
             detail="Admin users cannot delete their own permissions"
         )
     
-    # Check if current user has permission for this scholarship (admin role only)
-    if current_user.role == UserRole.ADMIN:
-        permission_check_stmt = select(AdminScholarship).where(
-            AdminScholarship.admin_id == current_user.id,
-            AdminScholarship.scholarship_id == permission.scholarship_id
-        )
-        permission_check_result = await db.execute(permission_check_stmt)
-        has_permission = permission_check_result.scalar_one_or_none()
-        
-        if not has_permission:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to manage this scholarship"
-            )
+    # Check if current user has permission for this scholarship
+    check_scholarship_permission(current_user, permission.scholarship_id)
     
     # Delete permission
     await db.delete(permission)
@@ -1756,6 +1732,10 @@ async def get_scholarship_rules(
 ):
     """Get scholarship rules with optional filters"""
     
+    # Check scholarship permission if specific scholarship type is requested
+    if scholarship_type_id:
+        check_scholarship_permission(current_user, scholarship_type_id)
+    
     # Build query with joins
     stmt = select(ScholarshipRule).options(
         selectinload(ScholarshipRule.scholarship_type),
@@ -1766,6 +1746,16 @@ async def get_scholarship_rules(
     # Apply filters
     if scholarship_type_id:
         stmt = stmt.where(ScholarshipRule.scholarship_type_id == scholarship_type_id)
+    elif not current_user.is_super_admin():
+        # If no specific scholarship type requested and user is not super admin,
+        # only show rules for scholarships they have permission to manage
+        admin_scholarship_ids = [admin_scholarship.scholarship_id 
+                               for admin_scholarship in current_user.admin_scholarships]
+        if admin_scholarship_ids:
+            stmt = stmt.where(ScholarshipRule.scholarship_type_id.in_(admin_scholarship_ids))
+        else:
+            # Admin has no scholarship permissions, return empty result
+            return ApiResponse(success=True, message="No scholarship rules found", data=[])
     
     if academic_year:
         stmt = stmt.where(ScholarshipRule.academic_year == academic_year)
@@ -1820,6 +1810,9 @@ async def create_scholarship_rule(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new scholarship rule"""
+    
+    # Check permission to manage this scholarship
+    check_scholarship_permission(current_user, rule_data.scholarship_type_id)
     
     # Verify scholarship type exists
     stmt = select(ScholarshipType).where(ScholarshipType.id == rule_data.scholarship_type_id)
@@ -1882,6 +1875,9 @@ async def get_scholarship_rule(
             detail="Scholarship rule not found"
         )
     
+    # Check permission to manage this scholarship
+    check_scholarship_permission(current_user, rule.scholarship_type_id)
+    
     # Ensure all attributes are loaded in the session context
     await db.refresh(rule)
     
@@ -1914,6 +1910,9 @@ async def update_scholarship_rule(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Scholarship rule not found"
         )
+    
+    # Check permission to manage this scholarship
+    check_scholarship_permission(current_user, rule.scholarship_type_id)
     
     # Update fields
     update_data = rule_data.dict(exclude_unset=True)
@@ -1956,6 +1955,9 @@ async def delete_scholarship_rule(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Scholarship rule not found"
         )
+    
+    # Check permission to manage this scholarship
+    check_scholarship_permission(current_user, rule.scholarship_type_id)
     
     await db.delete(rule)
     await db.commit()
@@ -2006,6 +2008,11 @@ async def copy_rules_between_periods(
             message="No rules found to copy",
             data=[]
         )
+    
+    # Check permissions for all scholarship types involved
+    scholarship_type_ids = set(rule.scholarship_type_id for rule in source_rules)
+    for scholarship_type_id in scholarship_type_ids:
+        check_scholarship_permission(current_user, scholarship_type_id)
     
     # Prepare target semester enum (already an enum from schema)
     target_semester_enum = copy_request.target_semester
@@ -2102,6 +2109,11 @@ async def bulk_rule_operation(
             detail="No rules found with the provided IDs"
         )
     
+    # Check permissions for all scholarship types involved
+    scholarship_type_ids = set(rule.scholarship_type_id for rule in rules)
+    for scholarship_type_id in scholarship_type_ids:
+        check_scholarship_permission(current_user, scholarship_type_id)
+    
     operation_results = {
         "operation": operation_request.operation,
         "affected_rules": len(rules),
@@ -2153,6 +2165,10 @@ async def get_rule_templates(
 ):
     """Get all rule templates"""
     
+    # Check scholarship permission if specific scholarship type is requested
+    if scholarship_type_id:
+        check_scholarship_permission(current_user, scholarship_type_id)
+    
     stmt = select(ScholarshipRule).options(
         selectinload(ScholarshipRule.scholarship_type),
         selectinload(ScholarshipRule.creator)
@@ -2160,6 +2176,16 @@ async def get_rule_templates(
     
     if scholarship_type_id:
         stmt = stmt.where(ScholarshipRule.scholarship_type_id == scholarship_type_id)
+    elif not current_user.is_super_admin():
+        # If no specific scholarship type requested and user is not super admin,
+        # only show templates for scholarships they have permission to manage
+        admin_scholarship_ids = [admin_scholarship.scholarship_id 
+                               for admin_scholarship in current_user.admin_scholarships]
+        if admin_scholarship_ids:
+            stmt = stmt.where(ScholarshipRule.scholarship_type_id.in_(admin_scholarship_ids))
+        else:
+            # Admin has no scholarship permissions, return empty result
+            return ApiResponse(success=True, message="No rule templates found", data=[])
     
     stmt = stmt.order_by(ScholarshipRule.template_name, ScholarshipRule.priority.desc())
     
@@ -2200,6 +2226,11 @@ async def create_rule_template(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No rules found with the provided IDs"
         )
+    
+    # Check permissions for all scholarship types involved
+    scholarship_type_ids = set(rule.scholarship_type_id for rule in source_rules)
+    for scholarship_type_id in scholarship_type_ids:
+        check_scholarship_permission(current_user, scholarship_type_id)
     
     # Verify all rules belong to the same scholarship type
     if not all(rule.scholarship_type_id == template_request.scholarship_type_id for rule in source_rules):
@@ -2282,6 +2313,9 @@ async def apply_rule_template(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Template not found"
         )
+    
+    # Check permission to manage the target scholarship
+    check_scholarship_permission(current_user, template_request.scholarship_type_id)
     
     # Get all rules with the same template name and scholarship type
     template_stmt = select(ScholarshipRule).where(
@@ -2377,6 +2411,9 @@ async def delete_rule_template(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a rule template and all its associated rules"""
+    
+    # Check permission to manage this scholarship
+    check_scholarship_permission(current_user, scholarship_type_id)
     
     # Get template rules
     stmt = select(ScholarshipRule).where(

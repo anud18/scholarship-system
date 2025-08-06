@@ -142,4 +142,19 @@ def require_staff(current_user: User = Depends(get_current_user)) -> User:
     """Require staff access (admin, college, professor, or super_admin)"""
     if not any([current_user.is_admin(), current_user.is_college(), current_user.is_professor(), current_user.is_super_admin()]):
         raise AuthorizationError("Staff access required")
-    return current_user 
+    return current_user
+
+
+def require_scholarship_permission(scholarship_type_id: int):
+    """Require permission to manage a specific scholarship"""
+    def permission_checker(current_user: User = Depends(require_admin)) -> User:
+        if not current_user.has_scholarship_permission(scholarship_type_id):
+            raise AuthorizationError(f"Access denied. No permission to manage scholarship type {scholarship_type_id}")
+        return current_user
+    return permission_checker
+
+
+def check_scholarship_permission(user: User, scholarship_type_id: int) -> None:
+    """Check if user has permission for a scholarship type and raise exception if not"""
+    if not user.has_scholarship_permission(scholarship_type_id):
+        raise AuthorizationError(f"Access denied. No permission to manage scholarship type {scholarship_type_id}") 
