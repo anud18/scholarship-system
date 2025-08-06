@@ -25,8 +25,19 @@ from app.core.config import settings
 class UserProfileService:
     """Service for managing user profiles"""
     
+    # Configurable upload settings
+    UPLOAD_BASE_DIR = os.environ.get("UPLOAD_BASE_DIR", "uploads")
+    BANK_DOCUMENTS_DIR = os.environ.get("BANK_DOCUMENTS_DIR", "bank_documents")
+    MAX_FILE_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE", 10 * 1024 * 1024))  # 10MB default
+    ALLOWED_MIME_TYPES = {
+        'image/jpeg': ['jpg', 'jpeg'],
+        'image/png': ['png'],
+        'image/webp': ['webp']
+    }
+    
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.upload_path = os.path.join(self.UPLOAD_BASE_DIR, self.BANK_DOCUMENTS_DIR)
         
     async def get_user_profile(self, user_id: int) -> Optional[UserProfile]:
         """Get user profile by user ID"""
@@ -165,28 +176,63 @@ class UserProfileService:
         self, 
         user_id: int, 
         document_upload: BankDocumentPhotoUpload,
-        upload_dir: str = "uploads/bank_documents"
+        upload_dir: str = None
     ) -> str:
         """Upload and process bank document photo"""
         try:
+            # Use configured upload directory
+            if upload_dir is None:
+                upload_dir = self.upload_path
+            
             # Create upload directory if it doesn't exist
             os.makedirs(upload_dir, exist_ok=True)
+            
+            # Check base64 size before decoding (roughly 3/4 of final size)
+            estimated_size = len(document_upload.photo_data) * 3 / 4
+            if estimated_size > self.MAX_FILE_SIZE:
+                raise ValueError(f"File too large. Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB")
             
             # Decode base64 image
             image_data = base64.b64decode(document_upload.photo_data)
             
+            # Verify actual size after decoding
+            if len(image_data) > self.MAX_FILE_SIZE:
+                raise ValueError(f"File too large. Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB")
+            
+            # Validate MIME type (try python-magic if available, fallback to content inspection)
+            try:
+                import magic
+                mime = magic.from_buffer(image_data, mime=True)
+            except ImportError:
+                # Fallback: detect from image data using PIL
+                try:
+                    temp_image = Image.open(io.BytesIO(image_data))
+                    format_to_mime = {'JPEG': 'image/jpeg', 'PNG': 'image/png', 'WEBP': 'image/webp'}
+                    mime = format_to_mime.get(temp_image.format, 'application/octet-stream')
+                except:
+                    mime = 'application/octet-stream'
+            
+            if mime not in self.ALLOWED_MIME_TYPES:
+                raise ValueError(f"Invalid file type: {mime}. Allowed types: {', '.join(self.ALLOWED_MIME_TYPES.keys())}")
+            
             # Validate image
             image = Image.open(io.BytesIO(image_data))
+            
+            # Verify image format matches claimed MIME type
+            format_to_mime = {'JPEG': 'image/jpeg', 'PNG': 'image/png', 'WEBP': 'image/webp'}
+            if image.format in format_to_mime:
+                expected_mime = format_to_mime[image.format]
+                if mime != expected_mime and not (mime == 'image/jpeg' and expected_mime == 'image/jpeg'):
+                    raise ValueError(f"File content does not match declared type")
             
             # Resize image if needed (max 1200x1200 for documents)
             max_size = (1200, 1200)
             if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
                 image.thumbnail(max_size, Image.Resampling.LANCZOS)
             
-            # Generate unique filename
-            file_extension = document_upload.filename.split('.')[-1].lower()
-            if file_extension not in ['jpg', 'jpeg', 'png', 'webp']:
-                raise ValueError("Unsupported image format")
+            # Generate unique filename based on validated MIME type
+            valid_extensions = self.ALLOWED_MIME_TYPES.get(mime, ['jpg'])
+            file_extension = valid_extensions[0]
             
             unique_filename = f"{user_id}_bank_doc_{uuid.uuid4().hex}.{file_extension}"
             file_path = os.path.join(upload_dir, unique_filename)
@@ -238,7 +284,7 @@ class UserProfileService:
         # Delete file if it exists
         if profile.bank_document_photo_url.startswith("/api/v1/user-profiles/files/bank_documents/"):
             filename = profile.bank_document_photo_url.split('/')[-1]
-            file_path = os.path.join("uploads/bank_documents", filename)
+            file_path = os.path.join(self.upload_path, filename)
             if os.path.exists(file_path):
                 os.remove(file_path)
         

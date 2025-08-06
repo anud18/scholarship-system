@@ -481,23 +481,10 @@ async def get_colleges(
     """Get college configurations from database"""
     
     try:
-        # Get unique college codes from student data or configurations
-        stmt = select(distinct(Student.std_aca_no)).where(
-            Student.std_aca_no.isnot(None)
-        )
-        result = await db.execute(stmt)
-        college_codes = result.scalars().all()
+        # Use centralized college mappings instead of querying non-existent Student model
+        from app.core.college_mappings import get_all_colleges
         
-        # Build college list using centralized mappings
-        from app.core.college_mappings import get_all_colleges, is_valid_college_code
-        
-        colleges = []
-        for code in sorted(college_codes):
-            if code and is_valid_college_code(code):
-                college_info = get_all_colleges()
-                college_data = next((c for c in college_info if c["code"] == code), None)
-                if college_data:
-                    colleges.append(college_data)
+        colleges = get_all_colleges()
         
         return ApiResponse(
             success=True,

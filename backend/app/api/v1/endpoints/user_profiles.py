@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import base64
 import os
+import re
 
 from app.db.deps import get_db
 from app.schemas.user_profile import (
@@ -337,22 +338,42 @@ async def delete_my_profile(
 @router.get("/files/bank_documents/{filename}")
 async def get_bank_document(filename: str):
     """Serve bank documents"""
-    file_path = f"uploads/bank_documents/{filename}"
-    
-    if not os.path.exists(file_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="證明文件不存在"
-        )
-    
-    # Validate filename to prevent path traversal
-    if ".." in filename or "/" in filename:
+    # Validate filename to prevent path traversal - MUST be done BEFORE using the filename
+    if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="無效的檔案名稱"
         )
     
-    return FileResponse(file_path)
+    # Additional validation: ensure filename only contains allowed characters
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+$', filename):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="檔案名稱包含無效字元"
+        )
+    
+    # Now it's safe to construct the path using configured directories
+    from app.services.user_profile_service import UserProfileService
+    upload_base = os.environ.get("UPLOAD_BASE_DIR", "uploads")
+    bank_docs_dir = os.environ.get("BANK_DOCUMENTS_DIR", "bank_documents")
+    file_path = os.path.join(upload_base, bank_docs_dir, filename)
+    
+    # Ensure the resolved path is still within the expected directory
+    resolved_path = os.path.abspath(file_path)
+    expected_dir = os.path.abspath(os.path.join(upload_base, bank_docs_dir))
+    if not resolved_path.startswith(expected_dir):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="存取被拒絕"
+        )
+    
+    if not os.path.exists(resolved_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="證明文件不存在"
+        )
+    
+    return FileResponse(resolved_path)
 
 
 # ==================== Admin endpoints ====================
