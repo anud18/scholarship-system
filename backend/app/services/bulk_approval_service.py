@@ -5,8 +5,8 @@ Handles batch processing, bulk operations, and automated decision workflows
 
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, or_, func, select
 
 from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.models.scholarship import ScholarshipType
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class BulkApprovalService:
     """Service for bulk approval operations"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
         self.notification_service = ScholarshipNotificationService(db)
         self.eligibility_service = EligibilityVerificationService(db)
@@ -47,9 +47,11 @@ class BulkApprovalService:
         
         try:
             # Get applications to approve
-            applications = self.db.query(Application).filter(
+            stmt = select(Application).where(
                 Application.id.in_(application_ids)
-            ).all()
+            )
+            result = await self.db.execute(stmt)
+            applications = result.scalars().all()
             
             found_ids = {app.id for app in applications}
             missing_ids = set(application_ids) - found_ids
@@ -87,7 +89,7 @@ class BulkApprovalService:
                     # Calculate final priority score
                     application.priority_score = application.calculate_priority_score()
                     
-                    self.db.commit()
+                    await self.db.commit()
                     
                     results["successful_approvals"].append({
                         "application_id": application.id,
@@ -117,7 +119,7 @@ class BulkApprovalService:
                     
                 except Exception as e:
                     logger.error(f"Failed to approve application {application.id}: {str(e)}")
-                    self.db.rollback()
+                    await self.db.rollback()
                     results["failed_approvals"].append({
                         "application_id": application.id,
                         "app_id": getattr(application, 'app_id', 'Unknown'),
@@ -129,7 +131,7 @@ class BulkApprovalService:
             
         except Exception as e:
             logger.error(f"Bulk approval operation failed: {str(e)}")
-            self.db.rollback()
+            await self.db.rollback()
             raise
     
     async def bulk_reject_applications(
@@ -150,9 +152,11 @@ class BulkApprovalService:
         }
         
         try:
-            applications = self.db.query(Application).filter(
+            stmt = select(Application).where(
                 Application.id.in_(application_ids)
-            ).all()
+            )
+            result = await self.db.execute(stmt)
+            applications = result.scalars().all()
             
             for application in applications:
                 try:
@@ -176,7 +180,7 @@ class BulkApprovalService:
                     application.reviewer_id = rejector_user_id
                     application.rejection_reason = rejection_reason
                     
-                    self.db.commit()
+                    await self.db.commit()
                     
                     results["successful_rejections"].append({
                         "application_id": application.id,
@@ -205,7 +209,7 @@ class BulkApprovalService:
                     
                 except Exception as e:
                     logger.error(f"Failed to reject application {application.id}: {str(e)}")
-                    self.db.rollback()
+                    await self.db.rollback()
                     results["failed_rejections"].append({
                         "application_id": application.id,
                         "app_id": getattr(application, 'app_id', 'Unknown'),
@@ -216,10 +220,10 @@ class BulkApprovalService:
             
         except Exception as e:
             logger.error(f"Bulk rejection operation failed: {str(e)}")
-            self.db.rollback()
+            await self.db.rollback()
             raise
     
-    def auto_approve_by_criteria(
+    async def auto_approve_by_criteria(
         self,
         scholarship_type_id: Optional[int] = None,
         main_type: Optional[str] = None,
@@ -233,7 +237,7 @@ class BulkApprovalService:
         
         try:
             # Build query
-            query = self.db.query(Application).filter(
+            stmt = select(Application).where(
                 Application.status.in_([
                     ApplicationStatus.SUBMITTED.value,
                     ApplicationStatus.UNDER_REVIEW.value
@@ -241,31 +245,32 @@ class BulkApprovalService:
             )
             
             if scholarship_type_id:
-                query = query.filter(Application.scholarship_type_id == scholarship_type_id)
+                stmt = stmt.where(Application.scholarship_type_id == scholarship_type_id)
             
             if main_type:
-                query = query.filter(Application.main_scholarship_type == main_type)
+                stmt = stmt.where(Application.main_scholarship_type == main_type)
             
             if sub_type:
-                query = query.filter(Application.sub_scholarship_type == sub_type)
+                stmt = stmt.where(Application.sub_scholarship_type == sub_type)
             
             if semester:
-                query = query.filter(Application.semester == semester)
+                stmt = stmt.where(Application.semester == semester)
             
             if min_priority_score > 0:
-                query = query.filter(Application.priority_score >= min_priority_score)
+                stmt = stmt.where(Application.priority_score >= min_priority_score)
             
             # Order by priority score (highest first) and renewal status
-            query = query.order_by(
+            stmt = stmt.order_by(
                 Application.is_renewal.desc(),
                 Application.priority_score.desc(),
                 Application.submitted_at.asc()
             )
             
             if max_applications:
-                query = query.limit(max_applications)
+                stmt = stmt.limit(max_applications)
             
-            applications = query.all()
+            result = await self.db.execute(stmt)
+            applications = result.scalars().all()
             
             # Apply additional criteria if provided
             if approval_criteria:
@@ -287,7 +292,7 @@ class BulkApprovalService:
                     application.decision_date = datetime.now(timezone.utc)
                     application.admin_notes = "Auto-approved based on criteria"
                     
-                    self.db.commit()
+                    await self.db.commit()
                     
                     auto_approved.append({
                         "application_id": application.id,
@@ -302,7 +307,7 @@ class BulkApprovalService:
                     
                 except Exception as e:
                     logger.error(f"Failed to auto-approve application {application.id}: {str(e)}")
-                    self.db.rollback()
+                    await self.db.rollback()
                     auto_approval_failures.append({
                         "application_id": application.id,
                         "error": str(e)
@@ -328,7 +333,7 @@ class BulkApprovalService:
             logger.error(f"Auto-approval by criteria failed: {str(e)}")
             raise
     
-    def bulk_status_update(
+    async def bulk_status_update(
         self,
         application_ids: List[int],
         new_status: str,
@@ -344,9 +349,11 @@ class BulkApprovalService:
             except ValueError:
                 raise ValueError(f"Invalid status: {new_status}")
             
-            applications = self.db.query(Application).filter(
+            stmt = select(Application).where(
                 Application.id.in_(application_ids)
-            ).all()
+            )
+            result = await self.db.execute(stmt)
+            applications = result.scalars().all()
             
             updated_applications = []
             update_failures = []
@@ -369,7 +376,7 @@ class BulkApprovalService:
                     
                     application.decision_date = datetime.now(timezone.utc)
                     
-                    self.db.commit()
+                    await self.db.commit()
                     
                     updated_applications.append({
                         "application_id": application.id,
@@ -381,7 +388,7 @@ class BulkApprovalService:
                     
                 except Exception as e:
                     logger.error(f"Failed to update application {application.id}: {str(e)}")
-                    self.db.rollback()
+                    await self.db.rollback()
                     update_failures.append({
                         "application_id": application.id,
                         "error": str(e)
@@ -465,7 +472,7 @@ class BulkApprovalService:
                     operation_params.get("send_notifications", True)
                 )
             elif operation_type == "update_status":
-                results = self.bulk_status_update(
+                results = await self.bulk_status_update(
                     application_ids,
                     operation_params["new_status"],
                     operator_user_id,
