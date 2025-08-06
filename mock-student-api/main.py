@@ -58,296 +58,304 @@ class APIResponse(BaseModel):
     msg: str
     data: List[Any]
 
-# Mock Data synchronized with init_db.py
+# Mock Data按照你提供的實際API格式
 SAMPLE_STUDENTS = {
-    # 對應 init_db.py 中的 stu_under (學士生)
+    # 完全按照你提供的實際API格式
+    "312551007": {
+        "std_stdcode": "312551007",
+        "std_enrollyear": "112",
+        "std_enrollterm": "1",
+        "std_highestschname": "國立陽明交通大學",
+        "std_cname": "陳暐誠",
+        "std_ename": "CHEN,WEI-CHENG",
+        "std_pid": "S125472277",
+        "std_academyno": "C",
+        "std_depno": "3551",
+        "std_sex": "1",
+        "std_nation": "中華民國",
+        "std_degree": "2",
+        "std_enrolltype": "4",
+        "std_identity": "1",
+        "std_schoolid": "1",
+        "std_overseaplace": "",
+        "std_termcount": "5",
+        "mgd_title": "在學",
+        "ToDoctor": "0",
+        "com_commadd": "新竹市大學路1001號十三舍716室",
+        "com_email": "jotp076315217@gmail.com",
+        "com_cellphone": "0905169251"
+    },
+    
+    # 其他測試學生，按照同樣格式
     "stu_under": {
-        "std_stdno": "A123456789",
         "std_stdcode": "stu_under",
-        "std_pid": "A123456789",
+        "std_enrollyear": "112",
+        "std_enrollterm": "1",
+        "std_highestschname": "台北市立建國高級中學",
         "std_cname": "學士生",
         "std_ename": "UNDERGRADUATE,STUDENT",
-        "std_degree": "3",  # 學士
-        "std_studingstatus": "1",  # 在學
-        "std_nation": "1",  # 中華民國
-        "std_schoolid": "1",  # 一般生
-        "std_identity": "1",  # 一般生
-        "std_termcount": "2",
-        "std_depno": "CS",
-        "dep_depname": "資訊工程學系",
+        "std_pid": "A123456789",
         "std_academyno": "EE",
-        "aca_cname": "電機資訊學院",
+        "std_depno": "3551",
+        "std_sex": "1",
+        "std_nation": "中華民國",
+        "std_degree": "3",
         "std_enrolltype": "1",
-        "std_directmemo": "",
-        "std_highestschname": "台北市立建國高級中學",
-        "com_cellphone": "0912345678",
-        "com_email": "stu_under@nycu.edu.tw",
-        "com_commzip": "30010",
+        "std_identity": "1",
+        "std_schoolid": "1",
+        "std_overseaplace": "",
+        "std_termcount": "2",
+        "mgd_title": "在學",
+        "ToDoctor": "0",
         "com_commadd": "新竹市東區大學路1001號",
-        "std_sex": "1",  # 男
-        "std_enrollyear": "112",
-        "std_enrollterm": "1",
-        "std_enrolldate": "2023-09"
+        "com_email": "stu_under@nycu.edu.tw",
+        "com_cellphone": "0912345678"
     },
     
-    # 對應 init_db.py 中的 stu_phd (博士生)
     "stu_phd": {
-        "std_stdno": "B123456789",
-        "std_stdcode": "stu_phd", 
-        "std_pid": "B123456789",
+        "std_stdcode": "stu_phd",
+        "std_enrollyear": "112",
+        "std_enrollterm": "1",
+        "std_highestschname": "國立交通大學",
         "std_cname": "博士生",
         "std_ename": "PHD,STUDENT",
-        "std_degree": "1",  # 博士
-        "std_studingstatus": "1",  # 在學
-        "std_nation": "1",  # 中華民國
-        "std_schoolid": "1",  # 一般生
-        "std_identity": "1",  # 一般生
-        "std_termcount": "1",
-        "std_depno": "CS",
-        "dep_depname": "資訊工程學系",
+        "std_pid": "B123456789",
         "std_academyno": "EE",
-        "aca_cname": "電機資訊學院",
+        "std_depno": "3551",
+        "std_sex": "1",
+        "std_nation": "中華民國",
+        "std_degree": "1",
         "std_enrolltype": "1",
-        "std_directmemo": "",
-        "std_highestschname": "國立交通大學",
-        "com_cellphone": "0912345678",
-        "com_email": "stu_phd@nycu.edu.tw",
-        "com_commzip": "30010",
-        "com_commadd": "新竹市東區大學路1001號",
-        "std_sex": "1",  # 男
-        "std_enrollyear": "112",
-        "std_enrollterm": "1",
-        "std_enrolldate": "2023-09"
-    },
-    
-    # 對應 init_db.py 中的 stu_direct (逕讀博士生)
-    "stu_direct": {
-        "std_stdno": "C123456789",
-        "std_stdcode": "stu_direct",
-        "std_pid": "C123456789", 
-        "std_cname": "逕讀博士生",
-        "std_ename": "DIRECT,PHD,STUDENT",
-        "std_degree": "1",  # 博士
-        "std_studingstatus": "1",  # 在學
-        "std_nation": "1",  # 中華民國
-        "std_schoolid": "1",  # 一般生
-        "std_identity": "1",  # 一般生
+        "std_identity": "1",
+        "std_schoolid": "1",
+        "std_overseaplace": "",
         "std_termcount": "1",
-        "std_depno": "CS",
-        "dep_depname": "資訊工程學系",
-        "std_academyno": "EE",
-        "aca_cname": "電機資訊學院",
-        "std_enrolltype": "8",  # 逕讀
-        "std_directmemo": "逕讀博士",
-        "std_highestschname": "國立陽明交通大學",
-        "com_cellphone": "0912345678",
-        "com_email": "stu_direct@nycu.edu.tw",
-        "com_commzip": "30010",
+        "mgd_title": "在學",
+        "ToDoctor": "0",
         "com_commadd": "新竹市東區大學路1001號",
-        "std_sex": "2",  # 女
-        "std_enrollyear": "112",
-        "std_enrollterm": "1",
-        "std_enrolldate": "2023-09"
+        "com_email": "stu_phd@nycu.edu.tw",
+        "com_cellphone": "0912345678"
     },
     
-    # 對應 init_db.py 中的 stu_master (碩士生)
     "stu_master": {
-        "std_stdno": "D123456789",
         "std_stdcode": "stu_master",
-        "std_pid": "D123456789",
+        "std_enrollyear": "112",
+        "std_enrollterm": "1",
+        "std_highestschname": "國立台灣大學",
         "std_cname": "碩士生",
         "std_ename": "MASTER,STUDENT",
-        "std_degree": "2",  # 碩士
-        "std_studingstatus": "1",  # 在學
-        "std_nation": "1",  # 中華民國
-        "std_schoolid": "1",  # 一般生
-        "std_identity": "1",  # 一般生
-        "std_termcount": "1",
-        "std_depno": "CS",
-        "dep_depname": "資訊工程學系",
+        "std_pid": "D123456789",
         "std_academyno": "EE",
-        "aca_cname": "電機資訊學院",
+        "std_depno": "3551",
+        "std_sex": "2",
+        "std_nation": "中華民國",
+        "std_degree": "2",
         "std_enrolltype": "1",
-        "std_directmemo": "",
-        "std_highestschname": "國立台灣大學",
-        "com_cellphone": "0912345678",
-        "com_email": "stu_master@nycu.edu.tw",
-        "com_commzip": "30010",
-        "com_commadd": "新竹市東區大學路1001號",
-        "std_sex": "2",  # 女
-        "std_enrollyear": "112",
-        "std_enrollterm": "1",
-        "std_enrolldate": "2023-09"
-    },
-    
-    # 對應 init_db.py 中的 phd_china (陸生博士)
-    "phd_china": {
-        "std_stdno": "E123456789",
-        "std_stdcode": "phd_china",
-        "std_pid": "E123456789",
-        "std_cname": "陸生",
-        "std_ename": "CHINA,PHD,STUDENT",
-        "std_degree": "1",  # 博士
-        "std_studingstatus": "1",  # 在學
-        "std_nation": "2",  # 非中華民國國籍
-        "std_schoolid": "1",  # 一般生
-        "std_identity": "17",  # 陸生
-        "std_termcount": "1",
-        "std_depno": "CS",
-        "dep_depname": "資訊工程學系", 
-        "std_academyno": "EE",
-        "aca_cname": "電機資訊學院",
-        "std_enrolltype": "1",
-        "std_directmemo": "",
-        "std_highestschname": "國立清華大學",
-        "com_cellphone": "0912345678",
-        "com_email": "phd_china@nycu.edu.tw",
-        "com_commzip": "30010",
-        "com_commadd": "新竹市東區大學路1001號",
-        "std_sex": "1",  # 男
-        "std_enrollyear": "112",
-        "std_enrollterm": "1",
-        "std_enrolldate": "2023-09"
-    },
-    
-    # 原有的測試學生資料保留用於測試
-    "313612215": {
-        "std_stdno": "A123456789",
-        "std_stdcode": "313612215",
-        "std_pid": "S125410615",
-        "std_cname": "陳弘穎",
-        "std_ename": "CHEN,HUNG-YING",
-        "std_degree": "3",
-        "std_studingstatus": "1",
-        "std_nation": "1",
-        "std_schoolid": "1",
         "std_identity": "1",
-        "std_termcount": "3",
-        "std_depno": "EECS01",
-        "dep_depname": "電機工程學系",
-        "std_academyno": "I",
-        "aca_cname": "工學院",
-        "std_enrolltype": "1",
-        "std_directmemo": "",
-        "std_highestschname": "逢甲大學",
-        "com_cellphone": "0900000000",
-        "com_email": "user@example.com",
-        "com_commzip": "300",
-        "com_commadd": "新竹市東區大學路100號",
+        "std_schoolid": "1",
+        "std_overseaplace": "",
+        "std_termcount": "1",
+        "mgd_title": "在學",
+        "ToDoctor": "0",
+        "com_commadd": "新竹市東區大學路1001號",
+        "com_email": "stu_master@nycu.edu.tw",
+        "com_cellphone": "0912345678"
+    },
+    
+    "stu_direct": {
+        "std_stdcode": "stu_direct",
+        "std_enrollyear": "112",
+        "std_enrollterm": "1",
+        "std_highestschname": "國立清華大學",
+        "std_cname": "李逕升",
+        "std_ename": "LEE,DIRECT-PHD",
+        "std_pid": "C123456789",
+        "std_academyno": "EE",
+        "std_depno": "3551",
         "std_sex": "1",
+        "std_nation": "中華民國",
+        "std_degree": "1",  # 博士
+        "std_enrolltype": "3",  # 逕讀博士
+        "std_identity": "1",
+        "std_schoolid": "1",
+        "std_overseaplace": "",
+        "std_termcount": "1",
+        "mgd_title": "在學",
+        "ToDoctor": "1",  # 逕讀博士
+        "com_commadd": "新竹市東區大學路1001號",
+        "com_email": "stu_direct@nycu.edu.tw",
+        "com_cellphone": "0912345679"
+    },
+    
+    "phd_china": {
+        "std_stdcode": "phd_china",
+        "std_enrollyear": "112",
+        "std_enrollterm": "1",
+        "std_highestschname": "北京大學",
+        "std_cname": "陸生",
+        "std_ename": "CHINA,STUDENT",
+        "std_pid": "H123456789",
+        "std_academyno": "EE",
+        "std_depno": "3551",
+        "std_sex": "2",
+        "std_nation": "中國大陸",
+        "std_degree": "1",  # 博士
+        "std_enrolltype": "1",
+        "std_identity": "2",  # 陸生身份
+        "std_schoolid": "1",
+        "std_overseaplace": "中國大陸",
+        "std_termcount": "2",
+        "mgd_title": "在學",
+        "ToDoctor": "0",
+        "com_commadd": "新竹市東區大學路1001號國際學舍",
+        "com_email": "phd_china@nycu.edu.tw",
+        "com_cellphone": "0912345680"
+    },
+    
+    "313612215": {
+        "std_stdcode": "313612215",
         "std_enrollyear": "113",
         "std_enrollterm": "1",
-        "std_enrolldate": "2024-09"
+        "std_highestschname": "逢甲大學",
+        "std_cname": "陳弘穎",
+        "std_ename": "CHEN,HUNG-YING",
+        "std_pid": "S125410615",
+        "std_academyno": "I",
+        "std_depno": "EECS01",
+        "std_sex": "1",
+        "std_nation": "中華民國",
+        "std_degree": "3",
+        "std_enrolltype": "1",
+        "std_identity": "1",
+        "std_schoolid": "1",
+        "std_overseaplace": "",
+        "std_termcount": "3",
+        "mgd_title": "在學",
+        "ToDoctor": "0",
+        "com_commadd": "新竹市東區大學路100號",
+        "com_email": "user@example.com",
+        "com_cellphone": "0900000000"
     }
 }
 
+# 學期資料按照你提供的實際API格式
 SAMPLE_TERMS = {
+    "312551007": [
+        {
+            "std_stdcode": "312551007",
+            "trm_year": "112",
+            "trm_term": "1",
+            "trm_termcount": "1",
+            "trm_studystatus": "1",
+            "trm_degree": "2",
+            "trm_academyno": "C",
+            "trm_depno": "3551",
+            "trm_placings": "0",
+            "trm_depplacing": "0",
+            "trm_ascore_gpa": "4.0"
+        }
+    ],
     "stu_under": [
         {
-            "trm_year": "113",
-            "trm_term": "2",
-            "trm_stdno": "stu_under",
+            "std_stdcode": "stu_under",
+            "trm_year": "112",
+            "trm_term": "1",
+            "trm_termcount": "1",
             "trm_studystatus": "1",
-            "trm_ascore": "82.5",
-            "trm_termcount": "2",
-            "trm_grade": "2",  # 二年級
-            "trm_degree": "3",  # 學士
-            "trm_academyname": "電機資訊學院",
-            "trm_depname": "資訊工程學系",
-            "trm_ascore_gpa": "3.5",
-            "trm_stdascore": "81.8",
-            "trm_placingsrate": "25.3",
-            "trm_depplacingrate": "30.1"
+            "trm_degree": "3",
+            "trm_academyno": "EE",
+            "trm_depno": "3551",
+            "trm_placings": "0",
+            "trm_depplacing": "0",
+            "trm_ascore_gpa": "3.5"
         }
     ],
     "stu_phd": [
         {
-            "trm_year": "113",
+            "std_stdcode": "stu_phd",
+            "trm_year": "112",
             "trm_term": "1",
-            "trm_stdno": "stu_phd",
-            "trm_studystatus": "1",
-            "trm_ascore": "90.2",
             "trm_termcount": "1",
-            "trm_grade": "1",  # 一年級
-            "trm_degree": "1",  # 博士
-            "trm_academyname": "電機資訊學院",
-            "trm_depname": "資訊工程學系",
-            "trm_ascore_gpa": "4.1",
-            "trm_stdascore": "89.5",
-            "trm_placingsrate": "8.7",
-            "trm_depplacingrate": "12.3"
-        }
-    ],
-    "stu_direct": [
-        {
-            "trm_year": "113",
-            "trm_term": "1",
-            "trm_stdno": "stu_direct",
             "trm_studystatus": "1",
-            "trm_ascore": "88.9",
-            "trm_termcount": "1",
-            "trm_grade": "1",  # 一年級
-            "trm_degree": "1",  # 博士
-            "trm_academyname": "電機資訊學院",
-            "trm_depname": "資訊工程學系",
-            "trm_ascore_gpa": "3.9",
-            "trm_stdascore": "87.2",
-            "trm_placingsrate": "10.5",
-            "trm_depplacingrate": "15.2"
+            "trm_degree": "1",
+            "trm_academyno": "EE",
+            "trm_depno": "3551",
+            "trm_placings": "0",
+            "trm_depplacing": "0",
+            "trm_ascore_gpa": "4.1"
         }
     ],
     "stu_master": [
         {
-            "trm_year": "113",
+            "std_stdcode": "stu_master",
+            "trm_year": "112",
             "trm_term": "1",
-            "trm_stdno": "stu_master",
-            "trm_studystatus": "1",
-            "trm_ascore": "85.7",
             "trm_termcount": "1",
-            "trm_grade": "1",  # 一年級
-            "trm_degree": "2",  # 碩士
-            "trm_academyname": "電機資訊學院",
-            "trm_depname": "資訊工程學系",
-            "trm_ascore_gpa": "3.7",
-            "trm_stdascore": "84.3",
-            "trm_placingsrate": "18.2",
-            "trm_depplacingrate": "22.8"
+            "trm_studystatus": "1",
+            "trm_degree": "2",
+            "trm_academyno": "EE",
+            "trm_depno": "3551",
+            "trm_placings": "0",
+            "trm_depplacing": "0",
+            "trm_ascore_gpa": "3.7"
+        }
+    ],
+    "stu_direct": [
+        {
+            "std_stdcode": "stu_direct",
+            "trm_year": "112",
+            "trm_term": "1",
+            "trm_termcount": "1",
+            "trm_studystatus": "1",
+            "trm_degree": "1",
+            "trm_academyno": "EE",
+            "trm_depno": "3551",
+            "trm_placings": "0",
+            "trm_depplacing": "0",
+            "trm_ascore_gpa": "4.2"
         }
     ],
     "phd_china": [
         {
-            "trm_year": "113",
+            "std_stdcode": "phd_china",
+            "trm_year": "112",
             "trm_term": "1",
-            "trm_stdno": "phd_china",
-            "trm_studystatus": "1",
-            "trm_ascore": "92.1",
             "trm_termcount": "1",
-            "trm_grade": "1",  # 一年級
-            "trm_degree": "1",  # 博士
-            "trm_academyname": "電機資訊學院",
-            "trm_depname": "資訊工程學系",
-            "trm_ascore_gpa": "4.2",
-            "trm_stdascore": "91.3",
-            "trm_placingsrate": "5.2",
-            "trm_depplacingrate": "8.9"
+            "trm_studystatus": "1",
+            "trm_degree": "1",
+            "trm_academyno": "EE",
+            "trm_depno": "3551",
+            "trm_placings": "0",
+            "trm_depplacing": "0",
+            "trm_ascore_gpa": "3.9"
+        },
+        {
+            "std_stdcode": "phd_china",
+            "trm_year": "112",
+            "trm_term": "2",
+            "trm_termcount": "2",
+            "trm_studystatus": "1",
+            "trm_degree": "1",
+            "trm_academyno": "EE",
+            "trm_depno": "3551",
+            "trm_placings": "0",
+            "trm_depplacing": "0",
+            "trm_ascore_gpa": "4.0"
         }
     ],
     "313612215": [
         {
+            "std_stdcode": "313612215",
             "trm_year": "113",
             "trm_term": "2",
-            "trm_stdno": "313612215",
-            "trm_studystatus": "1",
-            "trm_ascore": "86.3",
             "trm_termcount": "3",
-            "trm_grade": "1",
+            "trm_studystatus": "1",
             "trm_degree": "3",
-            "trm_academyname": "工學院",
-            "trm_depname": "電機工程學系",
-            "trm_ascore_gpa": "3.8",
-            "trm_stdascore": "85.1",
-            "trm_placingsrate": "20.3",
-            "trm_depplacingrate": "25.6"
+            "trm_academyno": "I",
+            "trm_depno": "EECS01",
+            "trm_placings": "0",
+            "trm_depplacing": "0",
+            "trm_ascore_gpa": "3.8"
         }
     ]
 }
@@ -362,7 +370,7 @@ async def root():
         "warning": "⚠️ 開發/測試專用 - 請勿用於正式環境 ⚠️",
         "version": "2.1.0",
         "environment": "development",
-        "data_source": "in-memory (synchronized with init_db.py)",
+        "data_source": "in-memory (matching real API format exactly)",
         "endpoints": {
             "student_basic": "POST /getsoaascholarshipstudent",
             "student_term": "POST /getsoaascholarshipstudentterm",
@@ -370,7 +378,8 @@ async def root():
         },
         "authentication": "HMAC-SHA256",
         "strict_mode": STRICT_TIME_CHECK,
-        "available_students": list(SAMPLE_STUDENTS.keys())
+        "available_students": list(SAMPLE_STUDENTS.keys()),
+        "total_students_in_data": len(SAMPLE_STUDENTS)
     }
 
 @app.get("/health")

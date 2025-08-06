@@ -177,7 +177,7 @@ def test_student_term_info_valid():
     term = data["data"][0]
     assert term["trm_year"] == "113", "Academic year mismatch"
     assert term["trm_term"] == "2", "Academic term mismatch"
-    assert term["trm_stdno"] == "313612215", "Student number mismatch"
+    assert term["std_stdcode"] == "313612215", "Student code mismatch"
     
     print("✅ Valid student term info request working correctly")
     return True
@@ -338,33 +338,33 @@ def test_sample_data_completeness():
     
     client = HMACAPIClient()
     
-    # Test student basic info fields
+    # Test student basic info fields - 根據實際API格式
     response = client.get_student_basic_info("313612215")
     assert response.status_code == 200
     
     student = response.json()["data"][0]
+    # 只檢查實際API中存在的欄位
     required_student_fields = [
-        "std_stdno", "std_stdcode", "std_pid", "std_cname", "std_ename",
-        "std_degree", "std_studingstatus", "std_nation", "std_schoolid",
-        "std_identity", "std_termcount", "std_depno", "dep_depname",
-        "std_academyno", "aca_cname", "std_enrolltype", "std_directmemo",
-        "std_highestschname", "com_cellphone", "com_email", "com_commzip",
-        "com_commadd", "std_sex", "std_enrollyear", "std_enrollterm", "std_enrolldate"
+        "std_stdcode", "std_enrollyear", "std_enrollterm", "std_highestschname",
+        "std_cname", "std_ename", "std_pid", "std_academyno", "std_depno",
+        "std_sex", "std_nation", "std_degree", "std_enrolltype", "std_identity",
+        "std_schoolid", "std_overseaplace", "std_termcount", "mgd_title",
+        "ToDoctor", "com_commadd", "com_email", "com_cellphone"
     ]
     
     for field in required_student_fields:
         assert field in student, f"Missing required field: {field}"
     
-    # Test term info fields
+    # Test term info fields - 根據實際API格式
     response = client.get_student_term_info("313612215", "113", "2")
     assert response.status_code == 200
     
     term = response.json()["data"][0]
+    # 只檢查實際API中存在的欄位
     required_term_fields = [
-        "trm_year", "trm_term", "trm_stdno", "trm_studystatus", "trm_ascore",
-        "trm_termcount", "trm_grade", "trm_degree", "trm_academyname",
-        "trm_depname", "trm_ascore_gpa", "trm_stdascore", "trm_placingsrate",
-        "trm_depplacingrate"
+        "std_stdcode", "trm_year", "trm_term", "trm_termcount", "trm_studystatus",
+        "trm_degree", "trm_academyno", "trm_depno", "trm_placings", 
+        "trm_depplacing", "trm_ascore_gpa"
     ]
     
     for field in required_term_fields:

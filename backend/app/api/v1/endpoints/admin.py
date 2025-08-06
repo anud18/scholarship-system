@@ -2,6 +2,7 @@
 Administration API endpoints
 """
 
+import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, status, Query, HTTPException
@@ -9,10 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, update, delete
 from sqlalchemy.orm import selectinload
 
+logger = logging.getLogger(__name__)
+
 from app.db.deps import get_db
 from app.schemas.common import MessageResponse, PaginatedResponse, SystemSettingSchema, EmailTemplateSchema, ApiResponse
 from app.schemas.application import ApplicationListResponse
-from app.schemas.scholarship import ScholarshipSubTypeConfigCreate, ScholarshipSubTypeConfigUpdate, ScholarshipSubTypeConfigResponse
+from app.schemas.scholarship import (
+    ScholarshipSubTypeConfigCreate, ScholarshipSubTypeConfigUpdate, ScholarshipSubTypeConfigResponse,
+    ScholarshipRuleCreate, ScholarshipRuleUpdate, ScholarshipRuleResponse, ScholarshipRuleFilter,
+    RuleCopyRequest, RuleTemplateRequest, ApplyTemplateRequest, BulkRuleOperation
+)
 from app.schemas.notification import NotificationResponse, NotificationCreate, NotificationUpdate
 from app.core.security import require_admin, get_current_user
 from app.models.user import User, UserRole
@@ -20,7 +27,8 @@ from app.models.application import Application, ApplicationStatus
 # Student model removed - student data now fetched from external API
 from app.models.notification import Notification
 from app.services.system_setting_service import SystemSettingService, EmailTemplateService
-from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipSubType
+from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipSubType, ScholarshipRule
+from app.models.enums import Semester
 from app.models.user import AdminScholarship
 
 router = APIRouter()
@@ -487,8 +495,8 @@ async def get_system_announcements(
             'title_en': notification.title_en,
             'message': notification.message,
             'message_en': notification.message_en,
-            'notification_type': notification.notification_type,
-            'priority': notification.priority,
+            'notification_type': notification.notification_type.value if hasattr(notification.notification_type, 'value') else str(notification.notification_type),
+            'priority': notification.priority.value if hasattr(notification.priority, 'value') else str(notification.priority),
             'related_resource_type': notification.related_resource_type,
             'related_resource_id': notification.related_resource_id,
             'action_url': notification.action_url,
@@ -557,8 +565,8 @@ async def get_all_announcements(
             'title_en': ann.title_en,
             'message': ann.message,
             'message_en': ann.message_en,
-            'notification_type': ann.notification_type,
-            'priority': ann.priority,
+            'notification_type': ann.notification_type.value if hasattr(ann.notification_type, 'value') else str(ann.notification_type),
+            'priority': ann.priority.value if hasattr(ann.priority, 'value') else str(ann.priority),
             'related_resource_type': ann.related_resource_type,
             'related_resource_id': ann.related_resource_id,
             'action_url': ann.action_url,
@@ -627,8 +635,8 @@ async def create_announcement(
         'title_en': announcement.title_en,
         'message': announcement.message,
         'message_en': announcement.message_en,
-        'notification_type': announcement.notification_type,
-        'priority': announcement.priority,
+        'notification_type': announcement.notification_type.value if hasattr(announcement.notification_type, 'value') else str(announcement.notification_type),
+        'priority': announcement.priority.value if hasattr(announcement.priority, 'value') else str(announcement.priority),
         'related_resource_type': announcement.related_resource_type,
         'related_resource_id': announcement.related_resource_id,
         'action_url': announcement.action_url,
@@ -678,8 +686,8 @@ async def get_announcement(
         'title_en': announcement.title_en,
         'message': announcement.message,
         'message_en': announcement.message_en,
-        'notification_type': announcement.notification_type,
-        'priority': announcement.priority,
+        'notification_type': announcement.notification_type.value if hasattr(announcement.notification_type, 'value') else str(announcement.notification_type),
+        'priority': announcement.priority.value if hasattr(announcement.priority, 'value') else str(announcement.priority),
         'related_resource_type': announcement.related_resource_type,
         'related_resource_id': announcement.related_resource_id,
         'action_url': announcement.action_url,
@@ -743,8 +751,8 @@ async def update_announcement(
         'title_en': announcement.title_en,
         'message': announcement.message,
         'message_en': announcement.message_en,
-        'notification_type': announcement.notification_type,
-        'priority': announcement.priority,
+        'notification_type': announcement.notification_type.value if hasattr(announcement.notification_type, 'value') else str(announcement.notification_type),
+        'priority': announcement.priority.value if hasattr(announcement.priority, 'value') else str(announcement.priority),
         'related_resource_type': announcement.related_resource_type,
         'related_resource_id': announcement.related_resource_id,
         'action_url': announcement.action_url,
@@ -1726,4 +1734,733 @@ async def get_all_scholarships_for_permissions(
         success=True,
         message=f"Retrieved {len(scholarship_list)} scholarships for permission management",
         data=scholarship_list
+    )
+
+
+# ============================
+# Scholarship Rules Management
+# ============================
+
+@router.get("/scholarship-rules", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+async def get_scholarship_rules(
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type"),
+    academic_year: Optional[int] = Query(None, description="Filter by academic year"),
+    semester: Optional[str] = Query(None, description="Filter by semester"),
+    sub_type: Optional[str] = Query(None, description="Filter by sub type"),
+    rule_type: Optional[str] = Query(None, description="Filter by rule type"),
+    is_template: Optional[bool] = Query(None, description="Filter templates"),
+    is_active: Optional[bool] = Query(True, description="Filter by active status"),
+    tag: Optional[str] = Query(None, description="Filter by tag"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get scholarship rules with optional filters"""
+    
+    # Build query with joins
+    stmt = select(ScholarshipRule).options(
+        selectinload(ScholarshipRule.scholarship_type),
+        selectinload(ScholarshipRule.creator),
+        selectinload(ScholarshipRule.updater)
+    )
+    
+    # Apply filters
+    if scholarship_type_id:
+        stmt = stmt.where(ScholarshipRule.scholarship_type_id == scholarship_type_id)
+    
+    if academic_year:
+        stmt = stmt.where(ScholarshipRule.academic_year == academic_year)
+    
+    if semester:
+        semester_enum = Semester.FIRST if semester == "first" else Semester.SECOND if semester == "second" else None
+        if semester_enum:
+            stmt = stmt.where(ScholarshipRule.semester == semester_enum)
+    
+    if sub_type:
+        stmt = stmt.where(ScholarshipRule.sub_type == sub_type)
+    
+    if rule_type:
+        stmt = stmt.where(ScholarshipRule.rule_type == rule_type)
+    
+    if is_template is not None:
+        stmt = stmt.where(ScholarshipRule.is_template == is_template)
+    
+    if is_active is not None:
+        stmt = stmt.where(ScholarshipRule.is_active == is_active)
+    
+    if tag:
+        stmt = stmt.where(ScholarshipRule.tag.icontains(tag))
+    
+    # Order by priority and created date
+    stmt = stmt.order_by(ScholarshipRule.priority.desc(), ScholarshipRule.created_at.desc())
+    
+    result = await db.execute(stmt)
+    rules = result.scalars().all()
+    
+    # Convert to response format
+    rule_responses = []
+    for rule in rules:
+        # Ensure all attributes are loaded in the session context
+        await db.refresh(rule)
+        
+        rule_data = ScholarshipRuleResponse.model_validate(rule)
+        rule_data.academic_period_label = rule.academic_period_label
+        rule_responses.append(rule_data)
+    
+    return ApiResponse(
+        success=True,
+        message=f"Retrieved {len(rule_responses)} scholarship rules",
+        data=rule_responses
+    )
+
+
+@router.post("/scholarship-rules", response_model=ApiResponse[ScholarshipRuleResponse])
+async def create_scholarship_rule(
+    rule_data: ScholarshipRuleCreate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new scholarship rule"""
+    
+    # Verify scholarship type exists
+    stmt = select(ScholarshipType).where(ScholarshipType.id == rule_data.scholarship_type_id)
+    result = await db.execute(stmt)
+    scholarship_type = result.scalar_one_or_none()
+    
+    if not scholarship_type:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scholarship type not found"
+        )
+    
+    # Create new rule
+    new_rule = ScholarshipRule(
+        **rule_data.dict(),
+        created_by=current_user.id,
+        updated_by=current_user.id
+    )
+    
+    db.add(new_rule)
+    await db.commit()
+    await db.refresh(new_rule)
+    
+    # Load relationships
+    await db.refresh(new_rule, ['scholarship_type', 'creator', 'updater'])
+    
+    # Ensure all attributes are loaded in the session context
+    await db.refresh(new_rule)
+    
+    rule_response = ScholarshipRuleResponse.model_validate(new_rule)
+    rule_response.academic_period_label = new_rule.academic_period_label
+    
+    return ApiResponse(
+        success=True,
+        message="Scholarship rule created successfully",
+        data=rule_response
+    )
+
+
+@router.get("/scholarship-rules/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse])
+async def get_scholarship_rule(
+    rule_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific scholarship rule"""
+    
+    stmt = select(ScholarshipRule).options(
+        selectinload(ScholarshipRule.scholarship_type),
+        selectinload(ScholarshipRule.creator),
+        selectinload(ScholarshipRule.updater)
+    ).where(ScholarshipRule.id == rule_id)
+    
+    result = await db.execute(stmt)
+    rule = result.scalar_one_or_none()
+    
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scholarship rule not found"
+        )
+    
+    # Ensure all attributes are loaded in the session context
+    await db.refresh(rule)
+    
+    rule_response = ScholarshipRuleResponse.model_validate(rule)
+    rule_response.academic_period_label = rule.academic_period_label
+    
+    return ApiResponse(
+        success=True,
+        message="Scholarship rule retrieved successfully",
+        data=rule_response
+    )
+
+
+@router.put("/scholarship-rules/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse])
+async def update_scholarship_rule(
+    rule_id: int,
+    rule_data: ScholarshipRuleUpdate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a scholarship rule"""
+    
+    # Get existing rule
+    stmt = select(ScholarshipRule).where(ScholarshipRule.id == rule_id)
+    result = await db.execute(stmt)
+    rule = result.scalar_one_or_none()
+    
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scholarship rule not found"
+        )
+    
+    # Update fields
+    update_data = rule_data.dict(exclude_unset=True)
+    update_data['updated_by'] = current_user.id
+    
+    for field, value in update_data.items():
+        setattr(rule, field, value)
+    
+    await db.commit()
+    await db.refresh(rule, ['scholarship_type', 'creator', 'updater'])
+    
+    # Ensure all attributes are loaded in the session context
+    await db.refresh(rule)
+    
+    rule_response = ScholarshipRuleResponse.model_validate(rule)
+    rule_response.academic_period_label = rule.academic_period_label
+    
+    return ApiResponse(
+        success=True,
+        message="Scholarship rule updated successfully",
+        data=rule_response
+    )
+
+
+@router.delete("/scholarship-rules/{rule_id}", response_model=ApiResponse[Dict[str, str]])
+async def delete_scholarship_rule(
+    rule_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a scholarship rule"""
+    
+    # Get existing rule
+    stmt = select(ScholarshipRule).where(ScholarshipRule.id == rule_id)
+    result = await db.execute(stmt)
+    rule = result.scalar_one_or_none()
+    
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scholarship rule not found"
+        )
+    
+    await db.delete(rule)
+    await db.commit()
+    
+    return ApiResponse(
+        success=True,
+        message="Scholarship rule deleted successfully",
+        data={"message": "Rule deleted successfully"}
+    )
+
+
+@router.post("/scholarship-rules/copy", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+async def copy_rules_between_periods(
+    copy_request: RuleCopyRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Copy rules between academic periods"""
+    
+    logger.info(f"[COPY RULES] Starting copy process with request: {copy_request.dict()}")
+    
+    # Build source query
+    stmt = select(ScholarshipRule)
+    
+    # Filter by source period
+    if copy_request.source_academic_year:
+        logger.info(f"[COPY RULES] Filtering by source academic year: {copy_request.source_academic_year}")
+        stmt = stmt.where(ScholarshipRule.academic_year == copy_request.source_academic_year)
+    
+    if copy_request.source_semester:
+        # source_semester is already a Semester enum from the schema
+        logger.info(f"[COPY RULES] Filtering by source semester: {copy_request.source_semester}")
+        stmt = stmt.where(ScholarshipRule.semester == copy_request.source_semester)
+    
+    # Filter by scholarship types if specified
+    if copy_request.scholarship_type_ids:
+        logger.info(f"[COPY RULES] Filtering by scholarship type IDs: {copy_request.scholarship_type_ids}")
+        stmt = stmt.where(ScholarshipRule.scholarship_type_id.in_(copy_request.scholarship_type_ids))
+    
+    # Filter by specific rules if specified
+    if copy_request.rule_ids:
+        logger.info(f"[COPY RULES] Filtering by specific rule IDs: {copy_request.rule_ids}")
+        
+        # Debug: Check if these rules exist at all
+        debug_stmt = select(ScholarshipRule).where(ScholarshipRule.id.in_(copy_request.rule_ids))
+        debug_result = await db.execute(debug_stmt)
+        debug_rules = debug_result.scalars().all()
+        logger.info(f"[COPY RULES DEBUG] Found {len(debug_rules)} rules with IDs {copy_request.rule_ids}")
+        for rule in debug_rules:
+            logger.info(f"[COPY RULES DEBUG] Rule ID={rule.id}, Year={rule.academic_year}, Semester={rule.semester}, IsTemplate={rule.is_template}")
+        
+        stmt = stmt.where(ScholarshipRule.id.in_(copy_request.rule_ids))
+    
+    # Exclude templates
+    stmt = stmt.where(ScholarshipRule.is_template == False)
+    logger.info(f"[COPY RULES] Excluding templates from query")
+    
+    # Log the full query for debugging
+    logger.info(f"[COPY RULES] Executing query: {stmt}")
+    
+    result = await db.execute(stmt)
+    source_rules = result.scalars().all()
+    
+    logger.info(f"[COPY RULES] Found {len(source_rules)} source rules")
+    if source_rules:
+        for rule in source_rules[:3]:  # Log first 3 rules for debugging
+            logger.info(f"[COPY RULES] Sample rule: ID={rule.id}, Name={rule.rule_name}, Year={rule.academic_year}, Semester={rule.semester}")
+    
+    if not source_rules:
+        return ApiResponse(
+            success=True,
+            message="No rules found to copy",
+            data=[]
+        )
+    
+    # Prepare target semester enum (already an enum from schema)
+    target_semester_enum = copy_request.target_semester
+    
+    # Create copies with duplicate checking
+    new_rules = []
+    skipped_rules = 0
+    
+    for source_rule in source_rules:
+        # Check for existing identical rule in target period (if not overwriting)
+        if not copy_request.overwrite_existing:
+            existing_stmt = select(ScholarshipRule).where(
+                ScholarshipRule.academic_year == copy_request.target_academic_year,
+                ScholarshipRule.semester == target_semester_enum,
+                ScholarshipRule.scholarship_type_id == source_rule.scholarship_type_id,
+                ScholarshipRule.rule_name == source_rule.rule_name,
+                ScholarshipRule.rule_type == source_rule.rule_type,
+                ScholarshipRule.condition_field == source_rule.condition_field,
+                ScholarshipRule.operator == source_rule.operator,
+                ScholarshipRule.expected_value == source_rule.expected_value,
+                ScholarshipRule.sub_type == source_rule.sub_type,
+                ScholarshipRule.is_template == False  # Exclude templates
+            )
+            
+            existing_result = await db.execute(existing_stmt)
+            existing_rule = existing_result.scalar_one_or_none()
+            
+            if existing_rule:
+                # Skip this rule as it already exists
+                logger.info(f"[COPY RULES] Skipping duplicate rule:")
+                logger.info(f"  Source rule: {source_rule.rule_name} (ID: {source_rule.id})")
+                logger.info(f"  Target year/semester: {copy_request.target_academic_year}/{copy_request.target_semester}")
+                logger.info(f"  Existing rule: {existing_rule.rule_name} (ID: {existing_rule.id})")
+                logger.info(f"  Existing year/semester: {existing_rule.academic_year}/{existing_rule.semester}")
+                skipped_rules += 1
+                continue
+        
+        # Create new rule
+        new_rule = source_rule.create_copy_for_period(
+            copy_request.target_academic_year, 
+            target_semester_enum
+        )
+        new_rule.created_by = current_user.id
+        new_rule.updated_by = current_user.id
+        new_rules.append(new_rule)
+    
+    # Add all new rules
+    db.add_all(new_rules)
+    await db.commit()
+    
+    # Refresh and prepare response
+    for rule in new_rules:
+        await db.refresh(rule, ['scholarship_type'])
+    
+    rule_responses = []
+    for rule in new_rules:
+        # Ensure all attributes are loaded in the session context
+        await db.refresh(rule)
+        
+        rule_response = ScholarshipRuleResponse.model_validate(rule)
+        rule_response.academic_period_label = rule.academic_period_label
+        rule_responses.append(rule_response)
+    
+    # Build response message
+    if skipped_rules > 0:
+        message = f"Successfully copied {len(new_rules)} rules to target period. Skipped {skipped_rules} duplicate rules."
+    else:
+        message = f"Successfully copied {len(new_rules)} rules to target period."
+    
+    logger.info(f"[COPY RULES] Copy complete: {len(new_rules)} copied, {skipped_rules} skipped")
+    logger.info(f"[COPY RULES] Response message: {message}")
+    
+    return ApiResponse(
+        success=True,
+        message=message,
+        data=rule_responses
+    )
+
+
+@router.post("/scholarship-rules/bulk-operation", response_model=ApiResponse[Dict[str, Any]])
+async def bulk_rule_operation(
+    operation_request: BulkRuleOperation,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Perform bulk operations on scholarship rules"""
+    
+    if not operation_request.rule_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No rule IDs provided"
+        )
+    
+    # Get rules
+    stmt = select(ScholarshipRule).where(ScholarshipRule.id.in_(operation_request.rule_ids))
+    result = await db.execute(stmt)
+    rules = result.scalars().all()
+    
+    if not rules:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No rules found with the provided IDs"
+        )
+    
+    operation_results = {
+        "operation": operation_request.operation,
+        "affected_rules": len(rules),
+        "details": []
+    }
+    
+    if operation_request.operation == "activate":
+        for rule in rules:
+            rule.is_active = True
+            rule.updated_by = current_user.id
+        await db.commit()
+        operation_results["details"].append(f"Activated {len(rules)} rules")
+    
+    elif operation_request.operation == "deactivate":
+        for rule in rules:
+            rule.is_active = False
+            rule.updated_by = current_user.id
+        await db.commit()
+        operation_results["details"].append(f"Deactivated {len(rules)} rules")
+    
+    elif operation_request.operation == "delete":
+        for rule in rules:
+            await db.delete(rule)
+        await db.commit()
+        operation_results["details"].append(f"Deleted {len(rules)} rules")
+    
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported operation: {operation_request.operation}"
+        )
+    
+    return ApiResponse(
+        success=True,
+        message=f"Bulk operation '{operation_request.operation}' completed successfully",
+        data=operation_results
+    )
+
+
+# ============================
+# Rule Template Management
+# ============================
+
+@router.get("/scholarship-rules/templates", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+async def get_rule_templates(
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all rule templates"""
+    
+    stmt = select(ScholarshipRule).options(
+        selectinload(ScholarshipRule.scholarship_type),
+        selectinload(ScholarshipRule.creator)
+    ).where(ScholarshipRule.is_template == True)
+    
+    if scholarship_type_id:
+        stmt = stmt.where(ScholarshipRule.scholarship_type_id == scholarship_type_id)
+    
+    stmt = stmt.order_by(ScholarshipRule.template_name, ScholarshipRule.priority.desc())
+    
+    result = await db.execute(stmt)
+    templates = result.scalars().all()
+    
+    template_responses = []
+    for template in templates:
+        # Ensure all attributes are loaded in the session context
+        await db.refresh(template)
+        
+        template_response = ScholarshipRuleResponse.model_validate(template)
+        template_response.academic_period_label = template.academic_period_label
+        template_responses.append(template_response)
+    
+    return ApiResponse(
+        success=True,
+        message=f"Retrieved {len(template_responses)} rule templates",
+        data=template_responses
+    )
+
+
+@router.post("/scholarship-rules/create-template", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+async def create_rule_template(
+    template_request: RuleTemplateRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a rule template from existing rules"""
+    
+    # Get the source rules
+    stmt = select(ScholarshipRule).where(ScholarshipRule.id.in_(template_request.rule_ids))
+    result = await db.execute(stmt)
+    source_rules = result.scalars().all()
+    
+    if not source_rules:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No rules found with the provided IDs"
+        )
+    
+    # Verify all rules belong to the same scholarship type
+    if not all(rule.scholarship_type_id == template_request.scholarship_type_id for rule in source_rules):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="All rules must belong to the same scholarship type"
+        )
+    
+    # Create template rules
+    template_rules = []
+    for source_rule in source_rules:
+        template_rule = ScholarshipRule(
+            scholarship_type_id=source_rule.scholarship_type_id,
+            sub_type=source_rule.sub_type,
+            academic_year=None,  # Templates don't have academic context
+            semester=None,
+            is_template=True,
+            template_name=template_request.template_name,
+            template_description=template_request.template_description,
+            rule_name=source_rule.rule_name,
+            rule_type=source_rule.rule_type,
+            tag=source_rule.tag,
+            description=source_rule.description,
+            condition_field=source_rule.condition_field,
+            operator=source_rule.operator,
+            expected_value=source_rule.expected_value,
+            message=source_rule.message,
+            message_en=source_rule.message_en,
+            is_hard_rule=source_rule.is_hard_rule,
+            is_warning=source_rule.is_warning,
+            priority=source_rule.priority,
+            is_active=True,
+            created_by=current_user.id,
+            updated_by=current_user.id
+        )
+        template_rules.append(template_rule)
+    
+    # Add template rules to database
+    db.add_all(template_rules)
+    await db.commit()
+    
+    # Refresh and prepare response
+    for rule in template_rules:
+        await db.refresh(rule, ['scholarship_type'])
+    
+    template_responses = []
+    for rule in template_rules:
+        # Ensure all attributes are loaded in the session context
+        await db.refresh(rule)
+        
+        rule_response = ScholarshipRuleResponse.model_validate(rule)
+        rule_response.academic_period_label = rule.academic_period_label
+        template_responses.append(rule_response)
+    
+    return ApiResponse(
+        success=True,
+        message=f"Created template '{template_request.template_name}' with {len(template_rules)} rules",
+        data=template_responses
+    )
+
+
+@router.post("/scholarship-rules/apply-template", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+async def apply_rule_template(
+    template_request: ApplyTemplateRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Apply a rule template to create rules for a specific academic period"""
+    
+    # Get template rules
+    stmt = select(ScholarshipRule).where(
+        ScholarshipRule.id == template_request.template_id,
+        ScholarshipRule.is_template == True
+    )
+    result = await db.execute(stmt)
+    template_rule = result.scalar_one_or_none()
+    
+    if not template_rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Template not found"
+        )
+    
+    # Get all rules with the same template name and scholarship type
+    template_stmt = select(ScholarshipRule).where(
+        ScholarshipRule.template_name == template_rule.template_name,
+        ScholarshipRule.scholarship_type_id == template_request.scholarship_type_id,
+        ScholarshipRule.is_template == True
+    )
+    template_result = await db.execute(template_stmt)
+    template_rules = template_result.scalars().all()
+    
+    # Check for existing rules in the target period if not overwriting
+    if not template_request.overwrite_existing:
+        target_semester_enum = None
+        if template_request.semester:
+            target_semester_enum = Semester.FIRST if template_request.semester == "first" else Semester.SECOND
+        
+        existing_stmt = select(ScholarshipRule).where(
+            ScholarshipRule.scholarship_type_id == template_request.scholarship_type_id,
+            ScholarshipRule.academic_year == template_request.academic_year,
+            ScholarshipRule.semester == target_semester_enum,
+            ScholarshipRule.is_template == False
+        )
+        
+        existing_result = await db.execute(existing_stmt)
+        existing_rules = existing_result.scalars().all()
+        
+        if existing_rules:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Rules already exist for the target period. Use overwrite_existing=true to replace them."
+            )
+    
+    # Create rules from template
+    new_rules = []
+    target_semester_enum = None
+    if template_request.semester:
+        target_semester_enum = Semester.FIRST if template_request.semester == "first" else Semester.SECOND
+    
+    for template_rule in template_rules:
+        new_rule = ScholarshipRule(
+            scholarship_type_id=template_request.scholarship_type_id,
+            sub_type=template_rule.sub_type,
+            academic_year=template_request.academic_year,
+            semester=target_semester_enum,
+            is_template=False,
+            rule_name=template_rule.rule_name,
+            rule_type=template_rule.rule_type,
+            tag=template_rule.tag,
+            description=template_rule.description,
+            condition_field=template_rule.condition_field,
+            operator=template_rule.operator,
+            expected_value=template_rule.expected_value,
+            message=template_rule.message,
+            message_en=template_rule.message_en,
+            is_hard_rule=template_rule.is_hard_rule,
+            is_warning=template_rule.is_warning,
+            priority=template_rule.priority,
+            is_active=template_rule.is_active,
+            created_by=current_user.id,
+            updated_by=current_user.id
+        )
+        new_rules.append(new_rule)
+    
+    # Add new rules to database
+    db.add_all(new_rules)
+    await db.commit()
+    
+    # Refresh and prepare response
+    for rule in new_rules:
+        await db.refresh(rule, ['scholarship_type'])
+    
+    rule_responses = []
+    for rule in new_rules:
+        # Ensure all attributes are loaded in the session context
+        await db.refresh(rule)
+        
+        rule_response = ScholarshipRuleResponse.model_validate(rule)
+        rule_response.academic_period_label = rule.academic_period_label
+        rule_responses.append(rule_response)
+    
+    return ApiResponse(
+        success=True,
+        message=f"Applied template '{template_rule.template_name}' and created {len(new_rules)} rules",
+        data=rule_responses
+    )
+
+
+@router.delete("/scholarship-rules/templates/{template_name}", response_model=ApiResponse[Dict[str, str]])
+async def delete_rule_template(
+    template_name: str,
+    scholarship_type_id: int = Query(..., description="Scholarship type ID"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a rule template and all its associated rules"""
+    
+    # Get template rules
+    stmt = select(ScholarshipRule).where(
+        ScholarshipRule.template_name == template_name,
+        ScholarshipRule.scholarship_type_id == scholarship_type_id,
+        ScholarshipRule.is_template == True
+    )
+    result = await db.execute(stmt)
+    template_rules = result.scalars().all()
+    
+    if not template_rules:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Template not found"
+        )
+    
+    # Delete all template rules
+    for rule in template_rules:
+        await db.delete(rule)
+    
+    await db.commit()
+    
+    return ApiResponse(
+        success=True,
+        message=f"Deleted template '{template_name}' with {len(template_rules)} rules",
+        data={"message": f"Template '{template_name}' deleted successfully"}
+    )
+
+
+@router.get("/scholarships/available-years", response_model=ApiResponse[List[int]])
+async def get_available_years(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get available academic years from scholarship rules"""
+    
+    # Query distinct academic years from scholarship rules
+    stmt = select(ScholarshipRule.academic_year).distinct().where(
+        ScholarshipRule.academic_year.is_not(None)
+    ).order_by(ScholarshipRule.academic_year.desc())
+    
+    result = await db.execute(stmt)
+    years = result.scalars().all()
+    
+    # If no years found in database, provide default years
+    if not years:
+        # Current year in Taiwan calendar (民國)
+        current_taiwan_year = datetime.now().year - 1911
+        years = [current_taiwan_year - 1, current_taiwan_year, current_taiwan_year + 1]
+    
+    return ApiResponse(
+        success=True,
+        message=f"Retrieved {len(years)} available years",
+        data=list(years)
     ) 

@@ -55,7 +55,7 @@ async def get_student_info(
     db: AsyncSession = Depends(get_db)
 ):
     """Get student information"""
-    from app.services.application_service import get_student_from_user
+    from app.services.application_service import get_student_data_from_user
     
     if current_user.role.value != "student":
         raise HTTPException(
@@ -64,7 +64,7 @@ async def get_student_info(
         )
     
     # Get student profile
-    student = await get_student_from_user(current_user, db)
+    student = await get_student_data_from_user(current_user)
     
     if not student:
         raise HTTPException(
@@ -78,33 +78,33 @@ async def get_student_info(
         "message": "Student information retrieved successfully",
         "data": {
             "student": {
-                "id": student.id,
-                "std_stdno": student.std_stdno,
-                "std_stdcode": student.std_stdcode,
-                "std_pid": student.std_pid,
-                "std_cname": student.std_cname,
-                "std_ename": student.std_ename,
-                "std_degree": student.std_degree,
-                "std_studingstatus": student.std_studingstatus,
-                "std_sex": student.std_sex,
-                "std_enrollyear": student.std_enrollyear,
-                "std_enrollterm": student.std_enrollterm,
-                "std_termcount": student.std_termcount,
-                "std_nation": student.std_nation,
-                "std_schoolid": student.std_schoolid,
-                "std_identity": student.std_identity,
-                "std_depno": student.std_depno,
-                "std_depname": student.std_depname,
-                "std_aca_no": student.std_aca_no,
-                "std_aca_cname": student.std_aca_cname,
-                "std_highestschname": student.std_highestschname,
-                "com_cellphone": student.com_cellphone,
-                "com_email": student.com_email,
-                "com_commzip": student.com_commzip,
-                "com_commadd": student.com_commadd,
-                "std_enrolled_date": student.std_enrolled_date,
-                "std_bank_account": student.std_bank_account,
-                "notes": student.notes
+                "id": current_user.id,
+                "std_stdno": student.get("std_stdno", ""),
+                "std_stdcode": student.get("std_stdcode", ""),
+                "std_pid": student.get("std_pid", ""),
+                "std_cname": student.get("std_cname", ""),
+                "std_ename": student.get("std_ename", ""),
+                "std_degree": student.get("std_degree", ""),
+                "std_studingstatus": student.get("std_studingstatus", ""),
+                "std_sex": student.get("std_sex", ""),
+                "std_enrollyear": student.get("std_enrollyear", ""),
+                "std_enrollterm": student.get("std_enrollterm", ""),
+                "std_termcount": student.get("std_termcount", ""),
+                "std_nation": student.get("std_nation", ""),
+                "std_schoolid": student.get("std_schoolid", ""),
+                "std_identity": student.get("std_identity", ""),
+                "std_depno": student.get("std_depno", ""),
+                "std_depname": student.get("std_depname", ""),
+                "std_aca_no": student.get("std_aca_no", ""),
+                "std_aca_cname": student.get("std_aca_cname", ""),
+                "std_highestschname": student.get("std_highestschname", ""),
+                "com_cellphone": student.get("com_cellphone", ""),
+                "com_email": student.get("com_email", ""),
+                "com_commzip": student.get("com_commzip", ""),
+                "com_commadd": student.get("com_commadd", ""),
+                "std_enrolled_date": student.get("std_enrolled_date", ""),
+                "std_bank_account": student.get("std_bank_account", ""),
+                "notes": student.get("notes", "")
             }
         }
     }
