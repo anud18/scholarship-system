@@ -635,6 +635,191 @@ export interface ScholarshipPermissionCreate {
   comment?: string
 }
 
+export interface ScholarshipConfiguration {
+  id: number
+  scholarship_type_id: number
+  scholarship_type_name: string
+  academic_year: number
+  semester: string | null
+  config_name: string
+  config_code: string
+  description?: string
+  description_en?: string
+  amount: number
+  currency: string
+  whitelist_student_ids: Record<string, number[]>
+  renewal_application_start_date?: string
+  renewal_application_end_date?: string
+  application_start_date?: string
+  application_end_date?: string
+  renewal_professor_review_start?: string
+  renewal_professor_review_end?: string
+  renewal_college_review_start?: string
+  renewal_college_review_end?: string
+  requires_professor_recommendation: boolean
+  professor_review_start?: string
+  professor_review_end?: string
+  requires_college_review: boolean
+  college_review_start?: string
+  college_review_end?: string
+  review_deadline?: string
+  is_active: boolean
+  effective_start_date?: string
+  effective_end_date?: string
+  version: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ScholarshipConfigurationFormData {
+  scholarship_type_id: number
+  academic_year: number
+  semester: string | null
+  config_name: string
+  config_code: string
+  description?: string
+  description_en?: string
+  amount: number
+  currency?: string
+  whitelist_student_ids?: Record<string, number[]>
+  renewal_application_start_date?: string
+  renewal_application_end_date?: string
+  application_start_date?: string
+  application_end_date?: string
+  renewal_professor_review_start?: string
+  renewal_professor_review_end?: string
+  renewal_college_review_start?: string
+  renewal_college_review_end?: string
+  requires_professor_recommendation?: boolean
+  professor_review_start?: string
+  professor_review_end?: string
+  requires_college_review?: boolean
+  college_review_start?: string
+  college_review_end?: string
+  review_deadline?: string
+  is_active?: boolean
+  effective_start_date?: string
+  effective_end_date?: string
+  version?: string
+}
+
+// User Profile interfaces
+export interface UserProfile {
+  id: number
+  user_id: number
+  bank_name?: string
+  bank_code?: string
+  bank_branch?: string
+  account_number?: string
+  account_holder_name?: string
+  advisor_name?: string
+  advisor_name_en?: string
+  advisor_email?: string
+  advisor_phone?: string
+  advisor_department?: string
+  advisor_title?: string
+  preferred_email?: string
+  phone_number?: string
+  mobile_number?: string
+  current_address?: string
+  permanent_address?: string
+  postal_code?: string
+  emergency_contact_name?: string
+  emergency_contact_relationship?: string
+  emergency_contact_phone?: string
+  preferred_language: string
+  bio?: string
+  interests?: string
+  social_links?: Record<string, string>
+  profile_photo_url?: string
+  has_complete_bank_info: boolean
+  has_advisor_info: boolean
+  profile_completion_percentage: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CompleteUserProfile {
+  user_info: UserResponse
+  profile: UserProfile | null
+  student_info?: any
+}
+
+export interface UserProfileUpdate {
+  bank_name?: string
+  bank_code?: string
+  bank_branch?: string
+  account_number?: string
+  account_holder_name?: string
+  advisor_name?: string
+  advisor_name_en?: string
+  advisor_email?: string
+  advisor_phone?: string
+  advisor_department?: string
+  advisor_title?: string
+  preferred_email?: string
+  phone_number?: string
+  mobile_number?: string
+  current_address?: string
+  permanent_address?: string
+  postal_code?: string
+  emergency_contact_name?: string
+  emergency_contact_relationship?: string
+  emergency_contact_phone?: string
+  preferred_language?: string
+  bio?: string
+  interests?: string
+  social_links?: Record<string, string>
+  privacy_settings?: Record<string, any>
+  custom_fields?: Record<string, any>
+}
+
+export interface BankInfoUpdate {
+  bank_name?: string
+  bank_code?: string
+  bank_branch?: string
+  account_number?: string
+  account_holder_name?: string
+  change_reason?: string
+}
+
+export interface AdvisorInfoUpdate {
+  advisor_name?: string
+  advisor_name_en?: string
+  advisor_email?: string
+  advisor_phone?: string
+  advisor_department?: string
+  advisor_title?: string
+  change_reason?: string
+}
+
+export interface ContactInfoUpdate {
+  preferred_email?: string
+  phone_number?: string
+  mobile_number?: string
+  current_address?: string
+  permanent_address?: string
+  postal_code?: string
+  change_reason?: string
+}
+
+export interface EmergencyContactUpdate {
+  emergency_contact_name?: string
+  emergency_contact_relationship?: string
+  emergency_contact_phone?: string
+  change_reason?: string
+}
+
+export interface ProfileHistory {
+  id: number
+  user_id: number
+  field_name: string
+  old_value?: string
+  new_value?: string
+  change_reason?: string
+  changed_at: string
+}
+
 class ApiClient {
   private baseURL: string
   private token: string | null = null
@@ -1464,6 +1649,57 @@ class ApiClient {
     getAvailableYears: async (): Promise<ApiResponse<number[]>> => {
       return this.request('/admin/scholarships/available-years')
     },
+
+    // Scholarship Configuration Management
+    getScholarshipConfigTypes: async (): Promise<ApiResponse<any[]>> => {
+      return this.request('/scholarship-configurations/scholarship-types')
+    },
+    getScholarshipConfigurations: async (params?: {
+      scholarship_type_id?: number;
+      academic_year?: number;
+      semester?: string;
+      is_active?: boolean;
+    }): Promise<ApiResponse<ScholarshipConfiguration[]>> => {
+      const queryParams = new URLSearchParams()
+      if (params?.scholarship_type_id) queryParams.append('scholarship_type_id', params.scholarship_type_id.toString())
+      if (params?.academic_year) queryParams.append('academic_year', params.academic_year.toString())
+      if (params?.semester) queryParams.append('semester', params.semester)
+      if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString())
+      
+      const queryString = queryParams.toString()
+      return this.request(`/scholarship-configurations/configurations/${queryString ? `?${queryString}` : ''}`)
+    },
+    getScholarshipConfiguration: async (id: number): Promise<ApiResponse<ScholarshipConfiguration>> => {
+      return this.request(`/scholarship-configurations/configurations/${id}`)
+    },
+    createScholarshipConfiguration: async (configData: ScholarshipConfigurationFormData): Promise<ApiResponse<{ id: number; config_code: string }>> => {
+      return this.request('/scholarship-configurations/configurations/', {
+        method: 'POST',
+        body: JSON.stringify(configData)
+      })
+    },
+    updateScholarshipConfiguration: async (id: number, configData: Partial<ScholarshipConfigurationFormData>): Promise<ApiResponse<{ id: number; config_code: string }>> => {
+      return this.request(`/scholarship-configurations/configurations/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(configData)
+      })
+    },
+    deleteScholarshipConfiguration: async (id: number): Promise<ApiResponse<{ id: number; config_code: string }>> => {
+      return this.request(`/scholarship-configurations/configurations/${id}`, {
+        method: 'DELETE'
+      })
+    },
+    duplicateScholarshipConfiguration: async (id: number, targetData: {
+      academic_year: number;
+      semester?: string | null;
+      config_code: string;
+      config_name?: string;
+    }): Promise<ApiResponse<{ id: number; config_code: string }>> => {
+      return this.request(`/scholarship-configurations/configurations/${id}/duplicate`, {
+        method: 'POST',
+        body: JSON.stringify(targetData)
+      })
+    },
   }
 
   // Application Fields Configuration
@@ -1519,6 +1755,106 @@ class ApiClient {
       this.request<boolean>(`/application-fields/documents/${documentId}`, {
         method: 'DELETE'
       }),
+  }
+
+  // User Profile management endpoints
+  userProfiles = {
+    // Get complete user profile (read-only + editable data)
+    getMyProfile: async (): Promise<ApiResponse<CompleteUserProfile>> => {
+      return this.request('/user-profiles/me')
+    },
+
+    // Create user profile
+    createProfile: async (profileData: UserProfileUpdate): Promise<ApiResponse<UserProfile>> => {
+      return this.request('/user-profiles/me', {
+        method: 'POST',
+        body: JSON.stringify(profileData),
+      })
+    },
+
+    // Update complete profile
+    updateProfile: async (profileData: UserProfileUpdate): Promise<ApiResponse<UserProfile>> => {
+      return this.request('/user-profiles/me', {
+        method: 'PUT',
+        body: JSON.stringify(profileData),
+      })
+    },
+
+    // Update bank account information
+    updateBankInfo: async (bankData: BankInfoUpdate): Promise<ApiResponse<any>> => {
+      return this.request('/user-profiles/me/bank-info', {
+        method: 'PUT',
+        body: JSON.stringify(bankData),
+      })
+    },
+
+    // Update advisor information
+    updateAdvisorInfo: async (advisorData: AdvisorInfoUpdate): Promise<ApiResponse<any>> => {
+      return this.request('/user-profiles/me/advisor-info', {
+        method: 'PUT',
+        body: JSON.stringify(advisorData),
+      })
+    },
+
+    // Upload bank document (base64)
+    uploadBankDocument: async (photoData: string, filename: string, contentType: string): Promise<ApiResponse<{ document_url: string }>> => {
+      return this.request('/user-profiles/me/bank-document', {
+        method: 'POST',
+        body: JSON.stringify({
+          photo_data: photoData,
+          filename,
+          content_type: contentType
+        }),
+      })
+    },
+
+    // Upload bank document (file)
+    uploadBankDocumentFile: async (file: File): Promise<ApiResponse<{ document_url: string }>> => {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      return this.request('/user-profiles/me/bank-document/file', {
+        method: 'POST',
+        body: formData,
+      })
+    },
+
+    // Delete bank document
+    deleteBankDocument: async (): Promise<ApiResponse<any>> => {
+      return this.request('/user-profiles/me/bank-document', {
+        method: 'DELETE',
+      })
+    },
+
+    // Get profile change history
+    getHistory: async (): Promise<ApiResponse<ProfileHistory[]>> => {
+      return this.request('/user-profiles/me/history')
+    },
+
+    // Delete entire profile
+    deleteProfile: async (): Promise<ApiResponse<any>> => {
+      return this.request('/user-profiles/me', {
+        method: 'DELETE',
+      })
+    },
+
+    // Admin endpoints
+    admin: {
+      // Get incomplete profiles
+      getIncompleteProfiles: async (): Promise<ApiResponse<any>> => {
+        return this.request('/user-profiles/admin/incomplete')
+      },
+
+      // Get user profile by ID
+      getUserProfile: async (userId: number): Promise<ApiResponse<CompleteUserProfile>> => {
+        return this.request(`/user-profiles/admin/${userId}`)
+      },
+
+      // Get user profile history by ID
+      getUserHistory: async (userId: number): Promise<ApiResponse<ProfileHistory[]>> => {
+        return this.request(`/user-profiles/admin/${userId}/history`)
+      },
+    }
   }
 }
 

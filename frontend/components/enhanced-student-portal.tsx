@@ -14,8 +14,13 @@ import { ProgressTimeline } from "@/components/progress-timeline"
 import { FileUpload } from "@/components/file-upload"
 import { DynamicApplicationForm } from "@/components/dynamic-application-form"
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
+import UserProfileManagement from "@/components/user-profile-management"
 import { Edit, Eye, Trash2, Save, AlertTriangle, Info, FileText, Calendar, User as UserIcon, Loader2, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Progress } from "@/components/ui/progress"
 import { getTranslation } from "@/lib/i18n"
 import { useApplications } from "@/hooks/use-applications"
 import { FormValidator, Locale } from "@/lib/validators"
@@ -1478,58 +1483,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         </TabsContent>
 
         <TabsContent value="profile" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>{locale === "zh" ? "個人資料" : "Personal Information"}</CardTitle>
-              <CardDescription>
-                {locale === "zh"
-                  ? "管理您的個人資訊與學籍資料"
-                  : "Manage your personal information and academic records"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>{locale === "zh" ? "學號" : "Student ID"}</Label>
-                  <Input value={user.id} disabled />
-                </div>
-                <div>
-                  <Label>{locale === "zh" ? "姓名" : "Name"}</Label>
-                  <Input value={user.name} disabled />
-                </div>
-                <div>
-                  <Label>{locale === "zh" ? "電子郵件" : "Email"}</Label>
-                  <Input value={user.email} disabled />
-                </div>
-                <div>
-                  <Label>{locale === "zh" ? "學生類型" : "Student Type"}</Label>
-                  <Input
-                    value={
-                      user.studentType === "undergraduate"
-                        ? locale === "zh"
-                          ? "學士"
-                          : "Undergraduate"
-                        : user.studentType === "phd"
-                          ? locale === "zh"
-                            ? "博士"
-                            : "PhD"
-                          : locale === "zh"
-                            ? "錯誤"
-                            : "Error"
-                    }
-                    disabled
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4">
-                <Button variant="outline">
-                  <Edit className="h-4 w-4 mr-2" />
-                  {locale === "zh" ? "更新聯絡資訊" : "Update Contact Information"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <UserProfileManagement />
         </TabsContent>
       </Tabs>
 

@@ -56,13 +56,82 @@ class ScholarshipService:
         return (self._is_dev_mode() and 
                 DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False))
     
-    # TODO: Refactor this method to work with external API student data
-    # async def get_eligible_scholarships(self, student_data: Dict[str, Any]) -> List[ScholarshipType]:
-    #     """Get scholarships that the student is eligible for"""
-    #     # TODO: Implement student eligibility checking with external API data
-    #     # This method needs to be refactored to work with student_data from external API
-    #     # instead of Student model
-    #     return []
+    async def get_eligible_scholarships(self, student_data: Dict[str, Any], user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get scholarships that the student is eligible for based on active configurations"""
+        from app.services.scholarship_configuration_service import ScholarshipConfigurationService
+        from app.services.eligibility_service import EligibilityService
+        
+        config_service = ScholarshipConfigurationService(self.db)
+        eligibility_service = EligibilityService(self.db)
+        
+        # Get all active and effective configurations
+        active_configs = await config_service.get_active_configurations()
+        
+        eligible_scholarships = []
+        
+        for config in active_configs:
+            # Check if student meets basic eligibility
+            is_eligible, reasons = await eligibility_service.check_student_eligibility(
+                student_data, config, user_id
+            )
+            
+            if is_eligible:
+                # Build scholarship response with configuration data
+                scholarship_type = config.scholarship_type
+                
+                scholarship_dict = {
+                    'id': scholarship_type.id,
+                    'code': scholarship_type.code,
+                    'name': config.config_name or scholarship_type.name,
+                    'name_en': scholarship_type.name_en,
+                    'description': config.description or scholarship_type.description,
+                    'description_en': config.description_en or scholarship_type.description_en,
+                    'category': scholarship_type.category,
+                    'academic_year': config.academic_year,
+                    'semester': config.semester.value if config.semester else None,
+                    'application_cycle': scholarship_type.application_cycle.value if scholarship_type.application_cycle else 'semester',
+                    'sub_type_list': scholarship_type.sub_type_list or [],
+                    'sub_type_selection_mode': scholarship_type.sub_type_selection_mode.value if scholarship_type.sub_type_selection_mode else 'single',
+                    
+                    # Configuration-specific data
+                    'amount': config.amount,
+                    'currency': config.currency,
+                    'application_start_date': config.application_start_date,
+                    'application_end_date': config.application_end_date,
+                    'renewal_application_start_date': config.renewal_application_start_date,
+                    'renewal_application_end_date': config.renewal_application_end_date,
+                    'professor_review_start': config.professor_review_start,
+                    'professor_review_end': config.professor_review_end,
+                    'college_review_start': config.college_review_start,
+                    'college_review_end': config.college_review_end,
+                    'requires_professor_recommendation': config.requires_professor_recommendation,
+                    'requires_college_review': config.requires_college_review,
+                    'requires_interview': getattr(config, 'requires_interview', False),
+                    'requires_research_proposal': getattr(config, 'requires_research_proposal', False),
+                    
+                    # Eligibility info
+                    'whitelist_enabled': scholarship_type.whitelist_enabled,
+                    'whitelist_student_ids': config.whitelist_student_ids or {},
+                    
+                    # System data
+                    'created_at': scholarship_type.created_at,
+                    'config_version': config.version,
+                    'config_code': config.config_code
+                }
+                
+                # Check quota availability
+                quota_available, quota_info = await config_service.check_quota_availability(
+                    config, student_data.get('department_code')
+                )
+                
+                scholarship_dict.update({
+                    'quota_available': quota_available,
+                    'quota_info': quota_info
+                })
+                
+                eligible_scholarships.append(scholarship_dict)
+        
+        return eligible_scholarships
 
 
 class ScholarshipApplicationService:
@@ -84,74 +153,80 @@ class ScholarshipApplicationService:
     #     is_renewal: bool = False,
     #     previous_application_id: Optional[int] = None
     # ) -> Tuple[Application, str]:
-        """Create a new scholarship application using existing schema"""
-        
-        # Validate eligibility
-        scholarship_type = self.db.query(ScholarshipType).filter(
-            ScholarshipType.id == scholarship_type_id
-        ).first()
-        
-        if not scholarship_type:
-            raise ValueError("Invalid scholarship type")
-        
-        can_apply, error_msg = scholarship_type.can_student_apply(student_id, semester)
-        if not can_apply:
-            raise ValueError(error_msg)
-        
-        # Check for existing application in the same semester
-        existing_app = self.db.query(Application).filter(
-            and_(
-                Application.student_id == student_id,
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.semester == semester,
-                Application.status.notin_([ApplicationStatus.WITHDRAWN.value, ApplicationStatus.REJECTED.value])
-            )
-        ).first()
-        
-        if existing_app:
-            raise ValueError("Student already has an active application for this scholarship in this semester")
-        
-        # Generate application number using existing format
-        app_number = self._generate_application_id(academic_year)
-        
-        # Calculate priority score
-        priority_score = self._calculate_initial_priority(is_renewal, student_id)
-        
-        # Extract main and sub types from scholarship code
-        main_type = self._extract_main_type(scholarship_type_code)
-        sub_type = self._extract_sub_type(scholarship_type_code)
-        
-        # Create application using existing schema
-        application = Application(
-            app_id=app_number,
-            user_id=user_id,
-            student_id=student_id,
-            scholarship_type_id=scholarship_type_id,
-            scholarship_type=scholarship_type_code,
-            scholarship_name=scholarship_type.name,
-            main_scholarship_type=main_type,
-            sub_scholarship_type=sub_type,
-            semester=semester,
-            academic_year=academic_year,
-            is_renewal=is_renewal,
-            previous_application_id=previous_application_id,
-            status=ApplicationStatus.DRAFT.value,
-            priority_score=priority_score,
-            amount=application_data.get('requested_amount'),
-            form_data=application_data
-        )
-        
-        self.db.add(application)
-        self.db.commit()
-        self.db.refresh(application)
-        
-        return application, "Application created successfully"
+    #     """Create a new scholarship application using existing schema"""
+    #     
+    #     # Validate eligibility
+    #     stmt = select(ScholarshipType).where(
+    #         ScholarshipType.id == scholarship_type_id
+    #     )
+    #     result = await self.db.execute(stmt)
+    #     scholarship_type = result.scalar_one_or_none()
+    #     
+    #     if not scholarship_type:
+    #         raise ValueError("Invalid scholarship type")
+    #     
+    #     can_apply, error_msg = scholarship_type.can_student_apply(student_id, semester)
+    #     if not can_apply:
+    #         raise ValueError(error_msg)
+    #     
+    #     # Check for existing application in the same semester
+    #     stmt = select(Application).where(
+    #         and_(
+    #             Application.student_id == student_id,
+    #             Application.scholarship_type_id == scholarship_type_id,
+    #             Application.semester == semester,
+    #             Application.status.notin_([ApplicationStatus.WITHDRAWN.value, ApplicationStatus.REJECTED.value])
+    #         )
+    #     )
+    #     result = await self.db.execute(stmt)
+    #     existing_app = result.scalar_one_or_none()
+    #     
+    #     if existing_app:
+    #         raise ValueError("Student already has an active application for this scholarship in this semester")
+    #     
+    #     # Generate application number using existing format
+    #     app_number = self._generate_application_id(academic_year)
+    #     
+    #     # Calculate priority score
+    #     priority_score = self._calculate_initial_priority(is_renewal, student_id)
+    #     
+    #     # Extract main and sub types from scholarship code
+    #     main_type = self._extract_main_type(scholarship_type_code)
+    #     sub_type = self._extract_sub_type(scholarship_type_code)
+    #     
+    #     # Create application using existing schema
+    #     application = Application(
+    #         app_id=app_number,
+    #         user_id=user_id,
+    #         student_id=student_id,
+    #         scholarship_type_id=scholarship_type_id,
+    #         scholarship_type=scholarship_type_code,
+    #         scholarship_name=scholarship_type.name,
+    #         main_scholarship_type=main_type,
+    #         sub_scholarship_type=sub_type,
+    #         semester=semester,
+    #         academic_year=academic_year,
+    #         is_renewal=is_renewal,
+    #         previous_application_id=previous_application_id,
+    #         status=ApplicationStatus.DRAFT.value,
+    #         priority_score=priority_score,
+    #         amount=application_data.get('requested_amount'),
+    #         form_data=application_data
+    #     )
+    #     
+    #     self.db.add(application)
+    #     await self.db.commit()
+    #     await self.db.refresh(application)
+    #     
+    #     return application, "Application created successfully"
     
-    def submit_application(self, application_id: int) -> Tuple[bool, str]:
+    async def submit_application(self, application_id: int) -> Tuple[bool, str]:
         """Submit application for review"""
-        application = self.db.query(Application).filter(
+        stmt = select(Application).where(
             Application.id == application_id
-        ).first()
+        )
+        result = await self.db.execute(stmt)
+        application = result.scalar_one_or_none()
         
         if not application:
             return False, "Application not found"
@@ -178,10 +253,10 @@ class ScholarshipApplicationService:
         if application.scholarship_type.requires_professor_recommendation:
             self._create_professor_review_request(application)
         
-        self.db.commit()
+        await self.db.commit()
         return True, "Application submitted successfully"
     
-    def get_applications_by_priority(
+    async def get_applications_by_priority(
         self,
         scholarship_type_id: Optional[int] = None,
         semester: Optional[str] = None,
@@ -189,36 +264,39 @@ class ScholarshipApplicationService:
         limit: int = 100
     ) -> List['Application']:
         """Get applications ordered by priority"""
-        query = self.db.query(Application)
+        stmt = select(Application)
         
         if scholarship_type_id:
-            query = query.filter(Application.scholarship_type_id == scholarship_type_id)
+            stmt = stmt.where(Application.scholarship_type_id == scholarship_type_id)
         
         if semester:
-            query = query.filter(Application.semester == semester)
+            stmt = stmt.where(Application.semester == semester)
         
         if status:
-            query = query.filter(Application.status == status)
+            stmt = stmt.where(Application.status == status)
         
         # Order by priority score (higher first), then by submission time (earlier first)
-        applications = query.order_by(
+        stmt = stmt.order_by(
             desc(Application.priority_score),
             asc(Application.submitted_at)
-        ).limit(limit).all()
+        ).limit(limit)
         
-        return applications
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
     
-    def process_renewal_applications_first(self, semester: str) -> Dict[str, int]:
+    async def process_renewal_applications_first(self, semester: str) -> Dict[str, int]:
         """Process renewal applications with higher priority"""
         
         # Get all submitted renewal applications for the semester
-        renewal_apps = self.db.query(Application).filter(
+        stmt = select(Application).where(
             and_(
                 Application.semester == semester,
-                Application.is_renewal == True,
+                Application.is_renewal.is_(True),
                 Application.status == ApplicationStatus.SUBMITTED
             )
-        ).order_by(desc(Application.priority_score)).all()
+        ).order_by(desc(Application.priority_score))
+        result = await self.db.execute(stmt)
+        renewal_apps = result.scalars().all()
         
         processed_count = 0
         approved_count = 0
@@ -235,20 +313,23 @@ class ScholarshipApplicationService:
             
             processed_count += 1
         
-        self.db.commit()
+        await self.db.commit()
         
         return {
             "processed": processed_count,
             "auto_approved": approved_count
         }
     
-    def _generate_application_id(self, academic_year: str) -> str:
+    async def _generate_application_id(self, academic_year: str) -> str:
         """Generate unique application ID using existing format"""
         
         # Get count of applications for this year
-        count = self.db.query(Application).filter(
+        from sqlalchemy import func
+        stmt = select(func.count(Application.id)).where(
             Application.academic_year == academic_year
-        ).count()
+        )
+        result = await self.db.execute(stmt)
+        count = result.scalar()
         
         # Format: APP-{year}-{count+1:06d}
         return f"APP-{academic_year}-{count+1:06d}"
@@ -372,10 +453,10 @@ class ScholarshipApplicationService:
 class ScholarshipQuotaService:
     """Service for managing scholarship quotas - simplified for existing schema"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
-    def get_quota_status_by_type(
+    async def get_quota_status_by_type(
         self,
         main_scholarship_type: str,
         sub_scholarship_type: str,
@@ -384,17 +465,20 @@ class ScholarshipQuotaService:
         """Get quota status for a scholarship type combination"""
         
         # Count approved applications by type
-        approved_count = self.db.query(Application).filter(
+        from sqlalchemy import func
+        stmt = select(func.count(Application.id)).where(
             and_(
                 Application.main_scholarship_type == main_scholarship_type,
                 Application.sub_scholarship_type == sub_scholarship_type,
                 Application.semester == semester,
                 Application.status == ApplicationStatus.APPROVED.value
             )
-        ).count()
+        )
+        result = await self.db.execute(stmt)
+        approved_count = result.scalar()
         
         # Get pending applications
-        pending_count = self.db.query(Application).filter(
+        stmt = select(func.count(Application.id)).where(
             and_(
                 Application.main_scholarship_type == main_scholarship_type,
                 Application.sub_scholarship_type == sub_scholarship_type,
@@ -404,7 +488,9 @@ class ScholarshipQuotaService:
                     ApplicationStatus.UNDER_REVIEW.value
                 ])
             )
-        ).count()
+        )
+        result = await self.db.execute(stmt)
+        pending_count = result.scalar()
         
         # For now, use default quotas (these would come from configuration)
         default_quotas = {
@@ -427,7 +513,7 @@ class ScholarshipQuotaService:
             "usage_percent": (approved_count / total_quota * 100) if total_quota > 0 else 0
         }
     
-    def process_applications_by_priority(
+    async def process_applications_by_priority(
         self,
         main_scholarship_type: str,
         sub_scholarship_type: str,
@@ -441,7 +527,7 @@ class ScholarshipQuotaService:
             return {"processed": 0, "approved": 0, "message": "No remaining quota"}
         
         # Get applications ordered by priority (renewal first, then by submission time)
-        applications = self.db.query(Application).filter(
+        stmt = select(Application).where(
             and_(
                 Application.main_scholarship_type == main_scholarship_type,
                 Application.sub_scholarship_type == sub_scholarship_type,
@@ -455,7 +541,9 @@ class ScholarshipQuotaService:
             desc(Application.is_renewal),  # Renewals first
             desc(Application.priority_score),
             asc(Application.submitted_at)
-        ).all()
+        )
+        result = await self.db.execute(stmt)
+        applications = result.scalars().all()
         
         processed_count = 0
         approved_count = 0
@@ -476,7 +564,7 @@ class ScholarshipQuotaService:
                 app.rejection_reason = "Quota limit reached"
                 app.decision_date = datetime.now(timezone.utc)
         
-        self.db.commit()
+        await self.db.commit()
         
         return {
             "processed": processed_count,

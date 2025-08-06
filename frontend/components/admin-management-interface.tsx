@@ -18,6 +18,7 @@ import { Modal } from "@/components/ui/modal"
 import { QuotaManagement } from "@/components/quota-management"
 import { ScholarshipRuleModal } from "@/components/scholarship-rule-modal"
 import { AdminRuleManagement } from "@/components/admin-rule-management"
+import { AdminConfigurationManagement } from "@/components/admin-configuration-management"
 
 
 
@@ -1158,12 +1159,13 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       </div>
 
       <Tabs defaultValue="dashboard" className="space-y-4">
-        <TabsList className={`grid w-full ${hasQuotaPermission ? 'grid-cols-8' : 'grid-cols-7'}`}>
+        <TabsList className={`grid w-full ${hasQuotaPermission ? 'grid-cols-9' : 'grid-cols-8'}`}>
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
           <TabsTrigger value="users">使用者權限</TabsTrigger>
           {hasQuotaPermission && (
             <TabsTrigger value="quota">名額管理</TabsTrigger>
           )}
+          <TabsTrigger value="configurations">獎學金配置</TabsTrigger>
           <TabsTrigger value="rules">審核規則</TabsTrigger>
           <TabsTrigger value="announcements">系統公告</TabsTrigger>
           <TabsTrigger value="email">郵件模板管理</TabsTrigger>
@@ -1387,6 +1389,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
         <TabsContent value="rules" className="space-y-4">
           <AdminRuleManagement scholarshipTypes={scholarshipTypes} />
+        </TabsContent>
+
+        <TabsContent value="configurations" className="space-y-4">
+          <AdminConfigurationManagement scholarshipTypes={scholarshipTypes} />
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">
