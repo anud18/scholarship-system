@@ -25,10 +25,11 @@ from app.core.config import settings
 class UserProfileService:
     """Service for managing user profiles"""
     
-    # Configurable upload settings
-    UPLOAD_BASE_DIR = os.environ.get("UPLOAD_BASE_DIR", "uploads")
-    BANK_DOCUMENTS_DIR = os.environ.get("BANK_DOCUMENTS_DIR", "bank_documents")
-    MAX_FILE_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE", 10 * 1024 * 1024))  # 10MB default
+    # Configurable upload settings from config
+    UPLOAD_BASE_DIR = settings.upload_dir
+    BANK_DOCUMENTS_DIR = "bank_documents"
+    MAX_FILE_SIZE = settings.max_file_size
+    MAX_IMAGE_SIZE = (settings.max_document_image_width, settings.max_document_image_height)
     ALLOWED_MIME_TYPES = {
         'image/jpeg': ['jpg', 'jpeg'],
         'image/png': ['png'],
@@ -223,6 +224,12 @@ class UserProfileService:
             if mime not in self.ALLOWED_MIME_TYPES:
                 raise ValueError(f"Invalid file type: {mime}. Allowed types: {', '.join(self.ALLOWED_MIME_TYPES.keys())}")
             
+            # Virus scanning hook (if enabled)
+            if settings.enable_virus_scan:
+                scan_result = await self._scan_for_virus(image_data, mime)
+                if not scan_result['is_safe']:
+                    raise ValueError(f"File failed security scan: {scan_result.get('reason', 'Unknown threat detected')}")
+            
             # Validate image
             image = Image.open(io.BytesIO(image_data))
             
@@ -233,10 +240,9 @@ class UserProfileService:
                 if mime != expected_mime and not (mime == 'image/jpeg' and expected_mime == 'image/jpeg'):
                     raise ValueError(f"File content does not match declared type")
             
-            # Resize image if needed (max 1200x1200 for documents)
-            max_size = (1200, 1200)
-            if image.size[0] > max_size[0] or image.size[1] > max_size[1]:
-                image.thumbnail(max_size, Image.Resampling.LANCZOS)
+            # Resize image if needed (using configurable size)
+            if image.size[0] > self.MAX_IMAGE_SIZE[0] or image.size[1] > self.MAX_IMAGE_SIZE[1]:
+                image.thumbnail(self.MAX_IMAGE_SIZE, Image.Resampling.LANCZOS)
             
             # Generate unique filename based on validated MIME type
             valid_extensions = self.ALLOWED_MIME_TYPES.get(mime, ['jpg'])
@@ -313,6 +319,70 @@ class UserProfileService:
         )
         
         return True
+    
+    async def _scan_for_virus(self, file_data: bytes, mime_type: str) -> dict:
+        """
+        Virus scanning hook for uploaded files.
+        
+        This is a placeholder implementation that can be replaced with actual
+        virus scanning service integration (e.g., ClamAV, VirusTotal, etc.)
+        
+        Args:
+            file_data: File content as bytes
+            mime_type: MIME type of the file
+            
+        Returns:
+            dict with 'is_safe' (bool) and optional 'reason' (str) if not safe
+        """
+        # Placeholder implementation
+        # In production, integrate with actual virus scanning service
+        
+        if not settings.virus_scan_api_url or not settings.virus_scan_api_key:
+            # If not configured, log warning but allow upload
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("Virus scanning enabled but not configured properly")
+            return {'is_safe': True, 'warning': 'Scanner not configured'}
+        
+        try:
+            # Example integration point for virus scanning service
+            # This would be replaced with actual API call to virus scanner
+            import aiohttp
+            import asyncio
+            
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    'X-API-Key': settings.virus_scan_api_key,
+                    'Content-Type': 'application/octet-stream'
+                }
+                
+                timeout = aiohttp.ClientTimeout(total=settings.virus_scan_timeout)
+                
+                async with session.post(
+                    settings.virus_scan_api_url,
+                    data=file_data,
+                    headers=headers,
+                    timeout=timeout
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        return {
+                            'is_safe': result.get('clean', True),
+                            'reason': result.get('malware_name', None)
+                        }
+                    else:
+                        # Scanner error, log but don't block upload
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.error(f"Virus scanner returned status {response.status}")
+                        return {'is_safe': True, 'warning': 'Scanner error'}
+                        
+        except Exception as e:
+            # Don't block uploads on scanner errors
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Virus scanning failed: {str(e)}")
+            return {'is_safe': True, 'warning': f'Scanner exception: {str(e)}'}
     
     async def get_profile_history(
         self, 

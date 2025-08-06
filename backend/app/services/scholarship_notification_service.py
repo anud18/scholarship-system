@@ -5,8 +5,8 @@ Handles automated notifications for application status changes, reminders, and d
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, or_, select
 
 from app.models.application import Application, ApplicationStatus
 from app.models.user import User
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class ScholarshipNotificationService:
     """Service for managing scholarship-related email notifications"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
         self.email_service = EmailService()
         self.student_service = StudentService()
@@ -32,7 +32,9 @@ class ScholarshipNotificationService:
         """Send notification when application is submitted"""
         try:
             # Get student data from external API and user information
-            user = self.db.query(User).filter(User.id == application.user_id).first()
+            stmt = select(User).where(User.id == application.user_id)
+            result = await self.db.execute(stmt)
+            user = result.scalar_one_or_none()
             if not user:
                 logger.error(f"User not found for application {application.id}")
                 return False
@@ -118,7 +120,9 @@ class ScholarshipNotificationService:
     async def send_status_change_notification(self, application: Application, old_status: str, new_status: str) -> bool:
         """Send notification when application status changes"""
         try:
-            user = self.db.query(User).filter(User.id == application.user_id).first()
+            stmt = select(User).where(User.id == application.user_id)
+            result = await self.db.execute(stmt)
+            user = result.scalar_one_or_none()
             if not user:
                 return False
 
@@ -211,7 +215,7 @@ class ScholarshipNotificationService:
             cutoff_date = datetime.now(timezone.utc) + timedelta(days=days_before)
             
             # Find applications with approaching review deadlines
-            applications = self.db.query(Application).filter(
+            stmt = select(Application).where(
                 and_(
                     Application.review_deadline.isnot(None),
                     Application.review_deadline <= cutoff_date,
@@ -220,14 +224,18 @@ class ScholarshipNotificationService:
                         ApplicationStatus.UNDER_REVIEW.value
                     ])
                 )
-            ).all()
+            )
+            result = await self.db.execute(stmt)
+            applications = result.scalars().all()
             
             sent_count = 0
             failed_count = 0
             
             for application in applications:
                 try:
-                    user = self.db.query(User).filter(User.id == application.user_id).first()
+                    stmt = select(User).where(User.id == application.user_id)
+                    result = await self.db.execute(stmt)
+                    user = result.scalar_one_or_none()
                     if not user:
                         failed_count += 1
                         continue

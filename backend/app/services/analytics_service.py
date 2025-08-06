@@ -5,8 +5,8 @@ Provides comprehensive analytics, reporting, and insights
 
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone, timedelta
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_, case, text, desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, and_, or_, case, text, desc, select
 import json
 
 from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 class ScholarshipAnalyticsService:
     """Service for scholarship application analytics and reporting"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
-    def get_comprehensive_analytics(
+    async def get_comprehensive_analytics(
         self,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
@@ -41,15 +41,16 @@ class ScholarshipAnalyticsService:
                 start_date = end_date - timedelta(days=365)  # Last year
             
             # Base query
-            query = self.db.query(Application).filter(
+            stmt = select(Application).where(
                 Application.created_at >= start_date,
                 Application.created_at <= end_date
             )
             
             if semester:
-                query = query.filter(Application.semester == semester)
+                stmt = stmt.where(Application.semester == semester)
             
-            applications = query.all()
+            result = await self.db.execute(stmt)
+            applications = result.scalars().all()
             
             analytics = {
                 "date_range": {
@@ -350,7 +351,7 @@ class ScholarshipAnalyticsService:
         
         return transitions
     
-    def generate_executive_summary(
+    async def generate_executive_summary(
         self,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
@@ -359,7 +360,7 @@ class ScholarshipAnalyticsService:
         """Generate executive summary report"""
         
         try:
-            analytics = self.get_comprehensive_analytics(start_date, end_date, semester)
+            analytics = await self.get_comprehensive_analytics(start_date, end_date, semester)
             
             # Extract key insights
             overview = analytics["overview"]
@@ -406,7 +407,7 @@ class ScholarshipAnalyticsService:
             logger.error(f"Error generating executive summary: {str(e)}")
             raise
     
-    def get_predictive_insights(
+    async def get_predictive_insights(
         self,
         forecast_months: int = 6
     ) -> Dict[str, Any]:
@@ -417,10 +418,12 @@ class ScholarshipAnalyticsService:
             end_date = datetime.now(timezone.utc)
             start_date = end_date - timedelta(days=365)
             
-            historical_apps = self.db.query(Application).filter(
+            stmt = select(Application).where(
                 Application.created_at >= start_date,
                 Application.created_at <= end_date
-            ).all()
+            )
+            result = await self.db.execute(stmt)
+            historical_apps = result.scalars().all()
             
             # Calculate monthly averages
             monthly_data = {}

@@ -5,8 +5,8 @@ Performs comprehensive checks based on scholarship rules and student data
 
 from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, select
 
 from app.models.scholarship import ScholarshipType, ScholarshipRule
 # Student model removed - student data now fetched from external API
@@ -23,11 +23,11 @@ logger = logging.getLogger(__name__)
 class EligibilityVerificationService:
     """Service for automated eligibility verification"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
         self.student_service = StudentService()
     
-    def verify_student_eligibility(
+    async def verify_student_eligibility(
         self, 
         student_id: int, 
         scholarship_type_id: int, 
@@ -45,9 +45,11 @@ class EligibilityVerificationService:
         try:
             # Fetch student data from external API
             student_data = self.student_service.get_student_info(student_id)
-            scholarship_type = self.db.query(ScholarshipType).filter(
+            stmt = select(ScholarshipType).where(
                 ScholarshipType.id == scholarship_type_id
-            ).first()
+            )
+            result = await self.db.execute(stmt)
+            scholarship_type = result.scalar_one_or_none()
             
             if not student_data or not scholarship_type:
                 return False, ["Student data or scholarship type not found"], {}
@@ -111,7 +113,7 @@ class EligibilityVerificationService:
                 })
             
             # 4. Duplicate application check
-            existing_app = self.db.query(Application).filter(
+            stmt = select(Application).where(
                 and_(
                     Application.student_id == student_id,
                     Application.scholarship_type_id == scholarship_type_id,
@@ -122,7 +124,9 @@ class EligibilityVerificationService:
                         ApplicationStatus.CANCELLED.value
                     ])
                 )
-            ).first()
+            )
+            result = await self.db.execute(stmt)
+            existing_app = result.scalar_one_or_none()
             
             if existing_app:
                 failure_reasons.append(f"Already has an active application ({existing_app.app_id})")
@@ -149,7 +153,7 @@ class EligibilityVerificationService:
                 failure_reasons.extend(academic_details["failures"])
             
             # 6. Scholarship-specific rule validation
-            rules_passed, rules_details = self._validate_scholarship_rules(
+            rules_passed, rules_details = await self._validate_scholarship_rules(
                 student_data, scholarship_type
             )
             verification_results["checks_performed"].extend(rules_details["checks"])
@@ -159,7 +163,7 @@ class EligibilityVerificationService:
                 failure_reasons.extend(rules_details["failures"])
             
             # 7. Check renewal eligibility if applicable
-            renewal_eligible, renewal_details = self._check_renewal_eligibility(
+            renewal_eligible, renewal_details = await self._check_renewal_eligibility(
                 student_id, scholarship_type_id, semester
             )
             verification_results["checks_performed"].extend(renewal_details["checks"])
@@ -263,7 +267,7 @@ class EligibilityVerificationService:
         is_eligible = len(details["failures"]) == 0
         return is_eligible, details
     
-    def _validate_scholarship_rules(
+    async def _validate_scholarship_rules(
         self, 
         student: Dict[str, Any], 
         scholarship_type: ScholarshipType
@@ -276,12 +280,14 @@ class EligibilityVerificationService:
             "failures": []
         }
         
-        rules = self.db.query(ScholarshipRule).filter(
+        stmt = select(ScholarshipRule).where(
             and_(
                 ScholarshipRule.scholarship_type_id == scholarship_type.id,
                 ScholarshipRule.is_active == True
             )
-        ).order_by(ScholarshipRule.priority.desc()).all()
+        ).order_by(ScholarshipRule.priority.desc())
+        result = await self.db.execute(stmt)
+        rules = result.scalars().all()
         
         if not rules:
             details["checks"].append({
@@ -337,7 +343,7 @@ class EligibilityVerificationService:
         is_eligible = len(details["failures"]) == 0
         return is_eligible, details
     
-    def _check_renewal_eligibility(
+    async def _check_renewal_eligibility(
         self, 
         student_id: int, 
         scholarship_type_id: int, 
@@ -352,13 +358,15 @@ class EligibilityVerificationService:
         }
         
         # Look for previous approved applications
-        previous_apps = self.db.query(Application).filter(
+        stmt = select(Application).where(
             and_(
                 Application.student_id == student_id,
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.status == ApplicationStatus.APPROVED.value
             )
-        ).order_by(Application.created_at.desc()).all()
+        ).order_by(Application.created_at.desc())
+        result = await self.db.execute(stmt)
+        previous_apps = result.scalars().all()
         
         if previous_apps:
             details["is_renewal_candidate"] = True
@@ -413,7 +421,7 @@ class EligibilityVerificationService:
         
         return field_mapping.get(field_name)
     
-    def run_batch_eligibility_verification(
+    async def run_batch_eligibility_verification(
         self, 
         scholarship_type_id: int, 
         semester: str,
@@ -449,7 +457,7 @@ class EligibilityVerificationService:
             for student_data in students_data:
                 try:
                     student_id = student_data.get('std_stdcode', '')
-                    is_eligible, failure_reasons, verification_details = self.verify_student_eligibility(
+                    is_eligible, failure_reasons, verification_details = await self.verify_student_eligibility(
                         student_id, scholarship_type_id, semester
                     )
                     

@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     max_file_size: int = 10485760  # 10MB
     allowed_file_types: str = "pdf,jpg,jpeg,png,doc,docx"
     max_files_per_application: int = 5
+    max_document_image_width: int = 1200
+    max_document_image_height: int = 1200
+    
+    # Virus Scanning
+    enable_virus_scan: bool = False
+    virus_scan_api_url: Optional[str] = None
+    virus_scan_api_key: Optional[str] = None
+    virus_scan_timeout: int = 30  # seconds
     
     # MinIO Configuration
     minio_endpoint: str = "localhost:9000"

@@ -879,24 +879,7 @@ async def update_scholarship_configuration(
             flag_modified(config, "whitelist_student_ids")
         
         # Update application periods with proper date parsing
-        from datetime import datetime
-        
-        def parse_date_field(date_string):
-            """Parse date string to datetime object"""
-            if date_string is None or date_string == "":
-                return None
-            if isinstance(date_string, str):
-                try:
-                    # Try parsing ISO format with timezone
-                    if date_string.endswith('Z'):
-                        return datetime.fromisoformat(date_string.replace('Z', '+00:00'))
-                    # Try parsing ISO format
-                    return datetime.fromisoformat(date_string)
-                except ValueError:
-                    # Try parsing other common formats
-                    import dateutil.parser
-                    return dateutil.parser.parse(date_string)
-            return date_string  # Already a datetime object
+        from app.utils.date_utils import parse_date_field
         
         if 'renewal_application_start_date' in config_data:
             config.renewal_application_start_date = parse_date_field(config_data['renewal_application_start_date'])
