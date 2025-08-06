@@ -43,16 +43,34 @@ export function CopyRulesModal({
   const [yearInputMode, setYearInputMode] = useState<"existing" | "custom">("existing")
   const [overwriteExisting, setOverwriteExisting] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleCopy = async () => {
     const finalYear = yearInputMode === "custom" ? parseInt(customYear) : targetYear
-    if (!finalYear || isNaN(finalYear)) return
+    if (!finalYear || isNaN(finalYear)) {
+      setError('請選擇或輸入有效的學年')
+      return
+    }
 
     setIsLoading(true)
+    setError(null) // Clear previous errors
+    
     try {
       await onCopy(finalYear, targetSemester || undefined, overwriteExisting)
       onClose()
-    } catch (error) {
+    } catch (error: any) {
+      // Extract meaningful error message
+      let errorMessage = '複製失敗，請稍後再試'
+      
+      if (error?.message) {
+        errorMessage = error.message
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message
+      }
+      
+      setError(errorMessage)
       console.error('複製失敗:', error)
     } finally {
       setIsLoading(false)
@@ -65,6 +83,7 @@ export function CopyRulesModal({
     setTargetSemester(null)
     setYearInputMode("existing")
     setOverwriteExisting(false)
+    setError(null)
     onClose()
   }
 
@@ -210,6 +229,14 @@ export function CopyRulesModal({
           <p>• 重複檢查基於：規則名稱、類型、條件欄位、運算子和期望值</p>
         </div>
       </div>
+
+      {/* 錯誤訊息 */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md">
+          <p className="text-sm font-medium">複製失敗</p>
+          <p className="text-sm">{error}</p>
+        </div>
+      )}
 
       {/* 操作按鈕 */}
       <div className="flex justify-end gap-2 pt-4 border-t">

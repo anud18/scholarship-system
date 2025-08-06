@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -25,6 +25,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
   const [selectedYear, setSelectedYear] = useState<number | null>(currentROCYear)
   const [selectedSemester, setSelectedSemester] = useState<string | null>("first")
   const [searchTerm, setSearchTerm] = useState("")
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false)
@@ -88,23 +89,36 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
     }
   }, [selectedScholarshipType, selectedYear, selectedSemester])
 
-  // 過濾規則
+  // Debounce search term (400ms delay)
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 400)
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Memoized filtering for better performance
+  const filteredAndSortedRules = useMemo(() => {
     let filtered = rules
 
-    if (searchTerm) {
+    if (debouncedSearchTerm) {
+      const searchLower = debouncedSearchTerm.toLowerCase()
       filtered = filtered.filter(rule => 
-        rule.rule_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (rule.tag && rule.tag.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (rule.description && rule.description.toLowerCase().includes(searchTerm.toLowerCase()))
+        rule.rule_name.toLowerCase().includes(searchLower) ||
+        (rule.tag && rule.tag.toLowerCase().includes(searchLower)) ||
+        (rule.description && rule.description.toLowerCase().includes(searchLower))
       )
     }
 
     // 依照優先級排序 (1 在最上面)
-    filtered.sort((a, b) => a.priority - b.priority)
+    return filtered.sort((a, b) => a.priority - b.priority)
+  }, [rules, debouncedSearchTerm])
 
-    setFilteredRules(filtered)
-  }, [rules, searchTerm])
+  // Update filtered rules when computation changes
+  useEffect(() => {
+    setFilteredRules(filteredAndSortedRules)
+  }, [filteredAndSortedRules])
 
   const loadRules = async () => {
     if (!selectedScholarshipType) return
