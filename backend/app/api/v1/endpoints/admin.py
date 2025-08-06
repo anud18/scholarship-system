@@ -1867,13 +1867,15 @@ async def create_scholarship_rule(
     
     db.add(new_rule)
     await db.commit()
-    await db.refresh(new_rule)
+    # Load relationships in a single query
+    refreshed_rule_stmt = select(ScholarshipRule).options(
+        selectinload(ScholarshipRule.scholarship_type),
+        selectinload(ScholarshipRule.creator),
+        selectinload(ScholarshipRule.updater)
+    ).where(ScholarshipRule.id == new_rule.id)
     
-    # Load relationships
-    await db.refresh(new_rule, ['scholarship_type', 'creator', 'updater'])
-    
-    # Ensure all attributes are loaded in the session context
-    await db.refresh(new_rule)
+    refreshed_result = await db.execute(refreshed_rule_stmt)
+    new_rule = refreshed_result.scalar_one()
     
     rule_response = ScholarshipRuleResponse.model_validate(new_rule)
     rule_response.academic_period_label = new_rule.academic_period_label
@@ -1955,10 +1957,16 @@ async def update_scholarship_rule(
         setattr(rule, field, value)
     
     await db.commit()
-    await db.refresh(rule, ['scholarship_type', 'creator', 'updater'])
     
-    # Ensure all attributes are loaded in the session context
-    await db.refresh(rule)
+    # Load relationships in a single query
+    refreshed_rule_stmt = select(ScholarshipRule).options(
+        selectinload(ScholarshipRule.scholarship_type),
+        selectinload(ScholarshipRule.creator),
+        selectinload(ScholarshipRule.updater)
+    ).where(ScholarshipRule.id == rule.id)
+    
+    refreshed_result = await db.execute(refreshed_rule_stmt)
+    rule = refreshed_result.scalar_one()
     
     rule_response = ScholarshipRuleResponse.model_validate(rule)
     rule_response.academic_period_label = rule.academic_period_label
@@ -2091,18 +2099,26 @@ async def copy_rules_between_periods(
     db.add_all(new_rules)
     await db.commit()
     
-    # Refresh and prepare response
-    for rule in new_rules:
-        await db.refresh(rule, ['scholarship_type'])
-    
-    rule_responses = []
-    for rule in new_rules:
-        # Ensure all attributes are loaded in the session context
-        await db.refresh(rule)
+    # Load all relationships in a single batch query
+    if new_rules:
+        rule_ids = [rule.id for rule in new_rules]
+        refreshed_rules_stmt = select(ScholarshipRule).options(
+            selectinload(ScholarshipRule.scholarship_type),
+            selectinload(ScholarshipRule.creator),
+            selectinload(ScholarshipRule.updater)
+        ).where(ScholarshipRule.id.in_(rule_ids))
         
-        rule_response = ScholarshipRuleResponse.model_validate(rule)
-        rule_response.academic_period_label = rule.academic_period_label
-        rule_responses.append(rule_response)
+        refreshed_result = await db.execute(refreshed_rules_stmt)
+        refreshed_rules = refreshed_result.scalars().all()
+        
+        # Create response objects
+        rule_responses = []
+        for rule in refreshed_rules:
+            rule_response = ScholarshipRuleResponse.model_validate(rule)
+            rule_response.academic_period_label = rule.academic_period_label
+            rule_responses.append(rule_response)
+    else:
+        rule_responses = []
     
     # Build response message
     if skipped_rules > 0:
@@ -2305,18 +2321,26 @@ async def create_rule_template(
     db.add_all(template_rules)
     await db.commit()
     
-    # Refresh and prepare response
-    for rule in template_rules:
-        await db.refresh(rule, ['scholarship_type'])
-    
-    template_responses = []
-    for rule in template_rules:
-        # Ensure all attributes are loaded in the session context
-        await db.refresh(rule)
+    # Load all relationships in a single batch query
+    if template_rules:
+        rule_ids = [rule.id for rule in template_rules]
+        refreshed_rules_stmt = select(ScholarshipRule).options(
+            selectinload(ScholarshipRule.scholarship_type),
+            selectinload(ScholarshipRule.creator),
+            selectinload(ScholarshipRule.updater)
+        ).where(ScholarshipRule.id.in_(rule_ids))
         
-        rule_response = ScholarshipRuleResponse.model_validate(rule)
-        rule_response.academic_period_label = rule.academic_period_label
-        template_responses.append(rule_response)
+        refreshed_result = await db.execute(refreshed_rules_stmt)
+        refreshed_rules = refreshed_result.scalars().all()
+        
+        # Create response objects
+        template_responses = []
+        for rule in refreshed_rules:
+            rule_response = ScholarshipRuleResponse.model_validate(rule)
+            rule_response.academic_period_label = rule.academic_period_label
+            template_responses.append(rule_response)
+    else:
+        template_responses = []
     
     return ApiResponse(
         success=True,
@@ -2416,18 +2440,26 @@ async def apply_rule_template(
     db.add_all(new_rules)
     await db.commit()
     
-    # Refresh and prepare response
-    for rule in new_rules:
-        await db.refresh(rule, ['scholarship_type'])
-    
-    rule_responses = []
-    for rule in new_rules:
-        # Ensure all attributes are loaded in the session context
-        await db.refresh(rule)
+    # Load all relationships in a single batch query
+    if new_rules:
+        rule_ids = [rule.id for rule in new_rules]
+        refreshed_rules_stmt = select(ScholarshipRule).options(
+            selectinload(ScholarshipRule.scholarship_type),
+            selectinload(ScholarshipRule.creator),
+            selectinload(ScholarshipRule.updater)
+        ).where(ScholarshipRule.id.in_(rule_ids))
         
-        rule_response = ScholarshipRuleResponse.model_validate(rule)
-        rule_response.academic_period_label = rule.academic_period_label
-        rule_responses.append(rule_response)
+        refreshed_result = await db.execute(refreshed_rules_stmt)
+        refreshed_rules = refreshed_result.scalars().all()
+        
+        # Create response objects
+        rule_responses = []
+        for rule in refreshed_rules:
+            rule_response = ScholarshipRuleResponse.model_validate(rule)
+            rule_response.academic_period_label = rule.academic_period_label
+            rule_responses.append(rule_response)
+    else:
+        rule_responses = []
     
     return ApiResponse(
         success=True,

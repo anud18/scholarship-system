@@ -61,7 +61,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
     fetchAvailableYears()
   }, [])
 
-  // 當選擇的獎學金類型改變時，處理學期設置並載入規則
+  // 當選擇的獎學金類型改變時，處理學期設置
   useEffect(() => {
     if (selectedScholarshipType) {
       // 如果是學年制獎學金，清除學期選擇
@@ -71,7 +71,20 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
         // 如果是學期制但沒有選擇學期，設置預設值
         setSelectedSemester('first')
       }
-      loadRules()
+    }
+  }, [selectedScholarshipType])
+
+  // 當獎學金類型、學年或學期改變時載入規則（確保狀態已穩定）
+  useEffect(() => {
+    if (selectedScholarshipType && selectedYear) {
+      // 對於學年制獎學金，不需要等待學期狀態
+      if (selectedScholarshipType.application_cycle === 'yearly') {
+        loadRules()
+      } 
+      // 對於學期制獎學金，需要確保有選擇學期
+      else if (selectedScholarshipType.application_cycle === 'semester' && selectedSemester) {
+        loadRules()
+      }
     }
   }, [selectedScholarshipType, selectedYear, selectedSemester])
 

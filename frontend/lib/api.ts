@@ -606,16 +606,6 @@ export interface Workflow {
   updated_at: string
 }
 
-export interface ScholarshipRule {
-  id: string
-  name: string
-  type: string
-  criteria: Record<string, any>
-  active: boolean
-  description?: string
-  created_at: string
-  updated_at: string
-}
 
 export interface SystemStats {
   totalUsers: number
