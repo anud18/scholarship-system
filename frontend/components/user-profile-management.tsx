@@ -54,12 +54,10 @@ interface UserProfile {
   bank_code?: string
   account_number?: string
   bank_document_photo_url?: string
+  advisor_name?: string
   advisor_email?: string
   advisor_nycu_id?: string
   preferred_language: string
-  bio?: string
-  interests?: string
-  social_links?: Record<string, string>
   has_complete_bank_info: boolean
   has_advisor_info: boolean
   profile_completion_percentage: number
@@ -207,6 +205,7 @@ export default function UserProfileManagement() {
         case 'advisor':
           endpoint = '/user-profiles/me/advisor-info'
           data = {
+            advisor_name: editingProfile.advisor_name,
             advisor_email: editingProfile.advisor_email,
             advisor_nycu_id: editingProfile.advisor_nycu_id,
             change_reason: "使用者更新指導教授資訊"
@@ -678,7 +677,19 @@ export default function UserProfileManagement() {
             <CardContent className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="advisor_email">指導教授Email</Label>
+                  <Label htmlFor="advisor_name">指導教授姓名</Label>
+                  <Input
+                    id="advisor_name"
+                    placeholder="例：王小明"
+                    value={editingProfile.advisor_name || ''}
+                    onChange={(e) => setEditingProfile({
+                      ...editingProfile,
+                      advisor_name: e.target.value
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="advisor_email">指導教授 Email</Label>
                   <Input
                     id="advisor_email"
                     type="email"
@@ -691,7 +702,7 @@ export default function UserProfileManagement() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="advisor_nycu_id">指導教授NYCU ID</Label>
+                  <Label htmlFor="advisor_nycu_id">指導教授學校工號</Label>
                   <Input
                     id="advisor_nycu_id"
                     placeholder="例：professor123"
