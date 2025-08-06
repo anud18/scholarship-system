@@ -20,7 +20,9 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
   const [rules, setRules] = useState<ScholarshipRule[]>([])
   const [filteredRules, setFilteredRules] = useState<ScholarshipRule[]>([])
   const [selectedScholarshipType, setSelectedScholarshipType] = useState<ScholarshipType | null>(null)
-  const [selectedYear, setSelectedYear] = useState<number | null>(113)
+  // Calculate current ROC year dynamically (current year - 1911)
+  const currentROCYear = new Date().getFullYear() - 1911
+  const [selectedYear, setSelectedYear] = useState<number | null>(currentROCYear)
   const [selectedSemester, setSelectedSemester] = useState<string | null>("first")
   const [searchTerm, setSearchTerm] = useState("")
   const [availableYears, setAvailableYears] = useState<number[]>([])
@@ -51,7 +53,9 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
         }
       } catch (error) {
         console.error('獲取可用年份失敗:', error)
-        throw error
+        // Set a default range of years if API fails
+        const currentYear = new Date().getFullYear() - 1911
+        setAvailableYears([currentYear - 2, currentYear - 1, currentYear, currentYear + 1])
       }
     }
     fetchAvailableYears()
@@ -113,7 +117,10 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
       }
     } catch (error) {
       console.error('載入規則失敗:', error)
-      throw error
+      alert('載入規則失敗: ' + (error as Error).message)
+      // Set empty rules on error
+      setRules([])
+      setFilteredRules([])
     } finally {
       setLoading(false)
     }
@@ -154,7 +161,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
       await loadRules()
     } catch (error) {
       console.error('提交規則失敗:', error)
-      throw error
+      alert('提交規則失敗: ' + (error as Error).message)
     }
   }
 
@@ -485,7 +492,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
           onClose={() => setIsRuleModalOpen(false)}
           rule={selectedRule}
           scholarshipTypeId={selectedScholarshipType.id}
-          academicYear={selectedYear || 113}
+          academicYear={selectedYear || currentROCYear}
           semester={selectedScholarshipType.application_cycle === 'semester' ? selectedSemester : null}
           onSubmit={handleRuleSubmit}
         />

@@ -337,13 +337,25 @@ class ScholarshipRuleFilter(BaseModel):
 
 class RuleCopyRequest(BaseModel):
     """Schema for copying rules between periods"""
-    source_academic_year: Optional[int] = Field(None, ge=100, le=200, description="Source academic year")
+    source_academic_year: Optional[int] = Field(None, description="Source academic year")
     source_semester: Optional[Semester] = Field(None, description="Source semester")
-    target_academic_year: int = Field(..., ge=100, le=200, description="Target academic year")
+    target_academic_year: int = Field(..., description="Target academic year")
     target_semester: Optional[Semester] = Field(None, description="Target semester")
     scholarship_type_ids: Optional[List[int]] = Field(None, description="Scholarship type IDs to copy")
     rule_ids: Optional[List[int]] = Field(None, description="Specific rule IDs to copy")
     overwrite_existing: bool = Field(False, description="Whether to overwrite existing rules")
+    
+    @field_validator('source_academic_year', 'target_academic_year')
+    @classmethod
+    def validate_academic_years(cls, v):
+        if v is not None:
+            from datetime import datetime
+            current_roc_year = datetime.now().year - 1911
+            min_year = current_roc_year - 10
+            max_year = current_roc_year + 5
+            if v < min_year or v > max_year:
+                raise ValueError(f"Academic year must be between {min_year} and {max_year} (current year: {current_roc_year})")
+        return v
     
     @field_validator('scholarship_type_ids')
     @classmethod
@@ -379,9 +391,20 @@ class ApplyTemplateRequest(BaseModel):
     """Schema for applying rule templates"""
     template_id: int = Field(..., ge=1, description="Template rule ID")
     scholarship_type_id: int = Field(..., ge=1, description="Target scholarship type ID")
-    academic_year: int = Field(..., ge=100, le=200, description="Target academic year")
+    academic_year: int = Field(..., description="Target academic year")
     semester: Optional[Semester] = Field(None, description="Target semester")
     overwrite_existing: bool = Field(False, description="Whether to overwrite existing rules")
+    
+    @field_validator('academic_year')
+    @classmethod
+    def validate_academic_year(cls, v):
+        from datetime import datetime
+        current_roc_year = datetime.now().year - 1911
+        min_year = current_roc_year - 10
+        max_year = current_roc_year + 5
+        if v < min_year or v > max_year:
+            raise ValueError(f"Academic year must be between {min_year} and {max_year} (current year: {current_roc_year})")
+        return v
 
 
 class BulkRuleOperation(BaseModel):

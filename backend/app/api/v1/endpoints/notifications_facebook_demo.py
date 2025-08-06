@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
-from app.core.deps import get_db, get_current_user
+from app.core.deps import get_db
+from app.core.security import require_admin
 from app.models.user import User
 from app.models.notification import NotificationType, NotificationPriority, NotificationChannel
 from app.services.notification_service import NotificationService
@@ -42,7 +43,7 @@ class PreferenceUpdateRequest(BaseModel):
 async def create_facebook_style_notification(
     request: CreateNotificationRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Create a Facebook-style notification with enhanced features"""
     service = NotificationService(db)
@@ -85,7 +86,7 @@ async def create_facebook_style_notification(
 async def create_batch_notifications(
     request: BatchNotificationRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Create batched notifications for multiple users"""
     service = NotificationService(db)
@@ -116,7 +117,7 @@ async def get_aggregated_notifications(
     group_key: str,
     max_age_hours: int = 24,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Get Facebook-style aggregated notifications"""
     service = NotificationService(db)
@@ -137,7 +138,7 @@ async def get_aggregated_notifications(
 async def update_notification_preferences(
     request: PreferenceUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Update user notification preferences"""
     service = NotificationService(db)
@@ -179,7 +180,7 @@ async def update_notification_preferences(
 async def get_notification_analytics(
     days: int = 30,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Get Facebook-style notification analytics"""
     service = NotificationService(db)
@@ -200,7 +201,7 @@ async def notify_new_scholarship_demo(
     user_ids: List[int],
     use_batching: bool = True,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Demo: Notify users about new scholarship opportunities"""
     service = NotificationService(db)
@@ -230,7 +231,7 @@ async def notify_new_scholarship_demo(
 async def batch_application_status_updates_demo(
     application_updates: List[Dict[str, Any]],
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Demo: Send batched application status updates"""
     service = NotificationService(db)
@@ -246,7 +247,7 @@ async def batch_application_status_updates_demo(
 @router.post("/queue/process")
 async def process_notification_queue_demo(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin)
 ):
     """Demo: Process notification queue (normally a background task)"""
     service = NotificationService(db)

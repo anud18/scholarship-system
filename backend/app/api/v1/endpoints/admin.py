@@ -1975,54 +1975,30 @@ async def copy_rules_between_periods(
 ):
     """Copy rules between academic periods"""
     
-    logger.info(f"[COPY RULES] Starting copy process with request: {copy_request.dict()}")
-    
     # Build source query
     stmt = select(ScholarshipRule)
     
     # Filter by source period
     if copy_request.source_academic_year:
-        logger.info(f"[COPY RULES] Filtering by source academic year: {copy_request.source_academic_year}")
         stmt = stmt.where(ScholarshipRule.academic_year == copy_request.source_academic_year)
     
     if copy_request.source_semester:
         # source_semester is already a Semester enum from the schema
-        logger.info(f"[COPY RULES] Filtering by source semester: {copy_request.source_semester}")
         stmt = stmt.where(ScholarshipRule.semester == copy_request.source_semester)
     
     # Filter by scholarship types if specified
     if copy_request.scholarship_type_ids:
-        logger.info(f"[COPY RULES] Filtering by scholarship type IDs: {copy_request.scholarship_type_ids}")
         stmt = stmt.where(ScholarshipRule.scholarship_type_id.in_(copy_request.scholarship_type_ids))
     
     # Filter by specific rules if specified
     if copy_request.rule_ids:
-        logger.info(f"[COPY RULES] Filtering by specific rule IDs: {copy_request.rule_ids}")
-        
-        # Debug: Check if these rules exist at all
-        debug_stmt = select(ScholarshipRule).where(ScholarshipRule.id.in_(copy_request.rule_ids))
-        debug_result = await db.execute(debug_stmt)
-        debug_rules = debug_result.scalars().all()
-        logger.info(f"[COPY RULES DEBUG] Found {len(debug_rules)} rules with IDs {copy_request.rule_ids}")
-        for rule in debug_rules:
-            logger.info(f"[COPY RULES DEBUG] Rule ID={rule.id}, Year={rule.academic_year}, Semester={rule.semester}, IsTemplate={rule.is_template}")
-        
         stmt = stmt.where(ScholarshipRule.id.in_(copy_request.rule_ids))
     
     # Exclude templates
     stmt = stmt.where(ScholarshipRule.is_template == False)
-    logger.info(f"[COPY RULES] Excluding templates from query")
-    
-    # Log the full query for debugging
-    logger.info(f"[COPY RULES] Executing query: {stmt}")
     
     result = await db.execute(stmt)
     source_rules = result.scalars().all()
-    
-    logger.info(f"[COPY RULES] Found {len(source_rules)} source rules")
-    if source_rules:
-        for rule in source_rules[:3]:  # Log first 3 rules for debugging
-            logger.info(f"[COPY RULES] Sample rule: ID={rule.id}, Name={rule.rule_name}, Year={rule.academic_year}, Semester={rule.semester}")
     
     if not source_rules:
         return ApiResponse(
@@ -2059,11 +2035,6 @@ async def copy_rules_between_periods(
             
             if existing_rule:
                 # Skip this rule as it already exists
-                logger.info(f"[COPY RULES] Skipping duplicate rule:")
-                logger.info(f"  Source rule: {source_rule.rule_name} (ID: {source_rule.id})")
-                logger.info(f"  Target year/semester: {copy_request.target_academic_year}/{copy_request.target_semester}")
-                logger.info(f"  Existing rule: {existing_rule.rule_name} (ID: {existing_rule.id})")
-                logger.info(f"  Existing year/semester: {existing_rule.academic_year}/{existing_rule.semester}")
                 skipped_rules += 1
                 continue
         
@@ -2098,9 +2069,6 @@ async def copy_rules_between_periods(
         message = f"Successfully copied {len(new_rules)} rules to target period. Skipped {skipped_rules} duplicate rules."
     else:
         message = f"Successfully copied {len(new_rules)} rules to target period."
-    
-    logger.info(f"[COPY RULES] Copy complete: {len(new_rules)} copied, {skipped_rules} skipped")
-    logger.info(f"[COPY RULES] Response message: {message}")
     
     return ApiResponse(
         success=True,
