@@ -4,15 +4,13 @@ Handles business logic for dynamic scholarship configurations
 """
 
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, or_, desc, func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import selectinload
 
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import ApplicationCycle, QuotaManagementMode
-from app.models.user import User
+from app.models.enums import QuotaManagementMode
 
 
 class ScholarshipConfigurationService:
@@ -29,7 +27,7 @@ class ScholarshipConfigurationService:
         stmt = select(ScholarshipConfiguration).options(
             selectinload(ScholarshipConfiguration.scholarship_type)
         ).filter(
-            ScholarshipConfiguration.is_active == True
+            ScholarshipConfiguration.is_active.is_(True)
         )
         
         if scholarship_type_id:
@@ -229,7 +227,7 @@ class ScholarshipConfigurationService:
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
                 ScholarshipConfiguration.semester == semester,
-                ScholarshipConfiguration.is_active == True
+                ScholarshipConfiguration.is_active.is_(True)
             )
         )
         result = await self.db.execute(stmt)
@@ -273,8 +271,8 @@ class ScholarshipConfigurationService:
         )
         
         self.db.add(new_config)
-        self.db.commit()
-        self.db.refresh(new_config)
+        await self.db.commit()
+        await self.db.refresh(new_config)
         
         return new_config
     
@@ -312,8 +310,8 @@ class ScholarshipConfigurationService:
         
         config.updated_by = updated_by_user_id
         
-        self.db.commit()
-        self.db.refresh(config)
+        await self.db.commit()
+        await self.db.refresh(config)
         
         return config
     
@@ -340,8 +338,8 @@ class ScholarshipConfigurationService:
         config.is_active = False
         config.updated_by = updated_by_user_id
         
-        self.db.commit()
-        self.db.refresh(config)
+        await self.db.commit()
+        await self.db.refresh(config)
         
         return config
     
@@ -371,7 +369,7 @@ class ScholarshipConfigurationService:
                 ScholarshipConfiguration.scholarship_type_id == source_config.scholarship_type_id,
                 ScholarshipConfiguration.academic_year == target_academic_year,
                 ScholarshipConfiguration.semester == target_semester,
-                ScholarshipConfiguration.is_active == True
+                ScholarshipConfiguration.is_active.is_(True)
             )
         )
         result = await self.db.execute(stmt)
@@ -400,8 +398,8 @@ class ScholarshipConfigurationService:
         )
         
         self.db.add(new_config)
-        self.db.commit()
-        self.db.refresh(new_config)
+        await self.db.commit()
+        await self.db.refresh(new_config)
         
         return new_config
     
@@ -417,10 +415,10 @@ class ScholarshipConfigurationService:
         stmt = select(ScholarshipConfiguration)
         
         if scholarship_type_id:
-            query = query.filter(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
+            stmt = stmt.where(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
         
         if academic_year:
-            query = query.filter(ScholarshipConfiguration.academic_year == academic_year)
+            stmt = stmt.where(ScholarshipConfiguration.academic_year == academic_year)
         
         if semester:
             if semester == "first":
@@ -430,7 +428,7 @@ class ScholarshipConfigurationService:
                 from app.models.enums import Semester
                 stmt = stmt.where(ScholarshipConfiguration.semester == Semester.SECOND)
         
-        stmt = stmt.where(ScholarshipConfiguration.is_active == is_active)
+        stmt = stmt.where(ScholarshipConfiguration.is_active.is_(is_active))
         stmt = stmt.order_by(
             ScholarshipConfiguration.academic_year.desc(),
             ScholarshipConfiguration.semester.desc()
@@ -605,8 +603,8 @@ class ScholarshipConfigurationService:
         original_config.updated_by = user_id
         
         self.db.add(new_config)
-        self.db.commit()
-        self.db.refresh(new_config)
+        await self.db.commit()
+        await self.db.refresh(new_config)
         
         return new_config
     
@@ -628,7 +626,7 @@ class ScholarshipConfigurationService:
                     continue
                 
                 # Check if exists
-                existing = self.get_configuration_by_code(config_code)
+                existing = await self.get_configuration_by_code(config_code)
                 if existing and not overwrite_existing:
                     errors.append(f"Configuration {i+1}: Code '{config_code}' already exists")
                     continue
@@ -639,9 +637,11 @@ class ScholarshipConfigurationService:
                     errors.append(f"Configuration {i+1}: Missing scholarship_type_id")
                     continue
                 
-                scholarship_type = self.db.query(ScholarshipType).filter(
+                stmt = select(ScholarshipType).where(
                     ScholarshipType.id == scholarship_type_id
-                ).first()
+                )
+                result = await self.db.execute(stmt)
+                scholarship_type = result.scalar_one_or_none()
                 
                 if not scholarship_type:
                     errors.append(f"Configuration {i+1}: Scholarship type {scholarship_type_id} not found")
@@ -676,8 +676,8 @@ class ScholarshipConfigurationService:
                 errors.append(f"Configuration {i+1}: {str(e)}")
         
         if imported_configs and not errors:
-            self.db.commit()
+            await self.db.commit()
             for config in imported_configs:
-                self.db.refresh(config)
+                await self.db.refresh(config)
         
         return imported_configs, errors
