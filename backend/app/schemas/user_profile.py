@@ -1,0 +1,148 @@
+"""
+User Profile schemas for API requests and responses
+"""
+
+from datetime import datetime
+from typing import Optional, Dict, Any
+from pydantic import BaseModel, EmailStr, Field, HttpUrl
+
+
+class BankInfoBase(BaseModel):
+    """Base bank information schema"""
+    bank_code: Optional[str] = Field(None, max_length=20, description="銀行代碼")
+    account_number: Optional[str] = Field(None, max_length=50, description="帳戶號碼")
+
+
+class AdvisorInfoBase(BaseModel):
+    """Base advisor information schema"""
+    advisor_email: Optional[EmailStr] = Field(None, description="指導教授Email")
+    advisor_nycu_id: Optional[str] = Field(None, max_length=20, description="指導教授NYCU ID")
+
+
+
+
+class PersonalInfoBase(BaseModel):
+    """Base personal information schema"""
+    preferred_language: Optional[str] = Field("zh-TW", max_length=10, description="慣用語言")
+    bio: Optional[str] = Field(None, description="個人簡介")
+    interests: Optional[str] = Field(None, description="興趣專長")
+    social_links: Optional[Dict[str, str]] = Field(None, description="社群媒體連結")
+
+
+class UserProfileCreate(BaseModel):
+    """User profile creation schema"""
+    # Bank information
+    bank_code: Optional[str] = None
+    account_number: Optional[str] = None
+    
+    # Advisor information
+    advisor_email: Optional[EmailStr] = None
+    advisor_nycu_id: Optional[str] = None
+    
+    # Personal information
+    preferred_language: str = "zh-TW"
+    bio: Optional[str] = None
+    interests: Optional[str] = None
+    social_links: Optional[Dict[str, str]] = None
+    
+    # Privacy settings
+    privacy_settings: Optional[Dict[str, Any]] = None
+    custom_fields: Optional[Dict[str, Any]] = None
+
+
+class UserProfileUpdate(BaseModel):
+    """User profile update schema"""
+    # Bank information
+    bank_code: Optional[str] = Field(None, max_length=20)
+    account_number: Optional[str] = Field(None, max_length=50)
+    
+    # Advisor information
+    advisor_email: Optional[EmailStr] = None
+    advisor_nycu_id: Optional[str] = Field(None, max_length=20)
+    
+    # Personal information
+    preferred_language: Optional[str] = Field(None, max_length=10)
+    bio: Optional[str] = None
+    interests: Optional[str] = None
+    social_links: Optional[Dict[str, str]] = None
+    
+    # Privacy settings
+    privacy_settings: Optional[Dict[str, Any]] = None
+    custom_fields: Optional[Dict[str, Any]] = None
+
+
+class UserProfileResponse(BaseModel):
+    """User profile response schema"""
+    id: int
+    user_id: int
+    
+    # Bank information
+    bank_code: Optional[str] = None
+    account_number: Optional[str] = None
+    bank_document_photo_url: Optional[str] = None  # Bank document photo
+    
+    # Advisor information
+    advisor_email: Optional[str] = None
+    advisor_nycu_id: Optional[str] = None
+    
+    # Personal information
+    preferred_language: str
+    bio: Optional[str] = None
+    interests: Optional[str] = None
+    social_links: Optional[Dict[str, str]] = None
+    
+    # Metadata
+    privacy_settings: Optional[Dict[str, Any]] = None
+    custom_fields: Optional[Dict[str, Any]] = None
+    has_complete_bank_info: bool
+    has_advisor_info: bool
+    profile_completion_percentage: int
+    
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class CompleteUserProfileResponse(BaseModel):
+    """Complete user profile including read-only data from User model"""
+    # Read-only user data (from API)
+    user_info: Dict[str, Any]
+    
+    # Editable profile data
+    profile: Optional[UserProfileResponse] = None
+    
+    # Student-specific data (if user is a student)
+    student_info: Optional[Dict[str, Any]] = None
+
+
+class BankDocumentPhotoUpload(BaseModel):
+    """Bank document photo upload schema"""
+    photo_data: str = Field(..., description="Base64 encoded image data")
+    filename: str = Field(..., description="Original filename")
+    content_type: str = Field(..., description="MIME type of the image")
+
+
+class ProfileHistoryResponse(BaseModel):
+    """Profile change history response schema"""
+    id: int
+    user_id: int
+    field_name: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    change_reason: Optional[str] = None
+    changed_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class BankInfoUpdate(BankInfoBase):
+    """Schema for updating just bank information"""
+    change_reason: Optional[str] = Field(None, description="更新銀行資訊的原因")
+
+
+class AdvisorInfoUpdate(AdvisorInfoBase):
+    """Schema for updating just advisor information"""
+    change_reason: Optional[str] = Field(None, description="更新指導教授資訊的原因")

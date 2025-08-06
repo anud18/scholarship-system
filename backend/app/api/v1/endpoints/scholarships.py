@@ -155,36 +155,36 @@ async def get_scholarship_eligibility(
         )
 
     scholarship_service = ScholarshipService(db)
-    eligible_scholarships = await scholarship_service.get_eligible_scholarships(student)
+    eligible_scholarships = await scholarship_service.get_eligible_scholarships(student, current_user.id)
     
-    # Convert ScholarshipType objects to EligibleScholarshipResponse
+    # Convert scholarship dictionaries to EligibleScholarshipResponse
     response_data = []
     for scholarship in eligible_scholarships:
         response_item = EligibleScholarshipResponse(
-            id=scholarship.id,
-            code=scholarship.code,
-            name=scholarship.name,
-            name_en=scholarship.name_en or scholarship.name,
-            eligible_sub_types=scholarship.sub_type_list or ["general"],
-            category=scholarship.category,
-            academic_year=scholarship.academic_year,
-            semester=scholarship.semester.value if hasattr(scholarship.semester, 'value') else scholarship.semester,
-            application_cycle=scholarship.application_cycle.value if hasattr(scholarship.application_cycle, 'value') else scholarship.application_cycle,
-            description=scholarship.description,
-            description_en=scholarship.description_en,
-            amount=scholarship.amount,
-            currency=scholarship.currency,
-            application_start_date=scholarship.application_start_date,
-            application_end_date=scholarship.application_end_date,
-            professor_review_start=scholarship.professor_review_start,
-            professor_review_end=scholarship.professor_review_end,
-            college_review_start=scholarship.college_review_start,
-            college_review_end=scholarship.college_review_end,
-            sub_type_selection_mode=scholarship.sub_type_selection_mode.value if hasattr(scholarship.sub_type_selection_mode, 'value') else scholarship.sub_type_selection_mode,
-            passed=[],  # TODO: Implement rule validation
-            warnings=[],  # TODO: Implement rule validation
-            errors=[],  # TODO: Implement rule validation
-            created_at=scholarship.created_at
+            id=scholarship['id'],
+            code=scholarship['code'],
+            name=scholarship['name'],
+            name_en=scholarship.get('name_en') or scholarship['name'],
+            eligible_sub_types=scholarship.get('sub_type_list', []) or ["general"],
+            category=scholarship['category'],
+            academic_year=scholarship.get('academic_year'),
+            semester=scholarship.get('semester'),
+            application_cycle=scholarship.get('application_cycle', 'semester'),
+            description=scholarship.get('description'),
+            description_en=scholarship.get('description_en'),
+            amount=scholarship.get('amount', 0),
+            currency=scholarship.get('currency', 'TWD'),
+            application_start_date=scholarship.get('application_start_date'),
+            application_end_date=scholarship.get('application_end_date'),
+            professor_review_start=scholarship.get('professor_review_start'),
+            professor_review_end=scholarship.get('professor_review_end'),
+            college_review_start=scholarship.get('college_review_start'),
+            college_review_end=scholarship.get('college_review_end'),
+            sub_type_selection_mode=scholarship.get('sub_type_selection_mode', 'single'),
+            passed=[],  # Rules passed - could be populated from eligibility check
+            warnings=[],  # Warning messages - could be populated from eligibility check
+            errors=[],  # Error messages - could be populated from eligibility check
+            created_at=scholarship.get('created_at')
         )
         response_data.append(response_item)
     

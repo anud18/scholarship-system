@@ -694,3 +694,560 @@ async def get_quota_overview(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve quota overview: {str(e)}"
         )
+
+
+# CRUD Endpoints for ScholarshipConfiguration Management
+
+@router.post("/configurations/", response_model=ApiResponse)
+async def create_scholarship_configuration(
+    config_data: Dict[str, Any] = Body(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new scholarship configuration"""
+    
+    try:
+        # Get accessible scholarship IDs
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+        
+        scholarship_type_id = config_data.get('scholarship_type_id')
+        if not scholarship_type_id or scholarship_type_id not in accessible_scholarship_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="您沒有管理此獎學金的權限"
+            )
+        
+        # Check if configuration already exists for this period
+        existing_stmt = select(ScholarshipConfiguration).where(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                ScholarshipConfiguration.academic_year == config_data.get('academic_year'),
+                ScholarshipConfiguration.semester == config_data.get('semester'),
+                ScholarshipConfiguration.is_active == True
+            )
+        )
+        existing_result = await db.execute(existing_stmt)
+        existing_config = existing_result.scalar_one_or_none()
+        
+        if existing_config:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="此學年度/學期已存在配置"
+            )
+        
+        # Create new configuration
+        new_config = ScholarshipConfiguration(
+            scholarship_type_id=scholarship_type_id,
+            academic_year=config_data['academic_year'],
+            semester=config_data.get('semester'),
+            config_name=config_data['config_name'],
+            config_code=config_data['config_code'],
+            description=config_data.get('description'),
+            description_en=config_data.get('description_en'),
+            amount=config_data['amount'],
+            currency=config_data.get('currency', 'TWD'),
+            whitelist_student_ids=config_data.get('whitelist_student_ids', {}),
+            renewal_application_start_date=config_data.get('renewal_application_start_date'),
+            renewal_application_end_date=config_data.get('renewal_application_end_date'),
+            application_start_date=config_data.get('application_start_date'),
+            application_end_date=config_data.get('application_end_date'),
+            renewal_professor_review_start=config_data.get('renewal_professor_review_start'),
+            renewal_professor_review_end=config_data.get('renewal_professor_review_end'),
+            renewal_college_review_start=config_data.get('renewal_college_review_start'),
+            renewal_college_review_end=config_data.get('renewal_college_review_end'),
+            requires_professor_recommendation=config_data.get('requires_professor_recommendation', False),
+            professor_review_start=config_data.get('professor_review_start'),
+            professor_review_end=config_data.get('professor_review_end'),
+            requires_college_review=config_data.get('requires_college_review', False),
+            college_review_start=config_data.get('college_review_start'),
+            college_review_end=config_data.get('college_review_end'),
+            review_deadline=config_data.get('review_deadline'),
+            is_active=config_data.get('is_active', True),
+            effective_start_date=config_data.get('effective_start_date'),
+            effective_end_date=config_data.get('effective_end_date'),
+            version=config_data.get('version', '1.0'),
+            created_by=current_user.id
+        )
+        
+        db.add(new_config)
+        await db.commit()
+        await db.refresh(new_config)
+        
+        return ApiResponse(
+            success=True,
+            message="獎學金配置建立成功",
+            data={"id": new_config.id, "config_code": new_config.config_code}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create configuration: {str(e)}"
+        )
+
+
+@router.get("/configurations/{config_id}", response_model=ApiResponse)
+async def get_scholarship_configuration(
+    config_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific scholarship configuration by ID"""
+    
+    try:
+        # Get accessible scholarship IDs
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+        
+        # Get configuration with scholarship type
+        stmt = select(ScholarshipConfiguration).where(
+            and_(
+                ScholarshipConfiguration.id == config_id,
+                ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids)
+            )
+        ).options(selectinload(ScholarshipConfiguration.scholarship_type))
+        
+        result = await db.execute(stmt)
+        config = result.scalar_one_or_none()
+        
+        if not config:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="配置不存在或您沒有存取權限"
+            )
+        
+        # Build response data
+        config_data = {
+            "id": config.id,
+            "scholarship_type_id": config.scholarship_type_id,
+            "scholarship_type_name": config.scholarship_type.name if config.scholarship_type else None,
+            "academic_year": config.academic_year,
+            "semester": config.semester.value if config.semester else None,
+            "config_name": config.config_name,
+            "config_code": config.config_code,
+            "description": config.description,
+            "description_en": config.description_en,
+            "amount": config.amount,
+            "currency": config.currency,
+            "whitelist_student_ids": config.whitelist_student_ids,
+            "renewal_application_start_date": config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None,
+            "renewal_application_end_date": config.renewal_application_end_date.isoformat() if config.renewal_application_end_date else None,
+            "application_start_date": config.application_start_date.isoformat() if config.application_start_date else None,
+            "application_end_date": config.application_end_date.isoformat() if config.application_end_date else None,
+            "renewal_professor_review_start": config.renewal_professor_review_start.isoformat() if config.renewal_professor_review_start else None,
+            "renewal_professor_review_end": config.renewal_professor_review_end.isoformat() if config.renewal_professor_review_end else None,
+            "renewal_college_review_start": config.renewal_college_review_start.isoformat() if config.renewal_college_review_start else None,
+            "renewal_college_review_end": config.renewal_college_review_end.isoformat() if config.renewal_college_review_end else None,
+            "requires_professor_recommendation": config.requires_professor_recommendation,
+            "professor_review_start": config.professor_review_start.isoformat() if config.professor_review_start else None,
+            "professor_review_end": config.professor_review_end.isoformat() if config.professor_review_end else None,
+            "requires_college_review": config.requires_college_review,
+            "college_review_start": config.college_review_start.isoformat() if config.college_review_start else None,
+            "college_review_end": config.college_review_end.isoformat() if config.college_review_end else None,
+            "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
+            "is_active": config.is_active,
+            "effective_start_date": config.effective_start_date.isoformat() if config.effective_start_date else None,
+            "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
+            "version": config.version,
+            "created_at": config.created_at.isoformat() if config.created_at else None,
+            "updated_at": config.updated_at.isoformat() if config.updated_at else None
+        }
+        
+        return ApiResponse(
+            success=True,
+            message="配置資料取得成功",
+            data=config_data
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve configuration: {str(e)}"
+        )
+
+
+@router.put("/configurations/{config_id}", response_model=ApiResponse)
+async def update_scholarship_configuration(
+    config_id: int,
+    config_data: Dict[str, Any] = Body(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a scholarship configuration (excluding quota fields)"""
+    
+    try:
+        # Get accessible scholarship IDs
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+        
+        # Get existing configuration
+        stmt = select(ScholarshipConfiguration).where(
+            and_(
+                ScholarshipConfiguration.id == config_id,
+                ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids)
+            )
+        )
+        
+        result = await db.execute(stmt)
+        config = result.scalar_one_or_none()
+        
+        if not config:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="配置不存在或您沒有存取權限"
+            )
+        
+        # Update fields (excluding quota-related fields)
+        if 'config_name' in config_data:
+            config.config_name = config_data['config_name']
+        if 'description' in config_data:
+            config.description = config_data['description']
+        if 'description_en' in config_data:
+            config.description_en = config_data['description_en']
+        if 'amount' in config_data:
+            config.amount = config_data['amount']
+        if 'currency' in config_data:
+            config.currency = config_data['currency']
+        if 'whitelist_student_ids' in config_data:
+            config.whitelist_student_ids = config_data['whitelist_student_ids']
+            flag_modified(config, "whitelist_student_ids")
+        
+        # Update application periods with proper date parsing
+        from datetime import datetime
+        
+        def parse_date_field(date_string):
+            """Parse date string to datetime object"""
+            if date_string is None or date_string == "":
+                return None
+            if isinstance(date_string, str):
+                try:
+                    # Try parsing ISO format with timezone
+                    if date_string.endswith('Z'):
+                        return datetime.fromisoformat(date_string.replace('Z', '+00:00'))
+                    # Try parsing ISO format
+                    return datetime.fromisoformat(date_string)
+                except ValueError:
+                    # Try parsing other common formats
+                    import dateutil.parser
+                    return dateutil.parser.parse(date_string)
+            return date_string  # Already a datetime object
+        
+        if 'renewal_application_start_date' in config_data:
+            config.renewal_application_start_date = parse_date_field(config_data['renewal_application_start_date'])
+        if 'renewal_application_end_date' in config_data:
+            config.renewal_application_end_date = parse_date_field(config_data['renewal_application_end_date'])
+        if 'application_start_date' in config_data:
+            config.application_start_date = parse_date_field(config_data['application_start_date'])
+        if 'application_end_date' in config_data:
+            config.application_end_date = parse_date_field(config_data['application_end_date'])
+        
+        # Update review periods
+        if 'renewal_professor_review_start' in config_data:
+            config.renewal_professor_review_start = parse_date_field(config_data['renewal_professor_review_start'])
+        if 'renewal_professor_review_end' in config_data:
+            config.renewal_professor_review_end = parse_date_field(config_data['renewal_professor_review_end'])
+        if 'renewal_college_review_start' in config_data:
+            config.renewal_college_review_start = parse_date_field(config_data['renewal_college_review_start'])
+        if 'renewal_college_review_end' in config_data:
+            config.renewal_college_review_end = parse_date_field(config_data['renewal_college_review_end'])
+        if 'requires_professor_recommendation' in config_data:
+            config.requires_professor_recommendation = config_data['requires_professor_recommendation']
+        if 'professor_review_start' in config_data:
+            config.professor_review_start = parse_date_field(config_data['professor_review_start'])
+        if 'professor_review_end' in config_data:
+            config.professor_review_end = parse_date_field(config_data['professor_review_end'])
+        if 'requires_college_review' in config_data:
+            config.requires_college_review = config_data['requires_college_review']
+        if 'college_review_start' in config_data:
+            config.college_review_start = parse_date_field(config_data['college_review_start'])
+        if 'college_review_end' in config_data:
+            config.college_review_end = parse_date_field(config_data['college_review_end'])
+        if 'review_deadline' in config_data:
+            config.review_deadline = parse_date_field(config_data['review_deadline'])
+        
+        # Update status and effective dates
+        if 'is_active' in config_data:
+            config.is_active = config_data['is_active']
+        if 'effective_start_date' in config_data:
+            config.effective_start_date = parse_date_field(config_data['effective_start_date'])
+        if 'effective_end_date' in config_data:
+            config.effective_end_date = parse_date_field(config_data['effective_end_date'])
+        if 'version' in config_data:
+            config.version = config_data['version']
+        
+        config.updated_by = current_user.id
+        
+        await db.commit()
+        await db.refresh(config)
+        
+        return ApiResponse(
+            success=True,
+            message="配置更新成功",
+            data={"id": config.id, "config_code": config.config_code}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in update_scholarship_configuration: {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update configuration: {str(e)}"
+        )
+
+
+@router.delete("/configurations/{config_id}", response_model=ApiResponse)
+async def deactivate_scholarship_configuration(
+    config_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Deactivate (soft delete) a scholarship configuration"""
+    
+    try:
+        # Get accessible scholarship IDs
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+        
+        # Get existing configuration
+        stmt = select(ScholarshipConfiguration).where(
+            and_(
+                ScholarshipConfiguration.id == config_id,
+                ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids)
+            )
+        )
+        
+        result = await db.execute(stmt)
+        config = result.scalar_one_or_none()
+        
+        if not config:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="配置不存在或您沒有存取權限"
+            )
+        
+        # Check if there are active applications using this configuration
+        # This would need to be implemented based on your application model structure
+        # For now, we'll just perform the soft delete
+        
+        config.is_active = False
+        config.updated_by = current_user.id
+        
+        await db.commit()
+        
+        return ApiResponse(
+            success=True,
+            message="配置已停用",
+            data={"id": config.id, "config_code": config.config_code}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to deactivate configuration: {str(e)}"
+        )
+
+
+@router.post("/configurations/{config_id}/duplicate", response_model=ApiResponse)
+async def duplicate_scholarship_configuration(
+    config_id: int,
+    target_data: Dict[str, Any] = Body(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Duplicate a scholarship configuration to a new academic period"""
+    
+    try:
+        # Get accessible scholarship IDs
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+        
+        # Get source configuration
+        stmt = select(ScholarshipConfiguration).where(
+            and_(
+                ScholarshipConfiguration.id == config_id,
+                ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids)
+            )
+        )
+        
+        result = await db.execute(stmt)
+        source_config = result.scalar_one_or_none()
+        
+        if not source_config:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="來源配置不存在或您沒有存取權限"
+            )
+        
+        target_academic_year = target_data['academic_year']
+        target_semester = target_data.get('semester')
+        
+        # Check if target configuration already exists
+        existing_stmt = select(ScholarshipConfiguration).where(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == source_config.scholarship_type_id,
+                ScholarshipConfiguration.academic_year == target_academic_year,
+                ScholarshipConfiguration.semester == target_semester,
+                ScholarshipConfiguration.is_active == True
+            )
+        )
+        existing_result = await db.execute(existing_stmt)
+        existing_config = existing_result.scalar_one_or_none()
+        
+        if existing_config:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="目標學年度/學期已存在配置"
+            )
+        
+        # Create duplicate configuration
+        new_config = ScholarshipConfiguration(
+            scholarship_type_id=source_config.scholarship_type_id,
+            academic_year=target_academic_year,
+            semester=target_semester,
+            config_name=target_data.get('config_name', f"{source_config.config_name} (複製)"),
+            config_code=target_data['config_code'],
+            description=source_config.description,
+            description_en=source_config.description_en,
+            amount=source_config.amount,
+            currency=source_config.currency,
+            whitelist_student_ids=source_config.whitelist_student_ids.copy() if source_config.whitelist_student_ids else {},
+            requires_professor_recommendation=source_config.requires_professor_recommendation,
+            requires_college_review=source_config.requires_college_review,
+            is_active=True,
+            version="1.0",
+            created_by=current_user.id
+        )
+        
+        db.add(new_config)
+        await db.commit()
+        await db.refresh(new_config)
+        
+        return ApiResponse(
+            success=True,
+            message="配置複製成功",
+            data={"id": new_config.id, "config_code": new_config.config_code}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to duplicate configuration: {str(e)}"
+        )
+
+
+@router.get("/configurations/", response_model=ApiResponse)
+async def list_scholarship_configurations(
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
+    academic_year: Optional[int] = Query(None, description="Filter by academic year"),
+    semester: Optional[str] = Query(None, description="Filter by semester (first/second)"),
+    is_active: bool = Query(True, description="Filter by active status"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """List scholarship configurations with filtering"""
+    
+    try:
+        # Get accessible scholarship IDs
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+        
+        if not accessible_scholarship_ids:
+            return ApiResponse(
+                success=True,
+                message="No accessible configurations found",
+                data=[]
+            )
+        
+        # Build query conditions
+        conditions = [
+            ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
+            ScholarshipConfiguration.is_active == is_active
+        ]
+        
+        if scholarship_type_id:
+            conditions.append(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
+        
+        if academic_year:
+            conditions.append(ScholarshipConfiguration.academic_year == academic_year)
+        
+        if semester:
+            if semester == "first":
+                conditions.append(ScholarshipConfiguration.semester == Semester.FIRST)
+            elif semester == "second":
+                conditions.append(ScholarshipConfiguration.semester == Semester.SECOND)
+        
+        # Execute query
+        stmt = select(ScholarshipConfiguration).where(
+            and_(*conditions)
+        ).options(
+            selectinload(ScholarshipConfiguration.scholarship_type)
+        ).order_by(
+            ScholarshipConfiguration.academic_year.desc(),
+            ScholarshipConfiguration.semester.desc()
+        )
+        
+        result = await db.execute(stmt)
+        configurations = result.scalars().all()
+        
+        # Build response data
+        config_list = []
+        for config in configurations:
+            config_data = {
+                "id": config.id,
+                "scholarship_type_id": config.scholarship_type_id,
+                "scholarship_type_name": config.scholarship_type.name if config.scholarship_type else None,
+                "academic_year": config.academic_year,
+                "semester": config.semester.value if config.semester else None,
+                "config_name": config.config_name,
+                "config_code": config.config_code,
+                "description": config.description,
+                "description_en": config.description_en,
+                "amount": config.amount,
+                "currency": config.currency,
+                "whitelist_student_ids": config.whitelist_student_ids,
+                "is_active": config.is_active,
+                "renewal_application_start_date": config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None,
+                "renewal_application_end_date": config.renewal_application_end_date.isoformat() if config.renewal_application_end_date else None,
+                "application_start_date": config.application_start_date.isoformat() if config.application_start_date else None,
+                "application_end_date": config.application_end_date.isoformat() if config.application_end_date else None,
+                # Add review-related fields
+                "renewal_professor_review_start": config.renewal_professor_review_start.isoformat() if config.renewal_professor_review_start else None,
+                "renewal_professor_review_end": config.renewal_professor_review_end.isoformat() if config.renewal_professor_review_end else None,
+                "renewal_college_review_start": config.renewal_college_review_start.isoformat() if config.renewal_college_review_start else None,
+                "renewal_college_review_end": config.renewal_college_review_end.isoformat() if config.renewal_college_review_end else None,
+                "requires_professor_recommendation": config.requires_professor_recommendation,
+                "professor_review_start": config.professor_review_start.isoformat() if config.professor_review_start else None,
+                "professor_review_end": config.professor_review_end.isoformat() if config.professor_review_end else None,
+                "requires_college_review": config.requires_college_review,
+                "college_review_start": config.college_review_start.isoformat() if config.college_review_start else None,
+                "college_review_end": config.college_review_end.isoformat() if config.college_review_end else None,
+                "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
+                "effective_start_date": config.effective_start_date.isoformat() if config.effective_start_date else None,
+                "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
+                "version": config.version,
+                "created_at": config.created_at.isoformat() if config.created_at else None,
+                "updated_at": config.updated_at.isoformat() if config.updated_at else None
+            }
+            config_list.append(config_data)
+        
+        return ApiResponse(
+            success=True,
+            message=f"Retrieved {len(config_list)} configurations",
+            data=config_list
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list configurations: {str(e)}"
+        )

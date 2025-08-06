@@ -56,13 +56,82 @@ class ScholarshipService:
         return (self._is_dev_mode() and 
                 DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False))
     
-    # TODO: Refactor this method to work with external API student data
-    # async def get_eligible_scholarships(self, student_data: Dict[str, Any]) -> List[ScholarshipType]:
-    #     """Get scholarships that the student is eligible for"""
-    #     # TODO: Implement student eligibility checking with external API data
-    #     # This method needs to be refactored to work with student_data from external API
-    #     # instead of Student model
-    #     return []
+    async def get_eligible_scholarships(self, student_data: Dict[str, Any], user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get scholarships that the student is eligible for based on active configurations"""
+        from app.services.scholarship_configuration_service import ScholarshipConfigurationService
+        from app.services.eligibility_service import EligibilityService
+        
+        config_service = ScholarshipConfigurationService(self.db)
+        eligibility_service = EligibilityService(self.db)
+        
+        # Get all active and effective configurations
+        active_configs = await config_service.get_active_configurations()
+        
+        eligible_scholarships = []
+        
+        for config in active_configs:
+            # Check if student meets basic eligibility
+            is_eligible, reasons = await eligibility_service.check_student_eligibility(
+                student_data, config, user_id
+            )
+            
+            if is_eligible:
+                # Build scholarship response with configuration data
+                scholarship_type = config.scholarship_type
+                
+                scholarship_dict = {
+                    'id': scholarship_type.id,
+                    'code': scholarship_type.code,
+                    'name': config.config_name or scholarship_type.name,
+                    'name_en': scholarship_type.name_en,
+                    'description': config.description or scholarship_type.description,
+                    'description_en': config.description_en or scholarship_type.description_en,
+                    'category': scholarship_type.category,
+                    'academic_year': config.academic_year,
+                    'semester': config.semester.value if config.semester else None,
+                    'application_cycle': scholarship_type.application_cycle.value if scholarship_type.application_cycle else 'semester',
+                    'sub_type_list': scholarship_type.sub_type_list or [],
+                    'sub_type_selection_mode': scholarship_type.sub_type_selection_mode.value if scholarship_type.sub_type_selection_mode else 'single',
+                    
+                    # Configuration-specific data
+                    'amount': config.amount,
+                    'currency': config.currency,
+                    'application_start_date': config.application_start_date,
+                    'application_end_date': config.application_end_date,
+                    'renewal_application_start_date': config.renewal_application_start_date,
+                    'renewal_application_end_date': config.renewal_application_end_date,
+                    'professor_review_start': config.professor_review_start,
+                    'professor_review_end': config.professor_review_end,
+                    'college_review_start': config.college_review_start,
+                    'college_review_end': config.college_review_end,
+                    'requires_professor_recommendation': config.requires_professor_recommendation,
+                    'requires_college_review': config.requires_college_review,
+                    'requires_interview': getattr(config, 'requires_interview', False),
+                    'requires_research_proposal': getattr(config, 'requires_research_proposal', False),
+                    
+                    # Eligibility info
+                    'whitelist_enabled': scholarship_type.whitelist_enabled,
+                    'whitelist_student_ids': config.whitelist_student_ids or {},
+                    
+                    # System data
+                    'created_at': scholarship_type.created_at,
+                    'config_version': config.version,
+                    'config_code': config.config_code
+                }
+                
+                # Check quota availability
+                quota_available, quota_info = await config_service.check_quota_availability(
+                    config, student_data.get('department_code')
+                )
+                
+                scholarship_dict.update({
+                    'quota_available': quota_available,
+                    'quota_info': quota_info
+                })
+                
+                eligible_scholarships.append(scholarship_dict)
+        
+        return eligible_scholarships
 
 
 class ScholarshipApplicationService:

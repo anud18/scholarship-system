@@ -43,13 +43,14 @@ class EligibilityVerificationService:
         """
         
         try:
-            student = self.db.query(Student).filter(Student.id == student_id).first()
+            # Fetch student data from external API
+            student_data = self.student_service.get_student_info(student_id)
             scholarship_type = self.db.query(ScholarshipType).filter(
                 ScholarshipType.id == scholarship_type_id
             ).first()
             
-            if not student or not scholarship_type:
-                return False, ["Student or scholarship type not found"], {}
+            if not student_data or not scholarship_type:
+                return False, ["Student data or scholarship type not found"], {}
             
             verification_results = {
                 "student_id": student_id,
@@ -139,7 +140,7 @@ class EligibilityVerificationService:
             
             # 5. Academic eligibility checks
             academic_eligible, academic_details = self._check_academic_eligibility(
-                student, scholarship_type
+                student_data, scholarship_type
             )
             verification_results["checks_performed"].extend(academic_details["checks"])
             verification_results["scores"].update(academic_details["scores"])
@@ -149,7 +150,7 @@ class EligibilityVerificationService:
             
             # 6. Scholarship-specific rule validation
             rules_passed, rules_details = self._validate_scholarship_rules(
-                student, scholarship_type
+                student_data, scholarship_type
             )
             verification_results["checks_performed"].extend(rules_details["checks"])
             verification_results["scores"].update(rules_details["scores"])
@@ -188,7 +189,7 @@ class EligibilityVerificationService:
     
     def _check_academic_eligibility(
         self, 
-        student: Student, 
+        student: Dict[str, Any], 
         scholarship_type: ScholarshipType
     ) -> Tuple[bool, Dict[str, Any]]:
         """Check academic eligibility requirements"""
@@ -218,22 +219,22 @@ class EligibilityVerificationService:
         
         # Determine student type
         student_type = self._determine_student_type(student)
-        details["scores"]["student_type"] = student_type.value
+        details["scores"]["student_type"] = student_type
         
         # Check if student type is eligible for this scholarship
         if scholarship_type.eligible_student_types:
-            if student_type.value not in scholarship_type.eligible_student_types:
-                details["failures"].append(f"Student type {student_type.value} not eligible")
+            if student_type not in scholarship_type.eligible_student_types:
+                details["failures"].append(f"Student type {student_type} not eligible")
                 details["checks"].append({
                     "check": "student_type_eligibility",
                     "passed": False,
-                    "details": f"Required: {scholarship_type.eligible_student_types}, Actual: {student_type.value}"
+                    "details": f"Required: {scholarship_type.eligible_student_types}, Actual: {student_type}"
                 })
             else:
                 details["checks"].append({
                     "check": "student_type_eligibility",
                     "passed": True,
-                    "details": f"Student type {student_type.value} is eligible"
+                    "details": f"Student type {student_type} is eligible"
                 })
         
         # GPA check
@@ -256,53 +257,15 @@ class EligibilityVerificationService:
                     "details": f"GPA {term_record.gpa} meets requirement"
                 })
         
-        # Ranking check
-        if scholarship_type.max_ranking_percent:
-            if term_record.placingsrate:
-                ranking_eligible = float(term_record.placingsrate) <= float(scholarship_type.max_ranking_percent)
-                details["scores"]["class_ranking_percent"] = float(term_record.placingsrate)
-                details["scores"]["max_ranking_percent"] = float(scholarship_type.max_ranking_percent)
-                
-                if not ranking_eligible:
-                    details["failures"].append(f"Class ranking {term_record.placingsrate}% exceeds maximum {scholarship_type.max_ranking_percent}%")
-                    details["checks"].append({
-                        "check": "ranking_requirement",
-                        "passed": False,
-                        "details": f"Ranking {term_record.placingsrate}% > {scholarship_type.max_ranking_percent}%"
-                    })
-                else:
-                    details["checks"].append({
-                        "check": "ranking_requirement",
-                        "passed": True,
-                        "details": f"Ranking {term_record.placingsrate}% meets requirement"
-                    })
-        
-        # Term count check
-        if scholarship_type.max_completed_terms and term_record.completedTerms:
-            terms_eligible = term_record.completedTerms <= scholarship_type.max_completed_terms
-            details["scores"]["completed_terms"] = term_record.completedTerms
-            details["scores"]["max_completed_terms"] = scholarship_type.max_completed_terms
-            
-            if not terms_eligible:
-                details["failures"].append(f"Completed terms {term_record.completedTerms} exceeds maximum {scholarship_type.max_completed_terms}")
-                details["checks"].append({
-                    "check": "term_count_requirement",
-                    "passed": False,
-                    "details": f"Terms {term_record.completedTerms} > {scholarship_type.max_completed_terms}"
-                })
-            else:
-                details["checks"].append({
-                    "check": "term_count_requirement",
-                    "passed": True,
-                    "details": f"Terms {term_record.completedTerms} meets requirement"
-                })
+        # All ranking and term count requirements are now handled by scholarship rules
+        # No hardcoded validation logic needed here
         
         is_eligible = len(details["failures"]) == 0
         return is_eligible, details
     
     def _validate_scholarship_rules(
         self, 
-        student: Student, 
+        student: Dict[str, Any], 
         scholarship_type: ScholarshipType
     ) -> Tuple[bool, Dict[str, Any]]:
         """Validate custom scholarship rules"""
@@ -423,20 +386,27 @@ class EligibilityVerificationService:
         
         return True, details
     
-    def _determine_student_type(self, student: Student) -> str:
+    def _determine_student_type(self, student_data: Dict[str, Any]) -> str:
         """Determine student type based on student data"""
-        return student.get_student_type()
+        # Get student type from degree code
+        degree = student_data.get('std_degree', '')
+        if degree == '1':
+            return 'phd'
+        elif degree == '2':
+            return 'master'
+        else:
+            return 'undergraduate'
     
-    def _get_student_value_for_rule(self, student: Student, field_name: str) -> Any:
+    def _get_student_value_for_rule(self, student: Dict[str, Any], field_name: str) -> Any:
         """Get student value for rule validation"""
         
-        # Map field names to actual values from student model
+        # Map field names to actual values from student data
         field_mapping = {
             "gpa": 3.0,  # Default GPA - should be fetched from external API
             "class_ranking": None,  # To be fetched from external API
-            "completed_terms": student.std_termcount or 1,
-            "student_id": student.std_stdcode,
-            "department": student.std_depno,
+            "completed_terms": student.get('std_termcount', 1),
+            "student_id": student.get('std_stdcode', ''),
+            "department": student.get('std_depno', ''),
             "grade": None,  # To be calculated from enrollment data
             # Add more field mappings as needed
         }
@@ -452,32 +422,41 @@ class EligibilityVerificationService:
         """Run eligibility verification for multiple students"""
         
         try:
-            # Get students to check
+            # Get student data from external API
+            students_data = []
             if student_ids:
-                students = self.db.query(Student).filter(Student.id.in_(student_ids)).all()
+                # Fetch specific students from external API
+                for student_id in student_ids:
+                    student_info = self.student_service.get_student_info(student_id)
+                    if student_info:
+                        students_data.append(student_info)
             else:
-                # Get all students if no specific list provided
-                students = self.db.query(Student).all()
+                # This would require a batch API endpoint to get all students
+                # For now, return an error message
+                return {
+                    "error": "Batch verification without specific student IDs not supported yet"
+                }
             
             results = {
                 "scholarship_type_id": scholarship_type_id,
                 "semester": semester,
-                "total_students": len(students),
+                "total_students": len(students_data),
                 "eligible_students": [],
                 "ineligible_students": [],
                 "verification_errors": []
             }
             
-            for student in students:
+            for student_data in students_data:
                 try:
+                    student_id = student_data.get('std_stdcode', '')
                     is_eligible, failure_reasons, verification_details = self.verify_student_eligibility(
-                        student.id, scholarship_type_id, semester
+                        student_id, scholarship_type_id, semester
                     )
                     
                     student_result = {
-                        "student_id": student.id,
-                        "student_name": student.name,
-                        "student_no": student.stdNo,
+                        "student_id": student_id,
+                        "student_name": student_data.get('std_name', ''),
+                        "student_no": student_data.get('std_stdcode', ''),
                         "is_eligible": is_eligible,
                         "failure_reasons": failure_reasons,
                         "eligibility_score": verification_details.get("eligibility_score", 0),
@@ -490,9 +469,9 @@ class EligibilityVerificationService:
                         results["ineligible_students"].append(student_result)
                         
                 except Exception as e:
-                    logger.error(f"Error verifying eligibility for student {student.id}: {str(e)}")
+                    logger.error(f"Error verifying eligibility for student {student_id}: {str(e)}")
                     results["verification_errors"].append({
-                        "student_id": student.id,
+                        "student_id": student_id,
                         "error": str(e)
                     })
             

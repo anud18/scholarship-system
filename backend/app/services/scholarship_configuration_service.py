@@ -5,8 +5,9 @@ Handles business logic for dynamic scholarship configurations
 
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, desc, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, or_, desc, func, select
+from sqlalchemy.orm import selectinload
 
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
 from app.models.application import Application, ApplicationStatus
@@ -17,23 +18,25 @@ from app.models.user import User
 class ScholarshipConfigurationService:
     """Service class for scholarship configuration management"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
     
-    def get_active_configurations(
+    async def get_active_configurations(
         self, 
         scholarship_type_id: Optional[int] = None
     ) -> List[ScholarshipConfiguration]:
         """Get all active and effective configurations"""
-        query = self.db.query(ScholarshipConfiguration).filter(
+        stmt = select(ScholarshipConfiguration).options(
+            selectinload(ScholarshipConfiguration.scholarship_type)
+        ).filter(
             ScholarshipConfiguration.is_active == True
         )
         
         if scholarship_type_id:
-            query = query.filter(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
+            stmt = stmt.filter(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
         
-        now = datetime.now(timezone.utc)
-        configurations = query.all()
+        result = await self.db.execute(stmt)
+        configurations = result.scalars().all()
         
         # Filter by effective dates
         effective_configs = []
@@ -43,11 +46,13 @@ class ScholarshipConfigurationService:
         
         return effective_configs
     
-    def get_configuration_by_code(self, config_code: str) -> Optional[ScholarshipConfiguration]:
+    async def get_configuration_by_code(self, config_code: str) -> Optional[ScholarshipConfiguration]:
         """Get configuration by its unique code"""
-        return self.db.query(ScholarshipConfiguration).filter(
+        stmt = select(ScholarshipConfiguration).filter(
             ScholarshipConfiguration.config_code == config_code
-        ).first()
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
     
     def validate_configuration_requirements(
         self, 
@@ -57,32 +62,16 @@ class ScholarshipConfigurationService:
         """Validate if application meets configuration requirements"""
         errors = []
         
-        # Check interview requirement
-        if config.requires_interview and not application_data.get('interview_scheduled'):
-            errors.append("此獎學金需要面試")
-        
-        # Check recommendation letter requirement
-        if config.requires_recommendation_letter and not application_data.get('recommendation_letter'):
-            errors.append("此獎學金需要推薦信")
-        
-        # Check research proposal requirement
-        if config.requires_research_proposal and not application_data.get('research_proposal'):
-            errors.append("此獎學金需要研究計畫")
-        
-        # Check special requirements
-        if config.special_requirements:
-            for requirement_key, requirement_value in config.special_requirements.items():
+        # Check quota allocation rules for requirements
+        if config.quota_allocation_rules:
+            requirements = config.quota_allocation_rules.get('requirements', {})
+            for requirement_key, requirement_value in requirements.items():
                 if requirement_key not in application_data or application_data[requirement_key] != requirement_value:
-                    errors.append(f"不符合特殊要求: {requirement_key}")
-        
-        # Check eligibility overrides
-        if config.eligibility_overrides:
-            # This would implement complex eligibility logic
-            pass
+                    errors.append(f"不符合要求: {requirement_key}")
         
         return len(errors) == 0, errors
     
-    def check_quota_availability(
+    async def check_quota_availability(
         self, 
         config: ScholarshipConfiguration, 
         college_code: Optional[str] = None
@@ -92,12 +81,14 @@ class ScholarshipConfigurationService:
             return True, {"unlimited": True}
         
         # Get current approved applications
-        approved_count = self.db.query(Application).filter(
+        stmt = select(func.count(Application.id)).filter(
             and_(
                 Application.scholarship_type_id == config.scholarship_type_id,
                 Application.status == ApplicationStatus.APPROVED.value
             )
-        ).count()
+        )
+        result = await self.db.execute(stmt)
+        approved_count = result.scalar()
         
         quota_info = {
             "total_quota": config.total_quota,
@@ -212,6 +203,282 @@ class ScholarshipConfigurationService:
             results.append((application, passed, reason))
         
         return results
+    
+    # CRUD Operations for ScholarshipConfiguration Management
+    
+    def create_configuration(
+        self,
+        scholarship_type_id: int,
+        config_data: Dict[str, Any],
+        created_by_user_id: int
+    ) -> ScholarshipConfiguration:
+        """Create a new scholarship configuration"""
+        
+        # Validate academic year and semester combination
+        academic_year = config_data.get('academic_year')
+        semester = config_data.get('semester')
+        
+        if not academic_year:
+            raise ValueError("Academic year is required")
+        
+        # Check if configuration already exists for this period
+        existing_config = self.db.query(ScholarshipConfiguration).filter(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                ScholarshipConfiguration.academic_year == academic_year,
+                ScholarshipConfiguration.semester == semester,
+                ScholarshipConfiguration.is_active == True
+            )
+        ).first()
+        
+        if existing_config:
+            raise ValueError("Configuration already exists for this academic period")
+        
+        # Create new configuration
+        new_config = ScholarshipConfiguration(
+            scholarship_type_id=scholarship_type_id,
+            academic_year=academic_year,
+            semester=semester,
+            config_name=config_data['config_name'],
+            config_code=config_data['config_code'],
+            description=config_data.get('description'),
+            description_en=config_data.get('description_en'),
+            amount=config_data['amount'],
+            currency=config_data.get('currency', 'TWD'),
+            whitelist_student_ids=config_data.get('whitelist_student_ids', {}),
+            renewal_application_start_date=config_data.get('renewal_application_start_date'),
+            renewal_application_end_date=config_data.get('renewal_application_end_date'),
+            application_start_date=config_data.get('application_start_date'),
+            application_end_date=config_data.get('application_end_date'),
+            renewal_professor_review_start=config_data.get('renewal_professor_review_start'),
+            renewal_professor_review_end=config_data.get('renewal_professor_review_end'),
+            renewal_college_review_start=config_data.get('renewal_college_review_start'),
+            renewal_college_review_end=config_data.get('renewal_college_review_end'),
+            requires_professor_recommendation=config_data.get('requires_professor_recommendation', False),
+            professor_review_start=config_data.get('professor_review_start'),
+            professor_review_end=config_data.get('professor_review_end'),
+            requires_college_review=config_data.get('requires_college_review', False),
+            college_review_start=config_data.get('college_review_start'),
+            college_review_end=config_data.get('college_review_end'),
+            review_deadline=config_data.get('review_deadline'),
+            is_active=config_data.get('is_active', True),
+            effective_start_date=config_data.get('effective_start_date'),
+            effective_end_date=config_data.get('effective_end_date'),
+            version=config_data.get('version', '1.0'),
+            created_by=created_by_user_id
+        )
+        
+        self.db.add(new_config)
+        self.db.commit()
+        self.db.refresh(new_config)
+        
+        return new_config
+    
+    def update_configuration(
+        self,
+        config_id: int,
+        config_data: Dict[str, Any],
+        updated_by_user_id: int
+    ) -> ScholarshipConfiguration:
+        """Update an existing scholarship configuration"""
+        
+        config = self.db.query(ScholarshipConfiguration).filter(
+            ScholarshipConfiguration.id == config_id
+        ).first()
+        
+        if not config:
+            raise ValueError("Configuration not found")
+        
+        # Update fields (excluding quota-related fields)
+        updatable_fields = [
+            'config_name', 'description', 'description_en', 'amount', 'currency',
+            'whitelist_student_ids', 'renewal_application_start_date', 'renewal_application_end_date',
+            'application_start_date', 'application_end_date', 'renewal_professor_review_start',
+            'renewal_professor_review_end', 'renewal_college_review_start', 'renewal_college_review_end',
+            'requires_professor_recommendation', 'professor_review_start', 'professor_review_end',
+            'requires_college_review', 'college_review_start', 'college_review_end',
+            'review_deadline', 'is_active', 'effective_start_date', 'effective_end_date', 'version'
+        ]
+        
+        for field in updatable_fields:
+            if field in config_data:
+                setattr(config, field, config_data[field])
+        
+        config.updated_by = updated_by_user_id
+        
+        self.db.commit()
+        self.db.refresh(config)
+        
+        return config
+    
+    def deactivate_configuration(
+        self,
+        config_id: int,
+        updated_by_user_id: int
+    ) -> ScholarshipConfiguration:
+        """Deactivate (soft delete) a scholarship configuration"""
+        
+        config = self.db.query(ScholarshipConfiguration).filter(
+            ScholarshipConfiguration.id == config_id
+        ).first()
+        
+        if not config:
+            raise ValueError("Configuration not found")
+        
+        # Check if there are active applications using this configuration
+        # For now, we'll just perform the soft delete
+        # TODO: Add proper validation for active applications
+        
+        config.is_active = False
+        config.updated_by = updated_by_user_id
+        
+        self.db.commit()
+        self.db.refresh(config)
+        
+        return config
+    
+    def duplicate_configuration(
+        self,
+        source_config_id: int,
+        target_academic_year: int,
+        target_semester: Optional[str],
+        new_config_code: str,
+        new_config_name: Optional[str],
+        created_by_user_id: int
+    ) -> ScholarshipConfiguration:
+        """Duplicate a scholarship configuration to a new academic period"""
+        
+        source_config = self.db.query(ScholarshipConfiguration).filter(
+            ScholarshipConfiguration.id == source_config_id
+        ).first()
+        
+        if not source_config:
+            raise ValueError("Source configuration not found")
+        
+        # Check if target configuration already exists
+        existing_target = self.db.query(ScholarshipConfiguration).filter(
+            and_(
+                ScholarshipConfiguration.scholarship_type_id == source_config.scholarship_type_id,
+                ScholarshipConfiguration.academic_year == target_academic_year,
+                ScholarshipConfiguration.semester == target_semester,
+                ScholarshipConfiguration.is_active == True
+            )
+        ).first()
+        
+        if existing_target:
+            raise ValueError("Target configuration already exists for this academic period")
+        
+        # Create duplicate configuration
+        new_config = ScholarshipConfiguration(
+            scholarship_type_id=source_config.scholarship_type_id,
+            academic_year=target_academic_year,
+            semester=target_semester,
+            config_name=new_config_name or f"{source_config.config_name} (複製)",
+            config_code=new_config_code,
+            description=source_config.description,
+            description_en=source_config.description_en,
+            amount=source_config.amount,
+            currency=source_config.currency,
+            whitelist_student_ids=source_config.whitelist_student_ids.copy() if source_config.whitelist_student_ids else {},
+            requires_professor_recommendation=source_config.requires_professor_recommendation,
+            requires_college_review=source_config.requires_college_review,
+            is_active=True,
+            version="1.0",
+            created_by=created_by_user_id
+        )
+        
+        self.db.add(new_config)
+        self.db.commit()
+        self.db.refresh(new_config)
+        
+        return new_config
+    
+    def get_configurations_by_filter(
+        self,
+        scholarship_type_id: Optional[int] = None,
+        academic_year: Optional[int] = None,
+        semester: Optional[str] = None,
+        is_active: bool = True
+    ) -> List[ScholarshipConfiguration]:
+        """Get configurations with filtering options"""
+        
+        query = self.db.query(ScholarshipConfiguration)
+        
+        if scholarship_type_id:
+            query = query.filter(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
+        
+        if academic_year:
+            query = query.filter(ScholarshipConfiguration.academic_year == academic_year)
+        
+        if semester:
+            if semester == "first":
+                from app.models.enums import Semester
+                query = query.filter(ScholarshipConfiguration.semester == Semester.FIRST)
+            elif semester == "second":
+                from app.models.enums import Semester
+                query = query.filter(ScholarshipConfiguration.semester == Semester.SECOND)
+        
+        query = query.filter(ScholarshipConfiguration.is_active == is_active)
+        
+        return query.order_by(
+            ScholarshipConfiguration.academic_year.desc(),
+            ScholarshipConfiguration.semester.desc()
+        ).all()
+    
+    def validate_configuration_data(self, config_data: Dict[str, Any]) -> List[str]:
+        """Validate configuration data and return list of errors"""
+        errors = []
+        
+        # Required fields validation
+        required_fields = ['config_name', 'config_code', 'academic_year', 'amount']
+        for field in required_fields:
+            if not config_data.get(field):
+                errors.append(f"{field} is required")
+        
+        # Academic year validation
+        academic_year = config_data.get('academic_year')
+        if academic_year and (academic_year < 100 or academic_year > 200):
+            errors.append("Academic year should be in Taiwan calendar format (e.g., 113)")
+        
+        # Amount validation
+        amount = config_data.get('amount')
+        if amount and amount <= 0:
+            errors.append("Amount must be greater than 0")
+        
+        # Date validation
+        date_fields = [
+            ('renewal_application_start_date', 'renewal_application_end_date'),
+            ('application_start_date', 'application_end_date'),
+            ('renewal_professor_review_start', 'renewal_professor_review_end'),
+            ('renewal_college_review_start', 'renewal_college_review_end'),
+            ('professor_review_start', 'professor_review_end'),
+            ('college_review_start', 'college_review_end'),
+            ('effective_start_date', 'effective_end_date')
+        ]
+        
+        for start_field, end_field in date_fields:
+            start_date = config_data.get(start_field)
+            end_date = config_data.get(end_field)
+            
+            if start_date and end_date:
+                try:
+                    from datetime import datetime
+                    if isinstance(start_date, str):
+                        start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                    else:
+                        start_dt = start_date
+                    
+                    if isinstance(end_date, str):
+                        end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                    else:
+                        end_dt = end_date
+                    
+                    if start_dt >= end_dt:
+                        errors.append(f"{end_field} must be after {start_field}")
+                except (ValueError, TypeError):
+                    errors.append(f"Invalid date format for {start_field} or {end_field}")
+        
+        return errors
     
     def get_configuration_analytics(
         self, 

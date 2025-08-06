@@ -20,6 +20,7 @@ from app.models.scholarship import ScholarshipRule, ScholarshipType, Scholarship
 from app.models.enums import Semester, ApplicationCycle, SubTypeSelectionMode, QuotaManagementMode
 from app.models.notification import Notification, NotificationType, NotificationPriority
 from app.models.application_field import ApplicationField, ApplicationDocument
+from app.models.user_profile import UserProfile, UserProfileHistory
 from app.core.config import settings
 
 
@@ -1072,7 +1073,6 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     
     print("📊 Creating quota management configurations...")
     
-    
     # 獲取管理員用戶ID
     result = await session.execute(select(User).where(User.nycu_id == "admin"))
     admin_user = result.scalar_one_or_none()
@@ -1082,312 +1082,395 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     result = await session.execute(select(ScholarshipType))
     scholarships = result.scalars().all()
     
-    # 設定基本時間參數
-    now = datetime.now(timezone.utc)
-    start_date = now + timedelta(days=7)  # 一般申請開始
-    end_date = now + timedelta(days=21)   # 一般申請結束
-    renewal_start = now - timedelta(days=60)  # 續領申請開始
-    renewal_end = now - timedelta(days=40)    # 續領申請結束
+    # 設定基本時間參數 - 使用台灣時間 (UTC+8)
+    taiwan_tz = timezone(timedelta(hours=8))
+    now = datetime.now(taiwan_tz)
+    current_year = now.year
     
-    # 學院代碼對應表 (用於博士生獎學金) - 基於NYCU官方學院代碼
-    college_quotas = {
-        "E": {"name": "電機學院", "name_en": "College of Electrical and Computer Engineering", "quota": 15},
-        "C": {"name": "資訊學院", "name_en": "College of Computer Science", "quota": 12},
-        "I": {"name": "工學院", "name_en": "College of Engineering", "quota": 12},
-        "S": {"name": "理學院", "name_en": "College of Science", "quota": 10},
-        "B": {"name": "工程生物學院", "name_en": "College of Engineering Bioscience", "quota": 8},
-        "M": {"name": "管理學院", "name_en": "College of Management", "quota": 6},
-        "A": {"name": "人社院", "name_en": "College of Humanities Arts and Social Sciences", "quota": 6},
-        "K": {"name": "客家學院", "name_en": "College of Hakka Studies", "quota": 3},
-        "O": {"name": "光電學院", "name_en": "College of Photonics", "quota": 8},
-        "L": {"name": "科技法律學院", "name_en": "School of Law", "quota": 4},
-        "D": {"name": "半導體學院", "name_en": "International College of Semiconductor Technology", "quota": 7},
-        "G": {"name": "綠能學院", "name_en": "College of Artificial Intelligence", "quota": 6},
-        "1": {"name": "醫學院", "name_en": "College of Medicine", "quota": 10},
-        "2": {"name": "牙醫學院", "name_en": "College of Dentistry", "quota": 3},
-        "3": {"name": "護理學院", "name_en": "College of Nursing", "quota": 4},
-        "5": {"name": "藥物科學院", "name_en": "College of Pharmaceutical Sciences", "quota": 5},
-        "6": {"name": "生醫工學院", "name_en": "College of Biomedical Science and Engineering", "quota": 7},
-        "7": {"name": "生命科學院", "name_en": "College of Life Sciences", "quota": 8}
+    # 申請時間設定 - 使用台灣時間，更實際的時間安排
+    base_start = datetime(current_year, 9, 1, 0, 0, 0, tzinfo=taiwan_tz)  # 9月1日 00:00 台灣時間
+    base_end = datetime(current_year, 10, 31, 23, 59, 59, tzinfo=taiwan_tz)  # 10月31日 23:59:59 台灣時間
+    renewal_start = datetime(current_year, 8, 1, 0, 0, 0, tzinfo=taiwan_tz)  # 續領8月1日 00:00 台灣時間
+    renewal_end = datetime(current_year, 9, 15, 23, 59, 59, tzinfo=taiwan_tz)  # 續領9月15日 23:59:59 台灣時間
+    
+    # 學院配額配置 - 簡化且平衡的配額分配
+    COLLEGE_INFO = {
+        "E": {"name": "電機學院", "name_en": "College of Electrical and Computer Engineering"},
+        "C": {"name": "資訊學院", "name_en": "College of Computer Science"},
+        "I": {"name": "工學院", "name_en": "College of Engineering"},
+        "S": {"name": "理學院", "name_en": "College of Science"},
+        "B": {"name": "工程生物學院", "name_en": "College of Engineering Bioscience"},
+        "M": {"name": "管理學院", "name_en": "College of Management"},
+        "A": {"name": "人社院", "name_en": "College of Humanities Arts and Social Sciences"},
+        "K": {"name": "客家學院", "name_en": "College of Hakka Studies"},
+        "O": {"name": "光電學院", "name_en": "College of Photonics"},
+        "L": {"name": "科技法律學院", "name_en": "School of Law"},
+        "D": {"name": "半導體學院", "name_en": "International College of Semiconductor Technology"},
+        "G": {"name": "綠能學院", "name_en": "College of Green Technology"},
+        "1": {"name": "醫學院", "name_en": "College of Medicine"},
+        "2": {"name": "牙醫學院", "name_en": "College of Dentistry"},
+        "3": {"name": "護理學院", "name_en": "College of Nursing"},
+        "5": {"name": "藥物科學院", "name_en": "College of Pharmaceutical Sciences"},
+        "6": {"name": "生醫工學院", "name_en": "College of Biomedical Science and Engineering"},
+        "7": {"name": "生命科學院", "name_en": "College of Life Sciences"}
     }
     
-    # 創建名額管理配置
+    # 博士生獎學金子類型配額配置 - 統一且清晰的配額分配
+    PHD_QUOTA_CONFIG = {
+        "nstc": {
+            "E": 6, "C": 5, "I": 5, "S": 4, "B": 3, "O": 4, "D": 4,
+            "1": 5, "6": 3, "7": 3, "M": 3, "A": 3, "K": 2
+        },
+        "moe_1w": {
+            "E": 7, "C": 6, "I": 6, "S": 5, "B": 4, "O": 5, "D": 5,
+            "1": 6, "6": 4, "7": 4, "M": 3, "A": 3, "K": 2
+        },
+        "moe_2w": {
+            "E": 8, "C": 7, "I": 7, "S": 6, "B": 5, "O": 6, "D": 6,
+            "1": 7, "6": 5, "7": 5, "M": 4, "A": 4, "K": 3
+        }
+    }
+    
+    def create_base_config(scholarship, academic_year, **overrides):
+        """創建基礎配置模板"""
+        # 設定有效期間 - 學年度的完整期間，使用台灣時間
+        academic_start = datetime(current_year, 8, 1, 0, 0, 0, tzinfo=taiwan_tz)  # 8月1日 00:00 台灣時間
+        academic_end = datetime(current_year + 1, 7, 31, 23, 59, 59, tzinfo=taiwan_tz)  # 隔年7月31日 23:59:59 台灣時間
+        
+        base_config = {
+            "scholarship_type_id": scholarship.id,
+            "academic_year": academic_year,
+            "version": "1.0",
+            "created_by": admin_id,
+            "updated_by": admin_id,
+            "is_active": True,
+            "currency": "TWD",
+            "whitelist_student_ids": {},
+            "effective_start_date": academic_start,  # 配置生效開始時間
+            "effective_end_date": academic_end,      # 配置生效結束時間
+        }
+        base_config.update(overrides)
+        return base_config
+    
+    def create_review_schedule(start_date, end_date, renewal_start, renewal_end, professor_required=False, college_required=False):
+        """創建審查時程配置"""
+        schedule = {
+            "requires_professor_recommendation": professor_required,
+            "requires_college_review": college_required,
+            "review_deadline": end_date + timedelta(days=30)
+        }
+        
+        # 一般申請審查時程
+        if professor_required:
+            schedule.update({
+                "professor_review_start": end_date + timedelta(days=1),
+                "professor_review_end": end_date + timedelta(days=14)
+            })
+            
+        if college_required:
+            start_offset = 15 if professor_required else 1
+            schedule.update({
+                "college_review_start": end_date + timedelta(days=start_offset),
+                "college_review_end": end_date + timedelta(days=start_offset + 14)
+            })
+        
+        # 續領申請審查時程
+        if professor_required:
+            schedule.update({
+                "renewal_professor_review_start": renewal_end + timedelta(days=1),
+                "renewal_professor_review_end": renewal_end + timedelta(days=10)
+            })
+            
+        if college_required:
+            renewal_start_offset = 11 if professor_required else 1
+            schedule.update({
+                "renewal_college_review_start": renewal_end + timedelta(days=renewal_start_offset),
+                "renewal_college_review_end": renewal_end + timedelta(days=renewal_start_offset + 10)
+            })
+            
+        return schedule
+    
+    # 配置數據生成 - 包含113和114學年度
     quota_configs_data = []
     
-    for scholarship in scholarships:
-        if scholarship.code == "undergraduate_freshman":
-            # 學士班新生獎學金配置 - 無配額限制
-            quota_configs_data.append({
-                "scholarship_type_id": scholarship.id,
-                "academic_year": 113,  # 民國113年
-                "semester": Semester.FIRST,  # 第一學期
-                "config_name": "學士班新生獎學金配置",
-                "config_code": f"config_{scholarship.code}_113_first",
-                "description": "113學年度第一學期學士班新生獎學金配置，無配額限制",
-                "description_en": "Undergraduate freshman scholarship configuration AY113-first without quota limits",
-                "has_quota_limit": False,  # 移除配額限制
-                "has_college_quota": False,
-                "quota_management_mode": QuotaManagementMode.NONE,  # 無配額管理
-                "total_quota": None,  # 無總配額限制
-                "college_quota_config": None,  # 無配額配置
-                
-                # 金額設定 (從 ScholarshipType 移至此處)
-                "amount": 50000,  # 學士班新生獎學金金額
-                "currency": "TWD",
-                
-                # 白名單設定 (依子獎學金類型區分)
-                "whitelist_student_ids": {},
-                
-                # 申請時間設定
-                "application_start_date": start_date,
-                "application_end_date": end_date,
-                "renewal_application_start_date": renewal_start,
-                "renewal_application_end_date": renewal_end,
-                
-                # 審查時間設定
-                "requires_professor_recommendation": False,
-                "professor_review_start": end_date + timedelta(days=1),
-                "professor_review_end": end_date + timedelta(days=7),
-                "requires_college_review": False,
-                "college_review_start": end_date + timedelta(days=8),
-                "college_review_end": end_date + timedelta(days=14),
-                "review_deadline": end_date + timedelta(days=21),
-                
-                "quota_allocation_rules": {
-                    "unlimited_allocation": True  # 無配額限制
-                },
-                "is_active": True,
-                "version": "1.0",
-                "created_by": admin_id,
-                "updated_by": admin_id
-            })
-            
-        elif scholarship.code == "phd":
-            # 博士生獎學金 - 子類型×學院矩陣配額管理
-            # 每個子類型在每個學院都有獨立的配額
-            phd_college_subtype_quotas = {
-                # 國科會博士生獎學金 - 各學院配額
-                "nstc": {
-                    "E": 5,  # 電機學院 國科會 5個
-                    "C": 4,  # 資訊學院 國科會 4個
-                    "I": 4,  # 工學院 國科會 4個
-                    "S": 3,  # 理學院 國科會 3個
-                    "B": 3,  # 工程生物學院 國科會 3個
-                    "O": 3,  # 光電學院 國科會 3個
-                    "D": 3,  # 半導體學院 國科會 3個
-                    "1": 4,  # 醫學院 國科會 4個
-                    "6": 3,  # 生醫工學院 國科會 3個
-                    "7": 3,  # 生命科學院 國科會 3個
-                    "M": 2,  # 管理學院 國科會 2個
-                    "A": 2,  # 人社院 國科會 2個
-                    "K": 1   # 客家學院 國科會 1個
-                },
-                # 教育部博士生獎學金(一萬配合款) - 各學院配額
-                "moe_1w": {
-                    "E": 6,  # 電機學院 教育部一萬 6個
-                    "C": 5,  # 資訊學院 教育部一萬 5個
-                    "I": 5,  # 工學院 教育部一萬 5個
-                    "S": 4,  # 理學院 教育部一萬 4個
-                    "B": 3,  # 工程生物學院 教育部一萬 3個
-                    "O": 4,  # 光電學院 教育部一萬 4個
-                    "D": 4,  # 半導體學院 教育部一萬 4個
-                    "1": 5,  # 醫學院 教育部一萬 5個
-                    "6": 3,  # 生醫工學院 教育部一萬 3個
-                    "7": 3,  # 生命科學院 教育部一萬 3個
-                    "M": 3,  # 管理學院 教育部一萬 3個
-                    "A": 3,  # 人社院 教育部一萬 3個
-                    "K": 1   # 客家學院 教育部一萬 1個
-                },
-                # 教育部博士生獎學金(兩萬配合款) - 各學院配額
-                "moe_2w": {
-                    "E": 8,  # 電機學院 教育部兩萬 8個
-                    "C": 6,  # 資訊學院 教育部兩萬 6個
-                    "I": 6,  # 工學院 教育部兩萬 6個
-                    "S": 5,  # 理學院 教育部兩萬 5個
-                    "B": 4,  # 工程生物學院 教育部兩萬 4個
-                    "O": 5,  # 光電學院 教育部兩萬 5個
-                    "D": 5,  # 半導體學院 教育部兩萬 5個
-                    "1": 6,  # 醫學院 教育部兩萬 6個
-                    "6": 4,  # 生醫工學院 教育部兩萬 4個
-                    "7": 4,  # 生命科學院 教育部兩萬 4個
-                    "M": 3,  # 管理學院 教育部兩萬 3個
-                    "A": 3,  # 人社院 教育部兩萬 3個
-                    "K": 2   # 客家學院 教育部兩萬 2個
+    # 113學年度 - 舊配置用於驗證系統
+    def create_113_configs():
+        """創建113學年度配置 - 用於測試舊配置兼容性"""
+        configs_113 = []
+        
+        for scholarship in scholarships:
+            if scholarship.code == "undergraduate_freshman":
+                # 113學年度學士班新生獎學金 - 每學期制
+                for semester in [Semester.FIRST, Semester.SECOND]:
+                    sem_name = "第一學期" if semester == Semester.FIRST else "第二學期"
+                    sem_code = "first" if semester == Semester.FIRST else "second"
+                    
+                    config = create_base_config(
+                        scholarship, 113,
+                        semester=semester,
+                        config_name=f"113學年度學士班新生獎學金 - {sem_name}",
+                        config_code=f"config_{scholarship.code}_113_{sem_code}",
+                        description=f"113學年度{sem_name}學士班新生獎學金配置，已結束申請期間",
+                        description_en=f"AY113-{sem_code} undergraduate freshman scholarship (application period ended)",
+                        amount=45000,  # 113年較低的金額
+                        has_quota_limit=False,
+                        has_college_quota=False,
+                        quota_management_mode=QuotaManagementMode.NONE,
+                        total_quota=None,
+                        college_quota_config=None,
+                        # 113年的申請時間 (已過期)
+                        application_start_date=datetime(current_year-1, 9, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                        application_end_date=datetime(current_year-1, 10, 31, 23, 59, 59, tzinfo=taiwan_tz),
+                        renewal_application_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                        renewal_application_end_date=datetime(current_year-1, 9, 15, 23, 59, 59, tzinfo=taiwan_tz),
+                        # 113年的有效期間 (已過期)
+                        effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                        effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
+                        quota_allocation_rules={"unlimited_allocation": True, "legacy_config": True},
+                        is_active=False  # 舊配置設為不活躍
+                    )
+                    config.update(create_review_schedule(
+                        datetime(current_year-1, 9, 1, tzinfo=taiwan_tz), 
+                        datetime(current_year-1, 10, 31, tzinfo=taiwan_tz),
+                        datetime(current_year-1, 8, 1, tzinfo=taiwan_tz),
+                        datetime(current_year-1, 9, 15, tzinfo=taiwan_tz),
+                        professor_required=False, college_required=False
+                    ))
+                    configs_113.append(config)
+                    
+            elif scholarship.code == "phd":
+                # 113學年度博士生獎學金 - 舊的矩陣配額
+                old_phd_config = {
+                    "nstc": {
+                        "E": 5, "C": 4, "I": 4, "S": 3, "B": 3, "O": 3, "D": 3,
+                        "1": 4, "6": 3, "7": 3, "M": 2, "A": 2, "K": 1
+                    },
+                    "moe_1w": {
+                        "E": 6, "C": 5, "I": 5, "S": 4, "B": 3, "O": 4, "D": 4,
+                        "1": 5, "6": 3, "7": 3, "M": 3, "A": 3, "K": 1
+                    },
+                    "moe_2w": {
+                        "E": 8, "C": 6, "I": 6, "S": 5, "B": 4, "O": 5, "D": 5,
+                        "1": 6, "6": 4, "7": 4, "M": 3, "A": 3, "K": 2
+                    }
                 }
-            }
-            
-            # 計算總配額
-            total_phd_quota = sum(sum(college_quotas.values()) for college_quotas in phd_college_subtype_quotas.values())
-            
-            quota_configs_data.append({
-                "scholarship_type_id": scholarship.id,
-                "academic_year": 113,  # 民國113年
-                "semester": None,  # 學年制獎學金不需要學期
-                "config_name": "博士生獎學金名額管理配置",
-                "config_code": f"quota_config_{scholarship.code}_113",
-                "description": "113學年度博士生獎學金名額管理配置，採用子類型×學院矩陣配額管理",
-                "description_en": "Quota management configuration for PhD scholarship AY113 with sub-type × college matrix allocation",
-                "has_quota_limit": True,
-                "has_college_quota": True,
-                "quota_management_mode": QuotaManagementMode.MATRIX_BASED,  # 使用矩陣配額管理模式
-                "total_quota": total_phd_quota,  # 總配額 (所有子類型×學院的總和)
-                "college_quota_config": phd_college_subtype_quotas,  # 子類型×學院矩陣配額
                 
-                # 金額設定 (從 ScholarshipType 移至此處)
-                "amount": 60000,  # 博士生獎學金金額
-                "currency": "TWD",
+                total_old_quota = sum(sum(quotas.values()) for quotas in old_phd_config.values())
                 
-                # 白名單設定 (依子獎學金類型區分)
-                "whitelist_student_ids": {},
-                
-                # 申請時間設定
-                "application_start_date": start_date - timedelta(days=365),
-                "application_end_date": end_date - timedelta(days=365),
-                "renewal_application_start_date": renewal_start - timedelta(days=365),
-                "renewal_application_end_date": renewal_end - timedelta(days=365),
-
-                "renewal_professor_review_start": end_date - timedelta(days=365) + timedelta(days=1),
-                "renewal_professor_review_end": end_date - timedelta(days=365) + timedelta(days=10),
-                "renewal_college_review_start": end_date - timedelta(days=365) + timedelta(days=11),
-                "renewal_college_review_end": end_date - timedelta(days=365) + timedelta(days=21),
-                
-                # 審查時間設定
-                "requires_professor_recommendation": True,
-                "professor_review_start": end_date - timedelta(days=365) + timedelta(days=1),
-                "professor_review_end": end_date - timedelta(days=365) + timedelta(days=10),
-                "requires_college_review": True,
-                "college_review_start": end_date - timedelta(days=365) + timedelta(days=11),
-                "college_review_end": end_date - timedelta(days=365) + timedelta(days=21),
-                "review_deadline": end_date - timedelta(days=365) + timedelta(days=30),
-                "quota_allocation_rules": {
-                    "sub_type_quotas": {
-                        "nstc": sum(phd_college_subtype_quotas["nstc"].values()),      # 國科會總名額: 23個
-                        "moe_1w": sum(phd_college_subtype_quotas["moe_1w"].values()),  # 教育部一萬總名額: 28個
-                        "moe_2w": sum(phd_college_subtype_quotas["moe_2w"].values())   # 教育部兩萬總名額: 36個
+                config = create_base_config(
+                    scholarship, 113,
+                    semester=None,  # 學年制
+                    config_name="113學年度博士生獎學金配置 - 矩陣配額管理",
+                    config_code=f"config_{scholarship.code}_113",
+                    description="113學年度博士生獎學金配置，已結束申請期間",
+                    description_en="AY113 PhD scholarship with matrix allocation (application period ended)",
+                    amount=55000,  # 113年的金額
+                    has_quota_limit=True,
+                    has_college_quota=True,
+                    quota_management_mode=QuotaManagementMode.MATRIX_BASED,
+                    total_quota=total_old_quota,
+                    college_quota_config=old_phd_config,
+                    # 113年的申請時間 (已過期)
+                    application_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    application_end_date=datetime(current_year-1, 9, 30, 23, 59, 59, tzinfo=taiwan_tz),
+                    renewal_application_start_date=datetime(current_year-1, 7, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    renewal_application_end_date=datetime(current_year-1, 8, 15, 23, 59, 59, tzinfo=taiwan_tz),
+                    # 113年的有效期間 (已過期)
+                    effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
+                    quota_allocation_rules={
+                        "sub_type_quotas": {
+                            subtype: sum(quotas.values()) 
+                            for subtype, quotas in old_phd_config.items()
+                        },
+                        "matrix_quotas": old_phd_config,
+                        "matrix_allocation": True,
+                        "backup_allocation": True,
+                        "cross_subtype_allocation": False,
+                        "college_subtype_strict": True,
+                        "renewal_priority": True,
+                        "legacy_config": True
                     },
-                    "matrix_quotas": phd_college_subtype_quotas,  # 矩陣配額數據
-                    "matrix_allocation": True,  # 啟用矩陣分配模式
-                    "backup_allocation": True,  # 允許同子類型不同學院間調配
-                    "cross_subtype_allocation": False,  # 不允許跨子類型調配
-                    "college_subtype_strict": True,  # 嚴格按學院×子類型分配
-                    "renewal_priority": True  # 續領優先
-                },
-                "is_active": True,
-                "version": "1.0",
-                "created_by": admin_id,
-                "updated_by": admin_id
-            })
-
-            quota_configs_data.append({
-                "scholarship_type_id": scholarship.id,
-                "academic_year": 114,  # 民國114年
-                "semester": None,  # 學年制獎學金不需要學期
-                "config_name": "博士生獎學金名額管理配置",
-                "config_code": f"quota_config_{scholarship.code}_114",
-                "description": "114學年度博士生獎學金名額管理配置，採用子類型×學院矩陣配額管理",
-                "description_en": "Quota management configuration for PhD scholarship AY114 with sub-type × college matrix allocation",
-                "has_quota_limit": True,
-                "has_college_quota": True,
-                "quota_management_mode": QuotaManagementMode.MATRIX_BASED,  # 使用矩陣配額管理模式
-                "total_quota": total_phd_quota,  # 總配額 (所有子類型×學院的總和)
-                "college_quota_config": phd_college_subtype_quotas,  # 子類型×學院矩陣配額
+                    is_active=False  # 舊配置設為不活躍
+                )
+                config.update(create_review_schedule(
+                    datetime(current_year-1, 8, 1, tzinfo=taiwan_tz),
+                    datetime(current_year-1, 9, 30, tzinfo=taiwan_tz),
+                    datetime(current_year-1, 7, 1, tzinfo=taiwan_tz),
+                    datetime(current_year-1, 8, 15, tzinfo=taiwan_tz),
+                    professor_required=True, college_required=True
+                ))
+                configs_113.append(config)
                 
-                # 金額設定 (從 ScholarshipType 移至此處)
-                "amount": 40000,  # 博士生獎學金金額
-                "currency": "TWD",
-                
-                # 白名單設定 (依子獎學金類型區分)
-                "whitelist_student_ids": {},
-                
-                # 申請時間設定
-                "application_start_date": start_date,
-                "application_end_date": end_date,
-                "renewal_application_start_date": renewal_start,
-                "renewal_application_end_date": renewal_end,
-
-                "renewal_professor_review_start": end_date + timedelta(days=1),
-                "renewal_professor_review_end": end_date + timedelta(days=10),
-                "renewal_college_review_start": end_date + timedelta(days=11),
-                "renewal_college_review_end": end_date + timedelta(days=21),
-                
-                # 審查時間設定
-                "requires_professor_recommendation": True,
-                "professor_review_start": end_date + timedelta(days=1),
-                "professor_review_end": end_date + timedelta(days=10),
-                "requires_college_review": True,
-                "college_review_start": end_date + timedelta(days=11),
-                "college_review_end": end_date + timedelta(days=21),
-                "review_deadline": end_date + timedelta(days=30),
-                "quota_allocation_rules": {
-                    "sub_type_quotas": {
-                        "nstc": sum(phd_college_subtype_quotas["nstc"].values()),      # 國科會總名額: 23個
-                        "moe_1w": sum(phd_college_subtype_quotas["moe_1w"].values()),  # 教育部一萬總名額: 28個
-                        "moe_2w": sum(phd_college_subtype_quotas["moe_2w"].values())   # 教育部兩萬總名額: 36個
-                    },
-                    "matrix_quotas": phd_college_subtype_quotas,  # 矩陣配額數據
-                    "matrix_allocation": True,  # 啟用矩陣分配模式
-                    "backup_allocation": True,  # 允許同子類型不同學院間調配
-                    "cross_subtype_allocation": False,  # 不允許跨子類型調配
-                    "college_subtype_strict": True,  # 嚴格按學院×子類型分配
-                    "renewal_priority": True  # 續領優先
-                },
-                "is_active": True,
-                "version": "1.0",
-                "created_by": admin_id,
-                "updated_by": admin_id
-            })
-            
-        elif scholarship.code == "direct_phd":
-            quota_configs_data.append({
-                "scholarship_type_id": scholarship.id,
-                "academic_year": 113,  # 民國113年
-                "semester": Semester.FIRST,  # 第一學期
-                "config_name": "逕讀博士獎學金配置",
-                "config_code": f"config_{scholarship.code}_113_first",
-                "description": "113學年度第一學期逕讀博士獎學金配置，無配額限制",
-                "description_en": "Direct PhD scholarship configuration AY113-first without quota limits",
-                "has_quota_limit": False,  # 移除配額限制
-                "has_college_quota": False,
-                "quota_management_mode": QuotaManagementMode.NONE,  # 無配額管理
-                "total_quota": None,  # 無總配額限制
-                "college_quota_config": None,  # 無配額配置
-                
-                # 金額設定 (從 ScholarshipType 移至此處)
-                "amount": 80000,  # 逕讀博士獎學金金額較高
-                "currency": "TWD",
-                
-                # 白名單設定 (依子獎學金類型區分)
-                "whitelist_student_ids": {},
-                
-                # 申請時間設定
-                "application_start_date": start_date,
-                "application_end_date": end_date,
-                "renewal_application_start_date": renewal_start,
-                "renewal_application_end_date": renewal_end,
-                
-                # 審查時間設定
-                "requires_professor_recommendation": False,
-                "professor_review_start": end_date + timedelta(days=1),
-                "professor_review_end": end_date + timedelta(days=14),
-                "requires_college_review": True,
-                "college_review_start": end_date + timedelta(days=15),
-                "college_review_end": end_date + timedelta(days=28),
-                "review_deadline": end_date + timedelta(days=35),
-                "quota_allocation_rules": {
-                    "strict_qualification": True,
-                    "first_year_only": True,
-                    "direct_phd_track_only": True,
-                    "unlimited_allocation": True  # 無配額限制
-                },
-                "is_active": True,
-                "version": "1.0",
-                "created_by": admin_id,
-                "updated_by": admin_id
-            })
+            elif scholarship.code == "direct_phd":
+                # 113學年度逕讀博士獎學金 - 每學期制
+                for semester in [Semester.FIRST, Semester.SECOND]:
+                    sem_name = "第一學期" if semester == Semester.FIRST else "第二學期"
+                    sem_code = "first" if semester == Semester.FIRST else "second"
+                    
+                    config = create_base_config(
+                        scholarship, 113,
+                        semester=semester,
+                        config_name=f"113學年度逕讀博士獎學金 - {sem_name}",
+                        config_code=f"config_{scholarship.code}_113_{sem_code}",
+                        description=f"113學年度{sem_name}逕讀博士獎學金配置，已結束申請期間",
+                        description_en=f"AY113-{sem_code} direct PhD scholarship (application period ended)",
+                        amount=75000,  # 113年的金額
+                        has_quota_limit=False,
+                        has_college_quota=False,
+                        quota_management_mode=QuotaManagementMode.NONE,
+                        total_quota=None,
+                        college_quota_config=None,
+                        # 113年的申請時間 (已過期)
+                        application_start_date=datetime(current_year-1, 9, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                        application_end_date=datetime(current_year-1, 10, 31, 23, 59, 59, tzinfo=taiwan_tz),
+                        renewal_application_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                        renewal_application_end_date=datetime(current_year-1, 9, 15, 23, 59, 59, tzinfo=taiwan_tz),
+                        # 113年的有效期間 (已過期)
+                        effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                        effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
+                        quota_allocation_rules={
+                            "strict_qualification": True,
+                            "first_year_priority": True,
+                            "direct_phd_track_only": True,
+                            "unlimited_allocation": True,
+                            "legacy_config": True
+                        },
+                        is_active=False  # 舊配置設為不活躍
+                    )
+                    config.update(create_review_schedule(
+                        datetime(current_year-1, 9, 1, tzinfo=taiwan_tz),
+                        datetime(current_year-1, 10, 31, tzinfo=taiwan_tz),
+                        datetime(current_year-1, 8, 1, tzinfo=taiwan_tz),
+                        datetime(current_year-1, 9, 15, tzinfo=taiwan_tz),
+                        professor_required=True, college_required=True
+                    ))
+                    configs_113.append(config)
+                    
+        return configs_113
     
-    # 創建配置記錄
+    # 114學年度 - 當前配置
+    def create_114_configs():
+        """創建114學年度配置 - 當前活躍配置"""
+        configs_114 = []
+        
+        for scholarship in scholarships:
+            scholarship_configs = []
+            
+            if scholarship.code == "undergraduate_freshman":
+                # 學士班新生獎學金 - 每學期制，無配額限制
+                for semester in [Semester.FIRST, Semester.SECOND]:
+                    sem_name = "第一學期" if semester == Semester.FIRST else "第二學期"
+                    sem_code = "first" if semester == Semester.FIRST else "second"
+                    
+                    config = create_base_config(
+                        scholarship, 114,
+                        semester=semester,
+                        config_name=f"學士班新生獎學金配置 - {sem_name}",
+                        config_code=f"config_{scholarship.code}_114_{sem_code}",
+                        description=f"114學年度{sem_name}學士班新生獎學金配置，無配額限制",
+                        description_en=f"Undergraduate freshman scholarship AY114-{sem_code} without quota limits",
+                        amount=50000,
+                        has_quota_limit=False,
+                        has_college_quota=False,
+                        quota_management_mode=QuotaManagementMode.NONE,
+                        total_quota=None,
+                        college_quota_config=None,
+                        application_start_date=base_start,
+                        application_end_date=base_end,
+                        renewal_application_start_date=renewal_start,
+                        renewal_application_end_date=renewal_end,
+                        quota_allocation_rules={"unlimited_allocation": True}
+                    )
+                    config.update(create_review_schedule(base_start, base_end, renewal_start, renewal_end, professor_required=False, college_required=False))
+                    scholarship_configs.append(config)
+                    
+            elif scholarship.code == "phd":
+                # 博士生獎學金 - 學年制，矩陣配額管理
+                total_quota = sum(sum(quotas.values()) for quotas in PHD_QUOTA_CONFIG.values())
+                
+                config = create_base_config(
+                    scholarship, 114,
+                    semester=None,  # 學年制
+                    config_name="博士生獎學金配置 - 矩陣配額管理",
+                    config_code=f"config_{scholarship.code}_114",
+                    description="114學年度博士生獎學金配置，採用子類型×學院矩陣配額管理",
+                    description_en="PhD scholarship AY114 with sub-type × college matrix allocation",
+                    amount=50000,  # 統一金額
+                    has_quota_limit=True,
+                    has_college_quota=True,
+                    quota_management_mode=QuotaManagementMode.MATRIX_BASED,
+                    total_quota=total_quota,
+                    college_quota_config=PHD_QUOTA_CONFIG,
+                    application_start_date=base_start - timedelta(days=30),  # 提前開始申請
+                    application_end_date=base_end,
+                    renewal_application_start_date=renewal_start,
+                    renewal_application_end_date=renewal_end,
+                    quota_allocation_rules={
+                        "sub_type_quotas": {
+                            subtype: sum(quotas.values()) 
+                            for subtype, quotas in PHD_QUOTA_CONFIG.items()
+                        },
+                        "matrix_quotas": PHD_QUOTA_CONFIG,
+                        "matrix_allocation": True,
+                        "backup_allocation": True,
+                        "cross_subtype_allocation": False,
+                        "college_subtype_strict": True,
+                        "renewal_priority": True
+                    }
+                )
+                config.update(create_review_schedule(
+                    base_start - timedelta(days=30), base_end, renewal_start, renewal_end,
+                    professor_required=True, college_required=True
+                ))
+                scholarship_configs.append(config)
+                
+            elif scholarship.code == "direct_phd":
+                # 逕讀博士獎學金 - 每學期制，無配額限制
+                for semester in [Semester.FIRST, Semester.SECOND]:
+                    sem_name = "第一學期" if semester == Semester.FIRST else "第二學期"
+                    sem_code = "first" if semester == Semester.FIRST else "second"
+                    
+                    config = create_base_config(
+                        scholarship, 114,
+                        semester=semester,
+                        config_name=f"逕讀博士獎學金配置 - {sem_name}",
+                        config_code=f"config_{scholarship.code}_114_{sem_code}",
+                        description=f"114學年度{sem_name}逕讀博士獎學金配置，無配額限制",
+                        description_en=f"Direct PhD scholarship AY114-{sem_code} without quota limits",
+                        amount=80000,  # 較高金額
+                        has_quota_limit=False,
+                        has_college_quota=False,
+                        quota_management_mode=QuotaManagementMode.NONE,
+                        total_quota=None,
+                        college_quota_config=None,
+                        application_start_date=base_start,
+                        application_end_date=base_end,
+                        renewal_application_start_date=renewal_start,
+                        renewal_application_end_date=renewal_end,
+                        quota_allocation_rules={
+                            "strict_qualification": True,
+                            "first_year_priority": True,
+                            "direct_phd_track_only": True,
+                            "unlimited_allocation": True
+                        }
+                    )
+                    config.update(create_review_schedule(
+                        base_start, base_end, renewal_start, renewal_end,
+                        professor_required=True, college_required=True
+                    ))
+                    scholarship_configs.append(config)
+            
+            configs_114.extend(scholarship_configs)
+        return configs_114
+    
+    # 生成所有配置
+    quota_configs_data.extend(create_113_configs())  # 113學年度配置
+    quota_configs_data.extend(create_114_configs())  # 114學年度配置
+    
+    # 創建配置記錄 - 避免重複創建
+    created_count = 0
     for config_data in quota_configs_data:
-        # 檢查是否已存在
         result = await session.execute(
             select(ScholarshipConfiguration).where(
                 ScholarshipConfiguration.config_code == config_data["config_code"]
@@ -1398,17 +1481,73 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
         if not existing:
             config = ScholarshipConfiguration(**config_data)
             session.add(config)
+            created_count += 1
+        else:
+            # 更新現有配置
+            for key, value in config_data.items():
+                if key != "config_code":
+                    setattr(existing, key, value)
     
     await session.commit()
-    print("✅ Scholarship configurations created successfully!")
-    print("📋 Created configurations for:")
-    print("   - 學士班新生獎學金: 無配額限制，依學業成績與經濟需求評核")
-    print(f"   - 博士生獎學金: 總名額150個，採用子類型×學院矩陣分配")
-    print(f"     • 國科會 (40名): 電機(E)5、資訊(C)4、工學(I)4、理學(S)3、生物(B)3、光電(O)3、半導體(D)3、醫學(1)4、生醫工(6)3、生科(7)3、管理(M)2、人社(A)2、客家(K)1")
-    print(f"     • 教育部一萬 (49名): 電機(E)6、資訊(C)5、工學(I)5、理學(S)4、生物(B)3、光電(O)4、半導體(D)4、醫學(1)5、生醫工(6)3、生科(7)3、管理(M)3、人社(A)3、客家(K)1")
-    print(f"     • 教育部兩萬 (61名): 電機(E)8、資訊(C)6、工學(I)6、理學(S)5、生物(B)4、光電(O)5、半導體(D)5、醫學(1)6、生醫工(6)4、生科(7)4、管理(M)3、人社(A)3、客家(K)2")
-    print("   - 逕讀博士獎學金: 無配額限制，依學術卓越表現評核")
-    print("   - 僅博士生獎學金採用矩陣配額管理，其他獎學金無配額限制")
+    
+    # 輸出配置摘要
+    print("✅ Scholarship configurations created/updated successfully!")
+    print(f"📋 Total configurations: {created_count} new, {len(quota_configs_data) - created_count} updated")
+    print(f"📊 Total configurations generated: {len(quota_configs_data)} (covering 2 academic years)")
+    
+    # 分別統計113和114年配置
+    configs_113 = [c for c in quota_configs_data if c['academic_year'] == 113]
+    configs_114 = [c for c in quota_configs_data if c['academic_year'] == 114]
+    print(f"   📚 AY113 (Legacy): {len(configs_113)} configurations - inactive for validation")
+    print(f"   📚 AY114 (Current): {len(configs_114)} configurations - active for current use")
+    
+    # 有效期間資訊 - 台灣時間
+    academic_start_113 = datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz)
+    academic_end_113 = datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz)
+    academic_start_114 = datetime(current_year, 8, 1, 0, 0, 0, tzinfo=taiwan_tz)
+    academic_end_114 = datetime(current_year + 1, 7, 31, 23, 59, 59, tzinfo=taiwan_tz)
+    
+    print("\n⏰ Academic year periods (Taiwan time):")
+    print(f"   📆 AY113: {academic_start_113.strftime('%Y-%m-%d')} to {academic_end_113.strftime('%Y-%m-%d')} (Legacy - Expired)")
+    print(f"   📆 AY114: {academic_start_114.strftime('%Y-%m-%d')} to {academic_end_114.strftime('%Y-%m-%d')} (Current - Active)")
+    
+    print("\n🎯 Configuration comparison:")
+    print("📚 AY113 (Legacy configurations for validation):")
+    print("   - 學士班新生獎學金: 每學期制，無配額限制，金額 45,000元 [INACTIVE]")
+    print("   - 博士生獎學金: 學年制，舊矩陣配額管理，金額 55,000元")
+    
+    # 計算113年博士生配額
+    old_phd_config = {
+        "nstc": {"E": 5, "C": 4, "I": 4, "S": 3, "B": 3, "O": 3, "D": 3, "1": 4, "6": 3, "7": 3, "M": 2, "A": 2, "K": 1},
+        "moe_1w": {"E": 6, "C": 5, "I": 5, "S": 4, "B": 3, "O": 4, "D": 4, "1": 5, "6": 3, "7": 3, "M": 3, "A": 3, "K": 1},
+        "moe_2w": {"E": 8, "C": 6, "I": 6, "S": 5, "B": 4, "O": 5, "D": 5, "1": 6, "6": 4, "7": 4, "M": 3, "A": 3, "K": 2}
+    }
+    old_phd_totals = {subtype: sum(quotas.values()) for subtype, quotas in old_phd_config.items()}
+    total_old_phd = sum(old_phd_totals.values())
+    print(f"     總配額: {total_old_phd}名 (國科會:{old_phd_totals['nstc']}, 教育部一萬:{old_phd_totals['moe_1w']}, 教育部二萬:{old_phd_totals['moe_2w']}) [INACTIVE]")
+    print("   - 逕讀博士獎學金: 每學期制，無配額限制，金額 75,000元 [INACTIVE]")
+    
+    print("\n📚 AY114 (Current active configurations):")
+    print("   - 學士班新生獎學金: 每學期制，無配額限制，金額 50,000元 [ACTIVE]")
+    print("   - 博士生獎學金: 學年制，新矩陣配額管理，金額 50,000元 [ACTIVE]")
+    
+    # 計算並顯示114年博士生獎學金配額摘要
+    phd_totals = {
+        subtype: sum(quotas.values()) 
+        for subtype, quotas in PHD_QUOTA_CONFIG.items()
+    }
+    total_phd = sum(phd_totals.values())
+    print(f"     總配額: {total_phd}名")
+    print(f"     • 國科會: {phd_totals['nstc']}名")
+    print(f"     • 教育部一萬: {phd_totals['moe_1w']}名") 
+    print(f"     • 教育部二萬: {phd_totals['moe_2w']}名")
+    print("   - 逕讀博士獎學金: 每學期制，無配額限制，金額 80,000元 [ACTIVE]")
+    
+    # 配置狀態摘要 - 包含台灣時間資訊
+    print(f"\n📅 Current active period: AY114 ({current_year}-{current_year+1})")
+    print(f"🇹🇼 Application period (Taiwan time): {base_start.strftime('%Y-%m-%d %H:%M')} to {base_end.strftime('%Y-%m-%d %H:%M')}")
+    print(f"🔄 Renewal period (Taiwan time): {renewal_start.strftime('%Y-%m-%d %H:%M')} to {renewal_end.strftime('%Y-%m-%d %H:%M')}")
+    print(f"🔍 Legacy AY113 configurations available for system validation and historical data queries")
 
 
 async def createTestApplicationsAndQuotaUsage(session: AsyncSession) -> None:

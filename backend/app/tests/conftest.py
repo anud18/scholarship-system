@@ -25,31 +25,48 @@ from app.models.scholarship import ScholarshipType
 from app.models.application import Application, ApplicationStatus
 
 # Override settings for testing
-settings.TESTING = True
-settings.DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-settings.DATABASE_URL_SYNC = "sqlite:///:memory:"
+import os
+os.environ["TESTING"] = "true"
+os.environ["PYTEST_CURRENT_TEST"] = "true"
 
-# Create test engines
-test_engine = create_async_engine(
-    settings.DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
+# Use in-memory SQLite for testing
+TEST_DATABASE_URL = "sqlite:///:memory:"
+TEST_DATABASE_URL_ASYNC = "sqlite+aiosqlite:///:memory:"
 
+settings.database_url_sync = TEST_DATABASE_URL
+
+# Create test engines - use sync only for service tests
 test_engine_sync = create_engine(
-    settings.DATABASE_URL_SYNC,
+    TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+# For async tests (if aiosqlite is available)
+try:
+    test_engine = create_async_engine(
+        TEST_DATABASE_URL_ASYNC,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    settings.database_url = TEST_DATABASE_URL_ASYNC
+except ImportError:
+    # Fallback if aiosqlite is not available
+    test_engine = None
+    settings.database_url = TEST_DATABASE_URL
 
 # Create session factories
-TestingSessionLocal = async_sessionmaker(
-    test_engine, class_=AsyncSession, expire_on_commit=False
-)
-
 TestingSessionLocalSync = sessionmaker(
     test_engine_sync, class_=Session, expire_on_commit=False
 )
+
+# Only create async session if async engine is available
+if test_engine:
+    TestingSessionLocal = async_sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
+else:
+    TestingSessionLocal = None
 
 
 @pytest.fixture(scope="session")
@@ -63,6 +80,9 @@ def event_loop():
 @pytest_asyncio.fixture(scope="function")
 async def db() -> AsyncGenerator[AsyncSession, None]:
     """Create a new database session for a test."""
+    if not test_engine or not TestingSessionLocal:
+        pytest.skip("Async database tests require aiosqlite")
+    
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

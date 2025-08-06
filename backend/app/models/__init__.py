@@ -32,6 +32,7 @@ from app.models.notification import Notification, NotificationType
 from app.models.audit_log import AuditLog, AuditAction
 from app.models.system_setting import SystemSetting
 from app.models.application_field import ApplicationField, ApplicationDocument, FieldType
+from app.models.user_profile import UserProfile, UserProfileHistory
 
 __all__ = [
     "User",
@@ -78,5 +79,9 @@ __all__ = [
     "NotificationType",
     "AuditLog",
     "AuditAction",
-    "SystemSetting"
+    "SystemSetting",
+    
+    # User profile models
+    "UserProfile",
+    "UserProfileHistory"
 ]

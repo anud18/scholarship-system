@@ -122,15 +122,8 @@ class ApplicationService:
             if not scholarship.is_user_in_whitelist(user_id):
                 raise ValidationError("您不在此獎學金的白名單內，僅限預先核准的學生申請")
         
-        # Optional: Check ranking requirement for undergraduate students (keeping as additional validation)
-        if student_type == "undergraduate" and scholarship.max_ranking_percent:
-            if (application_data.class_ranking_percent and 
-                application_data.class_ranking_percent > scholarship.max_ranking_percent):
-                raise ValidationError(f"Class ranking {application_data.class_ranking_percent}% exceeds maximum {scholarship.max_ranking_percent}%")
-        
-        # Check term count requirement
-        if scholarship.max_completed_terms and application_data.completed_terms is not None and application_data.completed_terms > scholarship.max_completed_terms:
-            raise ValidationError(f"Completed terms {application_data.completed_terms} exceeds maximum {scholarship.max_completed_terms}")
+        # All validation requirements (ranking, term count, etc.) are now handled by scholarship rules
+        # No hardcoded validation logic needed here
         
         # Check for existing active applications
         # In the new design, we need to get user ID differently
