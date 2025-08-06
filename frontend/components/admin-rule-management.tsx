@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -34,6 +34,16 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
   const [isCopyModalOpen, setIsCopyModalOpen] = useState(false)
   const [selectedRulesForCopy, setSelectedRulesForCopy] = useState<ScholarshipRule[]>([])
   const [isBulkCopyModalOpen, setIsBulkCopyModalOpen] = useState(false)
+  const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null)
+
+  // Toast helper functions
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 5000) // Auto dismiss after 5 seconds
+  }
+
+  const showSuccessToast = (message: string) => showToast(message, 'success')
+  const showErrorToast = (message: string) => showToast(message, 'error')
 
   // 自動選擇第一個獎學金類型
   useEffect(() => {
@@ -54,6 +64,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
         }
       } catch (error) {
         console.error('獲取可用年份失敗:', error)
+        showErrorToast('無法載入可用年份，將使用預設年份範圍')
         // Set a default range of years if API fails
         const currentYear = new Date().getFullYear() - 1911
         setAvailableYears([currentYear - 2, currentYear - 1, currentYear, currentYear + 1])
@@ -75,19 +86,19 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
     }
   }, [selectedScholarshipType])
 
-  // 當獎學金類型、學年或學期改變時載入規則（確保狀態已穩定）
+  // 當獎學金類型、學年或學期改變時載入規則（使用 useCallback 確保狀態一致性）
   useEffect(() => {
     if (selectedScholarshipType && selectedYear) {
       // 對於學年制獎學金，不需要等待學期狀態
       if (selectedScholarshipType.application_cycle === 'yearly') {
-        loadRules()
+        loadRules(selectedScholarshipType, selectedYear, null)
       } 
       // 對於學期制獎學金，需要確保有選擇學期
       else if (selectedScholarshipType.application_cycle === 'semester' && selectedSemester) {
-        loadRules()
+        loadRules(selectedScholarshipType, selectedYear, selectedSemester)
       }
     }
-  }, [selectedScholarshipType, selectedYear, selectedSemester])
+  }, [selectedScholarshipType, selectedYear, selectedSemester, loadRules])
 
   // Debounce search term (400ms delay)
   useEffect(() => {
@@ -120,20 +131,24 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
     setFilteredRules(filteredAndSortedRules)
   }, [filteredAndSortedRules])
 
-  const loadRules = async () => {
-    if (!selectedScholarshipType) return
+  const loadRules = useCallback(async (
+    scholarshipType: ScholarshipType,
+    year: number | null,
+    semester: string | null
+  ) => {
+    if (!scholarshipType || !year) return
 
     setLoading(true)
     try {
       // 根據獎學金類型決定是否包含學期參數
       const params: any = {
-        scholarship_type_id: selectedScholarshipType.id,
-        academic_year: selectedYear
+        scholarship_type_id: scholarshipType.id,
+        academic_year: year
       }
       
       // 只有學期制的獎學金才傳送 semester 參數
-      if (selectedScholarshipType.application_cycle === 'semester') {
-        params.semester = selectedSemester
+      if (scholarshipType.application_cycle === 'semester') {
+        params.semester = semester
       }
       
       const response = await api.admin.getScholarshipRules(params)
@@ -144,14 +159,14 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
       }
     } catch (error) {
       console.error('載入規則失敗:', error)
-      alert('載入規則失敗: ' + (error as Error).message)
+      showErrorToast('載入規則失敗: ' + (error as Error).message)
       // Set empty rules on error
       setRules([])
       setFilteredRules([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   const handleCreateRule = () => {
     setSelectedRule(null)
@@ -170,9 +185,11 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
 
     try {
       await api.admin.deleteScholarshipRule(rule.id)
-      await loadRules()
+      await loadRules(selectedScholarshipType!, selectedYear, selectedSemester)
+      showSuccessToast('規則刪除成功')
     } catch (error) {
       console.error('刪除規則失敗:', error)
+      showErrorToast('刪除規則失敗: ' + (error as Error).message)
     }
   }
 
@@ -185,10 +202,11 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
       } else if (selectedRule) {
         await api.admin.updateScholarshipRule(selectedRule.id, ruleData as any)
       }
-      await loadRules()
+      await loadRules(selectedScholarshipType, selectedYear, selectedSemester)
+      showSuccessToast(isCreating ? '規則創建成功' : '規則更新成功')
     } catch (error) {
       console.error('提交規則失敗:', error)
-      alert('提交規則失敗: ' + (error as Error).message)
+      showErrorToast('提交規則失敗: ' + (error as Error).message)
     }
   }
 
@@ -263,6 +281,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
             }
           } catch (error) {
             console.error('Failed to reload available years:', error)
+            showErrorToast('重新載入可用年份失敗')
           }
         }
         
@@ -270,7 +289,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
         if (targetYear === selectedYear && 
             ((!targetSemester && !selectedSemester) || targetSemester === selectedSemester)) {
           console.log('[COPY RULES] Reloading rules for current period...')
-          await loadRules()
+          await loadRules(selectedScholarshipType!, selectedYear, selectedSemester)
         }
       } else {
         console.error('[COPY RULES] Copy failed:', response.message)
@@ -279,7 +298,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
     } catch (error) {
       console.error('[COPY RULES] Error in copy process:', error)
       console.error('複製規則失敗:', error)
-      alert('複製規則失敗: ' + (error as Error).message)
+      showErrorToast('複製規則失敗: ' + (error as Error).message)
     }
   }
 
@@ -560,6 +579,36 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
             isBulkMode={true}
           />
         </>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-md shadow-lg transition-all duration-300 ${
+          toast.type === 'success' 
+            ? 'bg-green-50 border border-green-200 text-green-800' 
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          <div className="flex items-center gap-2">
+            {toast.type === 'success' ? (
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            )}
+            <p className="text-sm font-medium">{toast.message}</p>
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 text-current opacity-70 hover:opacity-100"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
