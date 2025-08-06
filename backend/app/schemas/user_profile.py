@@ -15,18 +15,12 @@ class BankInfoBase(BaseModel):
 
 class AdvisorInfoBase(BaseModel):
     """Base advisor information schema"""
+    advisor_name: Optional[str] = Field(None, max_length=100, description="指導教授姓名")
     advisor_email: Optional[EmailStr] = Field(None, description="指導教授Email")
     advisor_nycu_id: Optional[str] = Field(None, max_length=20, description="指導教授NYCU ID")
 
 
 
-
-class PersonalInfoBase(BaseModel):
-    """Base personal information schema"""
-    preferred_language: Optional[str] = Field("zh-TW", max_length=10, description="慣用語言")
-    bio: Optional[str] = Field(None, description="個人簡介")
-    interests: Optional[str] = Field(None, description="興趣專長")
-    social_links: Optional[Dict[str, str]] = Field(None, description="社群媒體連結")
 
 
 class UserProfileCreate(BaseModel):
@@ -36,14 +30,12 @@ class UserProfileCreate(BaseModel):
     account_number: Optional[str] = None
     
     # Advisor information
+    advisor_name: Optional[str] = None
     advisor_email: Optional[EmailStr] = None
     advisor_nycu_id: Optional[str] = None
     
     # Personal information
     preferred_language: str = "zh-TW"
-    bio: Optional[str] = None
-    interests: Optional[str] = None
-    social_links: Optional[Dict[str, str]] = None
     
     # Privacy settings
     privacy_settings: Optional[Dict[str, Any]] = None
@@ -57,14 +49,12 @@ class UserProfileUpdate(BaseModel):
     account_number: Optional[str] = Field(None, max_length=50)
     
     # Advisor information
+    advisor_name: Optional[str] = Field(None, max_length=100)
     advisor_email: Optional[EmailStr] = None
     advisor_nycu_id: Optional[str] = Field(None, max_length=20)
     
     # Personal information
     preferred_language: Optional[str] = Field(None, max_length=10)
-    bio: Optional[str] = None
-    interests: Optional[str] = None
-    social_links: Optional[Dict[str, str]] = None
     
     # Privacy settings
     privacy_settings: Optional[Dict[str, Any]] = None
@@ -82,14 +72,12 @@ class UserProfileResponse(BaseModel):
     bank_document_photo_url: Optional[str] = None  # Bank document photo
     
     # Advisor information
+    advisor_name: Optional[str] = None
     advisor_email: Optional[str] = None
     advisor_nycu_id: Optional[str] = None
     
     # Personal information
     preferred_language: str
-    bio: Optional[str] = None
-    interests: Optional[str] = None
-    social_links: Optional[Dict[str, str]] = None
     
     # Metadata
     privacy_settings: Optional[Dict[str, Any]] = None

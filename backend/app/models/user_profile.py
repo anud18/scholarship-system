@@ -24,16 +24,12 @@ class UserProfile(Base):
     bank_document_photo_url = Column(String(500))  # URL or file path to bank document photo
     
     # Advisor information (simplified)
+    advisor_name = Column(String(100))  # Professor name
     advisor_email = Column(String(100))
     advisor_nycu_id = Column(String(20))  # NYCU ID of the advisor
     
     # Personal preferences and notes
     preferred_language = Column(String(10), default="zh-TW")  # zh-TW, en-US
-    bio = Column(Text)  # Personal bio/description
-    interests = Column(Text)  # Academic interests, hobbies, etc.
-    
-    # Social media links
-    social_links = Column(JSON)  # {"linkedin": "url", "github": "url", etc.}
     
     # Custom fields for future extensibility
     custom_fields = Column(JSON)
@@ -61,19 +57,24 @@ class UserProfile(Base):
     @property
     def has_advisor_info(self) -> bool:
         """Check if user has advisor information"""
-        return bool(self.advisor_email or self.advisor_nycu_id)
+        return all([self.advisor_name, self.advisor_email, self.advisor_nycu_id])
     
     @property
     def profile_completion_percentage(self) -> int:
         """Calculate profile completion percentage"""
-        fields_to_check = [
-            self.bank_code, self.account_number,
-            self.advisor_email, self.advisor_nycu_id,
-            self.bio
-        ]
+        # Count completed sections instead of individual fields
+        completed_sections = 0
+        total_sections = 2
         
-        filled_fields = sum(1 for field in fields_to_check if field)
-        return int((filled_fields / len(fields_to_check)) * 100)
+        # Bank info section (both fields required)
+        if self.has_complete_bank_info:
+            completed_sections += 1
+            
+        # Advisor info section (all three fields required)
+        if self.has_advisor_info:
+            completed_sections += 1
+        
+        return int((completed_sections / total_sections) * 100)
 
 
 class UserProfileHistory(Base):
