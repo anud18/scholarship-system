@@ -187,15 +187,23 @@ class UserProfileService:
             # Create upload directory if it doesn't exist
             os.makedirs(upload_dir, exist_ok=True)
             
-            # Check base64 size before decoding (roughly 3/4 of final size)
-            estimated_size = len(document_upload.photo_data) * 3 / 4
-            if estimated_size > self.MAX_FILE_SIZE:
-                raise ValueError(f"File too large. Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB")
+            # More accurate base64 size estimation
+            # Base64 encoding adds ~33% overhead, so actual size = base64_size * 3/4
+            # But we need to account for padding characters
+            base64_data = document_upload.photo_data.rstrip('=')
+            estimated_size = len(base64_data) * 3 // 4
+            
+            # Add safety margin for estimation errors
+            if estimated_size > self.MAX_FILE_SIZE * 0.9:  # 90% of max to be safe
+                raise ValueError(f"File too large (estimated). Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB")
             
             # Decode base64 image
-            image_data = base64.b64decode(document_upload.photo_data)
+            try:
+                image_data = base64.b64decode(document_upload.photo_data)
+            except Exception as e:
+                raise ValueError(f"Invalid base64 data: {str(e)}")
             
-            # Verify actual size after decoding
+            # Verify actual size after decoding (final check)
             if len(image_data) > self.MAX_FILE_SIZE:
                 raise ValueError(f"File too large. Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB")
             

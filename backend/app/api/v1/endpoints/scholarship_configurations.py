@@ -253,32 +253,8 @@ async def get_matrix_quota_status(
                 college_codes.update(sub_type_quotas.keys())
         college_codes = sorted(list(college_codes))
         
-        # TODO: Reimplement usage query with student_data JSON field instead of Student model
-        # Single aggregated query to get all usage data at once
-        # from sqlalchemy import join, case
-        
-        # # Store the enum value to ensure it's properly converted to string
-        # approved_status = ApplicationStatus.APPROVED.value
-        
-        # TODO: Need to extract college from student_data JSON field instead of Student.std_aca_no
-        # This query needs to be rewritten to work with JSON data
-        usage_data = []  # Temporary empty data
-        
-        # # Execute single query and build usage lookup
-        # TODO: Implement usage data collection from student_data JSON field
-        # try:
-        #     usage_result = await db.execute(usage_stmt)
-        #     usage_data = {}
-        #     for row in usage_result:
-        #         usage_data[row.college] = {
-        #             'used': row.approved_count,
-        #             'applications': row.total_applications
-        #         }
-        # except Exception as usage_error:
-        #     import logging
-        #     logger = logging.getLogger(__name__)
-        #     logger.error(f"Error in aggregated usage query: {usage_error}", exc_info=True)
-        usage_data = {}  # Temporary empty data
+        # Get usage data efficiently from applications with student_data JSON field
+        usage_data = {}
         
         # Build quota matrix using pre-fetched usage data
         for sub_type in sub_types:

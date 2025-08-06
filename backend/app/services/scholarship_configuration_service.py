@@ -154,7 +154,7 @@ class ScholarshipConfigurationService:
             return (total_score / total_weight) * 100
         return 0.0
     
-    def apply_auto_screening(
+    async def apply_auto_screening(
         self, 
         config: ScholarshipConfiguration,
         applications: List[Application]
@@ -208,7 +208,7 @@ class ScholarshipConfigurationService:
     
     # CRUD Operations for ScholarshipConfiguration Management
     
-    def create_configuration(
+    async def create_configuration(
         self,
         scholarship_type_id: int,
         config_data: Dict[str, Any],
@@ -224,14 +224,16 @@ class ScholarshipConfigurationService:
             raise ValueError("Academic year is required")
         
         # Check if configuration already exists for this period
-        existing_config = self.db.query(ScholarshipConfiguration).filter(
+        stmt = select(ScholarshipConfiguration).where(
             and_(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
                 ScholarshipConfiguration.semester == semester,
                 ScholarshipConfiguration.is_active == True
             )
-        ).first()
+        )
+        result = await self.db.execute(stmt)
+        existing_config = result.scalar_one_or_none()
         
         if existing_config:
             raise ValueError("Configuration already exists for this academic period")
@@ -276,7 +278,7 @@ class ScholarshipConfigurationService:
         
         return new_config
     
-    def update_configuration(
+    async def update_configuration(
         self,
         config_id: int,
         config_data: Dict[str, Any],
@@ -284,9 +286,11 @@ class ScholarshipConfigurationService:
     ) -> ScholarshipConfiguration:
         """Update an existing scholarship configuration"""
         
-        config = self.db.query(ScholarshipConfiguration).filter(
+        stmt = select(ScholarshipConfiguration).where(
             ScholarshipConfiguration.id == config_id
-        ).first()
+        )
+        result = await self.db.execute(stmt)
+        config = result.scalar_one_or_none()
         
         if not config:
             raise ValueError("Configuration not found")
@@ -313,16 +317,18 @@ class ScholarshipConfigurationService:
         
         return config
     
-    def deactivate_configuration(
+    async def deactivate_configuration(
         self,
         config_id: int,
         updated_by_user_id: int
     ) -> ScholarshipConfiguration:
         """Deactivate (soft delete) a scholarship configuration"""
         
-        config = self.db.query(ScholarshipConfiguration).filter(
+        stmt = select(ScholarshipConfiguration).where(
             ScholarshipConfiguration.id == config_id
-        ).first()
+        )
+        result = await self.db.execute(stmt)
+        config = result.scalar_one_or_none()
         
         if not config:
             raise ValueError("Configuration not found")
@@ -339,7 +345,7 @@ class ScholarshipConfigurationService:
         
         return config
     
-    def duplicate_configuration(
+    async def duplicate_configuration(
         self,
         source_config_id: int,
         target_academic_year: int,
@@ -350,22 +356,26 @@ class ScholarshipConfigurationService:
     ) -> ScholarshipConfiguration:
         """Duplicate a scholarship configuration to a new academic period"""
         
-        source_config = self.db.query(ScholarshipConfiguration).filter(
+        stmt = select(ScholarshipConfiguration).where(
             ScholarshipConfiguration.id == source_config_id
-        ).first()
+        )
+        result = await self.db.execute(stmt)
+        source_config = result.scalar_one_or_none()
         
         if not source_config:
             raise ValueError("Source configuration not found")
         
         # Check if target configuration already exists
-        existing_target = self.db.query(ScholarshipConfiguration).filter(
+        stmt = select(ScholarshipConfiguration).where(
             and_(
                 ScholarshipConfiguration.scholarship_type_id == source_config.scholarship_type_id,
                 ScholarshipConfiguration.academic_year == target_academic_year,
                 ScholarshipConfiguration.semester == target_semester,
                 ScholarshipConfiguration.is_active == True
             )
-        ).first()
+        )
+        result = await self.db.execute(stmt)
+        existing_target = result.scalar_one_or_none()
         
         if existing_target:
             raise ValueError("Target configuration already exists for this academic period")
@@ -395,7 +405,7 @@ class ScholarshipConfigurationService:
         
         return new_config
     
-    def get_configurations_by_filter(
+    async def get_configurations_by_filter(
         self,
         scholarship_type_id: Optional[int] = None,
         academic_year: Optional[int] = None,
@@ -404,7 +414,7 @@ class ScholarshipConfigurationService:
     ) -> List[ScholarshipConfiguration]:
         """Get configurations with filtering options"""
         
-        query = self.db.query(ScholarshipConfiguration)
+        stmt = select(ScholarshipConfiguration)
         
         if scholarship_type_id:
             query = query.filter(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
@@ -415,17 +425,19 @@ class ScholarshipConfigurationService:
         if semester:
             if semester == "first":
                 from app.models.enums import Semester
-                query = query.filter(ScholarshipConfiguration.semester == Semester.FIRST)
+                stmt = stmt.where(ScholarshipConfiguration.semester == Semester.FIRST)
             elif semester == "second":
                 from app.models.enums import Semester
-                query = query.filter(ScholarshipConfiguration.semester == Semester.SECOND)
+                stmt = stmt.where(ScholarshipConfiguration.semester == Semester.SECOND)
         
-        query = query.filter(ScholarshipConfiguration.is_active == is_active)
-        
-        return query.order_by(
+        stmt = stmt.where(ScholarshipConfiguration.is_active == is_active)
+        stmt = stmt.order_by(
             ScholarshipConfiguration.academic_year.desc(),
             ScholarshipConfiguration.semester.desc()
-        ).all()
+        )
+        
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
     
     def validate_configuration_data(self, config_data: Dict[str, Any]) -> List[str]:
         """Validate configuration data and return list of errors"""
@@ -482,15 +494,17 @@ class ScholarshipConfigurationService:
         
         return errors
     
-    def get_configuration_analytics(
+    async def get_configuration_analytics(
         self, 
         config: ScholarshipConfiguration
     ) -> Dict[str, Any]:
         """Get analytics data for a configuration"""
         # Get applications for this configuration's scholarship type
-        applications = self.db.query(Application).filter(
+        stmt = select(Application).where(
             Application.scholarship_type_id == config.scholarship_type_id
-        ).all()
+        )
+        result = await self.db.execute(stmt)
+        applications = result.scalars().all()
         
         total_applications = len(applications)
         
@@ -547,7 +561,7 @@ class ScholarshipConfigurationService:
             }
         }
     
-    def create_configuration_version(
+    async def create_configuration_version(
         self, 
         original_config: ScholarshipConfiguration,
         updates: Dict[str, Any],
@@ -596,7 +610,7 @@ class ScholarshipConfigurationService:
         
         return new_config
     
-    def import_configurations(
+    async def import_configurations(
         self, 
         configurations_data: List[Dict[str, Any]],
         user_id: int,
