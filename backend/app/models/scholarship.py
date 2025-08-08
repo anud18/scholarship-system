@@ -573,8 +573,7 @@ class ScholarshipConfiguration(Base):
     
     # 配額詳細設定
     total_quota = Column(Integer, nullable=True)  # 總配額數量
-    college_quota_config = Column(JSON, nullable=True)  # 學院配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
-    quota_allocation_rules = Column(JSON, nullable=True)  # 配額分配規則
+    quotas = Column(JSON, nullable=True)  # 配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
     
     # 金額設定 (從 ScholarshipType 移至此處)
     amount = Column(Integer, nullable=False)  # 獎學金金額（整數）
@@ -673,59 +672,59 @@ class ScholarshipConfiguration(Base):
     
     def get_quota_for_college(self, college_code: str) -> Optional[int]:
         """Get quota allocation for specific college (simple mode)"""
-        if not self.has_college_quota or not self.college_quota_config:
+        if not self.has_college_quota or not self.quotas:
             return None
-        return self.college_quota_config.get(college_code)
+        return self.quotas.get(college_code)
     
     def get_matrix_quota(self, sub_type: str, college_code: str) -> Optional[int]:
         """Get quota allocation for specific sub-type and college (matrix mode)"""
-        if not self.has_college_quota or not self.college_quota_config:
+        if not self.has_college_quota or not self.quotas:
             return None
         
-        sub_type_quotas = self.college_quota_config.get(sub_type, {})
+        sub_type_quotas = self.quotas.get(sub_type, {})
         return sub_type_quotas.get(college_code)
     
     def set_matrix_quota(self, sub_type: str, college_code: str, quota: int) -> None:
         """Set quota allocation for specific sub-type and college"""
-        if not self.college_quota_config:
-            self.college_quota_config = {}
+        if not self.quotas:
+            self.quotas = {}
         
-        if sub_type not in self.college_quota_config:
-            self.college_quota_config[sub_type] = {}
+        if sub_type not in self.quotas:
+            self.quotas[sub_type] = {}
         
-        self.college_quota_config[sub_type][college_code] = quota
+        self.quotas[sub_type][college_code] = quota
     
     def get_sub_type_total_quota(self, sub_type: str) -> int:
         """Get total quota for a specific sub-type across all colleges"""
-        if not self.has_college_quota or not self.college_quota_config:
+        if not self.has_college_quota or not self.quotas:
             return 0
         
-        sub_type_quotas = self.college_quota_config.get(sub_type, {})
+        sub_type_quotas = self.quotas.get(sub_type, {})
         return sum(sub_type_quotas.values())
     
     def get_college_total_quota(self, college_code: str) -> int:
         """Get total quota for a specific college across all sub-types"""
-        if not self.has_college_quota or not self.college_quota_config:
+        if not self.has_college_quota or not self.quotas:
             return 0
         
         total = 0
-        for sub_type_quotas in self.college_quota_config.values():
+        for sub_type_quotas in self.quotas.values():
             total += sub_type_quotas.get(college_code, 0)
         return total
     
     def get_matrix_quota_summary(self) -> Dict[str, Any]:
         """Get complete matrix quota summary"""
-        if not self.has_college_quota or not self.college_quota_config:
+        if not self.has_college_quota or not self.quotas:
             return {"sub_types": {}, "colleges": {}, "grand_total": 0}
         
         # Calculate totals by sub-type
         sub_type_totals = {}
-        for sub_type in self.college_quota_config:
+        for sub_type in self.quotas:
             sub_type_totals[sub_type] = self.get_sub_type_total_quota(sub_type)
         
         # Calculate totals by college
         all_colleges = set()
-        for sub_type_quotas in self.college_quota_config.values():
+        for sub_type_quotas in self.quotas.values():
             all_colleges.update(sub_type_quotas.keys())
         
         college_totals = {}
@@ -736,7 +735,7 @@ class ScholarshipConfiguration(Base):
         grand_total = sum(sub_type_totals.values())
         
         return {
-            "matrix": self.college_quota_config,
+            "matrix": self.quotas,
             "sub_type_totals": sub_type_totals,
             "college_totals": college_totals,
             "grand_total": grand_total
@@ -759,18 +758,27 @@ class ScholarshipConfiguration(Base):
         if self.has_quota_limit and not self.total_quota:
             errors.append("總配額不能為空當啟用配額限制時")
             
-        if self.has_college_quota and not self.college_quota_config:
+        if self.has_college_quota and not self.quotas:
             errors.append("學院配額配置不能為空當啟用學院配額時")
             
-        if self.has_college_quota and self.college_quota_config:
+        if self.has_college_quota and self.quotas:
             # For matrix structure: {sub_type: {college: quota}}
             college_total = sum(
                 sum(college_quotas.values()) 
-                for college_quotas in self.college_quota_config.values()
+                for college_quotas in self.quotas.values()
                 if isinstance(college_quotas, dict)
             )
             if self.total_quota and college_total > self.total_quota:
                 errors.append(f"學院配額總和 ({college_total}) 超過總配額 ({self.total_quota})")
+        
+        # Validate renewal review dates
+        if not self.requires_professor_recommendation:
+            if self.renewal_professor_review_start or self.renewal_professor_review_end:
+                errors.append("續領教授審查時間不應設定當不需要教授推薦時")
+        
+        if not self.requires_college_review:
+            if self.renewal_college_review_start or self.renewal_college_review_end:
+                errors.append("續領學院審查時間不應設定當不需要學院審查時")
                 
         return errors
     
@@ -788,8 +796,7 @@ class ScholarshipConfiguration(Base):
             "has_college_quota": self.has_college_quota,
             "quota_management_mode": self.quota_management_mode.value if self.quota_management_mode else None,
             "total_quota": self.total_quota,
-            "college_quota_config": self.college_quota_config,
-            "quota_allocation_rules": self.quota_allocation_rules,
+            "quotas": self.quotas,
             "version": self.version,
             "is_active": self.is_active,
             "effective_start_date": self.effective_start_date.isoformat() if self.effective_start_date else None,

@@ -60,12 +60,7 @@ class ScholarshipConfigurationService:
         """Validate if application meets configuration requirements"""
         errors = []
         
-        # Check quota allocation rules for requirements
-        if config.quota_allocation_rules:
-            requirements = config.quota_allocation_rules.get('requirements', {})
-            for requirement_key, requirement_value in requirements.items():
-                if requirement_key not in application_data or application_data[requirement_key] != requirement_value:
-                    errors.append(f"不符合要求: {requirement_key}")
+        # Quota validation can be added here if needed
         
         return len(errors) == 0, errors
     

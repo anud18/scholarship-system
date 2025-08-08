@@ -39,7 +39,7 @@ class TestQuotaManagementPermissions:
             semester=None,
             quota_management_mode=QuotaManagementMode.MATRIX_BASED,
             is_active=True,
-            college_quota_config={
+            quotas={
                 "nstc": {"E": 5, "C": 3},
                 "moe_1w": {"E": 2, "C": 1}
             }
@@ -126,7 +126,7 @@ class TestMatrixQuotaOperations:
             semester=None,
             quota_management_mode=QuotaManagementMode.MATRIX_BASED,
             is_active=True,
-            college_quota_config={
+            quotas={
                 "nstc": {"E": 5, "C": 3, "I": 2},
                 "moe_1w": {"E": 2, "C": 1, "I": 1}
             }
@@ -173,7 +173,7 @@ class TestMatrixQuotaOperations:
             semester=None,
             quota_management_mode=QuotaManagementMode.MATRIX_BASED,
             is_active=True,
-            college_quota_config={
+            quotas={
                 "nstc": {"E": 5, "C": 3},
                 "moe_1w": {"E": 2, "C": 1}
             },
@@ -246,7 +246,7 @@ class TestQuotaUsageCalculation:
             semester=None,
             quota_management_mode=QuotaManagementMode.MATRIX_BASED,
             is_active=True,
-            college_quota_config={
+            quotas={
                 "nstc": {"E": 5, "C": 3}
             }
         )

@@ -2,7 +2,7 @@
  * Main quota management component for admin interface
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -43,6 +43,7 @@ export function QuotaManagement() {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [hasPermission, setHasPermission] = useState(false)
   const [checkingPermission, setCheckingPermission] = useState(true)
+  const [forceUpdateCounter, setForceUpdateCounter] = useState(0)
 
   // Check permissions on mount
   useEffect(() => {
@@ -198,8 +199,13 @@ export function QuotaManagement() {
   }
 
   const handleDataUpdate = (newData: MatrixQuotaData) => {
-    setMatrixData(newData)
+    // Force a complete re-render by using a new object reference
+    setMatrixData({ ...newData })
     setLastUpdate(new Date())
+    setForceUpdateCounter(prev => prev + 1) // Force re-calculation of stats
+    
+    // Optional: Show brief success feedback for immediate visual confirmation
+    // This could be enhanced to show the specific change made
   }
 
   // Calculate statistics
@@ -227,7 +233,8 @@ export function QuotaManagement() {
     }
   }
 
-  const stats = calculateStats()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stats = useMemo(() => calculateStats(), [matrixData, forceUpdateCounter])
 
   // Show loading while checking permissions
   if (checkingPermission) {

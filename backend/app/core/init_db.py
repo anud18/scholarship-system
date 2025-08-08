@@ -171,180 +171,6 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
     return created_users
 
 
-# Student data creation removed - students are now fetched from external API
-# async def createTestStudents(session: AsyncSession, users: List[User]) -> None:
-#     """Create test student data with new normalized structure"""
-#     
-#     print("🎓 Creating test student data...")
-#     
-#     student_users = [user for user in users if user.role == UserRole.STUDENT]
-# 
-#     # 修正 degree: 1=博士, 2=碩士, 3=學士
-#     student_data = {
-#        "stu_under": {
-#            "std_pid": "A123456789",
-#            "std_sex": "1",  # 1:男, 2:女
-#            "std_degree": "3",  # 學士
-#            "std_identity": "1", # 一般生
-#            "std_studingstatus": "1", # 在學
-#            "std_schoolid": "1", # 一般生
-#            "std_termcount": 2,
-#            "std_depno": "CS",
-#            "std_depname": "資訊工程學系",
-#            "std_aca_no": "EE",
-#            "std_aca_cname": "電機資訊學院",
-#            "std_enrollterm": "1", # 大學個人申請
-#            "std_enrollyear": "112",
-#            "std_highestschname": "台北市立建國高級中學",
-#            "std_nation": "1", # 中華民國
-#            "com_cellphone": "0912345678",
-#            "com_email": "stu_under@nycu.edu.tw",
-#            "com_commzip": "30010",
-#            "com_commadd": "新竹市東區大學路1001號",
-#            "std_enrolled_date": date(2023, 9, 1),
-#            "std_bank_account": "1234567890",
-#            "notes": "學士班新生"
-#        },
-#        "stu_phd": {
-#            "std_pid": "B123456789",
-#            "std_sex": "1",  # 1:男, 2:女
-#            "std_degree": "1", # 博士
-#            "std_identity": "1", # 一般生
-#            "std_studingstatus": "1", # 在學
-#            "std_schoolid": "1", # 一般生
-#            "std_termcount": 1,
-#            "std_depno": "CS",
-#            "std_depname": "資訊工程學系",
-#            "std_aca_no": "EE",
-#            "std_aca_cname": "電機資訊學院",
-#            "std_enrollterm": "1", # 招生考試一般生
-#            "std_enrollyear": "112",
-#            "std_highestschname": "國立交通大學",
-#            "std_nation": "1", # 中華民國
-#            "com_cellphone": "0912345678",
-#            "com_email": "stu_phd@nycu.edu.tw",
-#            "com_commzip": "30010",
-#            "com_commadd": "新竹市東區大學路1001號",
-#            "std_enrolled_date": date(2023, 9, 1),
-#            "std_bank_account": "1234567890",
-#            "notes": "博士生"
-#        },
-#        "stu_direct": {
-#            "std_pid": "C123456789",
-#            "std_sex": "2",  # 1:男, 2:女
-#            "std_degree": "1", # 博士
-#            "std_identity": "1", # 一般生
-#            "std_studingstatus": "1", # 在學
-#            "std_schoolid": "1", # 一般生
-#            "std_termcount": 1,
-#            "std_depno": "CS",
-#            "std_depname": "資訊工程學系",
-#            "std_aca_no": "EE",
-#            "std_aca_cname": "電機資訊學院",
-#            "std_enrollterm": "1", # 第一學期
-#            "std_enrollyear": "112",
-#            "std_highestschname": "國立陽明交通大學",
-#            "std_nation": "1", # 中華民國
-#            "com_cellphone": "0912345678",
-#            "com_email": "stu_direct@nycu.edu.tw",
-#            "com_commzip": "30010",
-#            "com_commadd": "新竹市東區大學路1001號",
-#            "std_enrolled_date": date(2023, 9, 1),
-#            "std_bank_account": "1234567890",
-#            "notes": "逕讀博士生"
-#        },
-#        "stu_master": {
-#            "std_pid": "D123456789",
-#            "std_sex": "2",  # 1:男, 2:女
-#            "std_degree": "2", # 碩士
-#            "std_identity": "1", # 一般生
-#            "std_studingstatus": "1", # 在學
-#            "std_schoolid": "1", # 一般生
-#            "std_termcount": 1,
-#            "std_depno": "CS",
-#            "std_depname": "資訊工程學系",
-#            "std_aca_no": "EE",
-#            "std_aca_cname": "電機資訊學院",
-#            "std_enrollterm": "1", # 一般考試
-#            "std_enrollyear": "112",
-#            "std_highestschname": "國立台灣大學",
-#            "std_nation": "1", # 中華民國
-#            "com_cellphone": "0912345678",
-#            "com_email": "stu_master@nycu.edu.tw",
-#            "com_commzip": "30010",
-#            "com_commadd": "新竹市東區大學路1001號",
-#            "std_enrolled_date": date(2023, 9, 1),
-#            "std_bank_account": "1234567890",
-#            "notes": "碩士生"
-#        },
-#        "phd_china": {
-#            "std_pid": "E123456789",
-#            "std_sex": "1",  # 1:男, 2:女
-#            "std_degree": "1", # 博士
-#            "std_identity": "17", # 陸生
-#            "std_studingstatus": "1", # 在學
-#            "std_schoolid": "1", # 一般生
-#            "std_termcount": 1,
-#            "std_depno": "CS",
-#            "std_depname": "資訊工程學系",
-#            "std_aca_no": "EE",
-#            "std_aca_cname": "電機資訊學院",
-#            "std_enrollterm": "1", # 第一學期
-#            "std_enrollyear": "112",
-#            "std_highestschname": "國立清華大學",
-#            "std_nation": "2", # 非中華民國國籍
-#            "com_cellphone": "0912345678",
-#            "com_email": "phd_china@nycu.edu.tw",
-#            "com_commzip": "30010",
-#            "com_commadd": "新竹市東區大學路1001號",
-#            "std_enrolled_date": date(2023, 9, 1),
-#            "std_bank_account": "1234567890",
-#            "notes": "陸生博士生"
-#        }
-#    }
-#
-#    for user in student_users:
-#        student_info = student_data[user.nycu_id]
-#
-#        result = await session.execute(select(Student).where(Student.std_pid == student_info["std_pid"]))
-#        existing = result.scalar_one_or_none()
-#        
-#        if not existing:
-#            student = Student(
-#                std_stdcode=user.nycu_id,
-#                std_cname=user.name,
-#                std_ename=user.name,
-#                std_degree=student_info.get("std_degree", "3"),  # Default to undergraduate
-#                std_sex=student_info.get("std_sex", "1"),
-#                std_pid=student_info.get("std_pid"),
-#                std_studingstatus=student_info.get("std_studingstatus", "1"),
-#                std_enrollyear=student_info.get("std_enrollyear"),
-#                std_enrollterm=student_info.get("std_enrollterm"),
-#                std_termcount=student_info.get("std_termcount"),
-#                std_nation=student_info.get("std_nation", "中華民國"),
-#                std_schoolid=student_info.get("std_schoolid", "1"),
-#                std_identity=student_info.get("std_identity"),
-#                std_depno=student_info.get("std_depno"),
-#                std_depname=student_info.get("std_depname"),
-#                std_aca_no=student_info.get("std_aca_no"),
-#                std_aca_cname=student_info.get("std_aca_cname"),
-#                std_highestschname=student_info.get("std_highestschname"),
-#                com_cellphone=student_info.get("com_cellphone"),
-#                com_email=student_info.get("com_email"),
-#                com_commzip=student_info.get("com_commzip"),
-#                com_commadd=student_info.get("com_commadd"),
-#                std_enrolled_date=student_info.get("std_enrolled_date"),
-#                std_bank_account=student_info.get("std_bank_account"),
-#                notes=student_info.get("notes")
-#            )
-#            session.add(student)
-#        
-#        await session.commit()
-#        print(f"✅ Student {user.nycu_id} created successfully!")
-#
-#    print("✅ Test student data created successfully!")
-
-
 async def createTestScholarships(session: AsyncSession) -> None:
     """Create test scholarship data with dev-friendly settings"""
     
@@ -363,8 +189,8 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "code": "undergraduate_freshman",
             "name": "學士班新生獎學金",
             "name_en": "Undergraduate Freshman Scholarship",
-            "description": "適用於學士班新生，需符合 GPA ≥ 3.38 或前35%排名",
-            "description_en": "For undergraduate freshmen, requires GPA ≥ 3.38 or top 35% ranking",
+            "description": "適用於學士班新生 白名單 與 地區劃分",
+            "description_en": "For undergraduate freshmen, white list and regional",
             "category": ScholarshipCategory.UNDERGRADUATE_FRESHMAN.value,
             "application_cycle": ApplicationCycle.SEMESTER,
             "whitelist_enabled": not settings.debug,
@@ -395,7 +221,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "description": "適用於逕讀博士班學生，需完整研究計畫",
             "description_en": "For direct PhD students, requires complete research plan",
             "category": ScholarshipCategory.DIRECT_PHD.value,
-            "application_cycle": ApplicationCycle.SEMESTER,
+            "application_cycle": ApplicationCycle.YEARLY,
             "whitelist_enabled": not settings.debug,
             "sub_type_selection_mode": SubTypeSelectionMode.SINGLE,
             "status": ScholarshipStatus.ACTIVE.value,
@@ -625,8 +451,8 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "academic_year": 113,
-            "semester": Semester.FIRST,
+            "academic_year": 114,
+            "semester": None,
             "is_template": False,
             "rule_name": "逕讀博士獎學金 博士生身分",
             "tag": "博士生",
@@ -647,8 +473,8 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "academic_year": 113,
-            "semester": Semester.FIRST,
+            "academic_year": 114,
+            "semester": None,
             "is_template": False,
             "rule_name": "逕讀博士獎學金 在學生身分 1: 在學 2: 應畢 3: 延畢",
             "rule_type": "student_term",
@@ -670,8 +496,8 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "academic_year": 113,
-            "semester": Semester.FIRST,
+            "academic_year": 114,
+            "semester": None,
             "is_template": False,
             "rule_name": "逕讀博士獎學金 非在職生身分 需要為一般生",
             "rule_type": "student",
@@ -693,8 +519,8 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "academic_year": 113,
-            "semester": Semester.FIRST,
+            "academic_year": 114,
+            "semester": None,
             "is_template": False,
             "rule_name": "逕讀博士獎學金 非陸港澳生身分",
             "rule_type": "student",
@@ -717,8 +543,8 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "academic_year": 113,
-            "semester": Semester.FIRST,
+            "academic_year": 114,
+            "semester": None,
             "is_template": False,
             "rule_name": "逕讀博士獎學金 逕博生身分 8: 大學逕博 9: 碩士逕博 10: 跨校學士逕博 11: 跨校碩士逕博",
             "rule_type": "student",
@@ -741,8 +567,8 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "academic_year": 113,
-            "semester": Semester.FIRST,
+            "academic_year": 114,
+            "semester": None,
             "is_template": False,
             "rule_name": "逕讀博士獎學金 第一學年",
             "rule_type": "student",
@@ -766,7 +592,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 1,
             "sub_type": None,
-            "academic_year": 113,
+            "academic_year": 114,
             "semester": Semester.FIRST,
             "is_template": False,
             "rule_name": "學士新生獎學金 學士生身分",
@@ -791,7 +617,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 2,
             "sub_type": "moe_1w",
-            "academic_year": 113,
+            "academic_year": 114,
             "semester": None,
             "is_template": False,
             "rule_name": "博士生獎學金 一般生入學管道提醒",
@@ -815,7 +641,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 2,
             "sub_type": "moe_2w",
-            "academic_year": 113,
+            "academic_year": 114,
             "semester": None,
             "is_template": False,
             "rule_name": "博士生獎學金 一般生入學管道提醒",
@@ -840,7 +666,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 2,
             "sub_type": "nstc",
-            "academic_year": 113,
+            "academic_year": 114,
             "semester": None,
             "is_template": False,
             "rule_name": "中華民國國籍生身份提醒",
@@ -1217,7 +1043,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                         has_college_quota=False,
                         quota_management_mode=QuotaManagementMode.NONE,
                         total_quota=None,
-                        college_quota_config=None,
+                        quotas=None,
                         # 113年的申請時間 (已過期)
                         application_start_date=datetime(current_year-1, 9, 1, 0, 0, 0, tzinfo=taiwan_tz),
                         application_end_date=datetime(current_year-1, 10, 31, 23, 59, 59, tzinfo=taiwan_tz),
@@ -1226,7 +1052,6 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                         # 113年的有效期間 (已過期)
                         effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
                         effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
-                        quota_allocation_rules={"unlimited_allocation": True, "legacy_config": True},
                         is_active=False  # 舊配置設為不活躍
                     )
                     config.update(create_review_schedule(
@@ -1269,7 +1094,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                     has_college_quota=True,
                     quota_management_mode=QuotaManagementMode.MATRIX_BASED,
                     total_quota=total_old_quota,
-                    college_quota_config=old_phd_config,
+                    quotas=old_phd_config,
                     # 113年的申請時間 (已過期)
                     application_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
                     application_end_date=datetime(current_year-1, 9, 30, 23, 59, 59, tzinfo=taiwan_tz),
@@ -1278,19 +1103,6 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                     # 113年的有效期間 (已過期)
                     effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
                     effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
-                    quota_allocation_rules={
-                        "sub_type_quotas": {
-                            subtype: sum(quotas.values()) 
-                            for subtype, quotas in old_phd_config.items()
-                        },
-                        "matrix_quotas": old_phd_config,
-                        "matrix_allocation": True,
-                        "backup_allocation": True,
-                        "cross_subtype_allocation": False,
-                        "college_subtype_strict": True,
-                        "renewal_priority": True,
-                        "legacy_config": True
-                    },
                     is_active=False  # 舊配置設為不活躍
                 )
                 config.update(create_review_schedule(
@@ -1303,49 +1115,38 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                 configs_113.append(config)
                 
             elif scholarship.code == "direct_phd":
-                # 113學年度逕讀博士獎學金 - 每學期制
-                for semester in [Semester.FIRST, Semester.SECOND]:
-                    sem_name = "第一學期" if semester == Semester.FIRST else "第二學期"
-                    sem_code = "first" if semester == Semester.FIRST else "second"
-                    
-                    config = create_base_config(
-                        scholarship, 113,
-                        semester=semester,
-                        config_name=f"113學年度逕讀博士獎學金 - {sem_name}",
-                        config_code=f"config_{scholarship.code}_113_{sem_code}",
-                        description=f"113學年度{sem_name}逕讀博士獎學金配置，已結束申請期間",
-                        description_en=f"AY113-{sem_code} direct PhD scholarship (application period ended)",
-                        amount=75000,  # 113年的金額
-                        has_quota_limit=False,
-                        has_college_quota=False,
-                        quota_management_mode=QuotaManagementMode.NONE,
-                        total_quota=None,
-                        college_quota_config=None,
-                        # 113年的申請時間 (已過期)
-                        application_start_date=datetime(current_year-1, 9, 1, 0, 0, 0, tzinfo=taiwan_tz),
-                        application_end_date=datetime(current_year-1, 10, 31, 23, 59, 59, tzinfo=taiwan_tz),
-                        renewal_application_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
-                        renewal_application_end_date=datetime(current_year-1, 9, 15, 23, 59, 59, tzinfo=taiwan_tz),
-                        # 113年的有效期間 (已過期)
-                        effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
-                        effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
-                        quota_allocation_rules={
-                            "strict_qualification": True,
-                            "first_year_priority": True,
-                            "direct_phd_track_only": True,
-                            "unlimited_allocation": True,
-                            "legacy_config": True
-                        },
-                        is_active=False  # 舊配置設為不活躍
-                    )
-                    config.update(create_review_schedule(
-                        datetime(current_year-1, 9, 1, tzinfo=taiwan_tz),
-                        datetime(current_year-1, 10, 31, tzinfo=taiwan_tz),
-                        datetime(current_year-1, 8, 1, tzinfo=taiwan_tz),
-                        datetime(current_year-1, 9, 15, tzinfo=taiwan_tz),
-                        professor_required=True, college_required=True
-                    ))
-                    configs_113.append(config)
+                # 113學年度逕讀博士獎學金 - 學年制（舊配置，已過期）
+                config = create_base_config(
+                    scholarship, 113,
+                    semester=None,
+                    config_name="113學年度逕讀博士獎學金配置 - 學年制",
+                    config_code=f"config_{scholarship.code}_113",
+                    description="113學年度逕讀博士獎學金配置（學年制），已結束申請期間",
+                    description_en="AY113 direct PhD scholarship (academic year) - application period ended",
+                    amount=75000,  # 113年的金額
+                    has_quota_limit=False,
+                    has_college_quota=False,
+                    quota_management_mode=QuotaManagementMode.NONE,
+                    total_quota=None,
+                    quotas=None,
+                    # 113年的申請時間 (已過期)
+                    application_start_date=datetime(current_year-1, 9, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    application_end_date=datetime(current_year-1, 10, 31, 23, 59, 59, tzinfo=taiwan_tz),
+                    renewal_application_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    renewal_application_end_date=datetime(current_year-1, 9, 15, 23, 59, 59, tzinfo=taiwan_tz),
+                    # 113年的有效期間 (已過期)
+                    effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
+                    is_active=False  # 舊配置設為不活躍
+                )
+                config.update(create_review_schedule(
+                    datetime(current_year-1, 9, 1, tzinfo=taiwan_tz),
+                    datetime(current_year-1, 10, 31, tzinfo=taiwan_tz),
+                    datetime(current_year-1, 8, 1, tzinfo=taiwan_tz),
+                    datetime(current_year-1, 9, 15, tzinfo=taiwan_tz),
+                    professor_required=True, college_required=True
+                ))
+                configs_113.append(config)
                     
         return configs_113
     
@@ -1362,7 +1163,19 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                 for semester in [Semester.FIRST, Semester.SECOND]:
                     sem_name = "第一學期" if semester == Semester.FIRST else "第二學期"
                     sem_code = "first" if semester == Semester.FIRST else "second"
-                    
+
+                    # 為第二學期設定合理時間（翌年 2/1 至 3/31；續領 1/1 至 1/31）
+                    if semester == Semester.FIRST:
+                        app_start = base_start
+                        app_end = base_end
+                        ren_start = renewal_start
+                        ren_end = renewal_end
+                    else:
+                        app_start = datetime(current_year + 1, 2, 1, 0, 0, 0, tzinfo=taiwan_tz)
+                        app_end = datetime(current_year + 1, 3, 31, 23, 59, 59, tzinfo=taiwan_tz)
+                        ren_start = datetime(current_year + 1, 1, 1, 0, 0, 0, tzinfo=taiwan_tz)
+                        ren_end = datetime(current_year + 1, 1, 31, 23, 59, 59, tzinfo=taiwan_tz)
+
                     config = create_base_config(
                         scholarship, 114,
                         semester=semester,
@@ -1375,14 +1188,13 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                         has_college_quota=False,
                         quota_management_mode=QuotaManagementMode.NONE,
                         total_quota=None,
-                        college_quota_config=None,
-                        application_start_date=base_start,
-                        application_end_date=base_end,
-                        renewal_application_start_date=renewal_start,
-                        renewal_application_end_date=renewal_end,
-                        quota_allocation_rules={"unlimited_allocation": True}
+                        quotas=None,
+                        application_start_date=app_start,
+                        application_end_date=app_end,
+                        renewal_application_start_date=ren_start,
+                        renewal_application_end_date=ren_end
                     )
-                    config.update(create_review_schedule(base_start, base_end, renewal_start, renewal_end, professor_required=False, college_required=False))
+                    config.update(create_review_schedule(app_start, app_end, ren_start, ren_end, professor_required=False, college_required=False))
                     scholarship_configs.append(config)
                     
             elif scholarship.code == "phd":
@@ -1401,65 +1213,47 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                     has_college_quota=True,
                     quota_management_mode=QuotaManagementMode.MATRIX_BASED,
                     total_quota=total_quota,
-                    college_quota_config=PHD_QUOTA_CONFIG,
+                    quotas=PHD_QUOTA_CONFIG,
                     application_start_date=base_start - timedelta(days=30),  # 提前開始申請
-                    application_end_date=base_end,
-                    renewal_application_start_date=renewal_start,
-                    renewal_application_end_date=renewal_end,
-                    quota_allocation_rules={
-                        "sub_type_quotas": {
-                            subtype: sum(quotas.values()) 
-                            for subtype, quotas in PHD_QUOTA_CONFIG.items()
-                        },
-                        "matrix_quotas": PHD_QUOTA_CONFIG,
-                        "matrix_allocation": True,
-                        "backup_allocation": True,
-                        "cross_subtype_allocation": False,
-                        "college_subtype_strict": True,
-                        "renewal_priority": True
-                    }
+                    application_end_date=base_end
                 )
-                config.update(create_review_schedule(
-                    base_start - timedelta(days=30), base_end, renewal_start, renewal_end,
-                    professor_required=True, college_required=True
-                ))
+                # AY114博士生獎學金不需要續領期間與設定，僅建立初次審查時程
+                config.update({
+                    "requires_professor_recommendation": True,
+                    "requires_college_review": True,
+                    "review_deadline": base_end + timedelta(days=30),
+                    "professor_review_start": base_end + timedelta(days=1),
+                    "professor_review_end": base_end + timedelta(days=14),
+                    "college_review_start": base_end + timedelta(days=15),
+                    "college_review_end": base_end + timedelta(days=29)
+                })
                 scholarship_configs.append(config)
                 
             elif scholarship.code == "direct_phd":
-                # 逕讀博士獎學金 - 每學期制，無配額限制
-                for semester in [Semester.FIRST, Semester.SECOND]:
-                    sem_name = "第一學期" if semester == Semester.FIRST else "第二學期"
-                    sem_code = "first" if semester == Semester.FIRST else "second"
-                    
-                    config = create_base_config(
-                        scholarship, 114,
-                        semester=semester,
-                        config_name=f"逕讀博士獎學金配置 - {sem_name}",
-                        config_code=f"config_{scholarship.code}_114_{sem_code}",
-                        description=f"114學年度{sem_name}逕讀博士獎學金配置，無配額限制",
-                        description_en=f"Direct PhD scholarship AY114-{sem_code} without quota limits",
-                        amount=80000,  # 較高金額
-                        has_quota_limit=False,
-                        has_college_quota=False,
-                        quota_management_mode=QuotaManagementMode.NONE,
-                        total_quota=None,
-                        college_quota_config=None,
-                        application_start_date=base_start,
-                        application_end_date=base_end,
-                        renewal_application_start_date=renewal_start,
-                        renewal_application_end_date=renewal_end,
-                        quota_allocation_rules={
-                            "strict_qualification": True,
-                            "first_year_priority": True,
-                            "direct_phd_track_only": True,
-                            "unlimited_allocation": True
-                        }
-                    )
-                    config.update(create_review_schedule(
-                        base_start, base_end, renewal_start, renewal_end,
-                        professor_required=True, college_required=True
-                    ))
-                    scholarship_configs.append(config)
+                # 逕讀博士獎學金 - 學年制，無配額限制
+                config = create_base_config(
+                    scholarship, 114,
+                    semester=None,
+                    config_name="逕讀博士獎學金配置 - 學年制",
+                    config_code=f"config_{scholarship.code}_114",
+                    description="114學年度逕讀博士獎學金配置（學年制），無配額限制",
+                    description_en="Direct PhD scholarship AY114 (academic year) without quota limits",
+                    amount=80000,  # 較高金額
+                    has_quota_limit=False,
+                    has_college_quota=False,
+                    quota_management_mode=QuotaManagementMode.NONE,
+                    total_quota=None,
+                    quotas=None,
+                    application_start_date=base_start,
+                    application_end_date=base_end,
+                    renewal_application_start_date=renewal_start,
+                    renewal_application_end_date=renewal_end
+                )
+                config.update(create_review_schedule(
+                    base_start, base_end, renewal_start, renewal_end,
+                    professor_required=True, college_required=True
+                ))
+                scholarship_configs.append(config)
             
             configs_114.extend(scholarship_configs)
         return configs_114
@@ -1525,7 +1319,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     old_phd_totals = {subtype: sum(quotas.values()) for subtype, quotas in old_phd_config.items()}
     total_old_phd = sum(old_phd_totals.values())
     print(f"     總配額: {total_old_phd}名 (國科會:{old_phd_totals['nstc']}, 教育部一萬:{old_phd_totals['moe_1w']}, 教育部二萬:{old_phd_totals['moe_2w']}) [INACTIVE]")
-    print("   - 逕讀博士獎學金: 每學期制，無配額限制，金額 75,000元 [INACTIVE]")
+    print("   - 逕讀博士獎學金: 學年制，無配額限制，金額 75,000元 [INACTIVE]")
     
     print("\n📚 AY114 (Current active configurations):")
     print("   - 學士班新生獎學金: 每學期制，無配額限制，金額 50,000元 [ACTIVE]")
@@ -1541,7 +1335,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     print(f"     • 國科會: {phd_totals['nstc']}名")
     print(f"     • 教育部一萬: {phd_totals['moe_1w']}名") 
     print(f"     • 教育部二萬: {phd_totals['moe_2w']}名")
-    print("   - 逕讀博士獎學金: 每學期制，無配額限制，金額 80,000元 [ACTIVE]")
+    print("   - 逕讀博士獎學金: 學年制，無配額限制，金額 80,000元 [ACTIVE]")
     
     # 配置狀態摘要 - 包含台灣時間資訊
     print(f"\n📅 Current active period: AY114 ({current_year}-{current_year+1})")
@@ -1568,8 +1362,8 @@ async def createTestApplicationsAndQuotaUsage(session: AsyncSession) -> None:
             print(f"     配額管理: 總名額 {config.total_quota}")
         elif not config.has_quota_limit:
             print(f"     配額管理: 無配額限制")
-        if config.has_college_quota and config.college_quota_config:
-            print(f"     矩陣配額: {len(config.college_quota_config)} 個子類型")
+        if config.has_college_quota and config.quotas:
+            print(f"     矩陣配額: {len(config.quotas)} 個子類型")
     
     # Verify scholarship configurations match API expectations
     result = await session.execute(select(ScholarshipType))

@@ -647,6 +647,12 @@ export interface ScholarshipConfiguration {
   description_en?: string
   amount: number
   currency: string
+  // Quota management fields
+  has_quota_limit?: boolean
+  has_college_quota?: boolean
+  quota_management_mode?: string
+  total_quota?: number
+  quotas?: Record<string, any>
   whitelist_student_ids: Record<string, number[]>
   renewal_application_start_date?: string
   renewal_application_end_date?: string
@@ -681,7 +687,13 @@ export interface ScholarshipConfigurationFormData {
   description_en?: string
   amount: number
   currency?: string
-  whitelist_student_ids?: Record<string, number[]>
+  // Quota management fields
+  has_quota_limit?: boolean
+  has_college_quota?: boolean
+  quota_management_mode?: string
+  total_quota?: number
+  quotas?: Record<string, any> | string
+  whitelist_student_ids?: Record<string, number[]> | string
   renewal_application_start_date?: string
   renewal_application_end_date?: string
   application_start_date?: string
@@ -1854,6 +1866,32 @@ class ApiClient {
       getUserHistory: async (userId: number): Promise<ApiResponse<ProfileHistory[]>> => {
         return this.request(`/user-profiles/admin/${userId}/history`)
       },
+    }
+  }
+
+  // Reference Data endpoints
+  referenceData = {
+    // Get all academies/colleges
+    getAcademies: async (): Promise<ApiResponse<Array<{ id: number; code: string; name: string }>>> => {
+      return this.request('/reference-data/academies')
+    },
+
+    // Get all departments
+    getDepartments: async (): Promise<ApiResponse<Array<{ id: number; code: string; name: string }>>> => {
+      return this.request('/reference-data/departments')
+    },
+
+    // Get all reference data in one request
+    getAll: async (): Promise<ApiResponse<{
+      academies: Array<{ id: number; code: string; name: string }>
+      departments: Array<{ id: number; code: string; name: string }>
+      degrees: Array<{ id: number; name: string }>
+      identities: Array<{ id: number; name: string }>
+      studying_statuses: Array<{ id: number; name: string }>
+      school_identities: Array<{ id: number; name: string }>
+      enroll_types: Array<{ degree_id: number; code: string; name: string; name_en?: string; degree_name?: string }>
+    }>> => {
+      return this.request('/reference-data/all')
     }
   }
 }

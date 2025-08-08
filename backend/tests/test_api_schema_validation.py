@@ -84,9 +84,6 @@ class TestAPISchemaValidation:
         def mock_get_current_user():
             return User(id=1, nycu_id="test", email="test@test.com", role=UserRole.STUDENT)
         
-        def mock_get_student_from_user(user, db):
-            return Student(id=1, user_id=1, std_stdcode="test", std_termcount=1)
-        
         async def mock_get_eligible_scholarships(student):
             from app.models.scholarship import ScholarshipType, ScholarshipStatus
             from app.models.enums import Semester, ApplicationCycle, SubTypeSelectionMode
@@ -113,8 +110,6 @@ class TestAPISchemaValidation:
         # Apply mocks
         monkeypatch.setattr("app.core.deps.get_db", mock_get_db)
         monkeypatch.setattr("app.core.security.get_current_user", lambda: mock_get_current_user())
-        monkeypatch.setattr("app.services.application_service.get_student_from_user", 
-                           lambda user, db: mock_get_student_from_user(user, db))
         
         # Mock the ScholarshipService.get_eligible_scholarships method
         def mock_scholarship_service_init(self, db):

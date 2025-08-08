@@ -9,7 +9,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, Mock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.application_service import ApplicationService, get_student_from_user
+from app.services.application_service import ApplicationService
 from app.models.user import User, UserRole
 from app.models.student import Student
 from app.models.application import Application, ApplicationStatus, Semester
@@ -541,57 +541,3 @@ class TestApplicationService:
                 await service.delete_application(application_id, mock_user)
 
 
-class TestGetStudentFromUser:
-    """Test cases for get_student_from_user helper function"""
-
-    @pytest.mark.asyncio
-    async def test_get_student_from_user_success(self, db: AsyncSession):
-        """Test successfully getting student from user"""
-        mock_user = Mock(spec=User)
-        mock_user.role = UserRole.STUDENT
-        mock_user.nycu_id = "112550001"
-        
-        mock_student = Mock(spec=Student)
-        
-        with patch.object(db, 'execute') as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = mock_student
-            
-            result = await get_student_from_user(mock_user, db)
-            
-            assert result == mock_student
-
-    @pytest.mark.asyncio
-    async def test_get_student_from_user_not_student_role(self, db: AsyncSession):
-        """Test getting student from user who is not a student"""
-        mock_user = Mock(spec=User)
-        mock_user.role = UserRole.ADMIN
-        mock_user.nycu_id = "112550001"
-        
-        result = await get_student_from_user(mock_user, db)
-        
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_student_from_user_no_nycu_id(self, db: AsyncSession):
-        """Test getting student from user without NYCU ID"""
-        mock_user = Mock(spec=User)
-        mock_user.role = UserRole.STUDENT
-        mock_user.nycu_id = None
-        
-        result = await get_student_from_user(mock_user, db)
-        
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_student_from_user_student_not_found(self, db: AsyncSession):
-        """Test getting student from user when student record not found"""
-        mock_user = Mock(spec=User)
-        mock_user.role = UserRole.STUDENT
-        mock_user.nycu_id = "112550001"
-        
-        with patch.object(db, 'execute') as mock_execute:
-            mock_execute.return_value.scalar_one_or_none.return_value = None
-            
-            result = await get_student_from_user(mock_user, db)
-            
-            assert result is None
