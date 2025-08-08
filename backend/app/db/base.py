@@ -10,26 +10,39 @@ from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
 # Create async engine for async operations
-async_engine = create_async_engine(
-    settings.database_url,
-    echo=False,  # 關閉詳細 SQL 日誌
-    future=True,
-    pool_pre_ping=True,
-    pool_recycle=3600,  # Recycle connections after 1 hour
-    pool_size=10,
-    max_overflow=20
-)
+# Configure pool settings based on database type
+engine_kwargs = {
+    "echo": False,  # 關閉詳細 SQL 日誌
+    "future": True,
+}
+
+# Only add pool settings for non-SQLite databases
+if not settings.database_url.startswith("sqlite"):
+    engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_recycle": 3600,  # Recycle connections after 1 hour
+        "pool_size": 10,
+        "max_overflow": 20
+    })
+
+async_engine = create_async_engine(settings.database_url, **engine_kwargs)
 
 # Create sync engine for Alembic migrations
-sync_engine = create_engine(
-    settings.database_url_sync,
-    echo=False,  # 關閉詳細 SQL 日誌
-    future=True,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    pool_size=10,
-    max_overflow=20
-)
+sync_engine_kwargs = {
+    "echo": False,  # 關閉詳細 SQL 日誌
+    "future": True,
+}
+
+# Only add pool settings for non-SQLite databases
+if not settings.database_url_sync.startswith("sqlite"):
+    sync_engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_recycle": 3600,
+        "pool_size": 10,
+        "max_overflow": 20
+    })
+
+sync_engine = create_engine(settings.database_url_sync, **sync_engine_kwargs)
 
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(
