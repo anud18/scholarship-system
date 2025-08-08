@@ -72,10 +72,14 @@ class ApplicationFieldService:
         if not field:
             return None
         
-        # Update only provided fields
+        # Update only fields defined in the Pydantic schema to prevent mass assignment
+        # This automatically stays in sync with schema changes
+        allowed_fields = set(field_data.model_fields.keys())
+        
         update_data = field_data.model_dump(exclude_unset=True)
         for key, value in update_data.items():
-            setattr(field, key, value)
+            if key in allowed_fields and hasattr(field, key):
+                setattr(field, key, value)
         
         field.updated_by = updated_by
         
@@ -170,10 +174,14 @@ class ApplicationFieldService:
         if not document:
             return None
         
-        # Update only provided fields
+        # Update only fields defined in the Pydantic schema to prevent mass assignment
+        # This automatically stays in sync with schema changes
+        allowed_fields = set(document_data.model_fields.keys())
+        
         update_data = document_data.model_dump(exclude_unset=True)
         for key, value in update_data.items():
-            setattr(document, key, value)
+            if key in allowed_fields and hasattr(document, key):
+                setattr(document, key, value)
         
         document.updated_by = updated_by
         

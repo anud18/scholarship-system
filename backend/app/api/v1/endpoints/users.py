@@ -117,10 +117,13 @@ async def update_my_profile(
     db: AsyncSession = Depends(get_db)
 ):
     """Update current user profile"""
-    # Update user fields
+    # Update only fields defined in the Pydantic schema to prevent mass assignment
+    # This automatically stays in sync with schema changes
+    allowed_fields = set(update_data.model_fields.keys())
+    
     update_dict = update_data.model_dump(exclude_unset=True)
     for field, value in update_dict.items():
-        if hasattr(current_user, field):
+        if field in allowed_fields and hasattr(current_user, field):
             setattr(current_user, field, value)
     
     await db.commit()
@@ -259,10 +262,13 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Update user fields
+    # Update only fields defined in the Pydantic schema to prevent mass assignment
+    # This automatically stays in sync with schema changes
+    allowed_fields = set(update_data.model_fields.keys())
+    
     update_dict = update_data.model_dump(exclude_unset=True)
     for field, value in update_dict.items():
-        if hasattr(user, field):
+        if field in allowed_fields and hasattr(user, field):
             setattr(user, field, value)
     
     await db.commit()

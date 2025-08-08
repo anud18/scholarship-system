@@ -65,10 +65,14 @@ class ScholarshipRulesService:
         if rule_update.sub_type:
             await self._validate_sub_type(rule.scholarship_type_id, rule_update.sub_type)
         
-        # Update fields
+        # Update only fields defined in the Pydantic schema to prevent mass assignment
+        # This automatically stays in sync with schema changes
+        allowed_fields = set(rule_update.model_fields.keys())
+        
         update_data = rule_update.model_dump(exclude_unset=True)
         for field, value in update_data.items():
-            setattr(rule, field, value)
+            if field in allowed_fields and hasattr(rule, field):
+                setattr(rule, field, value)
         
         rule.updated_by = updated_by
         

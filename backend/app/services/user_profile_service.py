@@ -144,11 +144,14 @@ class UserProfileService:
                 user_agent=user_agent
             )
         
-        # Track changes for audit log
+        # Track changes for audit log with schema-based validation to prevent mass assignment
+        # This automatically stays in sync with schema changes
+        allowed_fields = set(profile_data.model_fields.keys())
+        
         update_dict = profile_data.model_dump(exclude_unset=True)
         
         for field_name, new_value in update_dict.items():
-            if hasattr(profile, field_name):
+            if field_name in allowed_fields and hasattr(profile, field_name):
                 old_value = getattr(profile, field_name)
                 
                 # Only log if value actually changed

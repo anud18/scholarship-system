@@ -101,15 +101,20 @@ async def list_scholarship_rules(
     if tag:
         stmt = stmt.filter(ScholarshipRule.tag.ilike(f"%{tag}%"))
     
-    # Apply sorting
-    if hasattr(ScholarshipRule, sort_by):
-        order_field = getattr(ScholarshipRule, sort_by)
-        if sort_order.lower() == "desc":
-            stmt = stmt.order_by(desc(order_field))
-        else:
-            stmt = stmt.order_by(asc(order_field))
+    # Apply sorting with whitelist validation to prevent SQL injection
+    ALLOWED_SORT_FIELDS = {
+        "id", "created_at", "updated_at", "rule_name", "priority", 
+        "scholarship_type_id", "tag", "is_active", "is_hard_rule", "is_warning"
+    }
+    
+    if sort_by not in ALLOWED_SORT_FIELDS:
+        sort_by = "created_at"
+    
+    order_field = getattr(ScholarshipRule, sort_by)
+    if sort_order.lower() == "desc":
+        stmt = stmt.order_by(desc(order_field))
     else:
-        stmt = stmt.order_by(desc(ScholarshipRule.created_at))
+        stmt = stmt.order_by(asc(order_field))
     
     # Apply pagination
     offset = (page - 1) * per_page
@@ -236,10 +241,14 @@ async def update_scholarship_rule(
                 detail=f"Sub-type '{rule_update.sub_type}' is not valid for scholarship type '{scholarship_type.name}'"
             )
     
-    # Update fields
+    # Update only fields defined in the Pydantic schema to prevent mass assignment
+    # This automatically stays in sync with schema changes
+    allowed_fields = set(rule_update.model_fields.keys())
+    
     update_data = rule_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(rule, field, value)
+        if field in allowed_fields and hasattr(rule, field):
+            setattr(rule, field, value)
     
     rule.updated_by = current_user.id
     
