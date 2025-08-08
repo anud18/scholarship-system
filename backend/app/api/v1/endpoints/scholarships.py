@@ -157,7 +157,7 @@ async def get_scholarship_eligibility(
     scholarship_service = ScholarshipService(db)
     eligible_scholarships = await scholarship_service.get_eligible_scholarships(student, current_user.id)
     
-    # Convert scholarship dictionaries to EligibleScholarshipResponse
+    # Convert scholarship dictionaries to EligibleScholarshipResponse with rule details
     response_data = []
     for scholarship in eligible_scholarships:
         response_item = EligibleScholarshipResponse(
@@ -181,9 +181,9 @@ async def get_scholarship_eligibility(
             college_review_start=scholarship.get('college_review_start'),
             college_review_end=scholarship.get('college_review_end'),
             sub_type_selection_mode=scholarship.get('sub_type_selection_mode', 'single'),
-            passed=[],  # Rules passed - could be populated from eligibility check
-            warnings=[],  # Warning messages - could be populated from eligibility check
-            errors=[],  # Error messages - could be populated from eligibility check
+            passed=scholarship.get('passed', []),  # Rules passed from eligibility check
+            warnings=[],  # Hide warnings from student view - they don't need to see these
+            errors=scholarship.get('errors', []),  # Error messages from eligibility check
             created_at=scholarship.get('created_at')
         )
         response_data.append(response_item)

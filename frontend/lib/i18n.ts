@@ -120,6 +120,7 @@ export const translations = {
       "博士生": "博士生",
       "碩士生": "碩士生",
       "學士生": "學士生",
+      "學士班新生": "學士班新生",
       "在學生": "在學生",
       "非在職生": "非在職生",
       "非陸生": "非陸生",
@@ -258,6 +259,7 @@ export const translations = {
       // Basic eligibility
       "碩士生": "Master Student",
       "學士生": "Undergraduate Student",
+      "學士班新生": "Undergraduate Freshman",
       "博士生": "PhD Student",
       "在學生": "Current Student",
       "非在職生": "Full-time Student",

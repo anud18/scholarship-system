@@ -733,14 +733,18 @@ async def update_announcement(
             detail="System announcement not found"
         )
     
-    # Update fields
+    # Update only fields defined in the Pydantic schema to prevent mass assignment
+    # This automatically stays in sync with schema changes
+    allowed_fields = set(announcement_data.model_fields.keys())
+    
     update_data = announcement_data.dict(exclude_unset=True)
     if update_data:
         for field, value in update_data.items():
-            if field == 'metadata':
-                setattr(announcement, 'meta_data', value)
-            else:
-                setattr(announcement, field, value)
+            if field in allowed_fields:
+                if field == 'metadata':
+                    setattr(announcement, 'meta_data', value)
+                elif hasattr(announcement, field):
+                    setattr(announcement, field, value)
     
     await db.commit()
     await db.refresh(announcement)
@@ -1279,10 +1283,14 @@ async def update_sub_type_config(
     if not config:
         raise HTTPException(status_code=404, detail="Sub-type configuration not found")
     
-    # Update fields
+    # Update only fields defined in the Pydantic schema to prevent mass assignment
+    # This automatically stays in sync with schema changes
+    allowed_fields = set(config_data.model_fields.keys())
+    
     update_data = config_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(config, field, value)
+        if field in allowed_fields and hasattr(config, field):
+            setattr(config, field, value)
     
     config.updated_by = current_user.id
     await db.commit()
@@ -1950,12 +1958,17 @@ async def update_scholarship_rule(
     # Check permission to manage this scholarship
     check_scholarship_permission(current_user, rule.scholarship_type_id)
     
-    # Update fields
+    # Update only fields defined in the Pydantic schema to prevent mass assignment
+    # This automatically stays in sync with schema changes
+    allowed_fields = set(rule_data.model_fields.keys())
+    allowed_fields.add('updated_by')  # Allow system field
+    
     update_data = rule_data.dict(exclude_unset=True)
     update_data['updated_by'] = current_user.id
     
     for field, value in update_data.items():
-        setattr(rule, field, value)
+        if field in allowed_fields and hasattr(rule, field):
+            setattr(rule, field, value)
     
     await db.commit()
     

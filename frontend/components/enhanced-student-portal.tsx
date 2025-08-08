@@ -62,6 +62,57 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     return scholarship ? (locale === "zh" ? scholarship.name : (scholarship.name_en || scholarship.name)) : scholarshipType
   }
   
+  // Helper function to handle sub-type selection based on selection mode
+  const handleSubTypeSelection = (scholarshipType: string, subTypeValue: string, selectionMode: 'single' | 'multiple' | 'hierarchical') => {
+    setSelectedSubTypes(prev => {
+      const currentSelected = prev[scholarshipType] || []
+      let newSelected: string[]
+      
+      switch (selectionMode) {
+        case 'single':
+          // Single mode: only one selection allowed
+          newSelected = currentSelected.includes(subTypeValue) ? [] : [subTypeValue]
+          break
+          
+        case 'hierarchical':
+          // Hierarchical mode: sequential selection only
+          const scholarship = eligibleScholarships.find(s => s.code === scholarshipType)
+          const validSubTypes = scholarship?.eligible_sub_types?.filter(st => st.value && st.value !== "general") || []
+          const orderedValues = validSubTypes.map(st => st.value!).filter(Boolean)
+          
+          if (currentSelected.includes(subTypeValue)) {
+            // Deselecting - remove this and all subsequent selections
+            const indexToRemove = currentSelected.indexOf(subTypeValue)
+            newSelected = currentSelected.slice(0, indexToRemove)
+          } else {
+            // Selecting - only allow if this is the next in sequence
+            const expectedIndex = currentSelected.length
+            const expectedValue = orderedValues[expectedIndex]
+            if (subTypeValue === expectedValue) {
+              newSelected = [...currentSelected, subTypeValue]
+            } else {
+              // Not the next in sequence, don't change selection
+              newSelected = currentSelected
+            }
+          }
+          break
+          
+        case 'multiple':
+        default:
+          // Multiple mode: free selection
+          newSelected = currentSelected.includes(subTypeValue)
+            ? currentSelected.filter(t => t !== subTypeValue)
+            : [...currentSelected, subTypeValue]
+          break
+      }
+      
+      return {
+        ...prev,
+        [scholarshipType]: newSelected
+      }
+    })
+  }
+  
   // Debug authentication status
   useEffect(() => {
     console.log('EnhancedStudentPortal mounted with user:', user)
@@ -243,8 +294,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         // Add sub-type selection as a required item if applicable
         const scholarship = selectedScholarship
         if (scholarship?.eligible_sub_types && 
-            scholarship.eligible_sub_types[0] !== "general" &&
-            scholarship.eligible_sub_types.length > 0) {
+            scholarship.eligible_sub_types.length > 0 &&
+            scholarship.eligible_sub_types[0]?.value !== "general" && 
+            scholarship.eligible_sub_types[0]?.value !== null) {
           totalRequired += 1
         }
         
@@ -276,8 +328,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         
         // Check sub-type selection completion
         if (scholarship?.eligible_sub_types && 
-            scholarship.eligible_sub_types[0] !== "general" &&
-            scholarship.eligible_sub_types.length > 0) {
+            scholarship.eligible_sub_types.length > 0 &&
+            scholarship.eligible_sub_types[0]?.value !== "general" && 
+            scholarship.eligible_sub_types[0]?.value !== null) {
           if (selectedSubTypes[newApplicationData.scholarship_type]?.length > 0) {
             completedItems++
           }
@@ -684,7 +737,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     // 檢查獎學金是否有特殊的子類型（不是只有 general）
     const hasSpecialSubTypes = scholarship?.eligible_sub_types && 
       scholarship.eligible_sub_types.length > 0 && 
-      scholarship.eligible_sub_types[0] !== "general"
+      scholarship.eligible_sub_types[0]?.value !== "general" && 
+      scholarship.eligible_sub_types[0]?.value !== null
     
     console.log('Debug handleEditApplication:', {
       applicationId: application.id,
@@ -865,7 +919,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             </CardDescription>
 
             {/* Eligible Programs Section */}
-            {scholarship.eligible_sub_types && scholarship.eligible_sub_types.length > 0 && scholarship.eligible_sub_types[0] !== "general" && (
+            {scholarship.eligible_sub_types && scholarship.eligible_sub_types.length > 0 && 
+             scholarship.eligible_sub_types[0]?.value !== "general" && scholarship.eligible_sub_types[0]?.value !== null && (
               <div className="mt-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50 divide-y divide-indigo-100/50">
                 <div className="px-3 py-2">
                   <p className="text-sm font-medium text-indigo-900">
@@ -873,13 +928,13 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                   </p>
                 </div>
                 <div className="px-3 py-2 flex flex-wrap gap-1.5">
-                  {scholarship.eligible_sub_types.map((subType) => (
+                  {scholarship.eligible_sub_types.map((subType, index) => (
                     <Badge 
-                      key={subType} 
+                      key={subType.value || index} 
                       variant="outline" 
                       className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
                     >
-                      {getTranslation(locale, `scholarship_subtypes.${subType}`)}
+                      {locale === 'zh' ? subType.label : subType.label_en}
                     </Badge>
                   ))}
                 </div>
@@ -917,8 +972,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
 
                     {/* Sub-type specific rules */}
                     {["nstc", "moe_1w", "moe_2w"].map(subType => {
-                      const rulesForType = scholarship.passed?.filter(rule => rule.sub_type === subType);
-                      if (!rulesForType?.length) return null;
+                      const passedRulesForType = scholarship.passed?.filter(rule => rule.sub_type === subType);
+                      const errorRulesForType = scholarship.errors?.filter(rule => rule.sub_type === subType);
+                      
+                      // Only show subtype section if there are any rules for it
+                      if (!passedRulesForType?.length && !errorRulesForType?.length) return null;
                       
                       return (
                         <div key={subType} className="pl-2 border-l-2 border-gray-200">
@@ -926,12 +984,24 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                             {getTranslation(locale, `rule_types.${subType}`)}:
                           </p>
                           <div className="flex flex-wrap gap-1">
-                            {rulesForType.map((rule) => (
+                            {/* Passed rules for this subtype */}
+                            {passedRulesForType?.map((rule) => (
                               <Badge 
                                 key={rule.rule_id} 
                                 variant="outline" 
                                 className="bg-emerald-50 text-emerald-600 border-emerald-100"
                               >
+                                {getTranslation(locale, `eligibility_tags.${rule.tag}`)}
+                              </Badge>
+                            ))}
+                            {/* Error rules for this subtype */}
+                            {errorRulesForType?.map((rule) => (
+                              <Badge 
+                                key={rule.rule_id} 
+                                variant="outline" 
+                                className="bg-rose-50 text-rose-600 border-rose-100"
+                              >
+                                <AlertTriangle className="h-3 w-3 mr-1" />
                                 {getTranslation(locale, `eligibility_tags.${rule.tag}`)}
                               </Badge>
                             ))}
@@ -956,10 +1026,10 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       </div>
                     )}
 
-                    {/* Errors */}
-                    {scholarship.errors && scholarship.errors.length > 0 && (
+                    {/* General Errors (non-subtype specific) */}
+                    {scholarship.errors && scholarship.errors.filter(rule => !rule.sub_type).length > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        {scholarship.errors?.map((rule) => (
+                        {scholarship.errors?.filter(rule => !rule.sub_type).map((rule) => (
                           <Badge 
                             key={rule.rule_id} 
                             variant="outline" 
@@ -1255,13 +1325,34 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       const scholarship = eligibleScholarships.find(s => s.code === value)
                       setSelectedScholarship(scholarship || null)
                       
-                      // Initialize selected sub-types if not "general"
+                      // Initialize selected sub-types based on selection mode
                       if (scholarship?.eligible_sub_types && 
-                          scholarship.eligible_sub_types[0] !== "general" &&
-                          scholarship.eligible_sub_types.length > 0) {
+                          scholarship.eligible_sub_types.length > 0 &&
+                          scholarship.eligible_sub_types[0]?.value !== "general" && 
+                          scholarship.eligible_sub_types[0]?.value !== null) {
+                        
+                        const selectionMode = scholarship.sub_type_selection_mode || 'multiple'
+                        let initialSelection: string[] = []
+                        
+                        switch (selectionMode) {
+                          case 'hierarchical':
+                            // Hierarchical: start with empty selection
+                            initialSelection = []
+                            break
+                          case 'single':
+                            // Single: start with empty selection
+                            initialSelection = []
+                            break
+                          case 'multiple':
+                          default:
+                            // Multiple: could start empty or pre-select all (keeping current behavior for backward compatibility)
+                            initialSelection = []
+                            break
+                        }
+                        
                         setSelectedSubTypes(prev => ({
                           ...prev,
-                          [value]: [...scholarship.eligible_sub_types]
+                          [value]: initialSelection
                         }))
                       }
                       
@@ -1303,41 +1394,47 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                 {/* Sub-type selection UI */}
                 {newApplicationData.scholarship_type && selectedScholarship?.eligible_sub_types && 
                  selectedScholarship.eligible_sub_types.length > 0 && 
-                 selectedScholarship.eligible_sub_types[0] !== "general" && (
+                 selectedScholarship.eligible_sub_types[0]?.value !== "general" && 
+                 selectedScholarship.eligible_sub_types[0]?.value !== null && (
                   <div className="space-y-2">
-                    <Label>{locale === "zh" ? "申請欄位" : "Application Fields"} *</Label>
+                    <Label>{locale === "zh" ? "申請項目" : "Application Items"} *</Label>
+                    
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {(() => {
-                        console.log('Debug sub-type selection:', {
-                          scholarshipType: newApplicationData.scholarship_type,
-                          eligibleSubTypes: selectedScholarship.eligible_sub_types,
-                          selectedSubTypes: selectedSubTypes[newApplicationData.scholarship_type],
-                          editingApplication: editingApplication?.id
-                        })
-                        return null
-                      })()}
-                      {selectedScholarship.eligible_sub_types.map((subType) => {
-                        const isSelected = selectedSubTypes[newApplicationData.scholarship_type]?.includes(subType)
-                        console.log(`Subtype ${subType} isSelected:`, isSelected)
+                      {selectedScholarship.eligible_sub_types.map((subType, index) => {
+                        const subTypeValue = subType.value
+                        const isSelected = selectedSubTypes[newApplicationData.scholarship_type]?.includes(subTypeValue)
+                        const selectionMode = selectedScholarship.sub_type_selection_mode || 'multiple'
+                        
+                        // For hierarchical mode, determine if this option is selectable
+                        const isSelectable = (() => {
+                          if (editingApplication) return false
+                          if (!subTypeValue) return false
+                          
+                          if (selectionMode === 'hierarchical') {
+                            const currentSelected = selectedSubTypes[newApplicationData.scholarship_type] || []
+                            const validSubTypes = selectedScholarship.eligible_sub_types.filter(st => st.value && st.value !== "general")
+                            const expectedIndex = currentSelected.length
+                            
+                            // Can select if it's already selected OR it's the next in sequence
+                            return isSelected || index === expectedIndex
+                          }
+                          
+                          return true // For single/multiple modes, all are selectable
+                        })()
+                        
                         return (
                           <Card
-                            key={subType}
+                            key={subType.value || subType.label}
                             className={clsx(
                               "relative cursor-pointer transition-all duration-200",
-                              "hover:border-primary/50",
-                              isSelected && "border-primary bg-primary/5"
+                              isSelectable && "hover:border-primary/50",
+                              isSelected && "border-primary bg-primary/5",
+                              !isSelectable && "opacity-50 cursor-not-allowed bg-gray-50"
                             )}
                             onClick={() => {
-                              setSelectedSubTypes(prev => {
-                                const currentSelected = prev[newApplicationData.scholarship_type] || []
-                                const newSelected = isSelected
-                                  ? currentSelected.filter(t => t !== subType)
-                                  : [...currentSelected, subType]
-                                return {
-                                  ...prev,
-                                  [newApplicationData.scholarship_type]: newSelected
-                                }
-                              })
+                              if (isSelectable && subTypeValue) {
+                                handleSubTypeSelection(newApplicationData.scholarship_type, subTypeValue, selectionMode)
+                              }
                             }}
                           >
                             <div className="absolute top-2 right-2 w-4 h-4 rounded-full border-2 flex items-center justify-center">
@@ -1347,13 +1444,38 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                             </div>
                             <CardContent className="p-4">
                               <p className="text-sm font-medium">
-                                {getTranslation(locale, `scholarship_subtypes.${subType}`)}
+                                {locale === 'zh' ? subType.label : subType.label_en}
                               </p>
+                              
+                              {/* Show selection mode indicators */}
+                              <div className="text-xs text-gray-500 mt-1 space-y-1">
+                                {selectionMode === 'single' && (
+                                  <p>{locale === 'zh' ? '單選模式' : 'Single selection'}</p>
+                                )}
+                                {selectionMode === 'hierarchical' && !isSelectable && !isSelected && (
+                                  <p>{locale === 'zh' ? '請先選擇前面的項目' : 'Select previous items first'}</p>
+                                )}
+                                {selectionMode === 'hierarchical' && index === 0 && (
+                                  <p>{locale === 'zh' ? '階層式選擇' : 'Hierarchical selection'}</p>
+                                )}
+                              </div>
                             </CardContent>
                           </Card>
                         )
                       })}
                     </div>
+                    
+                    {/* Selection mode description */}
+                    <div className="mt-2 text-xs text-gray-600">
+                      {selectedScholarship.sub_type_selection_mode === 'single' ? (
+                        locale === 'zh' ? '請選擇一個項目' : 'Please select one item'
+                      ) : selectedScholarship.sub_type_selection_mode === 'hierarchical' ? (
+                        locale === 'zh' ? '請依序選擇項目（需按順序選取）' : 'Please select items in order (sequential selection required)'
+                      ) : (
+                        locale === 'zh' ? '可選擇多個項目' : 'Multiple selections allowed'
+                      )}
+                    </div>
+                    
                     {selectedSubTypes[newApplicationData.scholarship_type]?.length === 0 && (
                       <p className="text-sm text-destructive">
                         {locale === "zh" ? "請至少選擇一個申請項目" : "Please select at least one item"}

@@ -8,6 +8,8 @@ from typing import Optional, Dict, Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.db.deps import get_db
@@ -73,13 +75,17 @@ async def get_current_user(
     except Exception:
         raise AuthenticationError("Could not validate credentials")
     
-    # Get user from database
-    result = await db.get(User, user_id)
-    if result is None:
+    # Get user from database with relationships that will be used in-request
+    stmt = select(User).options(
+        selectinload(User.admin_scholarships)
+    ).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if user is None:
         raise AuthenticationError("User not found")
     
     
-    return result
+    return user
 
 
 

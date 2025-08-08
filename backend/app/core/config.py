@@ -153,6 +153,15 @@ class Settings(BaseSettings):
         """Get allowed file types as a list"""
         return [s.strip() for s in self.allowed_file_types.split(',') if s.strip()]
     
+    @property
+    def testing(self) -> bool:
+        """Check if we're in a testing environment"""
+        return bool(
+            os.getenv("PYTEST_CURRENT_TEST") or 
+            os.getenv("CI") or 
+            os.getenv("TESTING")
+        )
+    
     class Config:
         env_file = ".env"
         case_sensitive = False
@@ -179,7 +188,7 @@ MIME_TYPE_MAPPING = {
 
 # Development scholarship settings
 DEV_SCHOLARSHIP_SETTINGS = {
-    "ALWAYS_OPEN_APPLICATION": True,
+    "ALWAYS_OPEN_APPLICATION": False,  # Respect real application periods
     "BYPASS_WHITELIST": True,
-    "MOCK_APPLICATION_PERIOD": True,
+    "MOCK_APPLICATION_PERIOD": False,
 }

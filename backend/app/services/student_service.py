@@ -214,8 +214,9 @@ class StudentService:
             "std_pid": student_data.get("std_pid"),
             "std_cname": student_data.get("std_cname"),
             "std_ename": student_data.get("std_ename"),
+            "std_bdate": student_data.get("std_bdate"),  # New field
             "std_degree": student_data.get("std_degree"),
-            "std_studingstatus": student_data.get("std_studingstatus"),
+            "std_studingstatus": student_data.get("std_studingstatus"),  # Updated field
             "std_sex": student_data.get("std_sex"),
             "std_enrollyear": student_data.get("std_enrollyear"),
             "std_enrollterm": student_data.get("std_enrollterm"),
@@ -235,6 +236,9 @@ class StudentService:
             "com_commzip": student_data.get("com_commzip"),
             "com_commadd": student_data.get("com_commadd"),
             "std_enrolldate": student_data.get("std_enrolldate"),
+            "std_overseaplace": student_data.get("std_overseaplace"),
+            "mgd_title": student_data.get("mgd_title"),
+            "ToDoctor": student_data.get("ToDoctor"),
             
             # Metadata
             "api_fetched_at": datetime.now(timezone.utc).isoformat(),
@@ -261,6 +265,51 @@ class StudentService:
             return "master"
         else:
             return "undergraduate"
+    
+    def determine_student_api_type(self, scholarship_config = None) -> str:
+        """
+        Determine which student API to call based on scholarship configuration
+        
+        Args:
+            scholarship_config: ScholarshipConfiguration object (optional)
+            
+        Returns:
+            API type: "student" or "student_term"
+        """
+        # For now, default to "student" type for basic info
+        # In the future, we can add logic to determine based on scholarship requirements
+        # if scholarship_config and scholarship_config.requires_term_data:
+        #     return "student_term"
+        
+        # You can customize this logic based on your scholarship requirements
+        return "student"
+    
+    async def get_student_data_by_type(
+        self, 
+        student_code: str, 
+        api_type: str = "student", 
+        academic_year: str = None, 
+        term: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get student data using specified API type
+        
+        Args:
+            student_code: Student ID code
+            api_type: "student" for basic info, "student_term" for term-specific data
+            academic_year: Academic year (required if api_type is "student_term")
+            term: Term (required if api_type is "student_term")
+            
+        Returns:
+            Student data dictionary or None
+        """
+        if api_type == "student_term":
+            if not academic_year or not term:
+                logger.error("Academic year and term are required for student_term API")
+                return None
+            return await self.get_student_term_info(student_code, academic_year, term)
+        else:
+            return await self.get_student_basic_info(student_code)
     
     async def validate_student_exists(self, student_code: str) -> bool:
         """

@@ -71,10 +71,27 @@ class EligibilityService:
             
             # Check regular application period
             if config.application_start_date and config.application_end_date:
-                if not (config.application_start_date <= now <= config.application_end_date):
+                # Handle timezone-aware and naive datetime comparison
+                app_start = config.application_start_date
+                if app_start.tzinfo is None:
+                    app_start = app_start.replace(tzinfo=timezone.utc)
+                    
+                app_end = config.application_end_date
+                if app_end.tzinfo is None:
+                    app_end = app_end.replace(tzinfo=timezone.utc)
+                
+                if not (app_start <= now <= app_end):
                     # Check renewal application period if applicable
                     if config.renewal_application_start_date and config.renewal_application_end_date:
-                        if not (config.renewal_application_start_date <= now <= config.renewal_application_end_date):
+                        renewal_start = config.renewal_application_start_date
+                        if renewal_start.tzinfo is None:
+                            renewal_start = renewal_start.replace(tzinfo=timezone.utc)
+                            
+                        renewal_end = config.renewal_application_end_date
+                        if renewal_end.tzinfo is None:
+                            renewal_end = renewal_end.replace(tzinfo=timezone.utc)
+                            
+                        if not (renewal_start <= now <= renewal_end):
                             reasons.append("不在申請期間內")
                     else:
                         reasons.append("不在申請期間內")
@@ -108,6 +125,105 @@ class EligibilityService:
         
         return is_eligible, reasons
     
+    async def get_detailed_eligibility_check(
+        self, 
+        student_data: Dict[str, Any], 
+        config: ScholarshipConfiguration,
+        user_id: Optional[int] = None
+    ) -> Tuple[bool, List[str], Dict[str, Any]]:
+        """Get detailed eligibility check with rule breakdown
+        
+        Returns:
+            (is_eligible, reasons, details) where details contains:
+            - passed: list of passed rules with their tags
+            - warnings: list of warning rules
+            - errors: list of failed hard rules
+        """
+        
+        reasons = []
+        details = {
+            'passed': [],
+            'warnings': [],
+            'errors': []
+        }
+        
+        # Check if configuration is active and effective
+        if not config.is_active:
+            reasons.append("獎學金配置未啟用")
+            return False, reasons, details
+        
+        if not config.is_effective:
+            reasons.append("不在獎學金有效期間內")
+            return False, reasons, details
+        
+        # Check for existing application if user_id is provided
+        if user_id:
+            existing_app_eligible = await self._check_existing_applications(
+                user_id, config, student_data
+            )
+            if not existing_app_eligible:
+                reasons.append("已有相同學年學期的申請記錄")
+                return False, reasons, details
+        
+        # Check application period (unless bypassed in dev mode)
+        if not self._should_bypass_application_period():
+            now = datetime.now(timezone.utc)
+            
+            # Check regular application period
+            if config.application_start_date and config.application_end_date:
+                # Handle timezone-aware and naive datetime comparison
+                app_start = config.application_start_date
+                if app_start.tzinfo is None:
+                    app_start = app_start.replace(tzinfo=timezone.utc)
+                    
+                app_end = config.application_end_date
+                if app_end.tzinfo is None:
+                    app_end = app_end.replace(tzinfo=timezone.utc)
+                
+                if not (app_start <= now <= app_end):
+                    # Check renewal application period if applicable
+                    if config.renewal_application_start_date and config.renewal_application_end_date:
+                        renewal_start = config.renewal_application_start_date
+                        if renewal_start.tzinfo is None:
+                            renewal_start = renewal_start.replace(tzinfo=timezone.utc)
+                            
+                        renewal_end = config.renewal_application_end_date
+                        if renewal_end.tzinfo is None:
+                            renewal_end = renewal_end.replace(tzinfo=timezone.utc)
+                            
+                        if not (renewal_start <= now <= renewal_end):
+                            reasons.append("不在申請期間內")
+                    else:
+                        reasons.append("不在申請期間內")
+        
+        # Check whitelist if enabled (unless bypassed in dev mode)
+        if config.scholarship_type.whitelist_enabled and not self._should_bypass_whitelist():
+            student_id = student_data.get('std_stdcode', '')
+            whitelist_ids = config.whitelist_student_ids or {}
+            
+            # Check if student is in whitelist
+            if isinstance(whitelist_ids, dict):
+                if student_id not in whitelist_ids:
+                    reasons.append("未在白名單中")
+            elif isinstance(whitelist_ids, list):
+                if student_id not in whitelist_ids:
+                    reasons.append("未在白名單中")
+        
+        # Check scholarship rules with detailed breakdown
+        rules_passed, rule_failures, rule_details = await self._check_scholarship_rules_detailed(
+            student_data, config
+        )
+        if not rules_passed:
+            reasons.extend(rule_failures)
+        
+        # Add rule details to response
+        details.update(rule_details)
+        
+        # All checks passed if no reasons were added
+        is_eligible = len(reasons) == 0
+        
+        return is_eligible, reasons, details
+    
     async def _check_scholarship_rules(
         self, 
         student_data: Dict[str, Any], 
@@ -117,10 +233,11 @@ class EligibilityService:
         
         failure_reasons = []
         
-        # Get applicable rules for this scholarship configuration
+        # Get applicable rules for this scholarship configuration (exclude template rules)
         stmt = select(ScholarshipRule).filter(
             ScholarshipRule.scholarship_type_id == config.scholarship_type_id,
-            ScholarshipRule.is_active == True
+            ScholarshipRule.is_active == True,
+            ScholarshipRule.is_template == False  # Exclude template rules from filtering
         )
         
         # Filter by academic year and semester if specified
@@ -143,6 +260,9 @@ class EligibilityService:
         result = await self.db.execute(stmt)
         rules = result.scalars().all()
         
+        # Track subtype eligibility - if any subtype has failed critical rules, exclude scholarship
+        subtype_eligibility = {}  # subtype -> bool (True if eligible for this subtype)
+        
         for rule in rules:
             # Skip inactive rules
             if not rule.is_active:
@@ -156,16 +276,208 @@ class EligibilityService:
             # Check rule condition
             rule_passed = self._evaluate_rule(student_data, rule)
             
+            # Handle subtype rule tracking
+            if rule.sub_type:
+                if rule.sub_type not in subtype_eligibility:
+                    subtype_eligibility[rule.sub_type] = True  # Start optimistic
+                
+                # For subtype rules, both hard rules and critical soft rules should prevent eligibility
+                # Warning rules don't count as critical rules
+                if not rule.is_warning:
+                    if not rule_passed:
+                        subtype_eligibility[rule.sub_type] = False
+            
             if not rule_passed:
                 if rule.is_hard_rule:
-                    # Hard rules are mandatory
+                    # Hard rules are mandatory - prevent showing scholarship
                     message = rule.message or f"不符合規則: {rule.rule_name}"
                     failure_reasons.append(message)
                 elif rule.is_warning:
                     # Warning rules don't prevent eligibility but could be logged
                     logger.warning(f"Warning rule failed for student: {rule.rule_name}")
+                else:
+                    # Soft rules don't prevent eligibility - allow display but prevent application
+                    pass  # Don't add to failure_reasons, allow scholarship to be shown
+        
+        # Check if scholarship has subtypes and if student is eligible for at least one
+        # For subtypes: even soft rule failures should prevent subtype eligibility
+        # Only if student is eligible for at least one subtype, show the scholarship
+        has_subtypes = len(subtype_eligibility) > 0
+        if has_subtypes:
+            eligible_for_any_subtype = any(subtype_eligibility.values())
+            if not eligible_for_any_subtype:
+                # Student is not eligible for any subtype - prevent showing this scholarship
+                failure_reasons.append("不符合任何子類型的申請資格")
         
         return len(failure_reasons) == 0, failure_reasons
+    
+    async def _check_scholarship_rules_detailed(
+        self, 
+        student_data: Dict[str, Any], 
+        config: ScholarshipConfiguration
+    ) -> Tuple[bool, List[str], Dict[str, Any]]:
+        """Check student against scholarship rules with detailed breakdown"""
+        
+        failure_reasons = []
+        details = {
+            'passed': [],
+            'warnings': [],
+            'errors': []
+        }
+        
+        # Get applicable rules for this scholarship configuration (exclude template rules)
+        stmt = select(ScholarshipRule).filter(
+            ScholarshipRule.scholarship_type_id == config.scholarship_type_id,
+            ScholarshipRule.is_active == True,
+            ScholarshipRule.is_template == False  # Exclude template rules from filtering
+        )
+        
+        # Filter by academic year and semester if specified
+        if config.academic_year:
+            stmt = stmt.filter(
+                or_(
+                    ScholarshipRule.academic_year.is_(None),  # Generic rules
+                    ScholarshipRule.academic_year == config.academic_year
+                )
+            )
+        
+        if config.semester:
+            stmt = stmt.filter(
+                or_(
+                    ScholarshipRule.semester.is_(None),  # Generic rules
+                    ScholarshipRule.semester == config.semester
+                )
+            )
+        
+        result = await self.db.execute(stmt)
+        rules = result.scalars().all()
+        
+        # Track subtype eligibility - if any subtype has failed critical rules, exclude scholarship
+        subtype_eligibility = {}  # subtype -> bool (True if eligible for this subtype)
+        subtype_critical_rules = {}  # subtype -> list of critical rules
+        
+        for rule in rules:
+            # Skip inactive rules
+            if not rule.is_active:
+                continue
+            
+            # Check if rule applies to initial or renewal applications
+            # For eligibility checking, we assume initial application
+            if not rule.is_initial_enabled:
+                continue
+            
+            # Check rule condition
+            rule_passed = self._evaluate_rule(student_data, rule)
+            
+            # Create rule detail object
+            rule_detail = {
+                'rule_id': rule.id,
+                'rule_name': rule.rule_name,
+                'rule_type': rule.rule_type,  # Add missing rule_type field
+                'tag': rule.tag or 'general',
+                'sub_type': getattr(rule, 'sub_type', None),
+                'message': rule.message,
+                'message_en': rule.message_en
+            }
+            
+            # Handle subtype rule tracking
+            if rule.sub_type:
+                if rule.sub_type not in subtype_eligibility:
+                    subtype_eligibility[rule.sub_type] = True  # Start optimistic
+                    subtype_critical_rules[rule.sub_type] = []
+                
+                # For subtype rules, both hard rules and critical soft rules should prevent eligibility
+                # Warning rules don't count as critical rules
+                if not rule.is_warning:
+                    if not rule_passed:
+                        subtype_eligibility[rule.sub_type] = False
+                        subtype_critical_rules[rule.sub_type].append(rule.rule_name)
+            
+            if rule_passed:
+                # Rule passed - add to passed list
+                details['passed'].append(rule_detail)
+            else:
+                if rule.is_hard_rule:
+                    # Hard rules are mandatory - add to errors
+                    message = rule.message or f"不符合規則: {rule.rule_name}"
+                    failure_reasons.append(message)
+                    details['errors'].append(rule_detail)
+                elif rule.is_warning:
+                    # Warning rules don't prevent eligibility but are shown as warnings
+                    details['warnings'].append(rule_detail)
+                    logger.warning(f"Warning rule failed for student: {rule.rule_name}")
+                else:
+                    # Soft rules don't prevent eligibility - allow display but prevent application
+                    details['errors'].append(rule_detail)
+                    # Don't add to failure_reasons - allow scholarship to be shown
+        
+        # Check if scholarship has subtypes and if student is eligible for at least one
+        # For subtypes: even soft rule failures should prevent subtype eligibility
+        # Only if student is eligible for at least one subtype, show the scholarship
+        has_subtypes = len(subtype_eligibility) > 0
+        if has_subtypes:
+            eligible_for_any_subtype = any(subtype_eligibility.values())
+            if not eligible_for_any_subtype:
+                # Student is not eligible for any subtype - prevent showing this scholarship
+                failure_reasons.append("不符合任何子類型的申請資格")
+        
+        # Post-process: Group subtype rule errors for unified presentation
+        processed_details = self._process_subtype_rule_errors(details)
+        
+        return len(failure_reasons) == 0, failure_reasons, processed_details
+    
+    async def determine_required_student_api_type(
+        self, 
+        config: ScholarshipConfiguration
+    ) -> str:
+        """Determine which student API type is required based on scholarship rules
+        
+        Returns:
+            "student" for basic API or "student_term" for term-specific API
+        """
+        
+        # Get applicable rules for this scholarship configuration (exclude template rules)
+        stmt = select(ScholarshipRule).filter(
+            ScholarshipRule.scholarship_type_id == config.scholarship_type_id,
+            ScholarshipRule.is_active == True,
+            ScholarshipRule.is_template == False  # Exclude template rules from filtering
+        )
+        
+        # Filter by academic year and semester if specified
+        if config.academic_year:
+            stmt = stmt.filter(
+                or_(
+                    ScholarshipRule.academic_year.is_(None),  # Generic rules
+                    ScholarshipRule.academic_year == config.academic_year
+                )
+            )
+        
+        if config.semester:
+            stmt = stmt.filter(
+                or_(
+                    ScholarshipRule.semester.is_(None),  # Generic rules
+                    ScholarshipRule.semester == config.semester
+                )
+            )
+        
+        result = await self.db.execute(stmt)
+        rules = result.scalars().all()
+        
+        # Check if any active rule requires student_term data
+        for rule in rules:
+            if not rule.is_active:
+                continue
+            
+            # Skip rules that don't apply to initial applications
+            if not rule.is_initial_enabled:
+                continue
+                
+            # If any rule has rule_type == "student_term", we need the term-specific API
+            if rule.rule_type == "student_term":
+                return "student_term"
+        
+        # Default to basic student API
+        return "student"
     
     def _evaluate_rule(self, student_data: Dict[str, Any], rule: ScholarshipRule) -> bool:
         """Evaluate a single rule against student data"""
@@ -224,6 +536,20 @@ class EligibilityService:
                 return ''
         
         return current_data
+    
+    def _process_subtype_rule_errors(self, details: Dict[str, Any]) -> Dict[str, Any]:
+        """Process subtype rule errors - keep individual rule tags for display
+        
+        Return all error rules with their original tags so frontend can display them
+        grouped by subtype along with passed rules.
+        """
+        # Simply return the details as-is, preserving all rule tags
+        # The frontend will handle grouping by subtype
+        return {
+            'passed': details['passed'][:],  # Keep passed rules as-is
+            'warnings': details['warnings'][:],  # Keep warnings as-is
+            'errors': details['errors'][:]  # Keep all error rules with their original tags
+        }
     
     async def _check_existing_applications(
         self, 
