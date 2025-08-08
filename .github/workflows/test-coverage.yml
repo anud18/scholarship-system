@@ -54,8 +54,8 @@ jobs:
       with:
         name: backend-unit-coverage
         path: |
-          backend/coverage.xml
-          backend/htmlcov/
+          coverage.xml
+          htmlcov/
         retention-days: 7
 
   backend-integration-tests:
@@ -97,8 +97,8 @@ jobs:
       with:
         name: backend-integration-coverage
         path: |
-          backend/coverage.xml
-          backend/htmlcov/
+          coverage.xml
+          htmlcov/
         retention-days: 7
 
   backend-api-tests:
