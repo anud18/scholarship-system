@@ -103,28 +103,40 @@ export function MatrixQuotaTable({
       })
 
       if (response.success && response.data) {
-        // Update local data
-        const updatedData = { ...localData }
+        // Update local data with deep copy to ensure reactivity
+        const updatedData = JSON.parse(JSON.stringify(localData))
         updatedData.phd_quotas[editingCell.subType][editingCell.college].total_quota = newValue
+        updatedData.phd_quotas[editingCell.subType][editingCell.college].available = 
+          newValue - updatedData.phd_quotas[editingCell.subType][editingCell.college].used
         
-        // Recalculate totals
+        // Recalculate all totals comprehensively
         let grandTotal = 0
         let grandUsed = 0
+        let grandAvailable = 0
+        let grandApplications = 0
+        
         Object.values(updatedData.phd_quotas).forEach(colleges => {
           Object.values(colleges).forEach(cell => {
             grandTotal += cell.total_quota
             grandUsed += cell.used
+            grandAvailable += cell.available
+            grandApplications += cell.applications
           })
         })
         
         updatedData.grand_total = {
           total_quota: grandTotal,
           total_used: grandUsed,
-          total_available: grandTotal - grandUsed,
+          total_available: grandAvailable,
         }
 
+        // Force state update and callback
         setLocalData(updatedData)
-        onDataUpdate?.(updatedData)
+        
+        // Use timeout to ensure state has updated before calling parent callback
+        setTimeout(() => {
+          onDataUpdate?.(updatedData)
+        }, 0)
 
         toast({
           title: '更新成功',
@@ -160,7 +172,7 @@ export function MatrixQuotaTable({
     return getWarningColor(level)
   }
 
-  const calculateSubTypeTotal = (subType: string): QuotaCell => {
+  const calculateSubTypeTotal = useCallback((subType: string): QuotaCell => {
     if (!localData) return { total_quota: 0, used: 0, available: 0, applications: 0 }
     
     const result = { total_quota: 0, used: 0, available: 0, applications: 0 }
@@ -171,9 +183,9 @@ export function MatrixQuotaTable({
       result.applications += cell.applications
     })
     return result
-  }
+  }, [localData])
 
-  const calculateCollegeTotal = (college: string): QuotaCell => {
+  const calculateCollegeTotal = useCallback((college: string): QuotaCell => {
     if (!localData) return { total_quota: 0, used: 0, available: 0, applications: 0 }
     
     const result = { total_quota: 0, used: 0, available: 0, applications: 0 }
@@ -187,7 +199,7 @@ export function MatrixQuotaTable({
       }
     })
     return result
-  }
+  }, [localData, subTypes])
 
   if (loading) {
     return (

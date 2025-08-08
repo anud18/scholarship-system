@@ -12,7 +12,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
-from app.models.student import get_student_type_from_degree
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import Semester
 from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
@@ -108,16 +107,6 @@ class EligibilityService:
         is_eligible = len(reasons) == 0
         
         return is_eligible, reasons
-    
-    async def _get_student_type_from_data(self, student_data: Dict[str, Any]) -> str:
-        """Extract student type from student data"""
-        degree = student_data.get('std_degree', '')
-        return await get_student_type_from_degree(degree, self.db)
-    
-    
-    
-    
-    
     
     async def _check_scholarship_rules(
         self, 

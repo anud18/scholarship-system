@@ -230,7 +230,7 @@ async def get_matrix_quota_status(
             )
         
         # Get matrix quotas from configuration
-        matrix_quotas = config.college_quota_config or {}
+        matrix_quotas = config.quotas or {}
         
         if not matrix_quotas:
             raise HTTPException(
@@ -393,23 +393,23 @@ async def update_matrix_quota(
             )
         
         # Initialize quota structure if needed
-        if not config.college_quota_config:
-            config.college_quota_config = {}
+        if not config.quotas:
+            config.quotas = {}
         
-        if sub_type not in config.college_quota_config:
-            config.college_quota_config[sub_type] = {}
+        if sub_type not in config.quotas:
+            config.quotas[sub_type] = {}
         
         # Get old quota
-        old_quota = config.college_quota_config[sub_type].get(college, 0)
+        old_quota = config.quotas[sub_type].get(college, 0)
         
         # Update quota
-        config.college_quota_config[sub_type][college] = new_quota
+        config.quotas[sub_type][college] = new_quota
         
         # Calculate totals
-        sub_type_total = sum(config.college_quota_config[sub_type].values())
+        sub_type_total = sum(config.quotas[sub_type].values())
         grand_total = sum(
             sum(colleges.values()) 
-            for colleges in config.college_quota_config.values()
+            for colleges in config.quotas.values()
             if isinstance(colleges, dict)
         )
         
@@ -418,7 +418,7 @@ async def update_matrix_quota(
         config.updated_by = current_user.id
         
         # Mark as modified for SQLAlchemy
-        flag_modified(config, 'college_quota_config')
+        flag_modified(config, 'quotas')
         
         await db.commit()
         await db.refresh(config)
@@ -600,9 +600,9 @@ async def get_quota_overview(
                 # Calculate allocated quota for this sub-type
                 allocated_quota = 0
                 
-                if config.has_college_quota and config.college_quota_config:
-                    if sub_type_code in config.college_quota_config:
-                        sub_type_quotas = config.college_quota_config[sub_type_code]
+                if config.has_college_quota and config.quotas:
+                    if sub_type_code in config.quotas:
+                        sub_type_quotas = config.quotas[sub_type_code]
                         if isinstance(sub_type_quotas, dict):
                             allocated_quota = sum(sub_type_quotas.values())
                         else:

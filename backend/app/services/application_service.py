@@ -16,7 +16,6 @@ from app.core.exceptions import (
     BusinessLogicError, AuthorizationError
 )
 from app.models.user import User, UserRole
-from app.models.student import get_student_type_from_degree
 from app.models.application import Application, ApplicationStatus, ApplicationReview, ProfessorReview, ProfessorReviewItem, Semester
 from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
 from app.schemas.application import (
@@ -30,20 +29,6 @@ from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
 
 
-class StudentProxy:
-    """Backward compatibility proxy class for student data"""
-    
-    def __init__(self, data: Dict[str, Any]):
-        self._data = data
-    
-    @property
-    def id(self) -> str:
-        return self._data.get('std_stdcode', '')
-    
-    def __getattr__(self, name: str):
-        return self._data.get(name, '')
-
-
 async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
     """Get student data from external API using user's nycu_id"""
     if user.role != UserRole.STUDENT or not user.nycu_id:
@@ -51,14 +36,6 @@ async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
     
     student_service = StudentService()
     return await student_service.get_student_basic_info(user.nycu_id)
-
-
-async def get_student_from_user(user: User) -> Optional[StudentProxy]:
-    """Get student object (backward compatibility)"""
-    student_data = await get_student_data_from_user(user)
-    if student_data:
-        return StudentProxy(student_data)
-    return None
 
 
 class ApplicationService:

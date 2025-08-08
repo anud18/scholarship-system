@@ -26,8 +26,7 @@ class ScholarshipConfigurationBase(BaseModel):
     
     # 配額詳細設定
     total_quota: Optional[int] = Field(None, ge=0)
-    college_quota_config: Optional[Dict[str, Dict[str, int]]] = None
-    quota_allocation_rules: Optional[Dict[str, Any]] = None
+    quotas: Optional[Dict[str, Dict[str, int]]] = None
     
     # 金額設定 (從 ScholarshipType 移至此處)
     amount: int = Field(..., gt=0, description="獎學金金額（整數）")
@@ -76,12 +75,12 @@ class ScholarshipConfigurationBase(BaseModel):
             raise ValueError('總配額不能為空當啟用配額限制時')
         return v
     
-    @validator('college_quota_config')
-    def validate_college_quota_config(cls, v, values):
-        """Validate college quota configuration"""
+    @validator('quotas')
+    def validate_quotas(cls, v, values):
+        """Validate quota configuration"""
         if values.get('has_college_quota'):
             if not v:
-                raise ValueError('學院配額配置不能為空當啟用學院配額時')
+                raise ValueError('配額配置不能為空當啟用學院配額時')
             
             # Check if college quota sum exceeds total quota
             total_quota = values.get('total_quota')
@@ -93,7 +92,23 @@ class ScholarshipConfigurationBase(BaseModel):
                     if isinstance(college_quotas, dict)
                 )
                 if college_total > total_quota:
-                    raise ValueError(f'學院配額總和 ({college_total}) 超過總配額 ({total_quota})')
+                    raise ValueError(f'配額總和 ({college_total}) 超過總配額 ({total_quota})')
+        return v
+    
+    @validator('renewal_professor_review_end')
+    def validate_renewal_professor_review(cls, v, values):
+        """Validate renewal professor review dates"""
+        if not values.get('requires_professor_recommendation'):
+            if v or values.get('renewal_professor_review_start'):
+                raise ValueError('續領教授審查時間不應設定當不需要教授推薦時')
+        return v
+    
+    @validator('renewal_college_review_end')
+    def validate_renewal_college_review(cls, v, values):
+        """Validate renewal college review dates"""
+        if not values.get('requires_college_review'):
+            if v or values.get('renewal_college_review_start'):
+                raise ValueError('續領學院審查時間不應設定當不需要學院審查時')
         return v
     
     @validator('effective_end_date')
@@ -126,8 +141,7 @@ class ScholarshipConfigurationUpdate(BaseModel):
     
     # 配額詳細設定
     total_quota: Optional[int] = Field(None, ge=0)
-    college_quota_config: Optional[Dict[str, Dict[str, int]]] = None
-    quota_allocation_rules: Optional[Dict[str, Any]] = None
+    quotas: Optional[Dict[str, Dict[str, int]]] = None
     
     # 金額設定 (從 ScholarshipType 移至此處)
     amount: Optional[int] = Field(None, gt=0, description="獎學金金額（整數）")
