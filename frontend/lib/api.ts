@@ -211,7 +211,13 @@ export interface ScholarshipType {
   application_cycle: 'semester' | 'yearly'
   application_start_date: string
   application_end_date: string
-  eligible_sub_types: string[]
+  sub_type_selection_mode: 'single' | 'multiple' | 'hierarchical'
+  eligible_sub_types: Array<{
+    value: string | null
+    label: string
+    label_en: string
+    is_default: boolean
+  }>
   passed: Array<{
     rule_id: number
     rule_name: string
@@ -280,6 +286,13 @@ export interface ScholarshipRule {
   academic_period_label?: string
   created_at: string
   updated_at: string
+}
+
+export interface SubTypeOption {
+  value: string | null
+  label: string
+  label_en: string
+  is_default: boolean
 }
 
 // User management types
@@ -1595,6 +1608,11 @@ class ApiClient {
       return this.request(`/admin/scholarship-rules/templates/${encodeURIComponent(templateName)}?scholarship_type_id=${scholarshipTypeId}`, {
         method: 'DELETE',
       });
+    },
+
+    // Get available sub-types for a scholarship type
+    getScholarshipSubTypes: async (scholarshipTypeId: number): Promise<ApiResponse<SubTypeOption[]>> => {
+      return this.request(`/scholarship-rules/scholarship-types/${scholarshipTypeId}/sub-types`);
     },
 
     // 系統統計

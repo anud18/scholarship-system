@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Save, X } from "lucide-react"
-import { ScholarshipRule } from "@/lib/api"
+import { ScholarshipRule, SubTypeOption, api } from "@/lib/api"
 
 interface ScholarshipRuleModalProps {
   isOpen: boolean
@@ -49,6 +49,7 @@ const STUDENT_FIELDS = [
   { value: "std_cname", label: "中文姓名 (std_cname)" },
   { value: "std_ename", label: "英文姓名 (std_ename)" },
   { value: "std_pid", label: "身分證字號 (std_pid)" },
+  { value: "std_bdate", label: "出生日期 (std_bdate)" },
   { value: "std_academyno", label: "學院代碼 (std_academyno)" },
   { value: "std_depno", label: "系所代碼 (std_depno)" },
   { value: "std_sex", label: "性別 (std_sex)" },
@@ -59,7 +60,8 @@ const STUDENT_FIELDS = [
   { value: "std_schoolid", label: "學校身分 (std_schoolid)" },
   { value: "std_overseaplace", label: "僑居地 (std_overseaplace)" },
   { value: "std_termcount", label: "就學期間 (std_termcount)" },
-  { value: "mgd_title", label: "學籍狀態 (mgd_title)" },
+  { value: "std_studingstatus", label: "學籍狀態 (std_studingstatus)" },
+  { value: "mgd_title", label: "學籍狀態標題 (mgd_title)" },
   { value: "ToDoctor", label: "是否逕讀博士 (ToDoctor)" },
   { value: "com_commadd", label: "通訊地址 (com_commadd)" },
   { value: "com_email", label: "電子信箱 (com_email)" },
@@ -74,9 +76,13 @@ const STUDENT_TERM_FIELDS = [
   { value: "trm_studystatus", label: "就學狀態 (trm_studystatus)" },
   { value: "trm_degree", label: "學期學位 (trm_degree)" },
   { value: "trm_academyno", label: "學期學院代碼 (trm_academyno)" },
+  { value: "trm_academyname", label: "學院名稱 (trm_academyname)" },
   { value: "trm_depno", label: "學期系所代碼 (trm_depno)" },
+  { value: "trm_depname", label: "系所名稱 (trm_depname)" },
   { value: "trm_placings", label: "總排名 (trm_placings)" },
+  { value: "trm_placingsrate", label: "總排名百分比 (trm_placingsrate)" },
   { value: "trm_depplacing", label: "系排名 (trm_depplacing)" },
+  { value: "trm_depplacingrate", label: "系排名百分比 (trm_depplacingrate)" },
   { value: "trm_ascore_gpa", label: "GPA (trm_ascore_gpa)" }
 ]
 
@@ -126,6 +132,10 @@ export function ScholarshipRuleModal({
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [subTypeOptions, setSubTypeOptions] = useState<SubTypeOption[]>([
+    { value: null, label: "通用", label_en: "General", is_default: true }
+  ])
+  const [loadingSubTypes, setLoadingSubTypes] = useState(false)
 
   useEffect(() => {
     if (rule) {
@@ -179,6 +189,43 @@ export function ScholarshipRuleModal({
     }
     setErrors({})
   }, [rule, academicYear, semester])
+
+  // Load sub-type options when modal opens
+  useEffect(() => {
+    const loadSubTypes = async () => {
+      if (!isOpen || !scholarshipTypeId) {
+        // Reset to default options when modal closes or no scholarship type
+        setSubTypeOptions([
+          { value: null, label: "通用", label_en: "General", is_default: true }
+        ])
+        return
+      }
+      
+      setLoadingSubTypes(true)
+      try {
+        const response = await api.admin.getScholarshipSubTypes(scholarshipTypeId)
+        if (response.success && response.data && Array.isArray(response.data)) {
+          setSubTypeOptions(response.data)
+        } else {
+          console.error('Failed to load sub-types:', response.message)
+          // Keep default options on error
+          setSubTypeOptions([
+            { value: null, label: "通用", label_en: "General", is_default: true }
+          ])
+        }
+      } catch (error) {
+        console.error('Error loading sub-types:', error)
+        // Keep default options on error
+        setSubTypeOptions([
+          { value: null, label: "通用", label_en: "General", is_default: true }
+        ])
+      } finally {
+        setLoadingSubTypes(false)
+      }
+    }
+
+    loadSubTypes()
+  }, [isOpen, scholarshipTypeId])
 
   const handleChange = (field: keyof ScholarshipRule, value: any) => {
     setFormData(prev => {
@@ -279,7 +326,7 @@ export function ScholarshipRuleModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>標籤</Label>
             <Input
@@ -287,6 +334,25 @@ export function ScholarshipRuleModal({
               onChange={(e) => handleChange("tag", e.target.value)}
               placeholder="例：博士生、中華民國國籍"
             />
+          </div>
+          <div className="space-y-2">
+            <Label>子類型</Label>
+            <Select
+              value={formData.sub_type || "__general__"}
+              onValueChange={(value) => handleChange("sub_type", value === "__general__" ? null : value)}
+              disabled={loadingSubTypes}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={loadingSubTypes ? "載入中..." : "選擇子類型"} />
+              </SelectTrigger>
+              <SelectContent>
+                {subTypeOptions.map((option) => (
+                  <SelectItem key={option.value || "__general__"} value={option.value || "__general__"}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label>優先級</Label>

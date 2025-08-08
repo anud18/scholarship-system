@@ -4,7 +4,7 @@ Scholarship type and rule schemas for API requests and responses
 
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
 
@@ -225,7 +225,7 @@ class ScholarshipRuleResponse(ScholarshipRuleBase):
 
 
 class RuleMessage(BaseModel):
-    rule_id: int
+    rule_id: Union[int, str]  # Can be int for normal rules or string for subtype unified errors
     rule_name: str
     rule_type: str
     tag: Optional[str] = None
@@ -237,12 +237,20 @@ class RuleMessage(BaseModel):
     is_hard_rule: bool = False
 
 
+class SubTypeOption(BaseModel):
+    """Schema for scholarship sub-type options"""
+    value: Optional[str]
+    label: str
+    label_en: str
+    is_default: bool = False
+
+
 class EligibleScholarshipResponse(BaseModel):
     id: int
     code: str
     name: str
     name_en: str
-    eligible_sub_types: List[str]
+    eligible_sub_types: List[SubTypeOption]
     category: str
     application_cycle: ApplicationCycleEnum
     description: Optional[str] = None

@@ -179,7 +179,7 @@ MIME_TYPE_MAPPING = {
 
 # Development scholarship settings
 DEV_SCHOLARSHIP_SETTINGS = {
-    "ALWAYS_OPEN_APPLICATION": True,
+    "ALWAYS_OPEN_APPLICATION": False,  # Respect real application periods
     "BYPASS_WHITELIST": True,
-    "MOCK_APPLICATION_PERIOD": True,
+    "MOCK_APPLICATION_PERIOD": False,
 }

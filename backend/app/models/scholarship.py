@@ -185,6 +185,24 @@ class ScholarshipType(Base):
             return "MOE_2W"
         return "GENERAL"
     
+    def get_sub_type_translations(self) -> Dict[str, Dict[str, str]]:
+        """Get translations for sub-types in both Chinese and English"""
+        translations = {
+            'zh': {
+                'general': '通用',
+                'nstc': '國科會博士生獎學金',
+                'moe_1w': '教育部博士生獎學金（指導教授配合款一萬）',
+                'moe_2w': '教育部博士生獎學金（指導教授配合款兩萬）'
+            },
+            'en': {
+                'general': 'General',
+                'nstc': 'NSTC Doctoral Scholarship',
+                'moe_1w': 'MOE Doctoral Scholarship (10K Advisor Match)',
+                'moe_2w': 'MOE Doctoral Scholarship (20K Advisor Match)'
+            }
+        }
+        return translations
+    
     def can_student_apply(self, student_id: int, semester: str) -> tuple[bool, str]:
         """Check if student can apply for this scholarship"""
         # Check if scholarship is active
@@ -662,11 +680,20 @@ class ScholarshipConfiguration(Base):
         if not self.is_active:
             return False
             
-        if self.effective_start_date and now < self.effective_start_date:
-            return False
+        # Handle timezone-aware and naive datetime comparison
+        if self.effective_start_date:
+            start_date = self.effective_start_date
+            if start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=timezone.utc)
+            if now < start_date:
+                return False
             
-        if self.effective_end_date and now > self.effective_end_date:
-            return False
+        if self.effective_end_date:
+            end_date = self.effective_end_date
+            if end_date.tzinfo is None:
+                end_date = end_date.replace(tzinfo=timezone.utc)
+            if now > end_date:
+                return False
             
         return True
     
@@ -819,7 +846,17 @@ class ScholarshipConfiguration(Base):
         # 檢查一般申請期間
         if not self.application_start_date or not self.application_end_date:
             return False
-        return bool(self.application_start_date <= now <= self.application_end_date)
+            
+        # Handle timezone-aware and naive datetime comparison
+        start_date = self.application_start_date
+        if start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=timezone.utc)
+            
+        end_date = self.application_end_date  
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+            
+        return bool(start_date <= now <= end_date)
     
     @property
     def is_renewal_application_period(self) -> bool:
@@ -827,7 +864,17 @@ class ScholarshipConfiguration(Base):
         now = datetime.now(timezone.utc)
         if not self.renewal_application_start_date or not self.renewal_application_end_date:
             return False
-        return bool(self.renewal_application_start_date <= now <= self.renewal_application_end_date)
+            
+        # Handle timezone-aware and naive datetime comparison
+        start_date = self.renewal_application_start_date
+        if start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=timezone.utc)
+            
+        end_date = self.renewal_application_end_date  
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+            
+        return bool(start_date <= now <= end_date)
     
     @property
     def is_general_application_period(self) -> bool:
@@ -835,7 +882,17 @@ class ScholarshipConfiguration(Base):
         now = datetime.now(timezone.utc)
         if not self.application_start_date or not self.application_end_date:
             return False
-        return bool(self.application_start_date <= now <= self.application_end_date)
+            
+        # Handle timezone-aware and naive datetime comparison
+        start_date = self.application_start_date
+        if start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=timezone.utc)
+            
+        end_date = self.application_end_date  
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+            
+        return bool(start_date <= now <= end_date)
     
     @property
     def current_application_type(self) -> Optional[str]:

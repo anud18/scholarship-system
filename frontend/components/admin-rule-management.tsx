@@ -421,6 +421,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
                       <tr>
                         <th className="text-left p-4 font-semibold">規則名稱</th>
                         <th className="text-left p-4 font-semibold">規則類型</th>
+                        <th className="text-left p-4 font-semibold">子類型</th>
                         <th className="text-left p-4 font-semibold">屬性</th>
                         <th className="text-left p-4 font-semibold">條件</th>
                         <th className="text-left p-4 font-semibold">優先級</th>
@@ -449,6 +450,11 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
                           <td className="p-4">
                             <Badge variant="outline" className="text-xs whitespace-nowrap">
                               {rule.rule_type}
+                            </Badge>
+                          </td>
+                          <td className="p-4">
+                            <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                              {rule.sub_type || '通用'}
                             </Badge>
                           </td>
                           <td className="p-4">

@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
@@ -42,7 +43,10 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
     
-    result = await db.execute(select(User).where(User.id == int(user_id)))
+    stmt = select(User).options(
+        selectinload(User.admin_scholarships)
+    ).where(User.id == int(user_id))
+    result = await db.execute(stmt)
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception

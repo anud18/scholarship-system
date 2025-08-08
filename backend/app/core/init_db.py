@@ -287,7 +287,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_type": "student_term",
             "tag": "在學生",
             "description": "博士生獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
-            "condition_field": "trm_studingstatus",
+            "condition_field": "trm_studystatus",
             "operator": "in",
             "expected_value": "1,2,3",
             "message": "博士生獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
@@ -479,7 +479,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_name": "逕讀博士獎學金 在學生身分 1: 在學 2: 應畢 3: 延畢",
             "rule_type": "student_term",
             "tag": "在學生",
-            "condition_field": "trm_studingstatus",
+            "condition_field": "trm_studystatus",
             "operator": "in",
             "expected_value": "1,2,3",
             "message": "逕讀博士獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
@@ -728,7 +728,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_type": "student_term",
             "tag": "在學生",
             "description": "檢查申請者的在學狀態",
-            "condition_field": "trm_studingstatus",
+            "condition_field": "trm_studystatus",
             "operator": "in",
             "expected_value": "1,2,3",
             "message": "申請者必須為在學、應畢或延畢狀態",
@@ -1052,7 +1052,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                         # 113年的有效期間 (已過期)
                         effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
                         effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
-                        is_active=False  # 舊配置設為不活躍
+                        is_active=True
                     )
                     config.update(create_review_schedule(
                         datetime(current_year-1, 9, 1, tzinfo=taiwan_tz), 
@@ -1103,7 +1103,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                     # 113年的有效期間 (已過期)
                     effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
                     effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
-                    is_active=False  # 舊配置設為不活躍
+                    is_active=True
                 )
                 config.update(create_review_schedule(
                     datetime(current_year-1, 8, 1, tzinfo=taiwan_tz),
@@ -1137,7 +1137,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                     # 113年的有效期間 (已過期)
                     effective_start_date=datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
                     effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
-                    is_active=False  # 舊配置設為不活躍
+                    is_active=True
                 )
                 config.update(create_review_schedule(
                     datetime(current_year-1, 9, 1, tzinfo=taiwan_tz),
@@ -1292,8 +1292,8 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     # 分別統計113和114年配置
     configs_113 = [c for c in quota_configs_data if c['academic_year'] == 113]
     configs_114 = [c for c in quota_configs_data if c['academic_year'] == 114]
-    print(f"   📚 AY113 (Legacy): {len(configs_113)} configurations - inactive for validation")
-    print(f"   📚 AY114 (Current): {len(configs_114)} configurations - active for current use")
+    print(f"   📚 AY113: {len(configs_113)} configurations - active")
+    print(f"   📚 AY114: {len(configs_114)} configurations - active")
     
     # 有效期間資訊 - 台灣時間
     academic_start_113 = datetime(current_year-1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz)
@@ -1306,9 +1306,9 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     print(f"   📆 AY114: {academic_start_114.strftime('%Y-%m-%d')} to {academic_end_114.strftime('%Y-%m-%d')} (Current - Active)")
     
     print("\n🎯 Configuration comparison:")
-    print("📚 AY113 (Legacy configurations for validation):")
-    print("   - 學士班新生獎學金: 每學期制，無配額限制，金額 45,000元 [INACTIVE]")
-    print("   - 博士生獎學金: 學年制，舊矩陣配額管理，金額 55,000元")
+    print("📚 AY113:")
+    print("   - 學士班新生獎學金: 每學期制，無配額限制，金額 45,000元 [ACTIVE]")
+    print("   - 博士生獎學金: 學年制，舊矩陣配額管理，金額 55,000元 [ACTIVE]")
     
     # 計算113年博士生配額
     old_phd_config = {
@@ -1318,8 +1318,8 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     }
     old_phd_totals = {subtype: sum(quotas.values()) for subtype, quotas in old_phd_config.items()}
     total_old_phd = sum(old_phd_totals.values())
-    print(f"     總配額: {total_old_phd}名 (國科會:{old_phd_totals['nstc']}, 教育部一萬:{old_phd_totals['moe_1w']}, 教育部二萬:{old_phd_totals['moe_2w']}) [INACTIVE]")
-    print("   - 逕讀博士獎學金: 學年制，無配額限制，金額 75,000元 [INACTIVE]")
+    print(f"     總配額: {total_old_phd}名 (國科會:{old_phd_totals['nstc']}, 教育部一萬:{old_phd_totals['moe_1w']}, 教育部二萬:{old_phd_totals['moe_2w']}) [ACTIVE]")
+    print("   - 逕讀博士獎學金: 學年制，無配額限制，金額 75,000元 [ACTIVE]")
     
     print("\n📚 AY114 (Current active configurations):")
     print("   - 學士班新生獎學金: 每學期制，無配額限制，金額 50,000元 [ACTIVE]")
@@ -1338,10 +1338,8 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     print("   - 逕讀博士獎學金: 學年制，無配額限制，金額 80,000元 [ACTIVE]")
     
     # 配置狀態摘要 - 包含台灣時間資訊
-    print(f"\n📅 Current active period: AY114 ({current_year}-{current_year+1})")
+    print(f"\n📅 Active period overview: AY114 ({current_year}-{current_year+1})")
     print(f"🇹🇼 Application period (Taiwan time): {base_start.strftime('%Y-%m-%d %H:%M')} to {base_end.strftime('%Y-%m-%d %H:%M')}")
-    print(f"🔄 Renewal period (Taiwan time): {renewal_start.strftime('%Y-%m-%d %H:%M')} to {renewal_end.strftime('%Y-%m-%d %H:%M')}")
-    print(f"🔍 Legacy AY113 configurations available for system validation and historical data queries")
 
 
 async def createTestApplicationsAndQuotaUsage(session: AsyncSession) -> None:
