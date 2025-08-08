@@ -26,7 +26,10 @@ class MinIOService:
             secure=settings.minio_secure
         )
         self.bucket_name = settings.minio_bucket
-        self._ensure_bucket_exists()
+        
+        # Skip bucket check during testing to avoid connection issues
+        if not getattr(settings, 'testing', False):
+            self._ensure_bucket_exists()
     
     def _ensure_bucket_exists(self):
         """Ensure the bucket exists, create if it doesn't"""
