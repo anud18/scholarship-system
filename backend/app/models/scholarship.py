@@ -75,7 +75,7 @@ class ScholarshipType(Base):
     
     # 關聯
     rules = relationship("ScholarshipRule", back_populates="scholarship_type", cascade="all, delete-orphan")
-    applications = relationship("Application", foreign_keys="[Application.scholarship_type_id]")
+    applications = relationship("Application", foreign_keys="[Application.scholarship_type_id]", overlaps="scholarship,scholarship_type_ref")
     sub_type_configs = relationship("ScholarshipSubTypeConfig", back_populates="scholarship_type", cascade="all, delete-orphan")
     admins = relationship("AdminScholarship", back_populates="scholarship")
     creator = relationship("User", foreign_keys=[created_by])

@@ -133,6 +133,11 @@ class ScholarshipService:
                 current_student_data, config, user_id
             )
             
+            # Always get application status if user_id is provided, regardless of eligibility
+            application_status = {}
+            if user_id:
+                application_status = await eligibility_service.get_application_status(user_id, config)
+            
             if is_eligible:
                 # Build scholarship response with configuration data
                 scholarship_type = config.scholarship_type
@@ -144,6 +149,7 @@ class ScholarshipService:
                 
                 scholarship_dict = {
                     'id': scholarship_type.id,
+                    'configuration_id': config.id,  # Add configuration ID for application creation
                     'code': scholarship_type.code,
                     'name': config.config_name or scholarship_type.name,
                     'name_en': scholarship_type.name_en,
@@ -195,7 +201,13 @@ class ScholarshipService:
                     # Add rule evaluation results
                     'passed': eligibility_details.get('passed', []),
                     'warnings': eligibility_details.get('warnings', []),
-                    'errors': eligibility_details.get('errors', [])
+                    'errors': eligibility_details.get('errors', []),
+                    # Add application status information
+                    'application_status': application_status.get('application_status'),
+                    'can_apply': application_status.get('can_apply', True),
+                    'status_display': application_status.get('status_display', '可申請'),
+                    'has_application': application_status.get('has_application', False),
+                    'application_id': application_status.get('application_id')
                 })
                 
                 eligible_scholarships.append(scholarship_dict)

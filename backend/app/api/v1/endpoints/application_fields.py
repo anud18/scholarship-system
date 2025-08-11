@@ -202,7 +202,11 @@ async def get_scholarship_form_config(
         is_admin = current_user.role in ["admin", "super_admin"]
         should_include_inactive = include_inactive or is_admin
         
-        config = await service.get_scholarship_form_config(scholarship_type, should_include_inactive)
+        config = await service.get_scholarship_form_config(
+            scholarship_type, 
+            should_include_inactive,
+            user_id=current_user.id
+        )
         
         print(f"✅ API: Form config retrieved successfully for {scholarship_type}")
         return ApiResponse(

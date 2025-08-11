@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FileUpload } from "@/components/file-upload"
-import { Loader2, AlertCircle, FileText, FormInput } from "lucide-react"
+import { FilePreviewDialog } from "@/components/file-preview-dialog"
+import { Loader2, AlertCircle, FileText, FormInput, Eye, CheckCircle } from "lucide-react"
 import { api } from "@/lib/api"
 import type { ApplicationField, ApplicationDocument, ScholarshipFormConfig } from "@/lib/api"
 
@@ -26,6 +27,7 @@ interface DynamicApplicationFormProps {
   initialFiles?: Record<string, File[]>
   className?: string
   selectedSubTypes?: string[]
+  currentUserId?: number // 當前用戶ID，用於預覽現有文件
 }
 
 interface FormData {
@@ -44,7 +46,8 @@ export function DynamicApplicationForm({
   initialValues = {},
   initialFiles = {},
   className,
-  selectedSubTypes
+  selectedSubTypes,
+  currentUserId
 }: DynamicApplicationFormProps) {
   // State
   const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(null)
@@ -52,6 +55,13 @@ export function DynamicApplicationForm({
   const [fileData, setFileData] = useState<FileData>(initialFiles)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [previewFile, setPreviewFile] = useState<{
+    url: string
+    filename: string
+    type: string
+    downloadUrl?: string
+  } | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
 
   // Load form configuration
   useEffect(() => {
@@ -100,6 +110,64 @@ export function DynamicApplicationForm({
     onFileChange?.(documentType, files)
   }
 
+  const handlePreviewExistingFile = (document: ApplicationDocument) => {
+    if (!document.existing_file_url) return
+
+    // 從文件 URL 提取檔名
+    const documentUrl = document.existing_file_url
+    const filename = documentUrl.split('/').pop()?.split('?')[0] || 'bank_document'
+    
+    // 從 URL 中提取 token（如果有的話）
+    let token = ''
+    const urlParts = documentUrl.split('?')
+    if (urlParts.length > 1) {
+      const urlParams = new URLSearchParams(urlParts[1])
+      token = urlParams.get('token') || ''
+    }
+    
+    // 如果 URL 中沒有 token，嘗試從存儲中獲取
+    if (!token) {
+      token = localStorage.getItem('auth_token') || 
+              localStorage.getItem('token') || 
+              sessionStorage.getItem('auth_token') || 
+              sessionStorage.getItem('token') || 
+              'default_token'
+    }
+    
+    // 對於個人資料的文件，使用檔名作為 fileId
+    const fileId = filename
+    const fileType = encodeURIComponent('存摺封面')
+    
+    // 使用傳遞的用戶ID或預設值
+    const userId = currentUserId || 1
+    
+    // 建立預覽 URL
+    const previewUrl = `/api/v1/preview?fileId=${fileId}&filename=${encodeURIComponent(filename)}&type=${fileType}&userId=${userId}&token=${token}`
+    
+    // 判斷文件類型
+    let fileTypeDisplay = 'other'
+    if (filename.toLowerCase().endsWith('.pdf')) {
+      fileTypeDisplay = 'application/pdf'
+    } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].some(ext => filename.toLowerCase().endsWith(ext))) {
+      fileTypeDisplay = 'image'
+    }
+    
+    // 設定預覽文件資訊並打開modal
+    setPreviewFile({
+      url: previewUrl,
+      filename: filename,
+      type: fileTypeDisplay,
+      downloadUrl: documentUrl // 使用原始URL作為下載連結
+    })
+    
+    setShowPreview(true)
+  }
+
+  const handleClosePreview = () => {
+    setShowPreview(false)
+    setPreviewFile(null)
+  }
+
   const getFieldLabel = (field: ApplicationField) => {
     return locale === "en" && field.field_label_en ? field.field_label_en : field.field_label
   }
@@ -127,10 +195,14 @@ export function DynamicApplicationForm({
   const renderField = (field: ApplicationField) => {
     if (!field.is_active) return null
 
-    const fieldValue = formData[field.field_name] || ""
+    // Use prefill value for fixed fields if no current value exists
+    const fieldValue = formData[field.field_name] || field.prefill_value || ""
     const label = getFieldLabel(field)
     const placeholder = getFieldPlaceholder(field)
     const helpText = getFieldHelpText(field)
+    
+    // Add fixed field indicator
+    const isFixedField = field.is_fixed === true
 
     switch (field.field_type) {
       case "text":
@@ -140,6 +212,11 @@ export function DynamicApplicationForm({
             <Label htmlFor={field.field_name}>
               {label}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {isFixedField && (
+                <Badge variant="outline" className="ml-2 text-xs">
+                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
+                </Badge>
+              )}
             </Label>
             <Input
               id={field.field_name}
@@ -149,8 +226,15 @@ export function DynamicApplicationForm({
               placeholder={placeholder}
               maxLength={field.max_length}
               required={field.is_required}
-              className="w-full"
+              className={`w-full ${isFixedField ? 'bg-blue-50 border-blue-200' : ''}`}
             />
+            {isFixedField && (
+              <p className="text-sm text-blue-600">
+                {locale === "zh" 
+                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容" 
+                  : "This field has been auto-filled from your profile and can be modified"}
+              </p>
+            )}
             {helpText && (
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
@@ -163,6 +247,11 @@ export function DynamicApplicationForm({
             <Label htmlFor={field.field_name}>
               {label}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {isFixedField && (
+                <Badge variant="outline" className="ml-2 text-xs">
+                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
+                </Badge>
+              )}
             </Label>
             <Input
               id={field.field_name}
@@ -174,8 +263,15 @@ export function DynamicApplicationForm({
               max={field.max_value}
               step={field.step_value}
               required={field.is_required}
-              className="w-full"
+              className={`w-full ${isFixedField ? 'bg-blue-50 border-blue-200' : ''}`}
             />
+            {isFixedField && (
+              <p className="text-sm text-blue-600">
+                {locale === "zh" 
+                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容" 
+                  : "This field has been auto-filled from your profile and can be modified"}
+              </p>
+            )}
             {helpText && (
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
@@ -188,6 +284,11 @@ export function DynamicApplicationForm({
             <Label htmlFor={field.field_name}>
               {label}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {isFixedField && (
+                <Badge variant="outline" className="ml-2 text-xs">
+                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
+                </Badge>
+              )}
             </Label>
             <Input
               id={field.field_name}
@@ -195,8 +296,15 @@ export function DynamicApplicationForm({
               value={fieldValue}
               onChange={(e) => handleFieldChange(field.field_name, e.target.value)}
               required={field.is_required}
-              className="w-full"
+              className={`w-full ${isFixedField ? 'bg-blue-50 border-blue-200' : ''}`}
             />
+            {isFixedField && (
+              <p className="text-sm text-blue-600">
+                {locale === "zh" 
+                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容" 
+                  : "This field has been auto-filled from your profile and can be modified"}
+              </p>
+            )}
             {helpText && (
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
@@ -209,6 +317,11 @@ export function DynamicApplicationForm({
             <Label htmlFor={field.field_name}>
               {label}
               {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {isFixedField && (
+                <Badge variant="outline" className="ml-2 text-xs">
+                  {locale === "zh" ? "固定欄位" : "Fixed Field"}
+                </Badge>
+              )}
             </Label>
             <Textarea
               id={field.field_name}
@@ -217,9 +330,16 @@ export function DynamicApplicationForm({
               placeholder={placeholder}
               maxLength={field.max_length}
               required={field.is_required}
-              className="w-full min-h-[120px]"
+              className={`w-full min-h-[120px] ${isFixedField ? 'bg-blue-50 border-blue-200' : ''}`}
               rows={6}
             />
+            {isFixedField && (
+              <p className="text-sm text-blue-600">
+                {locale === "zh" 
+                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容" 
+                  : "This field has been auto-filled from your profile and can be modified"}
+              </p>
+            )}
             {field.max_length && (
               <p className="text-sm text-muted-foreground text-right">
                 {(fieldValue?.length || 0)} / {field.max_length}
@@ -325,13 +445,19 @@ export function DynamicApplicationForm({
     const description = getDocumentDescription(document)
     const instructions = getDocumentInstructions(document)
     const files = fileData[document.document_name] || []
+    const isFixedDocument = document.is_fixed === true
 
     return (
-      <div key={document.document_name} className="space-y-3 p-4 border rounded-lg">
+      <div key={document.document_name} className={`space-y-3 p-4 border rounded-lg ${isFixedDocument ? 'border-blue-200 bg-blue-50/50' : ''}`}>
         <div className="flex items-center justify-between">
           <Label className="text-base font-medium">
             {documentName}
             {document.is_required && <span className="text-red-500 ml-1">*</span>}
+            {isFixedDocument && (
+              <Badge variant="outline" className="ml-2 text-xs">
+                {locale === "zh" ? "固定文件" : "Fixed Document"}
+              </Badge>
+            )}
           </Label>
           {files.length > 0 && (
             <Badge variant="secondary" className="text-xs">
@@ -339,6 +465,50 @@ export function DynamicApplicationForm({
             </Badge>
           )}
         </div>
+        
+        {isFixedDocument && document.existing_file_url && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">
+              {locale === "zh" ? "已上傳檔案 (1/1) - " : "Uploaded files (1/1) - "}{documentName}
+            </h4>
+            <Card>
+              <CardContent className="flex items-center justify-between p-3">
+                <div className="flex items-center space-x-3">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {locale === "zh" ? "存摺封面" : "Bank Book Cover"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="ml-1 text-blue-600">
+                        {locale === "zh" ? "已上傳" : "Uploaded"}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {/* 預覽按鈕 */}
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handlePreviewExistingFile(document)}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Badge variant="outline" className="text-xs">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    {locale === "zh" ? "已存在" : "Exists"}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+            <p className="text-xs text-blue-600">
+              {locale === "zh" 
+                ? "您可以上傳新檔案來替換現有檔案" 
+                : "You can upload a new file to replace the existing one"}
+            </p>
+          </div>
+        )}
         
         {description && (
           <p className="text-sm text-muted-foreground">{description}</p>
@@ -470,6 +640,14 @@ export function DynamicApplicationForm({
           </AlertDescription>
         </Alert>
       )}
+      
+      {/* File Preview Dialog */}
+      <FilePreviewDialog 
+        isOpen={showPreview}
+        onClose={handleClosePreview}
+        file={previewFile}
+        locale={locale}
+      />
     </div>
   )
 } 

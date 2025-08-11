@@ -142,16 +142,41 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Health check endpoint
+# Health check endpoint with database status
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {
-        "success": True,
-        "message": "Service is healthy",
-        "app_name": settings.app_name,
-        "version": settings.app_version
-    }
+    """Comprehensive health check endpoint including database status"""
+    from app.core.database_health import check_database_health
+    
+    try:
+        # Check database health
+        db_health = await check_database_health()
+        
+        overall_status = "healthy" if db_health["status"] == "healthy" else "degraded"
+        
+        return {
+            "success": True,
+            "status": overall_status,
+            "message": f"Service is {overall_status}",
+            "app_name": settings.app_name,
+            "version": settings.app_version,
+            "database": {
+                "status": db_health["status"],
+                "connection": db_health["connection"],
+                "pool_info": db_health.get("pool_info", {}),
+                "cached_statement_error": db_health.get("cached_statement_error", False)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "success": False,
+            "status": "unhealthy",
+            "message": "Health check failed",
+            "app_name": settings.app_name,
+            "version": settings.app_version,
+            "error": str(e)
+        }
 
 
 # Root endpoint

@@ -4,11 +4,12 @@ User Profile Management API endpoints
 
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, File, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import base64
 import os
 import re
+import io
 
 from app.db.deps import get_db
 from app.schemas.user_profile import (
@@ -204,7 +205,7 @@ async def upload_bank_document(
             content_type=content_type
         )
         
-        document_url = await service.upload_bank_document(
+        document_url = await service.upload_bank_document_to_minio(
             user_id=current_user.id,
             document_upload=document_upload
         )
@@ -230,36 +231,49 @@ async def upload_bank_document_file(
     """Upload bank document via file upload"""
     service = UserProfileService(db)
     
-    # Validate file type
-    if not file.content_type or not file.content_type.startswith('image/'):
+    print(f"🔍 Bank document upload request:")
+    print(f"   File: {file.filename}")
+    print(f"   Content-Type: {file.content_type}")
+    print(f"   User ID: {current_user.id}")
+    
+    # Validate file type - accept images and PDF
+    accepted_types = ['image/', 'application/pdf']
+    if not file.content_type or not any(file.content_type.startswith(t) for t in accepted_types):
+        print(f"❌ File type rejected: {file.content_type}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="只接受圖片檔案"
+            detail=f"只接受圖片檔案 (JPG, PNG, WebP) 或 PDF 文件。收到: {file.content_type}"
         )
     
     # Validate file size (max 10MB)
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
     file_content = await file.read()
+    print(f"   File size: {len(file_content)} bytes")
+    
     if len(file_content) > MAX_FILE_SIZE:
+        print(f"❌ File too large: {len(file_content)} > {MAX_FILE_SIZE}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="檔案大小不能超過10MB"
+            detail=f"檔案大小不能超過10MB。當前檔案: {len(file_content)/1024/1024:.1f}MB"
         )
     
     try:
         # Convert to base64
         document_data_base64 = base64.b64encode(file_content).decode('utf-8')
+        print(f"   Base64 data length: {len(document_data_base64)}")
         
         document_upload = BankDocumentPhotoUpload(
             photo_data=document_data_base64,
             filename=file.filename or "bank_document.jpg",
             content_type=file.content_type
         )
+        print(f"   Created BankDocumentPhotoUpload successfully")
         
-        document_url = await service.upload_bank_document(
+        document_url = await service.upload_bank_document_to_minio(
             user_id=current_user.id,
             document_upload=document_upload
         )
+        print(f"✅ Upload to MinIO successful: {document_url}")
         
         return {
             "success": True,
@@ -267,9 +281,16 @@ async def upload_bank_document_file(
             "data": {"document_url": document_url}
         }
     except ValueError as e:
+        print(f"❌ ValueError in upload: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
+        )
+    except Exception as e:
+        print(f"❌ Unexpected error in upload: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"上傳失敗: {str(e)}"
         )
 
 
@@ -336,9 +357,9 @@ async def delete_my_profile(
 # ==================== File serving endpoint ====================
 
 @router.get("/files/bank_documents/{filename}")
-async def get_bank_document(filename: str):
-    """Serve bank documents"""
-    # Validate filename to prevent path traversal - MUST be done BEFORE using the filename
+async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
+    """Serve bank documents from MinIO"""
+    # Validate filename to prevent path traversal
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -352,28 +373,83 @@ async def get_bank_document(filename: str):
             detail="檔案名稱包含無效字元"
         )
     
-    # Now it's safe to construct the path using configured directories
-    from app.services.user_profile_service import UserProfileService
-    upload_base = os.environ.get("UPLOAD_BASE_DIR", "uploads")
-    bank_docs_dir = os.environ.get("BANK_DOCUMENTS_DIR", "bank_documents")
-    file_path = os.path.join(upload_base, bank_docs_dir, filename)
-    
-    # Ensure the resolved path is still within the expected directory
-    resolved_path = os.path.abspath(file_path)
-    expected_dir = os.path.abspath(os.path.join(upload_base, bank_docs_dir))
-    if not resolved_path.startswith(expected_dir):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="存取被拒絕"
+    try:
+        # Try to serve from MinIO first (new approach)
+        # We need to figure out the full object path from the filename
+        # For now, we'll try to find it by searching for the filename in user profile records
+        from sqlalchemy import select
+        from app.models.user_profile import UserProfile
+        from app.services.minio_service import minio_service
+        
+        # Search for the document in user profiles
+        stmt = select(UserProfile).where(
+            UserProfile.bank_document_photo_url.like(f"%{filename}%")
         )
-    
-    if not os.path.exists(resolved_path):
+        result = await db.execute(stmt)
+        profile = result.scalar_one_or_none()
+        
+        if profile:
+            # Try to construct the MinIO object path
+            # Format: user-profiles/{user_id}/bank-documents/{filename}
+            object_name = f"user-profiles/{profile.user_id}/bank-documents/{filename}"
+            
+            try:
+                # Get file from MinIO
+                response = minio_service.get_file_stream(object_name)
+                
+                # Determine content type
+                content_type = "application/octet-stream"
+                if filename.lower().endswith(('.jpg', '.jpeg')):
+                    content_type = "image/jpeg"
+                elif filename.lower().endswith('.png'):
+                    content_type = "image/png"
+                elif filename.lower().endswith('.webp'):
+                    content_type = "image/webp"
+                elif filename.lower().endswith('.pdf'):
+                    content_type = "application/pdf"
+                
+                return StreamingResponse(
+                    io.BytesIO(response.read()),
+                    media_type=content_type,
+                    headers={
+                        "Content-Disposition": f"inline; filename={filename}",
+                        "Cache-Control": "max-age=3600"  # Cache for 1 hour
+                    }
+                )
+                
+            except Exception as e:
+                # If MinIO fails, try fallback to local storage
+                pass
+        
+        # Fallback to local storage (backward compatibility)
+        upload_base = os.environ.get("UPLOAD_BASE_DIR", "uploads")
+        bank_docs_dir = os.environ.get("BANK_DOCUMENTS_DIR", "bank_documents")
+        file_path = os.path.join(upload_base, bank_docs_dir, filename)
+        
+        # Ensure the resolved path is still within the expected directory
+        resolved_path = os.path.abspath(file_path)
+        expected_dir = os.path.abspath(os.path.join(upload_base, bank_docs_dir))
+        if not resolved_path.startswith(expected_dir):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="存取被拒絕"
+            )
+        
+        if not os.path.exists(resolved_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="證明文件不存在"
+            )
+        
+        return FileResponse(resolved_path)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="證明文件不存在"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="檔案服務發生錯誤"
         )
-    
-    return FileResponse(resolved_path)
 
 
 # ==================== Admin endpoints ====================

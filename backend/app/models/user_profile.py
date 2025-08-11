@@ -22,6 +22,7 @@ class UserProfile(Base):
     bank_code = Column(String(20))
     account_number = Column(String(50))
     bank_document_photo_url = Column(String(500))  # URL or file path to bank document photo
+    bank_document_object_name = Column(String(500))  # MinIO object name for the bank document
     
     # Advisor information (simplified)
     advisor_name = Column(String(100))  # Professor name

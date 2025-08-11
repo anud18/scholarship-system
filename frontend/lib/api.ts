@@ -111,6 +111,7 @@ export interface Application {
 
 export interface ApplicationCreate {
   scholarship_type: string
+  configuration_id: number  // Required: ID from eligible scholarships
   scholarship_subtype_list?: string[]
   form_data: {
     fields: Record<string, {
@@ -201,6 +202,7 @@ export interface NotificationResponse {
 
 export interface ScholarshipType {
   id: number
+  configuration_id: number  // ID of the specific configuration this eligibility is for
   code: string
   name: string
   name_en?: string
@@ -445,6 +447,11 @@ export interface ApplicationField {
   updated_at: string
   created_by?: number
   updated_by?: number
+  // Fixed field properties
+  is_fixed?: boolean
+  prefill_value?: string
+  bank_code?: string
+  existing_file_url?: string
 }
 
 export interface ApplicationFieldCreate {
@@ -509,6 +516,9 @@ export interface ApplicationDocument {
   updated_at: string
   created_by?: number
   updated_by?: number
+  // Fixed document properties
+  is_fixed?: boolean
+  existing_file_url?: string
 }
 
 export interface ApplicationDocumentCreate {

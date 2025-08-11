@@ -20,6 +20,7 @@ from app.schemas.user_profile import (
     BankDocumentPhotoUpload, CompleteUserProfileResponse
 )
 from app.core.config import settings
+from app.services.minio_service import minio_service
 
 
 class UserProfileService:
@@ -176,6 +177,106 @@ class UserProfileService:
         
         return profile
     
+    async def upload_bank_document_to_minio(
+        self, 
+        user_id: int, 
+        document_upload: BankDocumentPhotoUpload
+    ) -> str:
+        """Upload bank document to MinIO storage"""
+        try:
+            # More accurate base64 size estimation
+            base64_data = document_upload.photo_data.rstrip('=')
+            estimated_size = len(base64_data) * 3 // 4
+            
+            # Add safety margin for estimation errors
+            if estimated_size > self.MAX_FILE_SIZE * 0.9:
+                raise ValueError(f"File too large (estimated). Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB")
+            
+            # Decode base64 image
+            try:
+                image_data = base64.b64decode(document_upload.photo_data)
+            except Exception as e:
+                raise ValueError(f"Invalid base64 data: {str(e)}")
+            
+            # Verify actual size after decoding
+            if len(image_data) > self.MAX_FILE_SIZE:
+                raise ValueError(f"File too large. Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB")
+            
+            # Validate image using PIL
+            try:
+                image = Image.open(io.BytesIO(image_data))
+                format_to_mime = {'JPEG': 'image/jpeg', 'PNG': 'image/png', 'WEBP': 'image/webp', 'PDF': 'application/pdf'}
+                mime = format_to_mime.get(image.format, document_upload.content_type)
+            except Exception:
+                # If PIL can't open it, it might be a PDF or other supported document type
+                mime = document_upload.content_type
+                image = None
+            
+            # Validate MIME type
+            allowed_types = list(self.ALLOWED_MIME_TYPES.keys()) + ['application/pdf']
+            if mime not in allowed_types:
+                raise ValueError(f"Invalid file type: {mime}. Allowed types: {', '.join(allowed_types)}")
+            
+            # Resize image if needed (only for images, not PDFs)
+            if image and (image.size[0] > self.MAX_IMAGE_SIZE[0] or image.size[1] > self.MAX_IMAGE_SIZE[1]):
+                image.thumbnail(self.MAX_IMAGE_SIZE, Image.Resampling.LANCZOS)
+                # Re-encode image to bytes
+                output_buffer = io.BytesIO()
+                image.save(output_buffer, format=image.format, optimize=True, quality=90)
+                image_data = output_buffer.getvalue()
+            
+            # Generate unique object name for MinIO
+            file_extension = document_upload.filename.split('.')[-1].lower() if '.' in document_upload.filename else 'jpg'
+            object_name = f"user-profiles/{user_id}/bank-documents/{uuid.uuid4().hex}.{file_extension}"
+            
+            # Upload to MinIO
+            try:
+                # Create a BytesIO buffer from image data
+                file_buffer = io.BytesIO(image_data)
+                
+                # Upload to MinIO using put_object directly
+                minio_service.client.put_object(
+                    bucket_name=minio_service.bucket_name,
+                    object_name=object_name,
+                    data=file_buffer,
+                    length=len(image_data),
+                    content_type=mime
+                )
+                
+                # Generate preview URL (this will be handled by a preview endpoint)
+                preview_url = f"/api/v1/user-profiles/files/bank_documents/{object_name.split('/')[-1]}"
+                
+            except Exception as e:
+                raise ValueError(f"Failed to upload to MinIO: {str(e)}")
+            
+            # Update profile with new document URL
+            profile = await self.get_user_profile(user_id)
+            if not profile:
+                profile = UserProfile(user_id=user_id)
+                self.db.add(profile)
+            
+            # Store the MinIO object name and preview URL
+            old_document_url = profile.bank_document_photo_url
+            profile.bank_document_photo_url = preview_url
+            profile.bank_document_object_name = object_name  # Store the object name for later use
+            profile.updated_at = datetime.now(timezone.utc)
+            
+            await self.db.commit()
+            
+            # Log document upload
+            await self._log_profile_change(
+                user_id=user_id,
+                field_name="bank_document_photo_url",
+                old_value=old_document_url,
+                new_value=profile.bank_document_photo_url,
+                change_reason="Bank document uploaded to MinIO"
+            )
+            
+            return profile.bank_document_photo_url
+            
+        except Exception as e:
+            raise ValueError(f"Failed to upload bank document: {str(e)}")
+
     async def upload_bank_document(
         self, 
         user_id: int, 

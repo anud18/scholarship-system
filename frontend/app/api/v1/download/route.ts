@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const filename = searchParams.get('filename')
     const type = searchParams.get('type')
     const applicationId = searchParams.get('applicationId')
+    const userId = searchParams.get('userId')
     const token = searchParams.get('token')
     
     if (!fileId) {
@@ -16,9 +17,10 @@ export async function GET(request: NextRequest) {
       )
     }
     
-    if (!applicationId) {
+    // For user profile documents, userId can be used instead of applicationId
+    if (!applicationId && !userId) {
       return NextResponse.json(
-        { error: 'Application ID is required' },
+        { error: 'Application ID or User ID is required' },
         { status: 400 }
       )
     }
@@ -31,11 +33,24 @@ export async function GET(request: NextRequest) {
     }
     
     // 使用後端的下載端點
-    const backendUrl = `${process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL}/api/v1/files/applications/${applicationId}/files/${fileId}/download?token=${token}`
+    let backendUrl
+    if (applicationId) {
+      // Application file download
+      backendUrl = `${process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL}/api/v1/files/applications/${applicationId}/files/${fileId}/download?token=${token}`
+    } else if (userId) {
+      // User profile file download (e.g., bank document)
+      backendUrl = `${process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL}/api/v1/user-profiles/files/bank_documents/${fileId}?token=${token}`
+    } else {
+      return NextResponse.json(
+        { error: 'Invalid file context' },
+        { status: 400 }
+      )
+    }
     
     console.log('Download API called:', {
       fileId,
       applicationId,
+      userId,
       backendUrl
     })
     

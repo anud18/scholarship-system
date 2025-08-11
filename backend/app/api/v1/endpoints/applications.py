@@ -102,7 +102,7 @@ async def create_application(
         print(f"[API Debug] Creating application (draft: {is_draft})")
         result = await service.create_application(
             user_id=current_user.id,
-            student_id=current_user.id,  # Use user.id as student_id since they're the same
+            student_code=current_user.nycu_id,  # Use nycu_id as student_code for fetching student data
             application_data=application_data,
             is_draft=is_draft
         )

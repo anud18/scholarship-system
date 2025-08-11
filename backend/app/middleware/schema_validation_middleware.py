@@ -51,8 +51,24 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
             return response
             
         except Exception as e:
-            # Log the error but don't break the request
-            logger.error(f"Schema validation middleware error: {e}")
+            # Enhanced error handling for database-related issues
+            error_message = str(e)
+            
+            # Check for PostgreSQL cached statement errors
+            if "InvalidCachedStatementError" in error_message or "cached statement plan is invalid" in error_message:
+                logger.warning(f"Database cached statement error in middleware: {error_message}")
+                # Try to invalidate connection pools to resolve the issue
+                try:
+                    from app.db.session import invalidate_connection_pools_sync
+                    invalidate_connection_pools_sync()
+                    logger.info("Connection pools invalidated due to cached statement error")
+                except ImportError:
+                    pass
+            else:
+                # Log other errors normally
+                logger.error(f"Schema validation middleware error: {e}")
+            
+            # Always continue with the request, don't break the application
             return await call_next(request)
         
         finally:
