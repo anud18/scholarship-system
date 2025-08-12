@@ -2,6 +2,7 @@
 User Profile Management API endpoints
 """
 
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, File, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -23,6 +24,7 @@ from app.models.user import User
 from app.services.user_profile_service import UserProfileService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def get_client_info(request: Request) -> tuple[Optional[str], Optional[str]]:
@@ -231,15 +233,12 @@ async def upload_bank_document_file(
     """Upload bank document via file upload"""
     service = UserProfileService(db)
     
-    print(f"🔍 Bank document upload request:")
-    print(f"   File: {file.filename}")
-    print(f"   Content-Type: {file.content_type}")
-    print(f"   User ID: {current_user.id}")
+    logger.info(f"Bank document upload request - File: {file.filename}, Content-Type: {file.content_type}, User ID: {current_user.id}")
     
     # Validate file type - accept images and PDF
     accepted_types = ['image/', 'application/pdf']
     if not file.content_type or not any(file.content_type.startswith(t) for t in accepted_types):
-        print(f"❌ File type rejected: {file.content_type}")
+        logger.warning(f"File type rejected: {file.content_type}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"只接受圖片檔案 (JPG, PNG, WebP) 或 PDF 文件。收到: {file.content_type}"
@@ -248,10 +247,10 @@ async def upload_bank_document_file(
     # Validate file size (max 10MB)
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
     file_content = await file.read()
-    print(f"   File size: {len(file_content)} bytes")
+    logger.debug(f"File size: {len(file_content)} bytes")
     
     if len(file_content) > MAX_FILE_SIZE:
-        print(f"❌ File too large: {len(file_content)} > {MAX_FILE_SIZE}")
+        logger.warning(f"File too large: {len(file_content)} > {MAX_FILE_SIZE}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"檔案大小不能超過10MB。當前檔案: {len(file_content)/1024/1024:.1f}MB"
@@ -260,20 +259,20 @@ async def upload_bank_document_file(
     try:
         # Convert to base64
         document_data_base64 = base64.b64encode(file_content).decode('utf-8')
-        print(f"   Base64 data length: {len(document_data_base64)}")
+        logger.debug(f"Base64 data length: {len(document_data_base64)}")
         
         document_upload = BankDocumentPhotoUpload(
             photo_data=document_data_base64,
             filename=file.filename or "bank_document.jpg",
             content_type=file.content_type
         )
-        print(f"   Created BankDocumentPhotoUpload successfully")
+        logger.debug("Created BankDocumentPhotoUpload successfully")
         
         document_url = await service.upload_bank_document_to_minio(
             user_id=current_user.id,
             document_upload=document_upload
         )
-        print(f"✅ Upload to MinIO successful: {document_url}")
+        logger.info(f"Upload to MinIO successful: {document_url}")
         
         return {
             "success": True,
@@ -281,13 +280,13 @@ async def upload_bank_document_file(
             "data": {"document_url": document_url}
         }
     except ValueError as e:
-        print(f"❌ ValueError in upload: {e}")
+        logger.error(f"ValueError in upload: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
-        print(f"❌ Unexpected error in upload: {e}")
+        logger.error(f"Unexpected error in upload: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"上傳失敗: {str(e)}"

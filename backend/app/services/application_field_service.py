@@ -403,7 +403,7 @@ class ApplicationFieldService:
             
             return False
         except Exception as e:
-            print(f"❌ Error checking professor recommendation requirement: {str(e)}")
+            self.logger.error(f"Error checking professor recommendation requirement: {str(e)}")
             return False
 
     async def inject_fixed_fields(self, scholarship_type: str, fields: List[Dict[str, Any]], documents: List[Dict[str, Any]], user_id: Optional[int] = None) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -443,26 +443,26 @@ class ApplicationFieldService:
                 )
                 fields.extend(advisor_fields)
             
-            print(f"✅ Injected fixed fields for {scholarship_type}: bank_account, bank_statement" + 
+            self.logger.info(f"Injected fixed fields for {scholarship_type}: bank_account, bank_statement" + 
                   (", advisor_info" if requires_advisor else ""))
             
             return fields, documents
             
         except Exception as e:
-            print(f"❌ Error injecting fixed fields: {str(e)}")
+            self.logger.error(f"Error injecting fixed fields: {str(e)}")
             return fields, documents
     
     # Combined methods
     async def get_scholarship_form_config(self, scholarship_type: str, include_inactive: bool = False, user_id: Optional[int] = None) -> ScholarshipFormConfigResponse:
         """Get complete form configuration for a scholarship type with fixed fields injection"""
         try:
-            print(f"🔍 Fetching form config for scholarship type: {scholarship_type}")
+            self.logger.debug(f"Fetching form config for scholarship type: {scholarship_type}")
             
             fields = await self.get_fields_by_scholarship_type(scholarship_type, include_inactive)
-            print(f"📝 Found {len(fields)} fields for {scholarship_type}")
+            self.logger.debug(f"Found {len(fields)} fields for {scholarship_type}")
             
             documents = await self.get_documents_by_scholarship_type(scholarship_type, include_inactive)
-            print(f"📄 Found {len(documents)} documents for {scholarship_type}")
+            self.logger.debug(f"Found {len(documents)} documents for {scholarship_type}")
             
             # Convert to dict format for fixed fields injection
             fields_dict = [field.model_dump() if hasattr(field, 'model_dump') else field for field in fields]
@@ -476,7 +476,7 @@ class ApplicationFieldService:
                 user_id=user_id
             )
             
-            print(f"✅ Fixed fields injected, total fields: {len(fields_dict)}, total documents: {len(documents_dict)}")
+            self.logger.debug(f"Fixed fields injected, total fields: {len(fields_dict)}, total documents: {len(documents_dict)}")
             
             # Create config using model_validate to handle extra fields
             config_data = {
@@ -486,11 +486,11 @@ class ApplicationFieldService:
             }
             config = ScholarshipFormConfigResponse.model_validate(config_data)
             
-            print(f"✅ Form config created successfully for {scholarship_type}")
+            self.logger.info(f"Form config created successfully for {scholarship_type}")
             return config
             
         except Exception as e:
-            print(f"❌ Error getting form config for {scholarship_type}: {str(e)}")
+            self.logger.error(f"Error getting form config for {scholarship_type}: {str(e)}")
             # Re-raise the exception instead of returning empty config
             raise e
     

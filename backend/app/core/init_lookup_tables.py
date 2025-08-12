@@ -6,11 +6,14 @@ separated from test data for better maintainability.
 """
 
 import asyncio
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 
 from app.db.session import async_engine, AsyncSessionLocal
+
+logger = logging.getLogger(__name__)
 from app.models.student import (
     Degree, Identity, StudyingStatus, SchoolIdentity, 
     Academy, Department, EnrollType
@@ -21,7 +24,7 @@ from app.db.base_class import Base
 async def initLookupTables(session: AsyncSession) -> None:
     """Initialize all lookup/reference tables with official NYCU data"""
     
-    print("📚 Initializing lookup tables with official NYCU data...")
+    logger.info("Initializing lookup tables with official NYCU data...")
     
     # === 學位類型 ===
     print("  📖 Initializing degrees...")
@@ -229,7 +232,7 @@ async def initLookupTables(session: AsyncSession) -> None:
         session.add(enroll_type)
     
     await session.commit()
-    print("✅ Lookup tables initialized successfully!")
+    logger.info("Lookup tables initialized successfully!")
     print(f"  📊 Inserted: {len(degrees_data)} degrees, {len(identities_data)} identities, {len(studying_statuses_data)} studying statuses")
     print(f"  📊 Inserted: {len(school_identities_data)} school identities, {len(academies_data)} academies, {len(departments_data)} departments")
     print(f"  📊 Inserted: {len(enroll_types_data)} enrollment types")

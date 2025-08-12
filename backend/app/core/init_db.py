@@ -3,6 +3,7 @@ Database initialization script for scholarship system
 """
 
 import asyncio
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, date, timezone, timedelta
@@ -23,6 +24,8 @@ from app.models.application_field import ApplicationField, ApplicationDocument
 from app.models.user_profile import UserProfile, UserProfileHistory
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 async def initLookupTables(session: AsyncSession) -> None:
     """Initialize lookup tables using the dedicated lookup tables module"""
@@ -35,11 +38,11 @@ async def initLookupTables(session: AsyncSession) -> None:
     degrees = result.scalars().all()
     
     if len(degrees) == 0:
-        print("📚 Lookup tables not found, initializing...")
+        logger.info("Lookup tables not found, initializing...")
         await initLookup(session)
     else:
-        print("📚 Lookup tables already initialized, skipping...")
-        print(f"✅ Found {len(degrees)} degrees in database")
+        logger.info("Lookup tables already initialized, skipping...")
+        logger.info(f"Found {len(degrees)} degrees in database")
 
 
 async def createTestUsers(session: AsyncSession) -> list[User]:

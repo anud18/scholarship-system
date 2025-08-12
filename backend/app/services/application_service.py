@@ -633,22 +633,22 @@ class ApplicationService:
         
         # Clone bank account proof document when saving draft or updating application
         # This ensures the document is available in the application
-        print(f"[Update] Cloning bank account proof document for application {application.app_id}")
+        logger.info(f"Cloning bank account proof document for application {application.app_id}")
         try:
             await self._clone_user_profile_documents(application, current_user)
         except Exception as e:
-            print(f"[Warning] Failed to clone bank account proof document for application {application.app_id}: {e}")
+            logger.warning(f"Failed to clone bank account proof document for application {application.app_id}: {e}")
             import traceback
             traceback.print_exc()
         
         # Check if subtype list changed and re-clone fixed documents if necessary
         new_subtype_list = application.scholarship_subtype_list.copy() if application.scholarship_subtype_list else []
         if old_subtype_list != new_subtype_list:
-            print(f"[Update] Subtype list changed from {old_subtype_list} to {new_subtype_list}, re-cloning fixed documents")
+            logger.info(f"Subtype list changed from {old_subtype_list} to {new_subtype_list}, re-cloning fixed documents")
             try:
                 await self._clone_user_profile_documents(application, current_user)
             except Exception as e:
-                print(f"[Warning] Failed to re-clone fixed documents after subtype change for application {application.app_id}: {e}")
+                logger.warning(f"Failed to re-clone fixed documents after subtype change for application {application.app_id}: {e}")
         
         return application
     
@@ -754,7 +754,7 @@ class ApplicationService:
         try:
             await self.emailService.send_submission_notification(application, db=self.db)
         except Exception as e:
-            print(f"[Email Error] {e}")
+            logger.error(f"Failed to send submission notification email: {e}")
         
         # 整合文件資訊到 submitted_form_data.documents
         integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
@@ -1134,7 +1134,7 @@ class ApplicationService:
         try:
             await self.emailService.send_to_college_reviewers(application, db=self.db)
         except Exception as e:
-            print(f"[Email Error] {e}")
+            logger.error(f"Failed to send college reviewer notification email: {e}")
         
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id)
@@ -1399,7 +1399,7 @@ class ApplicationService:
                             minio_service.delete_file(object_name)
                     except Exception as e:
                         # Log error but continue with deletion
-                        print(f"Error deleting file {doc['file_path']}: {e}")
+                        logger.error(f"Error deleting file {doc['file_path']}: {e}")
         
         # Delete the application
         await self.db.delete(application)
@@ -1425,7 +1425,7 @@ class ApplicationService:
             user_profile = await user_profile_service.get_user_profile(user.id)
             
             if not user_profile:
-                print(f"[Clone] No user profile found for user {user.id}")
+                logger.debug(f"No user profile found for user {user.id}")
                 return
             
             # 定義要複製的固定文件類型
@@ -1449,7 +1449,7 @@ class ApplicationService:
                 # 獲取文件 URL
                 doc_url = getattr(user_profile, doc_config['profile_field'], None)
                 if not doc_url:
-                    print(f"[Clone] No {doc_config['file_type']} found for user {user.id}")
+                    logger.debug(f"No {doc_config['file_type']} found for user {user.id}")
                     continue
                 
                 # Check if the document is already cloned to avoid duplication
@@ -1461,10 +1461,10 @@ class ApplicationService:
                 existing_file = existing_file_result.scalar_one_or_none()
                 
                 if existing_file:
-                    print(f"[Clone] {doc_config['document_name']} already cloned for application {application.app_id}, skipping")
+                    logger.debug(f"{doc_config['document_name']} already cloned for application {application.app_id}, skipping")
                     continue
                 
-                print(f"[Clone] Cloning {doc_config['document_name']} for application {application.app_id}")
+                logger.info(f"Cloning {doc_config['document_name']} for application {application.app_id}")
                 
                 # 使用儲存的 object_name，如果沒有則從 URL 提取
                 if hasattr(user_profile, doc_config['object_name_field']):
@@ -1491,7 +1491,7 @@ class ApplicationService:
                     file_type=doc_config['file_type']
                 )
                 
-                print(f"[Clone] File cloned from {source_object_name} to {new_object_name}")
+                logger.debug(f"File cloned from {source_object_name} to {new_object_name}")
                 
                 # 創建 ApplicationFile 記錄 - 與動態上傳文件相同處理
                 application_file = ApplicationFile(
@@ -1566,10 +1566,10 @@ class ApplicationService:
                 await self.db.commit()
                 await self.db.refresh(application)
                 
-                print(f"[Clone] {len(cloned_documents)} documents successfully cloned and linked to application {application.app_id}")
+                logger.info(f"{len(cloned_documents)} documents successfully cloned and linked to application {application.app_id}")
             
         except Exception as e:
-            print(f"[Clone Error] Failed to clone user profile documents for application {application.app_id}: {e}")
+            logger.error(f"Failed to clone user profile documents for application {application.app_id}: {e}")
             # 不拋出異常，避免影響申請提交流程
             import traceback
             traceback.print_exc()
