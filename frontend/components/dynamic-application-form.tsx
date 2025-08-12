@@ -131,7 +131,12 @@ export function DynamicApplicationForm({
               localStorage.getItem('token') || 
               sessionStorage.getItem('auth_token') || 
               sessionStorage.getItem('token') || 
-              'default_token'
+              ''
+      
+      if (!token) {
+        console.error('No authentication token available')
+        return null
+      }
     }
     
     // 對於個人資料的文件，使用檔名作為 fileId

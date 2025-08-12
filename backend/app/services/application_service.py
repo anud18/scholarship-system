@@ -4,6 +4,7 @@ Application service for scholarship application management
 
 import uuid
 import json
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
@@ -27,6 +28,8 @@ from app.schemas.application import (
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
+
+logger = logging.getLogger(__name__)
 
 
 async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
@@ -210,8 +213,8 @@ class ApplicationService:
         is_draft: bool = False
     ) -> ApplicationResponse:
         """Create a new application (draft or submitted)"""
-        print(f"[Debug] Starting application creation for user_id={user_id}, student_code={student_code}, is_draft={is_draft}")
-        print(f"[Debug] Application data received: {application_data.dict(exclude_none=True)}")
+        logger.debug(f"Starting application creation for user_id={user_id}, student_code={student_code}, is_draft={is_draft}")
+        logger.debug(f"Application data received: {application_data.dict(exclude_none=True)}")
         
         # Get user
         stmt = select(User).where(User.id == user_id)
@@ -219,9 +222,9 @@ class ApplicationService:
         user = result.scalar_one()
         
         # Get student data from external API
-        print(f"[Debug] Fetching student data for student_code={student_code}")
+        logger.debug(f"Fetching student data for student_code={student_code}")
         student_snapshot = await self.student_service.get_student_snapshot(student_code)
-        print(f"[Debug] Student snapshot: {student_snapshot}")
+        logger.debug(f"Student snapshot: {student_snapshot}")
         
         # Get scholarship type
         stmt = select(ScholarshipType).where(ScholarshipType.code == application_data.scholarship_type)
@@ -251,7 +254,7 @@ class ApplicationService:
         # Use configuration's academic year and semester
         academic_year = config.academic_year
         semester = config.semester  # This can be None for yearly scholarships
-        print(f"[Debug] Using config {config.id}: academic_year={academic_year}, semester={semester}")
+        logger.debug(f"Using config {config.id}: academic_year={academic_year}, semester={semester}")
         
         # Create application ID
         app_id = f"APP-{datetime.now().year}-{str(uuid.uuid4())[:8]}"
@@ -302,9 +305,7 @@ class ApplicationService:
             await self._clone_user_profile_documents(application, user)
         except Exception as e:
             # Don't fail the entire application creation if document cloning fails
-            print(f"[Warning] Failed to clone fixed documents for application {app_id}: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.warning(f"Failed to clone fixed documents for application {app_id}: {e}", exc_info=True)
         
         # Load relationships for response
         stmt = select(Application).where(Application.id == application.id).options(
@@ -315,7 +316,7 @@ class ApplicationService:
         result = await self.db.execute(stmt)
         application = result.scalar_one()
         
-        print(f"[Debug] Application created successfully: {app_id} with status: {status}")
+        logger.debug(f"Application created successfully: {app_id} with status: {status}")
         return await self._build_application_response(application, user)
     
 
@@ -350,7 +351,7 @@ class ApplicationService:
                 
                 token_data = {"sub": str(user.id)}
                 access_token = create_access_token(token_data)
-                base_url = f"http://localhost:8000{settings.api_v1_str}"
+                base_url = f"{settings.base_url}{settings.api_v1_str}"
                 
                 # 確保 documents 陣列存在
                 if 'documents' not in integrated_form_data:
@@ -880,7 +881,8 @@ class ApplicationService:
         # Build query based on user role
         query = select(Application).options(
             selectinload(Application.files),
-            selectinload(Application.scholarship)
+            selectinload(Application.scholarship),
+            selectinload(Application.user)  # Eagerly load user to avoid N+1 queries
         )
         
         if current_user.role == UserRole.PROFESSOR:
@@ -947,10 +949,8 @@ class ApplicationService:
                                 "object_name": matching_file.object_name
                             })
             
-            # Get user for this application to access nycu_id
-            stmt_user = select(User).where(User.id == application.user_id)
-            result_user = await self.db.execute(stmt_user)
-            app_user = result_user.scalar_one_or_none()
+            # Use eagerly loaded user (already loaded with selectinload)
+            app_user = application.user
             
             # 創建響應數據
             app_data = ApplicationListResponse(
@@ -1258,7 +1258,8 @@ class ApplicationService:
         # Build query based on user role
         query = select(Application).options(
             selectinload(Application.files),
-            selectinload(Application.scholarship)
+            selectinload(Application.scholarship),
+            selectinload(Application.user)  # Eagerly load user to avoid N+1 queries
         )
         
         if current_user.role == UserRole.STUDENT:
@@ -1323,10 +1324,8 @@ class ApplicationService:
                                 "object_name": matching_file.object_name
                             })
             
-            # Get user for this application to access nycu_id
-            stmt_user = select(User).where(User.id == application.user_id)
-            result_user = await self.db.execute(stmt_user)
-            app_user = result_user.scalar_one_or_none()
+            # Use eagerly loaded user (already loaded with selectinload)
+            app_user = application.user
             
             # 創建響應數據
             app_data = ApplicationListResponse(
@@ -1527,7 +1526,7 @@ class ApplicationService:
                 
                 token_data = {"sub": str(user.id)}
                 access_token = create_access_token(token_data)
-                base_url = f"http://localhost:8000{settings.api_v1_str}"
+                base_url = f"{settings.base_url}{settings.api_v1_str}"
                 
                 # 確保 documents 欄位存在
                 if 'documents' not in form_data:
