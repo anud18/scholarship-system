@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
+import logging
 
 from app.models.application_field import ApplicationField, ApplicationDocument
 from app.models.user_profile import UserProfile
@@ -22,6 +23,7 @@ class ApplicationFieldService:
     
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.logger = logging.getLogger(__name__)
     
     # Application Field methods
     async def get_fields_by_scholarship_type(self, scholarship_type: str, include_inactive: bool = False) -> List[ApplicationFieldResponse]:
@@ -246,7 +248,7 @@ class ApplicationFieldService:
                 }
             return None
         except Exception as e:
-            print(f"❌ Error fetching user profile data: {str(e)}")
+            self.logger.error(f"Error fetching user profile data: {str(e)}")
             return None
 
     def _create_fixed_bank_account_field(self, display_order: int = 1, prefill_data: Dict[str, Any] = None, scholarship_type: str = "fixed") -> Dict[str, Any]:

@@ -6,6 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, UploadFile, File, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import ValidationError
+import logging
 
 from app.db.deps import get_db
 from app.schemas.application import (
@@ -21,6 +22,7 @@ from app.models.user import User
 from app.core.exceptions import NotFoundError, ValidationError, AuthorizationError
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
@@ -31,20 +33,20 @@ async def create_application(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new scholarship application (draft or submitted)"""
-    print(f"[API Debug] Received application creation request from user: {current_user.id}, is_draft: {is_draft}")
-    print(f"[API Debug] Raw request data: {application_data.dict(exclude_none=True)}")
+    logger.debug(f"Received application creation request from user: {current_user.id}, is_draft: {is_draft}")
+    # Do not log raw request data as it may contain sensitive information
     
     try:
         service = ApplicationService(db)
         
         # Get student profile from user
-        print("[API Debug] Fetching student profile")
+        logger.debug("Fetching student profile")
         from app.services.application_service import get_student_data_from_user
         student = await get_student_data_from_user(current_user)
         
         if not student:
-            print(f"[API Error] Student profile not found for user: {current_user.id}")
-            print(f"[API Debug] User data: {current_user.nycu_id}, {current_user.name}, {current_user.email}")
+            logger.error(f"Student profile not found for user: {current_user.id}")
+            # Do not log personal information in production
             return {
                 "success": False,
                 "message": "Student profile not found",
@@ -54,11 +56,11 @@ async def create_application(
                 }
             }
             
-        print(f"[API Debug] Found student profile: {student.get('std_stdcode', 'unknown')}")
+        logger.debug("Found student profile")
         
         # Validate scholarship type exists
         if not application_data.scholarship_type:
-            print("[API Error] Missing scholarship_type")
+            logger.error("Missing scholarship_type")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
@@ -69,9 +71,9 @@ async def create_application(
             )
             
         # Validate form data
-        print("[API Debug] Validating form data")
+        logger.debug("Validating form data")
         if not application_data.form_data:
-            print("[API Error] Missing form_data")
+            logger.error("Missing form_data")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
@@ -83,12 +85,12 @@ async def create_application(
             
         try:
             # Try to validate form data structure
-            print("[API Debug] Validating form data structure")
+            logger.debug("Validating form data structure")
             form_data_dict = application_data.form_data.dict()
-            print(f"[API Debug] Form data validated: {form_data_dict}")
+            logger.debug("Form data validated successfully")
         except Exception as e:
-            print(f"[API Error] Form data validation failed: {str(e)}")
-            print(f"[API Error] Raw form data: {application_data.form_data}")
+            logger.error(f"Form data validation failed: {str(e)}")
+            # Do not log raw form data as it may contain sensitive information
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
@@ -99,20 +101,20 @@ async def create_application(
                 }
             )
         
-        print(f"[API Debug] Creating application (draft: {is_draft})")
+        logger.debug(f"Creating application (draft: {is_draft})")
         result = await service.create_application(
             user_id=current_user.id,
             student_code=current_user.nycu_id,  # Use nycu_id as student_code for fetching student data
             application_data=application_data,
             is_draft=is_draft
         )
-        print(f"[API Debug] Application created successfully: {result.app_id}")
+        logger.info(f"Application created successfully: {result.app_id}")
         return result
         
     except ValidationError as e:
-        print(f"[API Error] Validation error: {str(e)}")
+        logger.error(f"Validation error: {str(e)}")
         if hasattr(e, 'errors'):
-            print(f"[API Debug] Validation errors: {e.errors()}")
+            logger.debug(f"Validation error details: {[error.get('loc', []) for error in e.errors()]}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
@@ -123,10 +125,10 @@ async def create_application(
             }
         )
     except Exception as e:
-        print(f"[API Error] Unexpected error: {str(e)}")
+        logger.error(f"Unexpected error during application creation: {str(e)}")
         import traceback
         error_trace = traceback.format_exc()
-        print(f"[API Error] Full traceback: {error_trace}")
+        logger.debug(f"Full traceback: {error_trace}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

@@ -111,12 +111,16 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         message = error["msg"]
         errors.append(f"{field}: {message}")
     
-    # Log detailed error for debugging
-    print(f"[VALIDATION ERROR] Path: {request.url.path}")
-    print(f"[VALIDATION ERROR] Method: {request.method}")
-    print(f"[VALIDATION ERROR] Headers: {dict(request.headers)}")
-    print(f"[VALIDATION ERROR] Errors: {exc.errors()}")
-    print(f"[VALIDATION ERROR] Body: {await request.body() if request.method in ['POST', 'PUT', 'PATCH'] else 'N/A'}")
+    # Log sanitized error information for debugging
+    sanitized_headers = {
+        k: v for k, v in dict(request.headers).items() 
+        if k.lower() not in ['authorization', 'cookie', 'x-api-key', 'x-auth-token']
+    }
+    
+    logger.error(f"Validation error - Path: {request.url.path}, Method: {request.method}")
+    logger.error(f"Validation error - Headers (sanitized): {sanitized_headers}")
+    logger.error(f"Validation error - Field errors: {[error['loc'] for error in exc.errors()]}")
+    # Do not log request body as it may contain sensitive data
     
     return JSONResponse(
         status_code=422,
