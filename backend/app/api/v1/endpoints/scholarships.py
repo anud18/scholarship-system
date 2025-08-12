@@ -162,6 +162,7 @@ async def get_scholarship_eligibility(
     for scholarship in eligible_scholarships:
         response_item = EligibleScholarshipResponse(
             id=scholarship['id'],
+            configuration_id=scholarship['configuration_id'],  # Pass through configuration ID
             code=scholarship['code'],
             name=scholarship['name'],
             name_en=scholarship.get('name_en') or scholarship['name'],
@@ -203,7 +204,54 @@ async def get_scholarship_detail(
     scholarship = result.unique().scalar_one_or_none()
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
-    return scholarship
+    
+    # Get active configuration for this scholarship to retrieve amount and other details
+    config_stmt = select(ScholarshipConfiguration).where(
+        ScholarshipConfiguration.scholarship_type_id == scholarship_id,
+        ScholarshipConfiguration.is_active == True
+    ).order_by(
+        ScholarshipConfiguration.academic_year.desc(),
+        ScholarshipConfiguration.semester.desc()
+    ).limit(1)
+    
+    config_result = await db.execute(config_stmt)
+    active_config = config_result.scalar_one_or_none()
+    
+    # Convert the model to response format with proper enum serialization
+    response_data = {
+        "id": scholarship.id,
+        "code": scholarship.code,
+        "name": scholarship.name,
+        "name_en": scholarship.name_en,
+        "description": scholarship.description,
+        "description_en": scholarship.description_en,
+        "category": scholarship.category if hasattr(scholarship, 'category') else None,
+        "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
+        "sub_type_list": scholarship.sub_type_list or [],
+        "amount": active_config.amount if active_config else 0,  # Get amount from active configuration
+        "currency": active_config.currency if active_config else "TWD",  # Get currency from active configuration
+        "whitelist_enabled": scholarship.whitelist_enabled if hasattr(scholarship, 'whitelist_enabled') else False,
+        "whitelist_student_ids": [student_id for subtype_list in (active_config.whitelist_student_ids.values() if active_config and active_config.whitelist_student_ids else []) for student_id in subtype_list],
+        "application_start_date": active_config.application_start_date if active_config else None,
+        "application_end_date": active_config.application_end_date if active_config else None,
+        "review_deadline": active_config.review_deadline if active_config else None,
+        "professor_review_start": active_config.professor_review_start if active_config else None,
+        "professor_review_end": active_config.professor_review_end if active_config else None,
+        "college_review_start": active_config.college_review_start if active_config else None,
+        "college_review_end": active_config.college_review_end if active_config else None,
+        "sub_type_selection_mode": scholarship.sub_type_selection_mode.value if scholarship.sub_type_selection_mode else "single",
+        "status": scholarship.status if hasattr(scholarship, 'status') else "active",
+        "requires_professor_recommendation": active_config.requires_professor_recommendation if active_config else False,
+        "requires_college_review": active_config.requires_college_review if active_config else False,
+        "review_workflow": scholarship.review_workflow if hasattr(scholarship, 'review_workflow') else None,
+        "auto_approval_rules": scholarship.auto_approval_rules if hasattr(scholarship, 'auto_approval_rules') else None,
+        "created_at": scholarship.created_at,
+        "updated_at": scholarship.updated_at,
+        "created_by": scholarship.created_by,
+        "updated_by": scholarship.updated_by
+    }
+    
+    return ScholarshipTypeResponse(**response_data)
 
 @router.post("/dev/reset-application-periods")
 async def reset_application_periods(

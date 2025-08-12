@@ -3,6 +3,7 @@ Database initialization script for scholarship system
 """
 
 import asyncio
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, date, timezone, timedelta
@@ -23,6 +24,8 @@ from app.models.application_field import ApplicationField, ApplicationDocument
 from app.models.user_profile import UserProfile, UserProfileHistory
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 async def initLookupTables(session: AsyncSession) -> None:
     """Initialize lookup tables using the dedicated lookup tables module"""
@@ -35,11 +38,11 @@ async def initLookupTables(session: AsyncSession) -> None:
     degrees = result.scalars().all()
     
     if len(degrees) == 0:
-        print("📚 Lookup tables not found, initializing...")
+        logger.info("Lookup tables not found, initializing...")
         await initLookup(session)
     else:
-        print("📚 Lookup tables already initialized, skipping...")
-        print(f"✅ Found {len(degrees)} degrees in database")
+        logger.info("Lookup tables already initialized, skipping...")
+        logger.info(f"Found {len(degrees)} degrees in database")
 
 
 async def createTestUsers(session: AsyncSession) -> list[User]:
@@ -1506,80 +1509,12 @@ async def createApplicationFields(session: AsyncSession) -> None:
     admin_id = admin_user.id if admin_user else 1
     
     # === 學士班新生獎學金字段配置 ===
-    undergraduate_fields = [
-        {
-            "scholarship_type": "undergraduate_freshman",
-            "field_name": "bank_account",
-            "field_label": "郵局局帳號/玉山帳號",
-            "field_label_en": "Post Office/ESUN Bank Account Number",
-            "field_type": "text",
-            "is_required": True,
-            "placeholder": "請輸入您的郵局局帳號或玉山銀行帳號",
-            "placeholder_en": "Please enter your Post Office or ESUN Bank account number",
-            "max_length": 30,
-            "display_order": 1,
-            "is_active": True,
-            "help_text": "請填寫正確的郵局局帳號或玉山銀行帳號以便獎學金匯款",
-            "help_text_en": "Please provide your correct Post Office or ESUN Bank account number for scholarship remittance",
-            "created_by": admin_id,
-            "updated_by": admin_id
-        },
-    ]
+    # 銀行帳號將作為固定申請項目，不在此定義
+    undergraduate_fields = []
     
     # === 博士生獎學金字段配置 ===
-    phd_fields = [
-        {
-            "scholarship_type": "phd",
-            "field_name": "advisor_info",
-            "field_label": "指導教授姓名",
-            "field_label_en": "Advisor Name",
-            "field_type": "text",
-            "is_required": True,
-            "placeholder": "請輸入指導教授的姓名",
-            "placeholder_en": "Please enter the name of the advisor",
-            "max_length": 100,
-            "display_order": 1,
-            "is_active": True,
-            "help_text": "請填寫指導教授的姓名",
-            "help_text_en": "Please provide the name of the advisor",
-            "created_by": admin_id,
-            "updated_by": admin_id
-        },
-        {
-            "scholarship_type": "phd",
-            "field_name": "advisor_email",
-            "field_label": "指導教授Email",
-            "field_label_en": "Advisor Email",
-            "field_type": "email",
-            "is_required": True,
-            "placeholder": "請輸入指導教授的Email",
-            "placeholder_en": "Please enter the email of the advisor",
-            "max_length": 100,
-            "display_order": 2,
-            "is_active": True,
-            "help_text": "請填寫指導教授的Email",
-            "help_text_en": "Please provide the email of the advisor",
-            "created_by": admin_id,
-            "updated_by": admin_id
-        },
-        {
-            "scholarship_type": "phd",
-            "field_name": "bank_account",
-            "field_label": "郵局局帳號/玉山帳號",
-            "field_label_en": "Post Office/ESUN Bank Account Number",
-            "field_type": "text",
-            "is_required": True,
-            "placeholder": "請輸入您的郵局局帳號或玉山銀行帳號",
-            "placeholder_en": "Please enter your Post Office or ESUN Bank account number",
-            "max_length": 30,
-            "display_order": 2,
-            "is_active": True,
-            "help_text": "請填寫正確的郵局局帳號或玉山銀行帳號以便獎學金匯款",
-            "help_text_en": "Please provide your correct Post Office or ESUN Bank account number for scholarship remittance",
-            "created_by": admin_id,
-            "updated_by": admin_id
-        }
-    ]
+    # 指導教授資訊和銀行帳號將作為固定申請項目，不在此定義
+    phd_fields = []
     
     # === 逕讀博士獎學金字段配置 ===
     direct_phd_fields = [
@@ -1667,24 +1602,8 @@ async def createApplicationFields(session: AsyncSession) -> None:
             "help_text_en": "Please provide the recommender's email",
             "created_by": admin_id,
             "updated_by": admin_id
-        },
-        {
-            "scholarship_type": "direct_phd",
-            "field_name": "bank_account",
-            "field_label": "郵局局帳號/玉山帳號/支票",
-            "field_label_en": "Post Office/ESUN Bank Account Number/Cheque",
-            "field_type": "text",
-            "is_required": True,
-            "placeholder": "請輸入您的郵局局帳號、玉山銀行帳號或支票資訊",
-            "placeholder_en": "Please enter your Post Office, ESUN Bank account number, or cheque information",
-            "max_length": 50,
-            "display_order": 6,
-            "is_active": True,
-            "help_text": "請填寫正確的帳號或支票資訊以便獎學金匯款",
-            "help_text_en": "Please provide your correct account or cheque information for scholarship remittance",
-            "created_by": admin_id,
-            "updated_by": admin_id
         }
+        # 銀行帳號將作為固定申請項目，不在此定義
     ]
     
     # 創建所有字段
@@ -1706,24 +1625,7 @@ async def createApplicationFields(session: AsyncSession) -> None:
     
     # === 文件配置 ===
     document_configs = [
-        # 學士班文件
-        {
-            "scholarship_type": "undergraduate_freshman",
-            "document_name": "存摺封面",
-            "document_name_en": "Bank Statement Cover",
-            "description": "請上傳存摺封面",
-            "description_en": "Please upload bank statement cover",
-            "is_required": True,
-            "accepted_file_types": ["PDF", "JPG", "PNG"],
-            "max_file_size": "10MB",
-            "max_file_count": 1,
-            "display_order": 1,
-            "is_active": True,
-            "upload_instructions": "請確保存摺封面清晰可讀，包含戶名、帳號、銀行名稱等資訊",
-            "upload_instructions_en": "Please ensure the bank statement cover is clear and readable, including account name, account number, bank name, etc.",
-            "created_by": admin_id,
-            "updated_by": admin_id
-        },
+        # 存摺封面將作為固定申請項目，不在此定義
         # 博士生文件 
         # 1.含前一學年度完整成績的歷年成績單(上傳)
         # 2.勞保投保紀錄(上傳)
@@ -1798,23 +1700,7 @@ async def createApplicationFields(session: AsyncSession) -> None:
             "created_by": admin_id,
             "updated_by": admin_id
         },
-        {
-            "scholarship_type": "phd",
-            "document_name": "存摺封面",
-            "document_name_en": "Bank Statement Cover",
-            "description": "請上傳存摺封面",
-            "description_en": "Please upload bank statement cover",
-            "is_required": True,
-            "accepted_file_types": ["PDF", "JPG", "PNG"],
-            "max_file_size": "10MB",
-            "max_file_count": 1,
-            "display_order": 5,
-            "is_active": True,
-            "upload_instructions": "請確保存摺封面清晰可讀，包含戶名、帳號、銀行名稱等資訊",
-            "upload_instructions_en": "Please ensure the bank statement cover is clear and readable, including account name, account number, bank name, etc.",
-            "created_by": admin_id,
-            "updated_by": admin_id
-        },
+        # 存摺封面將作為固定申請項目，不在此定義
         # 逕讀博士文件
         # 1.個人基本資料(套印確認)
         # 2.博士班研修計畫書(範本下載)
@@ -1943,24 +1829,8 @@ async def createApplicationFields(session: AsyncSession) -> None:
             "upload_instructions_en": "Please ensure the labor insurance record is clear and readable, including insurance company, insurance amount, insurance date, etc.",
             "created_by": admin_id,
             "updated_by": admin_id
-        },
-        {
-            "scholarship_type": "direct_phd",
-            "document_name": "存摺封面",
-            "document_name_en": "Bank Statement Cover",
-            "description": "請上傳存摺封面",
-            "description_en": "Please upload bank statement cover",
-            "is_required": True,
-            "accepted_file_types": ["PDF", "JPG", "PNG"],
-            "max_file_size": "10MB",
-            "max_file_count": 1,
-            "display_order": 8,
-            "is_active": True,
-            "upload_instructions": "請確保存摺封面清晰可讀，包含戶名、帳號、銀行名稱等資訊",
-            "upload_instructions_en": "Please ensure the bank statement cover is clear and readable, including account name, account number, bank name, etc.",
-            "created_by": admin_id,
-            "updated_by": admin_id
         }
+        # 存摺封面將作為固定申請項目，不在此定義
     ]
     
     for doc_data in document_configs:

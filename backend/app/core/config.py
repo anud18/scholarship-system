@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     reload: bool = False
+    base_url: str = "http://localhost:8000"  # Base URL for the application
     
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/scholarship_test"

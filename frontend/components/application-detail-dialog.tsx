@@ -511,7 +511,14 @@ export function ApplicationDetailDialog({
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4" />
                           <div>
-                            <p className="text-sm font-medium">{file.filename || file.original_filename}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium">{file.filename || file.original_filename}</p>
+                              {file.file_type === 'bank_account_proof' && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {locale === "zh" ? "固定文件" : "Fixed Document"}
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">
                               {file.file_type ? getDocumentLabel(file.file_type, locale, documentLabels[file.file_type]) : 'Other'} • 
                               {file.file_size ? ` ${Math.round(file.file_size / 1024)}KB` : ''}

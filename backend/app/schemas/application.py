@@ -157,6 +157,11 @@ class ApplicationCreate(BaseModel):
         description="獎學金類型代碼",
         example="undergraduate_freshman"
     )
+    configuration_id: int = Field(
+        ...,
+        description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)",
+        example=1
+    )
     scholarship_subtype_list: List[str] = Field(
         default=[],
         description="獎學金子類型列表",
@@ -209,6 +214,7 @@ class ApplicationCreate(BaseModel):
 
 class ApplicationUpdate(BaseModel):
     """更新申請"""
+    scholarship_subtype_list: Optional[List[str]] = Field(None, description="獎學金子類型列表")
     form_data: Optional[ApplicationFormData] = Field(None, description="表單資料")
     status: Optional[str] = Field(None, description="申請狀態")
     agree_terms: Optional[bool] = Field(None, description="同意條款")
@@ -296,14 +302,14 @@ class ApplicationResponse(BaseModel):
     id: int
     app_id: str
     user_id: int
-    student_id: int
+    student_id: Optional[str] = None
     scholarship_type_id: int
     scholarship_subtype_list: Optional[List[str]] = []
     status: str
     status_name: Optional[str]
     is_renewal: bool = Field(False, description="是否為續領申請")
     academic_year: int
-    semester: str
+    semester: Optional[str] = None
     student_data: Dict[str, Any]
     submitted_form_data: Dict[str, Any]  # 包含整合後的文件資訊
     agree_terms: bool = False
@@ -359,8 +365,8 @@ class ApplicationListResponse(BaseModel):
     id: int
     app_id: str
     user_id: int
-    student_id: int
-    scholarship_type: str
+    student_id: Optional[str] = None
+    scholarship_type: Optional[str] = None
     scholarship_type_id: int
     scholarship_type_zh: Optional[str] = None  # 中文獎學金類型名稱
     scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
@@ -368,7 +374,7 @@ class ApplicationListResponse(BaseModel):
     status_name: Optional[str]
     is_renewal: bool = Field(False, description="是否為續領申請")
     academic_year: int
-    semester: str
+    semester: Optional[str] = None
     student_data: Dict[str, Any]
     submitted_form_data: Dict[str, Any]  # 包含整合後的文件資訊
     agree_terms: bool = False

@@ -97,7 +97,7 @@ class Application(Base):
     
     # 獎學金類型 - Enhanced for issue #10
     scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True)  # Reference to ScholarshipType
-    scholarship_type = Column(String(50), nullable=False)  # Backward compatibility
+    scholarship_configuration_id = Column(Integer, ForeignKey("scholarship_configurations.id"), nullable=True)  # Specific configuration applied for
     scholarship_name = Column(String(200))
     amount = Column(Numeric(10, 2))
     scholarship_subtype_list = Column(JSON, nullable=False, default=[])
@@ -118,7 +118,7 @@ class Application(Base):
     
     # 學期資訊 (申請當時的學期)
     academic_year = Column(Integer, nullable=False)  # 民國年，例如 113
-    semester = Column(Enum(Semester), nullable=False)
+    semester = Column(Enum(Semester), nullable=True)  # Can be NULL for yearly scholarships
     
     # 申請資料 (申請當時)
     student_data = Column(JSON)  # Student 資料
@@ -155,8 +155,9 @@ class Application(Base):
     final_approver = relationship("User", foreign_keys=[final_approver_id])
     
     # Enhanced relationships for issue #10
-    scholarship_type_ref = relationship("ScholarshipType", foreign_keys=[scholarship_type_id], overlaps="applications")
-    scholarship = relationship("ScholarshipType", foreign_keys=[scholarship_type_id])
+    scholarship_type_ref = relationship("ScholarshipType", foreign_keys=[scholarship_type_id], overlaps="applications,scholarship")
+    scholarship = relationship("ScholarshipType", foreign_keys=[scholarship_type_id], overlaps="applications,scholarship_type_ref")
+    scholarship_configuration = relationship("ScholarshipConfiguration", foreign_keys=[scholarship_configuration_id])
     previous_application = relationship("Application", remote_side=[id])
     
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")

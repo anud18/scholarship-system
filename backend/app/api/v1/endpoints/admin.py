@@ -952,7 +952,7 @@ async def get_applications_by_scholarship(
                     matching_file = next((f for f in app.files if f.file_type == existing_doc.get('document_id')), None)
                     if matching_file:
                         # Update existing file information with URLs
-                        base_url = f"http://localhost:8000{settings.api_v1_str}"
+                        base_url = f"{settings.base_url}{settings.api_v1_str}"
                         existing_doc.update({
                             "file_id": matching_file.id,
                             "filename": matching_file.filename,

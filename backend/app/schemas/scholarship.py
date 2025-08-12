@@ -247,6 +247,7 @@ class SubTypeOption(BaseModel):
 
 class EligibleScholarshipResponse(BaseModel):
     id: int
+    configuration_id: int  # Add configuration ID for application creation
     code: str
     name: str
     name_en: str

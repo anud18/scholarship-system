@@ -2,6 +2,7 @@
 Application field configuration API endpoints
 """
 
+import logging
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from app.schemas.application_field import (
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # Application Field endpoints
@@ -195,23 +197,27 @@ async def get_scholarship_form_config(
 ):
     """Get complete form configuration for a scholarship type"""
     try:
-        print(f"🔍 API: Getting form config for {scholarship_type}")
+        logger.debug(f"API: Getting form config for {scholarship_type}")
         service = ApplicationFieldService(db)
         
         # 管理員可以看到所有欄位（包括停用的），其他用戶只能看到啟用的
         is_admin = current_user.role in ["admin", "super_admin"]
         should_include_inactive = include_inactive or is_admin
         
-        config = await service.get_scholarship_form_config(scholarship_type, should_include_inactive)
+        config = await service.get_scholarship_form_config(
+            scholarship_type, 
+            should_include_inactive,
+            user_id=current_user.id
+        )
         
-        print(f"✅ API: Form config retrieved successfully for {scholarship_type}")
+        logger.info(f"API: Form config retrieved successfully for {scholarship_type}")
         return ApiResponse(
             success=True,
             message=f"Form configuration retrieved for {scholarship_type}",
             data=config
         )
     except Exception as e:
-        print(f"❌ API: Error getting form config for {scholarship_type}: {str(e)}")
+        logger.error(f"API: Error getting form config for {scholarship_type}: {str(e)}")
         # 返回空的配置而不是拋出異常
         empty_config = ScholarshipFormConfigResponse(
             scholarship_type=scholarship_type,

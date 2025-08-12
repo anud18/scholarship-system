@@ -43,7 +43,12 @@ class EligibilityService:
         config: ScholarshipConfiguration,
         user_id: Optional[int] = None
     ) -> Tuple[bool, List[str]]:
-        """Check if student is eligible for a scholarship configuration"""
+        """Check if student is eligible for a scholarship configuration
+        
+        Note: This method no longer checks for existing applications as we want to show
+        all scholarships the student meets the requirements for, regardless of application status.
+        Application status is now checked separately.
+        """
         
         reasons = []
         
@@ -56,14 +61,8 @@ class EligibilityService:
             reasons.append("不在獎學金有效期間內")
             return False, reasons
         
-        # Check for existing application if user_id is provided
-        if user_id:
-            existing_app_eligible = await self._check_existing_applications(
-                user_id, config, student_data
-            )
-            if not existing_app_eligible:
-                reasons.append("已有相同學年學期的申請記錄")
-                return False, reasons
+        # Existing application check is moved to separate method
+        # We want to show scholarships regardless of application status
         
         # Check application period (unless bypassed in dev mode)
         if not self._should_bypass_application_period():
@@ -138,6 +137,10 @@ class EligibilityService:
             - passed: list of passed rules with their tags
             - warnings: list of warning rules
             - errors: list of failed hard rules
+        
+        Note: This method no longer checks for existing applications as we want to show
+        all scholarships the student meets the requirements for, regardless of application status.
+        Application status is now checked separately.
         """
         
         reasons = []
@@ -156,14 +159,8 @@ class EligibilityService:
             reasons.append("不在獎學金有效期間內")
             return False, reasons, details
         
-        # Check for existing application if user_id is provided
-        if user_id:
-            existing_app_eligible = await self._check_existing_applications(
-                user_id, config, student_data
-            )
-            if not existing_app_eligible:
-                reasons.append("已有相同學年學期的申請記錄")
-                return False, reasons, details
+        # Existing application check is moved to separate method
+        # We want to show scholarships regardless of application status
         
         # Check application period (unless bypassed in dev mode)
         if not self._should_bypass_application_period():
@@ -479,6 +476,104 @@ class EligibilityService:
         # Default to basic student API
         return "student"
     
+    async def get_application_status(
+        self, 
+        user_id: int, 
+        config: ScholarshipConfiguration
+    ) -> Dict[str, Any]:
+        """Get application status for a specific scholarship configuration
+        
+        Returns:
+            Dictionary with application status info:
+            - has_application: bool - whether user has any application for this config
+            - application_status: str - current application status (draft, submitted, etc.)
+            - can_apply: bool - whether user can submit new/edit existing application
+            - status_display: str - display text for frontend
+        """
+        
+        # Check for any existing application
+        active_statuses = [
+            ApplicationStatus.DRAFT.value,
+            ApplicationStatus.SUBMITTED.value,
+            ApplicationStatus.UNDER_REVIEW.value,
+            ApplicationStatus.PENDING_RECOMMENDATION.value,
+            ApplicationStatus.RECOMMENDED.value,
+            ApplicationStatus.APPROVED.value,
+            ApplicationStatus.REJECTED.value,
+            ApplicationStatus.RETURNED.value,
+            ApplicationStatus.CANCELLED.value,
+            ApplicationStatus.RENEWAL_PENDING.value,
+            ApplicationStatus.RENEWAL_REVIEWED.value,
+            ApplicationStatus.PROFESSOR_REVIEW.value,
+            ApplicationStatus.WITHDRAWN.value
+        ]
+        
+        # Handle semester comparison - use enum name for PostgreSQL compatibility
+        # PostgreSQL stores enum as the name (FIRST, SECOND) not the value (first, second)
+        if config.semester:
+            # Use enum name for comparison
+            semester_filter = Application.semester == config.semester.name
+        else:
+            # If no semester in config, check for NULL
+            semester_filter = Application.semester.is_(None)
+        
+        stmt = select(Application).filter(
+            and_(
+                Application.user_id == user_id,
+                Application.scholarship_type_id == config.scholarship_type_id,
+                Application.academic_year == config.academic_year,
+                semester_filter,
+                Application.status.in_(active_statuses)
+            )
+        )
+        
+        result = await self.db.execute(stmt)
+        existing_application = result.scalar_one_or_none()
+        
+        if not existing_application:
+            return {
+                'has_application': False,
+                'application_status': None,
+                'can_apply': True,
+                'status_display': '可申請',
+                'application_id': None
+            }
+        
+        status = existing_application.status
+        
+        # Determine if user can apply/edit
+        can_apply = status in [
+            ApplicationStatus.DRAFT.value,
+            ApplicationStatus.RETURNED.value
+        ]
+        
+        # Determine display status
+        status_display_mapping = {
+            ApplicationStatus.DRAFT.value: '草稿',
+            ApplicationStatus.SUBMITTED.value: '已申請',
+            ApplicationStatus.UNDER_REVIEW.value: '審核中',
+            ApplicationStatus.PENDING_RECOMMENDATION.value: '待推薦',
+            ApplicationStatus.RECOMMENDED.value: '已推薦',
+            ApplicationStatus.APPROVED.value: '已核准',
+            ApplicationStatus.REJECTED.value: '已拒絕',
+            ApplicationStatus.RETURNED.value: '已退回',
+            ApplicationStatus.CANCELLED.value: '已取消',
+            ApplicationStatus.RENEWAL_PENDING.value: '續領待審',
+            ApplicationStatus.RENEWAL_REVIEWED.value: '續領已審',
+            ApplicationStatus.PROFESSOR_REVIEW.value: '教授審核中',
+            ApplicationStatus.WITHDRAWN.value: '已撤回'
+        }
+        
+        status_display = status_display_mapping.get(status, '未知狀態')
+        
+        return {
+            'has_application': True,
+            'application_status': status,
+            'can_apply': can_apply,
+            'status_display': status_display,
+            'application_id': existing_application.id
+        }
+    
     def _evaluate_rule(self, student_data: Dict[str, Any], rule: ScholarshipRule) -> bool:
         """Evaluate a single rule against student data"""
         
@@ -557,11 +652,16 @@ class EligibilityService:
         config: ScholarshipConfiguration, 
         student_data: Dict[str, Any]
     ) -> bool:
-        """Check if user already has an application for this scholarship configuration"""
+        """Check if user already has an application for this scholarship configuration
+        
+        Note: This check excludes DRAFT applications to allow students to see eligible 
+        scholarships even when they have saved drafts. Only finalized applications
+        (submitted or beyond) block eligibility.
+        """
         
         # Get active applications (not cancelled, withdrawn, or rejected)
+        # DRAFT status is excluded to allow students to see scholarships they have drafts for
         active_statuses = [
-            ApplicationStatus.DRAFT.value,
             ApplicationStatus.SUBMITTED.value,
             ApplicationStatus.UNDER_REVIEW.value,
             ApplicationStatus.PENDING_RECOMMENDATION.value,
@@ -573,16 +673,21 @@ class EligibilityService:
             ApplicationStatus.RETURNED.value  # Returned applications can still be edited
         ]
         
-        # Convert semester enum to string value to avoid type mismatch
-        # Database uses uppercase enum values (FIRST, SECOND) while Python enum uses lowercase (first, second)
-        semester_value = None if config.semester is None else config.semester.value.upper()
+        # Handle semester comparison - use enum name for PostgreSQL compatibility
+        # PostgreSQL stores enum as the name (FIRST, SECOND) not the value (first, second)
+        if config.semester:
+            # Use enum name for comparison
+            semester_filter = Application.semester == config.semester.name
+        else:
+            # If no semester in config, check for NULL
+            semester_filter = Application.semester.is_(None)
         
         stmt = select(Application).filter(
             and_(
                 Application.user_id == user_id,
                 Application.scholarship_type_id == config.scholarship_type_id,
                 Application.academic_year == config.academic_year,
-                Application.semester == semester_value,
+                semester_filter,
                 Application.status.in_(active_statuses)
             )
         )

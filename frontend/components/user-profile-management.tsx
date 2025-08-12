@@ -33,6 +33,8 @@ import {
   School,
   CreditCard
 } from 'lucide-react'
+import { FileUpload } from "@/components/file-upload"
+import { FilePreviewDialog } from "@/components/file-preview-dialog"
 
 interface UserInfo {
   id: number
@@ -89,6 +91,14 @@ export default function UserProfileManagement() {
   const [showHistory, setShowHistory] = useState(false)
   const [history, setHistory] = useState<ProfileHistory[]>([])
   const [activeTab, setActiveTab] = useState('overview')
+  const [bankDocumentFiles, setBankDocumentFiles] = useState<File[]>([])
+  const [previewFile, setPreviewFile] = useState<{
+    url: string
+    filename: string
+    type: string
+    downloadUrl?: string
+  } | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -248,9 +258,21 @@ export default function UserProfileManagement() {
     }
   }
 
-  const handleBankDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  const handleBankDocumentFilesChange = (files: File[]) => {
+    setBankDocumentFiles(files)
+  }
+
+  const handleBankDocumentUpload = async () => {
+    if (bankDocumentFiles.length === 0) {
+      toast({
+        title: "請選擇文件",
+        description: "請先選擇要上傳的銀行帳戶證明文件",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const file = bankDocumentFiles[0] // 只處理第一個文件，因為銀行文件通常只要一個
 
     if (file.size > 10 * 1024 * 1024) {
       toast({
@@ -274,6 +296,8 @@ export default function UserProfileManagement() {
         description: "銀行帳戶證明文件已上傳",
       })
 
+      // 清空已選擇的文件
+      setBankDocumentFiles([])
       await loadProfile()
     } catch (error: any) {
       toast({
@@ -306,6 +330,65 @@ export default function UserProfileManagement() {
         variant: "destructive"
       })
     }
+  }
+
+  const handlePreviewBankDocument = () => {
+    if (!profile?.profile?.bank_document_photo_url) return
+
+    // 從銀行文件 URL 提取檔名和 token
+    const documentUrl = profile.profile.bank_document_photo_url
+    const filename = documentUrl.split('/').pop()?.split('?')[0] || 'bank_document'
+    
+    // 從 URL 中提取 token（如果有的話）
+    let token = ''
+    const urlParts = documentUrl.split('?')
+    if (urlParts.length > 1) {
+      const urlParams = new URLSearchParams(urlParts[1])
+      token = urlParams.get('token') || ''
+    }
+    
+    // 如果 URL 中沒有 token，嘗試從存儲中獲取
+    if (!token) {
+      token = localStorage.getItem('auth_token') || 
+              localStorage.getItem('token') || 
+              sessionStorage.getItem('auth_token') || 
+              sessionStorage.getItem('token') || 
+              'eyJhbGciOiJIUzI' // 預設 token
+    }
+    
+    // 對於個人資料的銀行文件，使用檔名作為 fileId
+    const fileId = filename
+    const fileType = encodeURIComponent('銀行帳戶證明文件')
+    // 對於個人資料，使用用戶 ID 作為標識符，而不是 applicationId
+    const userId = profile.user_info.id || 0
+    
+    // 建立預覽 URL，使用前端路由而不是完整的外部 URL
+    const previewUrl = `/api/v1/preview?fileId=${fileId}&filename=${encodeURIComponent(filename)}&type=${fileType}&userId=${userId}&token=${token}`
+    
+    console.log('Preview URL:', previewUrl) // 用於調試
+    
+    // 判斷文件類型
+    let fileType_display = 'other'
+    if (filename.toLowerCase().endsWith('.pdf')) {
+      fileType_display = 'application/pdf'
+    } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].some(ext => filename.toLowerCase().endsWith(ext))) {
+      fileType_display = 'image'
+    }
+    
+    // 設定預覽文件資訊
+    setPreviewFile({
+      url: previewUrl,
+      filename: filename,
+      type: fileType_display,
+      downloadUrl: documentUrl // 使用原始的文件 URL 作為下載連結
+    })
+    
+    setShowPreview(true)
+  }
+
+  const handleClosePreview = () => {
+    setShowPreview(false)
+    setPreviewFile(null)
   }
 
   const loadHistory = async () => {
@@ -601,50 +684,80 @@ export default function UserProfileManagement() {
 
               {/* Bank Document Upload */}
               <div className="space-y-4">
-                <div className="space-y-2">
+                <div className="space-y-4">
                   <Label>銀行帳戶證明文件</Label>
-                  <div className="flex flex-col gap-2">
-                    {profile.profile?.bank_document_photo_url ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-green-600">✓ 已上傳證明文件</span>
-                        <Button 
-                          variant="destructive" 
-                          size="sm"
-                          onClick={handleDeleteBankDocument}
-                        >
-                          <X className="w-4 h-4 mr-2" />
-                          刪除文件
-                        </Button>
+                  
+                  {/* Display current uploaded document */}
+                  {profile.profile?.bank_document_photo_url && (
+                    <div className="mb-4 p-4 border rounded-lg bg-green-50 border-green-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-5 h-5 text-green-600" />
+                          <div>
+                            <span className="text-sm font-medium text-green-800">已上傳證明文件</span>
+                            <p className="text-xs text-green-600">點擊預覽按鈕查看已上傳的文件</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={handlePreviewBankDocument}
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            預覽
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            size="sm"
+                            onClick={handleDeleteBankDocument}
+                          >
+                            <X className="w-4 h-4 mr-1" />
+                            刪除
+                          </Button>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="text-sm text-gray-500">尚未上傳證明文件</div>
-                    )}
-                    
-                    <Label htmlFor="bank-doc-upload" className="cursor-pointer">
-                      <Button 
-                        variant="outline" 
-                        disabled={uploadingBankDoc}
-                        asChild
-                      >
-                        <span>
-                          {uploadingBankDoc ? (
-                            "上傳中..."
-                          ) : (
-                            <>
-                              <Upload className="w-4 h-4 mr-2" />
-                              上傳帳戶證明文件
-                            </>
-                          )}
-                        </span>
-                      </Button>
-                    </Label>
-                    <input
-                      id="bank-doc-upload"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleBankDocumentUpload}
-                      className="hidden"
+                    </div>
+                  )}
+                  
+                  {/* File Upload Component */}
+                  <div className="space-y-4">
+                    <FileUpload
+                      onFilesChange={handleBankDocumentFilesChange}
+                      acceptedTypes={[".jpg", ".jpeg", ".png", ".webp", ".pdf"]}
+                      maxSize={10 * 1024 * 1024} // 10MB
+                      maxFiles={1}
+                      initialFiles={bankDocumentFiles}
+                      fileType="bank_document"
+                      locale="zh"
                     />
+                    
+                    {/* Upload Button - only show when files are selected */}
+                    {bankDocumentFiles.length > 0 && (
+                      <Button
+                        onClick={handleBankDocumentUpload}
+                        disabled={uploadingBankDoc}
+                        className="w-full"
+                      >
+                        {uploadingBankDoc ? (
+                          <>
+                            <Upload className="w-4 h-4 mr-2 animate-pulse" />
+                            上傳中...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-2" />
+                            上傳銀行帳戶證明文件
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <div className="text-xs text-muted-foreground">
+                    <p>• 接受格式：JPG, JPEG, PNG, WebP, PDF</p>
+                    <p>• 檔案大小限制：10MB</p>
+                    <p>• 建議上傳清晰的銀行存摺封面或銀行開戶證明文件</p>
                   </div>
                 </div>
               </div>
@@ -783,6 +896,14 @@ export default function UserProfileManagement() {
           </Card>
         </div>
       )}
+
+      {/* File Preview Dialog */}
+      <FilePreviewDialog 
+        isOpen={showPreview}
+        onClose={handleClosePreview}
+        file={previewFile}
+        locale="zh"
+      />
     </div>
   )
 }

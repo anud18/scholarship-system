@@ -4,6 +4,7 @@ Application service for scholarship application management
 
 import uuid
 import json
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
@@ -27,6 +28,8 @@ from app.schemas.application import (
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
+
+logger = logging.getLogger(__name__)
 
 
 async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
@@ -57,6 +60,79 @@ class ApplicationService:
         elif isinstance(data, dict):
             return {k: self._serialize_for_json(v) for k, v in data.items()}
         return data
+    
+    def _get_student_id_from_user(self, user: User) -> Optional[str]:
+        """
+        Get student ID from user (using nycu_id)
+        
+        The student_id in our system is the user's nycu_id (string format)
+        """
+        if not user or not user.nycu_id:
+            return None
+        return user.nycu_id
+    
+    async def _build_application_response(self, application: Application, user: Optional[User] = None) -> ApplicationResponse:
+        """
+        Build ApplicationResponse from Application model
+        """
+        # If user is not provided, try to load it from the relationship
+        if not user and hasattr(application, 'student') and application.student:
+            user = application.student
+        elif not user:
+            # Load user from database
+            stmt = select(User).where(User.id == application.user_id)
+            result = await self.db.execute(stmt)
+            user = result.scalar_one_or_none()
+        
+        # Integrate file data from submitted_form_data.documents
+        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+        
+        return ApplicationResponse(
+            id=application.id,
+            app_id=application.app_id,
+            user_id=application.user_id,
+            student_id=self._get_student_id_from_user(user) if user else None,
+            scholarship_type_id=application.scholarship_type_id,
+            scholarship_subtype_list=application.scholarship_subtype_list or [],
+            status=application.status,
+            status_name=application.status_name,
+            is_renewal=application.is_renewal,
+            academic_year=application.academic_year,
+            semester=self._convert_semester_to_string(application.semester),
+            student_data=application.student_data or {},
+            submitted_form_data=integrated_form_data,
+            agree_terms=application.agree_terms,
+            professor_id=application.professor_id,
+            reviewer_id=application.reviewer_id,
+            final_approver_id=application.final_approver_id,
+            review_score=application.review_score,
+            review_comments=application.review_comments,
+            rejection_reason=application.rejection_reason,
+            submitted_at=application.submitted_at,
+            reviewed_at=application.reviewed_at,
+            approved_at=application.approved_at,
+            created_at=application.created_at,
+            updated_at=application.updated_at,
+            meta_data=application.meta_data
+        )
+    
+    def _convert_semester_to_string(self, semester) -> Optional[str]:
+        """
+        Convert semester to string format for schema validation
+        """
+        if semester is None:
+            return None
+        
+        # If it's already a string, return as is
+        if isinstance(semester, str):
+            return semester
+        
+        # If it's an enum or has a value attribute, get the value
+        if hasattr(semester, 'value'):
+            return str(semester.value)
+        
+        # Otherwise convert to string
+        return str(semester)
     
     def _generate_app_id(self) -> str:
         """Generate unique application ID"""
@@ -135,10 +211,10 @@ class ApplicationService:
         student_code: str,  # User's nycu_id for fetching student data
         application_data: ApplicationCreate,
         is_draft: bool = False
-    ) -> Application:
+    ) -> ApplicationResponse:
         """Create a new application (draft or submitted)"""
-        print(f"[Debug] Starting application creation for user_id={user_id}, student_code={student_code}, is_draft={is_draft}")
-        print(f"[Debug] Application data received: {application_data.dict(exclude_none=True)}")
+        logger.debug(f"Starting application creation for user_id={user_id}, student_code={student_code}, is_draft={is_draft}")
+        logger.debug(f"Application data received: {application_data.dict(exclude_none=True)}")
         
         # Get user
         stmt = select(User).where(User.id == user_id)
@@ -146,14 +222,39 @@ class ApplicationService:
         user = result.scalar_one()
         
         # Get student data from external API
-        print(f"[Debug] Fetching student data for student_code={student_code}")
+        logger.debug(f"Fetching student data for student_code={student_code}")
         student_snapshot = await self.student_service.get_student_snapshot(student_code)
-        print(f"[Debug] Student snapshot: {student_snapshot}")
+        logger.debug(f"Student snapshot: {student_snapshot}")
         
         # Get scholarship type
         stmt = select(ScholarshipType).where(ScholarshipType.code == application_data.scholarship_type)
         result = await self.db.execute(stmt)
         scholarship = result.scalar_one()
+        
+        # Get the specific configuration that the student is eligible for
+        from app.models.scholarship import ScholarshipConfiguration
+        
+        config_stmt = select(ScholarshipConfiguration).where(
+            ScholarshipConfiguration.id == application_data.configuration_id
+        )
+        config_result = await self.db.execute(config_stmt)
+        config = config_result.scalar_one_or_none()
+        
+        if not config:
+            raise ValueError(f"Configuration with id {application_data.configuration_id} not found")
+        
+        # Verify the configuration belongs to the scholarship type
+        if config.scholarship_type_id != scholarship.id:
+            raise ValueError(f"Configuration {application_data.configuration_id} does not belong to scholarship type {application_data.scholarship_type}")
+        
+        # TODO: Add eligibility verification here
+        # We should verify that the student is actually eligible for this specific configuration
+        # by calling the eligibility service to check if this configuration appears in their eligible scholarships
+        
+        # Use configuration's academic year and semester
+        academic_year = config.academic_year
+        semester = config.semester  # This can be None for yearly scholarships
+        logger.debug(f"Using config {config.id}: academic_year={academic_year}, semester={semester}")
         
         # Create application ID
         app_id = f"APP-{datetime.now().year}-{str(uuid.uuid4())[:8]}"
@@ -175,13 +276,16 @@ class ApplicationService:
             user_id=user_id,
             # student_id removed - student data is now in student_data JSON field
             scholarship_type_id=scholarship.id,
+            scholarship_configuration_id=config.id,  # Store the specific configuration
+            scholarship_name=config.config_name,  # Use configuration name
+            amount=config.amount,  # Use amount from configuration
             scholarship_subtype_list=application_data.scholarship_subtype_list,
             sub_type_selection_mode=scholarship.sub_type_selection_mode or "single",
             status=status,
             status_name=status_name,
             is_renewal=application_data.is_renewal or False,  # 設置續領申請標識
-            academic_year=int(datetime.now().year),
-            semester=Semester.FIRST.value,  # Default to first semester
+            academic_year=academic_year,
+            semester=self._convert_semester_to_string(semester),  # Convert to string or None
             student_data=student_snapshot,
             submitted_form_data=serialized_form_data,
             agree_terms=application_data.agree_terms or False
@@ -195,6 +299,14 @@ class ApplicationService:
         await self.db.commit()
         await self.db.refresh(application)
         
+        # Clone fixed documents (like bank account proof) for both draft and submitted applications
+        # This ensures that fixed documents are available for preview and progress calculation
+        try:
+            await self._clone_user_profile_documents(application, user)
+        except Exception as e:
+            # Don't fail the entire application creation if document cloning fails
+            logger.warning(f"Failed to clone fixed documents for application {app_id}: {e}", exc_info=True)
+        
         # Load relationships for response
         stmt = select(Application).where(Application.id == application.id).options(
             selectinload(Application.files),
@@ -204,8 +316,8 @@ class ApplicationService:
         result = await self.db.execute(stmt)
         application = result.scalar_one()
         
-        print(f"[Debug] Application created successfully: {app_id} with status: {status}")
-        return application
+        logger.debug(f"Application created successfully: {app_id} with status: {status}")
+        return await self._build_application_response(application, user)
     
 
     
@@ -239,34 +351,48 @@ class ApplicationService:
                 
                 token_data = {"sub": str(user.id)}
                 access_token = create_access_token(token_data)
+                base_url = f"{settings.base_url}{settings.api_v1_str}"
                 
-                # 更新 submitted_form_data 中的 documents
-                if 'documents' in integrated_form_data:
-                    existing_docs = integrated_form_data['documents']
-                    for existing_doc in existing_docs:
-                        # 查找對應的文件記錄
-                        matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
-                        if matching_file:
-                            # 更新現有文件資訊
-                            base_url = f"http://localhost:8000{settings.api_v1_str}"
-                            existing_doc.update({
-                                "file_id": matching_file.id,
-                                "filename": matching_file.filename,
-                                "original_filename": matching_file.original_filename,
-                                "file_size": matching_file.file_size,
-                                "mime_type": matching_file.mime_type or matching_file.content_type,
-                                "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
-                                "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
-                                "is_verified": matching_file.is_verified,
-                                "object_name": matching_file.object_name
-                            })
+                # 確保 documents 陣列存在
+                if 'documents' not in integrated_form_data:
+                    integrated_form_data['documents'] = []
+                
+                # 為每個 ApplicationFile 創建或更新對應的 document 記錄
+                for file in application.files:
+                    # 檢查是否已存在此文件的記錄
+                    existing_doc = next((doc for doc in integrated_form_data['documents'] 
+                                       if doc.get('document_type') == file.file_type or doc.get('document_id') == file.file_type), None)
+                    
+                    # 創建文件資訊
+                    file_info = {
+                        "document_id": file.file_type,
+                        "document_type": file.file_type,
+                        "document_name": self._get_document_display_name(file.file_type),
+                        "file_id": file.id,
+                        "filename": file.filename,
+                        "original_filename": file.original_filename,
+                        "file_size": file.file_size,
+                        "mime_type": file.mime_type or file.content_type,
+                        "file_path": f"{base_url}/files/applications/{application.id}/files/{file.id}?token={access_token}",
+                        "download_url": f"{base_url}/files/applications/{application.id}/files/{file.id}/download?token={access_token}",
+                        "is_verified": file.is_verified,
+                        "object_name": file.object_name,
+                        "upload_time": file.uploaded_at.isoformat() if file.uploaded_at else None
+                    }
+                    
+                    if existing_doc:
+                        # 更新現有記錄
+                        existing_doc.update(file_info)
+                    else:
+                        # 新增記錄
+                        integrated_form_data['documents'].append(file_info)
             
             # 創建響應數據
             app_data = ApplicationListResponse(
                 id=application.id,
                 app_id=application.app_id,
                 user_id=application.user_id,
-                student_id=application.student_data.get('student_id') if application.student_data else None,
+                student_id=user.nycu_id if user else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 scholarship_subtype_list=application.scholarship_subtype_list or [],
@@ -274,7 +400,7 @@ class ApplicationService:
                 status_name=application.status_name,
                 is_renewal=application.is_renewal,  # 添加續領申請標識
                 academic_year=application.academic_year,
-                semester=application.semester,
+                semester=self._convert_semester_to_string(application.semester),
                 student_data=application.student_data,
                 submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
                 agree_terms=application.agree_terms,
@@ -348,7 +474,7 @@ class ApplicationService:
                         matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                         if matching_file:
                             # 更新現有文件資訊
-                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            base_url = f"{settings.base_url}{settings.api_v1_str}"
                             existing_doc.update({
                                 "file_id": matching_file.id,
                                 "filename": matching_file.filename,
@@ -366,13 +492,13 @@ class ApplicationService:
                 id=application.id,
                 app_id=application.app_id,
                 user_id=application.user_id,
-                student_id=application.student_data.get('student_id') if application.student_data else None,
+                student_id=user.nycu_id if user else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 status=application.status,
                 status_name=application.status_name,
                 academic_year=application.academic_year,
-                semester=application.semester,
+                semester=self._convert_semester_to_string(application.semester),
                 student_data=application.student_data,
                 submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
                 agree_terms=application.agree_terms,
@@ -447,7 +573,7 @@ class ApplicationService:
                     matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                     if matching_file:
                         # 更新現有文件資訊
-                        base_url = f"http://localhost:8000{settings.api_v1_str}"
+                        base_url = f"{settings.base_url}{settings.api_v1_str}"
                         existing_doc.update({
                             "file_id": matching_file.id,
                             "filename": matching_file.filename,
@@ -482,6 +608,9 @@ class ApplicationService:
         if not application.is_editable:
             raise ValidationError("Application cannot be edited in current status")
         
+        # Store old subtype list for comparison
+        old_subtype_list = application.scholarship_subtype_list.copy() if application.scholarship_subtype_list else []
+        
         # 更新表單資料
         if update_data.form_data:
             # Serialize form data to handle datetime objects properly
@@ -495,8 +624,31 @@ class ApplicationService:
         if update_data.is_renewal is not None:
             application.is_renewal = update_data.is_renewal
             
+        # 更新子項目列表（如果提供）
+        if update_data.scholarship_subtype_list is not None:
+            application.scholarship_subtype_list = update_data.scholarship_subtype_list
+            
         await self.db.commit()
         await self.db.refresh(application)
+        
+        # Clone bank account proof document when saving draft or updating application
+        # This ensures the document is available in the application
+        logger.info(f"Cloning bank account proof document for application {application.app_id}")
+        try:
+            await self._clone_user_profile_documents(application, current_user)
+        except Exception as e:
+            logger.warning(f"Failed to clone bank account proof document for application {application.app_id}: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Check if subtype list changed and re-clone fixed documents if necessary
+        new_subtype_list = application.scholarship_subtype_list.copy() if application.scholarship_subtype_list else []
+        if old_subtype_list != new_subtype_list:
+            logger.info(f"Subtype list changed from {old_subtype_list} to {new_subtype_list}, re-cloning fixed documents")
+            try:
+                await self._clone_user_profile_documents(application, current_user)
+            except Exception as e:
+                logger.warning(f"Failed to re-clone fixed documents after subtype change for application {application.app_id}: {e}")
         
         return application
     
@@ -586,6 +738,9 @@ class ApplicationService:
         # 驗證所有必填欄位
         form_data = ApplicationFormData(**application.submitted_form_data)
         
+        # 處理銀行帳戶證明文件 clone（從個人資料複製到申請）
+        await self._clone_user_profile_documents(application, user)
+        
         # 更新狀態為已提交
         application.status = ApplicationStatus.SUBMITTED.value
         application.status_name = "已提交"
@@ -599,7 +754,7 @@ class ApplicationService:
         try:
             await self.emailService.send_submission_notification(application, db=self.db)
         except Exception as e:
-            print(f"[Email Error] {e}")
+            logger.error(f"Failed to send submission notification email: {e}")
         
         # 整合文件資訊到 submitted_form_data.documents
         integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
@@ -616,7 +771,7 @@ class ApplicationService:
             integrated_documents = []
             for file in application.files:
                 # 生成文件 URL
-                base_url = f"http://localhost:8000{settings.api_v1_str}"
+                base_url = f"{settings.base_url}{settings.api_v1_str}"
                 file_path = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
                 download_url = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
                 
@@ -646,7 +801,7 @@ class ApplicationService:
                     matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                     if matching_file:
                         # 更新現有文件資訊
-                        base_url = f"http://localhost:8000{settings.api_v1_str}"
+                        base_url = f"{settings.base_url}{settings.api_v1_str}"
                         existing_doc.update({
                             "file_id": matching_file.id,
                             "filename": matching_file.filename,
@@ -667,7 +822,7 @@ class ApplicationService:
             'id': application.id,
             'app_id': application.app_id,
             'user_id': application.user_id,
-            'student_id': application.student_data.get('student_id') if application.student_data else None,
+            'student_id': self._get_student_id_from_user(user),
             'scholarship_type_id': application.scholarship_type_id,
             'scholarship_subtype_list': application.scholarship_subtype_list,
             'status': application.status,
@@ -726,7 +881,8 @@ class ApplicationService:
         # Build query based on user role
         query = select(Application).options(
             selectinload(Application.files),
-            selectinload(Application.scholarship)
+            selectinload(Application.scholarship),
+            selectinload(Application.user)  # Eagerly load user to avoid N+1 queries
         )
         
         if current_user.role == UserRole.PROFESSOR:
@@ -780,7 +936,7 @@ class ApplicationService:
                         matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                         if matching_file:
                             # 更新現有文件資訊
-                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            base_url = f"{settings.base_url}{settings.api_v1_str}"
                             existing_doc.update({
                                 "file_id": matching_file.id,
                                 "filename": matching_file.filename,
@@ -793,18 +949,21 @@ class ApplicationService:
                                 "object_name": matching_file.object_name
                             })
             
+            # Use eagerly loaded user (already loaded with selectinload)
+            app_user = application.user
+            
             # 創建響應數據
             app_data = ApplicationListResponse(
                 id=application.id,
                 app_id=application.app_id,
                 user_id=application.user_id,
-                student_id=application.student_data.get('student_id') if application.student_data else None,
+                student_id=app_user.nycu_id if app_user else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 status=application.status,
                 status_name=application.status_name,
                 academic_year=application.academic_year,
-                semester=application.semester,
+                semester=self._convert_semester_to_string(application.semester),
                 student_data=application.student_data,
                 submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
                 agree_terms=application.agree_terms,
@@ -975,7 +1134,7 @@ class ApplicationService:
         try:
             await self.emailService.send_to_college_reviewers(application, db=self.db)
         except Exception as e:
-            print(f"[Email Error] {e}")
+            logger.error(f"Failed to send college reviewer notification email: {e}")
         
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id)
@@ -1099,7 +1258,8 @@ class ApplicationService:
         # Build query based on user role
         query = select(Application).options(
             selectinload(Application.files),
-            selectinload(Application.scholarship)
+            selectinload(Application.scholarship),
+            selectinload(Application.user)  # Eagerly load user to avoid N+1 queries
         )
         
         if current_user.role == UserRole.STUDENT:
@@ -1151,7 +1311,7 @@ class ApplicationService:
                         matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                         if matching_file:
                             # 更新現有文件資訊
-                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            base_url = f"{settings.base_url}{settings.api_v1_str}"
                             existing_doc.update({
                                 "file_id": matching_file.id,
                                 "filename": matching_file.filename,
@@ -1164,18 +1324,21 @@ class ApplicationService:
                                 "object_name": matching_file.object_name
                             })
             
+            # Use eagerly loaded user (already loaded with selectinload)
+            app_user = application.user
+            
             # 創建響應數據
             app_data = ApplicationListResponse(
                 id=application.id,
                 app_id=application.app_id,
                 user_id=application.user_id,
-                student_id=application.student_data.get('student_id') if application.student_data else None,
+                student_id=app_user.nycu_id if app_user else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 status=application.status,
                 status_name=application.status_name,
                 academic_year=application.academic_year,
-                semester=application.semester,
+                semester=self._convert_semester_to_string(application.semester),
                 student_data=application.student_data,
                 submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
                 agree_terms=application.agree_terms,
@@ -1236,10 +1399,199 @@ class ApplicationService:
                             minio_service.delete_file(object_name)
                     except Exception as e:
                         # Log error but continue with deletion
-                        print(f"Error deleting file {doc['file_path']}: {e}")
+                        logger.error(f"Error deleting file {doc['file_path']}: {e}")
         
         # Delete the application
         await self.db.delete(application)
         await self.db.commit()
         
         return True
+    
+    async def _clone_user_profile_documents(self, application: Application, user: User):
+        """
+        Clone all fixed documents from user profile to application-specific paths
+        在申請提交或儲存草稿時，將個人資料中的固定文件複製到申請專屬路徑
+        支援：銀行文件、其他固定文件
+        """
+        from app.services.user_profile_service import UserProfileService
+        from app.models.application import ApplicationFile
+        from sqlalchemy import select
+        
+        user_profile_service = UserProfileService(self.db)
+        cloned_documents = []
+        
+        try:
+            # 獲取用戶的個人資料
+            user_profile = await user_profile_service.get_user_profile(user.id)
+            
+            if not user_profile:
+                logger.debug(f"No user profile found for user {user.id}")
+                return
+            
+            # 定義要複製的固定文件類型
+            fixed_documents = [
+                {
+                    'file_type': 'bank_account_proof',
+                    'profile_field': 'bank_document_photo_url',
+                    'object_name_field': 'bank_document_object_name',
+                    'document_name': '存摺封面'
+                }
+                # 未來可以新增更多固定文件類型，例如：
+                # {
+                #     'file_type': 'id_card',
+                #     'profile_field': 'id_card_photo_url',
+                #     'object_name_field': 'id_card_object_name',
+                #     'document_name': '身份證件'
+                # }
+            ]
+            
+            for doc_config in fixed_documents:
+                # 獲取文件 URL
+                doc_url = getattr(user_profile, doc_config['profile_field'], None)
+                if not doc_url:
+                    logger.debug(f"No {doc_config['file_type']} found for user {user.id}")
+                    continue
+                
+                # Check if the document is already cloned to avoid duplication
+                existing_file_stmt = select(ApplicationFile).where(
+                    ApplicationFile.application_id == application.id,
+                    ApplicationFile.file_type == doc_config['file_type']
+                )
+                existing_file_result = await self.db.execute(existing_file_stmt)
+                existing_file = existing_file_result.scalar_one_or_none()
+                
+                if existing_file:
+                    logger.debug(f"{doc_config['document_name']} already cloned for application {application.app_id}, skipping")
+                    continue
+                
+                logger.info(f"Cloning {doc_config['document_name']} for application {application.app_id}")
+                
+                # 使用儲存的 object_name，如果沒有則從 URL 提取
+                if hasattr(user_profile, doc_config['object_name_field']):
+                    source_object_name = getattr(user_profile, doc_config['object_name_field'], None)
+                    if source_object_name:
+                        filename = source_object_name.split('/')[-1]
+                        file_extension = filename.split('.')[-1] if '.' in filename else 'jpg'
+                    else:
+                        # 從 URL 提取
+                        filename = doc_url.split('/')[-1].split('?')[0]
+                        file_extension = filename.split('.')[-1] if '.' in filename else 'jpg'
+                        source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
+                else:
+                    # 從 URL 提取（舊的邏輯作為備用）
+                    filename = doc_url.split('/')[-1].split('?')[0]
+                    file_extension = filename.split('.')[-1] if '.' in filename else 'jpg'
+                    source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
+            
+                
+                # 使用 MinIO 服務複製文件到申請路徑
+                new_object_name = minio_service.clone_file_to_application(
+                    source_object_name=source_object_name,
+                    application_id=application.app_id,
+                    file_type=doc_config['file_type']
+                )
+                
+                logger.debug(f"File cloned from {source_object_name} to {new_object_name}")
+                
+                # 創建 ApplicationFile 記錄 - 與動態上傳文件相同處理
+                application_file = ApplicationFile(
+                    application_id=application.id,
+                    file_type=doc_config['file_type'],
+                    filename=filename,
+                    original_filename=filename,
+                    file_size=0,  # 大小會在實際使用時獲取
+                    content_type="application/octet-stream",  # 會在實際使用時更新
+                    object_name=new_object_name,
+                    is_verified=True,  # 固定文件預設已驗證
+                    uploaded_at=datetime.now(timezone.utc)
+                )
+                
+                self.db.add(application_file)
+                await self.db.flush()  # 確保獲得 application_file.id
+                
+                cloned_documents.append({
+                    'file_type': doc_config['file_type'],
+                    'document_name': doc_config['document_name'],
+                    'file_id': application_file.id,
+                    'object_name': new_object_name
+                })
+            
+            # 批量更新申請的 form_data
+            if cloned_documents:
+                form_data = application.submitted_form_data or {}
+                
+                # 生成文件訪問 URL
+                from app.core.config import settings
+                from app.core.security import create_access_token
+                
+                token_data = {"sub": str(user.id)}
+                access_token = create_access_token(token_data)
+                base_url = f"{settings.base_url}{settings.api_v1_str}"
+                
+                # 確保 documents 欄位存在
+                if 'documents' not in form_data:
+                    form_data['documents'] = []
+                
+                # 更新或新增複製的文件資訊
+                for cloned_doc in cloned_documents:
+                    doc_info = {
+                        "document_id": cloned_doc['file_type'],
+                        "document_type": cloned_doc['file_type'],
+                        "document_name": cloned_doc['document_name'],
+                        "file_id": cloned_doc['file_id'],
+                        "filename": cloned_doc['object_name'].split('/')[-1],
+                        "original_filename": cloned_doc['object_name'].split('/')[-1],
+                        "file_path": f"{base_url}/files/applications/{application.id}/files/{cloned_doc['file_id']}?token={access_token}",
+                        "download_url": f"{base_url}/files/applications/{application.id}/files/{cloned_doc['file_id']}/download?token={access_token}",
+                        "object_name": cloned_doc['object_name'],
+                        "is_verified": True,
+                        "upload_time": datetime.now(timezone.utc).isoformat()
+                    }
+                    
+                    # 檢查是否已存在，如果存在則更新，否則新增
+                    doc_found = False
+                    for i, doc in enumerate(form_data['documents']):
+                        if doc.get('document_type') == cloned_doc['file_type']:
+                            form_data['documents'][i] = doc_info
+                            doc_found = True
+                            break
+                    
+                    if not doc_found:
+                        form_data['documents'].append(doc_info)
+                
+                # 更新申請的 form_data
+                application.submitted_form_data = form_data
+                
+                # 提交資料庫變更
+                await self.db.commit()
+                await self.db.refresh(application)
+                
+                logger.info(f"{len(cloned_documents)} documents successfully cloned and linked to application {application.app_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to clone user profile documents for application {application.app_id}: {e}")
+            # 不拋出異常，避免影響申請提交流程
+            import traceback
+            traceback.print_exc()
+    
+    def _get_document_display_name(self, file_type: str) -> str:
+        """
+        獲取文件類型的顯示名稱
+        
+        Args:
+            file_type: 文件類型代碼
+            
+        Returns:
+            文件顯示名稱
+        """
+        document_type_names = {
+            'bank_account_proof': '存摺封面',
+            'transcript': '成績單',
+            'certificate': '證書',
+            'recommendation_letter': '推薦信',
+            'personal_statement': '個人陳述',
+            'financial_statement': '財力證明',
+            'other': '其他文件'
+        }
+        
+        return document_type_names.get(file_type, file_type)
