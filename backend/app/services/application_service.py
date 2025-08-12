@@ -474,7 +474,7 @@ class ApplicationService:
                         matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                         if matching_file:
                             # 更新現有文件資訊
-                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            base_url = f"{settings.base_url}{settings.api_v1_str}"
                             existing_doc.update({
                                 "file_id": matching_file.id,
                                 "filename": matching_file.filename,
@@ -573,7 +573,7 @@ class ApplicationService:
                     matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                     if matching_file:
                         # 更新現有文件資訊
-                        base_url = f"http://localhost:8000{settings.api_v1_str}"
+                        base_url = f"{settings.base_url}{settings.api_v1_str}"
                         existing_doc.update({
                             "file_id": matching_file.id,
                             "filename": matching_file.filename,
@@ -771,7 +771,7 @@ class ApplicationService:
             integrated_documents = []
             for file in application.files:
                 # 生成文件 URL
-                base_url = f"http://localhost:8000{settings.api_v1_str}"
+                base_url = f"{settings.base_url}{settings.api_v1_str}"
                 file_path = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
                 download_url = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
                 
@@ -801,7 +801,7 @@ class ApplicationService:
                     matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                     if matching_file:
                         # 更新現有文件資訊
-                        base_url = f"http://localhost:8000{settings.api_v1_str}"
+                        base_url = f"{settings.base_url}{settings.api_v1_str}"
                         existing_doc.update({
                             "file_id": matching_file.id,
                             "filename": matching_file.filename,
@@ -936,7 +936,7 @@ class ApplicationService:
                         matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                         if matching_file:
                             # 更新現有文件資訊
-                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            base_url = f"{settings.base_url}{settings.api_v1_str}"
                             existing_doc.update({
                                 "file_id": matching_file.id,
                                 "filename": matching_file.filename,
@@ -1311,7 +1311,7 @@ class ApplicationService:
                         matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
                         if matching_file:
                             # 更新現有文件資訊
-                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            base_url = f"{settings.base_url}{settings.api_v1_str}"
                             existing_doc.update({
                                 "file_id": matching_file.id,
                                 "filename": matching_file.filename,

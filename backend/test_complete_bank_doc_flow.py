@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timezone
 
 # Add the backend directory to Python path
-sys.path.insert(0, '/home/jotp/scholarship-system/backend')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.core.init_db import initDatabase
 from app.db.session import AsyncSessionLocal

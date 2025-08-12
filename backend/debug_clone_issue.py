@@ -160,7 +160,7 @@ async def debug_clone_issue():
             
             token_data = {"sub": str(user.id)}
             access_token = create_access_token(token_data)
-            base_url = f"http://localhost:8000{settings.api_v1_str}"
+            base_url = f"{settings.base_url}{settings.api_v1_str}"
             
             doc_info = {
                 "document_id": 'bank_account_proof',

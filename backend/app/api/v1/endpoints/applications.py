@@ -280,7 +280,7 @@ async def get_application_files(
             
             # Generate backend proxy URLs instead of MinIO direct URLs
             if file.object_name:
-                base_url = f"http://localhost:8000{settings.api_v1_str}"
+                base_url = f"{settings.base_url}{settings.api_v1_str}"
                 file_dict["file_path"] = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
                 file_dict["download_url"] = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
             else:
