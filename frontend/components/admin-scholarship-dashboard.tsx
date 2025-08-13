@@ -505,6 +505,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                   <TableHead>申請人</TableHead>
                   <TableHead>學號</TableHead>
                   {showSubTypes && <TableHead>子項目</TableHead>}
+                  <TableHead>指派教授</TableHead>
                   <TableHead>狀態</TableHead>
                   <TableHead>提交時間</TableHead>
                   <TableHead>等待天數</TableHead>
@@ -534,6 +535,27 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                         )}
                       </TableCell>
                     )}
+                    <TableCell>
+                      {app.professor_id ? (
+                        <div className="flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          <span className="text-sm">
+                            {app.professor?.name || app.professor_id}
+                          </span>
+                          {app.professor?.nycu_id && (
+                            <Badge variant="outline" className="text-xs">
+                              {app.professor.nycu_id}
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        app.scholarship_configuration?.requires_professor_recommendation && (
+                          <Badge variant="outline" className="text-orange-600">
+                            待指派
+                          </Badge>
+                        )
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant={
@@ -1003,6 +1025,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
         }}
         application={selectedApplicationForDetail ? selectedApplicationForDetail as Application : null}
         locale={locale}
+        user={user}
       />
 
       {/* 獎學金管理面板 */}

@@ -15,6 +15,13 @@ import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
 import api from '@/lib/api'
 import { 
+  validateAdvisorInfo, 
+  validateBankInfo, 
+  validateAdvisorEmail,
+  sanitizeAdvisorInfo, 
+  sanitizeBankInfo 
+} from '@/lib/validations/user-profile'
+import { 
   User, 
   Building2, 
   Phone, 
@@ -99,6 +106,12 @@ export default function UserProfileManagement() {
     downloadUrl?: string
   } | null>(null)
   const [showPreview, setShowPreview] = useState(false)
+  
+  // Validation states
+  const [advisorErrors, setAdvisorErrors] = useState<string[]>([])
+  const [bankErrors, setBankErrors] = useState<string[]>([])
+  const [emailValidationError, setEmailValidationError] = useState<string>('')
+  
   const { toast } = useToast()
 
   useEffect(() => {
@@ -195,8 +208,71 @@ export default function UserProfileManagement() {
     }
   }
 
+  // Validation functions
+  const validateAdvisorData = () => {
+    const advisorData = {
+      advisor_name: editingProfile.advisor_name,
+      advisor_email: editingProfile.advisor_email,
+      advisor_nycu_id: editingProfile.advisor_nycu_id
+    }
+    
+    const validation = validateAdvisorInfo(advisorData)
+    setAdvisorErrors(validation.errors)
+    return validation.isValid
+  }
+
+  const validateBankData = () => {
+    const bankData = {
+      bank_code: editingProfile.bank_code,
+      account_number: editingProfile.account_number
+    }
+    
+    const validation = validateBankInfo(bankData)
+    setBankErrors(validation.errors)
+    return validation.isValid
+  }
+
+  // Real-time email validation
+  const handleAdvisorEmailChange = (email: string) => {
+    setEditingProfile({
+      ...editingProfile,
+      advisor_email: email
+    })
+    
+    // Clear previous errors
+    setEmailValidationError('')
+    if (advisorErrors.length > 0) {
+      setAdvisorErrors([])
+    }
+    
+    // Only validate if user has entered something
+    if (email.trim() !== '') {
+      const validation = validateAdvisorEmail(email)
+      if (!validation.isValid) {
+        setEmailValidationError(validation.errors[0] || '')
+      }
+    }
+  }
+
   const handleSave = async (section: string) => {
     if (!editingProfile) return
+    
+    // Validate data before saving
+    let isValid = true
+    if (section === 'advisor') {
+      isValid = validateAdvisorData()
+    } else if (section === 'bank') {
+      isValid = validateBankData()
+    }
+    
+    if (!isValid) {
+      toast({
+        title: "驗證失敗",
+        description: "請檢查並修正表單中的錯誤",
+        variant: "destructive"
+      })
+      return
+    }
     
     setSaving(true)
     try {
@@ -206,18 +282,24 @@ export default function UserProfileManagement() {
       switch (section) {
         case 'bank':
           endpoint = '/user-profiles/me/bank-info'
-          data = {
+          const bankData = sanitizeBankInfo({
             bank_code: editingProfile.bank_code,
-            account_number: editingProfile.account_number,
+            account_number: editingProfile.account_number
+          })
+          data = {
+            ...bankData,
             change_reason: "使用者更新銀行帳戶資訊"
           }
           break
         case 'advisor':
           endpoint = '/user-profiles/me/advisor-info'
-          data = {
+          const advisorData = sanitizeAdvisorInfo({
             advisor_name: editingProfile.advisor_name,
             advisor_email: editingProfile.advisor_email,
-            advisor_nycu_id: editingProfile.advisor_nycu_id,
+            advisor_nycu_id: editingProfile.advisor_nycu_id
+          })
+          data = {
+            ...advisorData,
             change_reason: "使用者更新指導教授資訊"
           }
           break
@@ -655,6 +737,20 @@ export default function UserProfileManagement() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Bank validation errors display */}
+              {bankErrors.length > 0 && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="space-y-1">
+                      {bankErrors.map((error, index) => (
+                        <div key={index}>{error}</div>
+                      ))}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="bank_code">銀行代碼</Label>
@@ -662,10 +758,17 @@ export default function UserProfileManagement() {
                     id="bank_code"
                     placeholder="例：808"
                     value={editingProfile.bank_code || ''}
-                    onChange={(e) => setEditingProfile({
-                      ...editingProfile,
-                      bank_code: e.target.value
-                    })}
+                    onChange={(e) => {
+                      setEditingProfile({
+                        ...editingProfile,
+                        bank_code: e.target.value
+                      })
+                      // Clear bank errors when user starts typing
+                      if (bankErrors.length > 0) {
+                        setBankErrors([])
+                      }
+                    }}
+                    className={bankErrors.some(error => error.includes('銀行代碼')) ? 'border-red-500' : ''}
                   />
                 </div>
                 <div className="space-y-2">
@@ -674,10 +777,17 @@ export default function UserProfileManagement() {
                     id="account_number"
                     placeholder="請輸入完整帳戶號碼"
                     value={editingProfile.account_number || ''}
-                    onChange={(e) => setEditingProfile({
-                      ...editingProfile,
-                      account_number: e.target.value
-                    })}
+                    onChange={(e) => {
+                      setEditingProfile({
+                        ...editingProfile,
+                        account_number: e.target.value
+                      })
+                      // Clear bank errors when user starts typing
+                      if (bankErrors.length > 0) {
+                        setBankErrors([])
+                      }
+                    }}
+                    className={bankErrors.some(error => error.includes('帳戶號碼')) ? 'border-red-500' : ''}
                   />
                 </div>
               </div>
@@ -788,6 +898,20 @@ export default function UserProfileManagement() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Advisor validation errors display */}
+              {advisorErrors.length > 0 && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <div className="space-y-1">
+                      {advisorErrors.map((error, index) => (
+                        <div key={index}>{error}</div>
+                      ))}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="advisor_name">指導教授 姓名</Label>
@@ -795,10 +919,17 @@ export default function UserProfileManagement() {
                     id="advisor_name"
                     placeholder="例：王小明"
                     value={editingProfile.advisor_name || ''}
-                    onChange={(e) => setEditingProfile({
-                      ...editingProfile,
-                      advisor_name: e.target.value
-                    })}
+                    onChange={(e) => {
+                      setEditingProfile({
+                        ...editingProfile,
+                        advisor_name: e.target.value
+                      })
+                      // Clear advisor errors when user starts typing
+                      if (advisorErrors.length > 0) {
+                        setAdvisorErrors([])
+                      }
+                    }}
+                    className={advisorErrors.some(error => error.includes('姓名')) ? 'border-red-500' : ''}
                   />
                 </div>
                 <div className="space-y-2">
@@ -808,11 +939,15 @@ export default function UserProfileManagement() {
                     type="email"
                     placeholder="professor@nycu.edu.tw"
                     value={editingProfile.advisor_email || ''}
-                    onChange={(e) => setEditingProfile({
-                      ...editingProfile,
-                      advisor_email: e.target.value
-                    })}
+                    onChange={(e) => handleAdvisorEmailChange(e.target.value)}
+                    className={emailValidationError || advisorErrors.some(error => error.includes('Email')) ? 'border-red-500' : ''}
                   />
+                  {emailValidationError && (
+                    <div className="text-sm text-red-600 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      {emailValidationError}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="advisor_nycu_id">指導教授 學校工號</Label>
@@ -820,10 +955,17 @@ export default function UserProfileManagement() {
                     id="advisor_nycu_id"
                     placeholder="例：professor123"
                     value={editingProfile.advisor_nycu_id || ''}
-                    onChange={(e) => setEditingProfile({
-                      ...editingProfile,
-                      advisor_nycu_id: e.target.value
-                    })}
+                    onChange={(e) => {
+                      setEditingProfile({
+                        ...editingProfile,
+                        advisor_nycu_id: e.target.value
+                      })
+                      // Clear advisor errors when user starts typing
+                      if (advisorErrors.length > 0) {
+                        setAdvisorErrors([])
+                      }
+                    }}
+                    className={advisorErrors.some(error => error.includes('學校工號')) ? 'border-red-500' : ''}
                   />
                 </div>
               </div>

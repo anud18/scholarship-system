@@ -164,6 +164,7 @@ async def update_my_advisor_info(
     
     # Convert to UserProfileUpdate
     update_data = UserProfileUpdate(
+        advisor_name=advisor_data.advisor_name,
         advisor_email=advisor_data.advisor_email,
         advisor_nycu_id=advisor_data.advisor_nycu_id
     )
@@ -180,6 +181,7 @@ async def update_my_advisor_info(
         "success": True,
         "message": "指導教授資訊更新成功",
         "data": {
+            "advisor_name": profile.advisor_name,
             "advisor_email": profile.advisor_email,
             "advisor_nycu_id": profile.advisor_nycu_id,
             "has_advisor_info": profile.has_advisor_info

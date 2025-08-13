@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 from app.db.deps import get_db
 from app.schemas.common import MessageResponse, PaginatedResponse, SystemSettingSchema, EmailTemplateSchema, ApiResponse
-from app.schemas.application import ApplicationListResponse
+from app.schemas.application import ApplicationListResponse, ApplicationResponse, ProfessorAssignmentRequest
 from app.schemas.scholarship import (
     ScholarshipSubTypeConfigCreate, ScholarshipSubTypeConfigUpdate, ScholarshipSubTypeConfigResponse,
     ScholarshipRuleCreate, ScholarshipRuleUpdate, ScholarshipRuleResponse, ScholarshipRuleFilter,
@@ -31,6 +31,7 @@ from app.services.system_setting_service import SystemSettingService, EmailTempl
 from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipSubType, ScholarshipRule
 from app.models.enums import Semester
 from app.models.user import AdminScholarship
+from app.services.application_service import ApplicationService
 
 router = APIRouter()
 
@@ -2691,4 +2692,66 @@ async def get_available_years(
         success=True,
         message=f"Retrieved {len(years)} available years",
         data=list(years)
-    ) 
+    )
+
+
+@router.get("/professors", response_model=ApiResponse[List[Dict[str, Any]]])
+async def get_available_professors(
+    search: Optional[str] = Query(None, description="Search by name or NYCU ID"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get list of available professors for assignment
+    - College admins see only professors in their college
+    - Admin/Super Admin see all professors
+    """
+    try:
+        service = ApplicationService(db)
+        professors = await service.get_available_professors(current_user, search)
+        
+        return ApiResponse(
+            success=True,
+            message=f"Retrieved {len(professors)} professors",
+            data=professors
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching professors: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch professors: {str(e)}"
+        )
+
+
+@router.put("/applications/{application_id}/assign-professor", response_model=ApiResponse[ApplicationResponse])
+async def assign_professor_to_application(
+    application_id: int,
+    request: ProfessorAssignmentRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Assign a professor to review an application"""
+    try:
+        service = ApplicationService(db)
+        application = await service.assign_professor(
+            application_id=application_id,
+            professor_nycu_id=request.professor_nycu_id,
+            assigned_by=current_user
+        )
+        
+        # Convert to response format
+        response_data = ApplicationResponse.from_orm(application)
+        
+        return ApiResponse(
+            success=True,
+            message=f"Professor {request.professor_nycu_id} assigned to application {application.app_id}",
+            data=response_data
+        )
+        
+    except Exception as e:
+        logger.error(f"Error assigning professor: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to assign professor: {str(e)}"
+        ) 

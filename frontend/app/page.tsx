@@ -21,7 +21,7 @@ import {
 import { EnhancedStudentPortal } from "@/components/enhanced-student-portal"
 import { AdminScholarshipDashboard } from "@/components/admin-scholarship-dashboard"
 import { AdminManagementInterface } from "@/components/admin-management-interface"
-import { ProfessorInterface } from "@/components/professor-interface"
+import { ProfessorReviewComponent } from "@/components/professor-review-component"
 import { CollegeDashboard } from "@/components/college-dashboard"
 import { AdminDashboard } from "@/components/admin-dashboard"
 import { Header } from "@/components/header"
@@ -96,7 +96,7 @@ export default function ScholarshipManagementSystem() {
 
   // Set initial active tab based on user role
   useEffect(() => {
-    if (activeTab === "main" && user && (user.role === "professor" || user.role === "college")) {
+    if (activeTab === "main" && user && user.role === "college") {
       setActiveTab("dashboard")
     }
   }, [activeTab, user])
@@ -155,7 +155,7 @@ export default function ScholarshipManagementSystem() {
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
           >
             <Users className="h-4 w-4" />
-            指導學生管理
+            獎學金申請審查
           </TabsTrigger>
         </TabsList>
       )
@@ -280,8 +280,8 @@ export default function ScholarshipManagementSystem() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           {getTabsList()}
 
-          {/* 儀表板 - 只有 admin、professor 和 college 可見 */}
-          {(user.role === "admin" || user.role === "professor" || user.role === "college" || user.role === "super_admin") && (
+          {/* 儀表板 - 只有 admin 和 college 可見 */}
+          {(user.role === "admin" || user.role === "college" || user.role === "super_admin") && (
             <TabsContent value="dashboard" className="space-y-4">
               <AdminDashboard
                 stats={stats}
@@ -308,7 +308,7 @@ export default function ScholarshipManagementSystem() {
               ...user,
               studentType: "undergraduate" // 默認值，實際應該從用戶數據中獲取
             } as User & { studentType: "undergraduate" }} locale={locale} />}
-            {user.role === "professor" && <ProfessorInterface user={user} />}
+            {user.role === "professor" && <ProfessorReviewComponent user={user} />}
             {(user.role === "college" || user.role === "admin" || user.role === "super_admin") && <AdminScholarshipDashboard user={user} />}
           </TabsContent>
 

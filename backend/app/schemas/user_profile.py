@@ -4,7 +4,8 @@ User Profile schemas for API requests and responses
 
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, EmailStr, Field, HttpUrl
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator, ValidationError
+import re
 
 
 class BankInfoBase(BaseModel):
@@ -16,8 +17,23 @@ class BankInfoBase(BaseModel):
 class AdvisorInfoBase(BaseModel):
     """Base advisor information schema"""
     advisor_name: Optional[str] = Field(None, max_length=100, description="指導教授姓名")
-    advisor_email: Optional[EmailStr] = Field(None, description="指導教授Email")
+    advisor_email: Optional[str] = Field(None, description="指導教授Email")
     advisor_nycu_id: Optional[str] = Field(None, max_length=20, description="指導教授NYCU ID")
+    
+    @field_validator('advisor_email', mode='before')
+    @classmethod
+    def validate_email(cls, v):
+        # Convert empty string to None
+        if v == '' or v is None:
+            return None
+        
+        # If it's not empty, validate email format
+        if v:
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, v):
+                raise ValueError('Invalid email format')
+        
+        return v
 
 
 
@@ -31,8 +47,23 @@ class UserProfileCreate(BaseModel):
     
     # Advisor information
     advisor_name: Optional[str] = None
-    advisor_email: Optional[EmailStr] = None
+    advisor_email: Optional[str] = None
     advisor_nycu_id: Optional[str] = None
+    
+    @field_validator('advisor_email', mode='before')
+    @classmethod
+    def validate_email(cls, v):
+        # Convert empty string to None
+        if v == '' or v is None:
+            return None
+        
+        # If it's not empty, validate email format
+        if v:
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, v):
+                raise ValueError('Invalid email format')
+        
+        return v
     
     # Personal information
     preferred_language: str = "zh-TW"
@@ -50,8 +81,23 @@ class UserProfileUpdate(BaseModel):
     
     # Advisor information
     advisor_name: Optional[str] = Field(None, max_length=100)
-    advisor_email: Optional[EmailStr] = None
+    advisor_email: Optional[str] = None
     advisor_nycu_id: Optional[str] = Field(None, max_length=20)
+    
+    @field_validator('advisor_email', mode='before')
+    @classmethod
+    def validate_email(cls, v):
+        # Convert empty string to None
+        if v == '' or v is None:
+            return None
+        
+        # If it's not empty, validate email format
+        if v:
+            email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_pattern, v):
+                raise ValueError('Invalid email format')
+        
+        return v
     
     # Personal information
     preferred_language: Optional[str] = Field(None, max_length=10)

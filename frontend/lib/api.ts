@@ -1621,7 +1621,7 @@ class ApiClient {
     },
 
     // Get available sub-types for a scholarship type
-    getScholarshipSubTypes: async (scholarshipTypeId: number): Promise<ApiResponse<SubTypeOption[]>> => {
+    getScholarshipRuleSubTypes: async (scholarshipTypeId: number): Promise<ApiResponse<SubTypeOption[]>> => {
       return this.request(`/scholarship-rules/scholarship-types/${scholarshipTypeId}/sub-types`);
     },
 
@@ -1738,6 +1738,28 @@ class ApiClient {
       return this.request(`/scholarship-configurations/configurations/${id}/duplicate`, {
         method: 'POST',
         body: JSON.stringify(targetData)
+      })
+    },
+
+    // Professor management endpoints
+    getProfessors: async (search?: string): Promise<ApiResponse<Array<{
+      nycu_id: string;
+      name: string;
+      dept_code: string;
+      dept_name: string;
+      email?: string;
+    }>>> => {
+      const params = search ? { search } : {}
+      return this.request('/admin/professors', {
+        method: 'GET',
+        params
+      })
+    },
+
+    assignProfessor: async (applicationId: number, professorNycuId: string): Promise<ApiResponse<Application>> => {
+      return this.request(`/admin/applications/${applicationId}/assign-professor`, {
+        method: 'PUT',
+        body: JSON.stringify({ professor_nycu_id: professorNycuId })
       })
     },
   }
@@ -1920,6 +1942,69 @@ class ApiClient {
       enroll_types: Array<{ degree_id: number; code: string; name: string; name_en?: string; degree_name?: string }>
     }>> => {
       return this.request('/reference-data/all')
+    }
+  }
+
+  // Professor review endpoints
+  professor = {
+    // Get applications requiring professor review
+    getApplications: async (statusFilter?: string): Promise<ApiResponse<Application[]>> => {
+      const params = statusFilter ? `?status_filter=${statusFilter}` : '';
+      return this.request(`/professor/applications${params}`);
+    },
+
+    // Get existing professor review for an application
+    getReview: async (applicationId: number): Promise<ApiResponse<any>> => {
+      return this.request(`/professor/applications/${applicationId}/review`);
+    },
+
+    // Submit professor review for an application
+    submitReview: async (applicationId: number, reviewData: {
+      recommendation?: string;
+      items: Array<{
+        sub_type_code: string;
+        is_recommended: boolean;
+        comments?: string;
+      }>;
+    }): Promise<ApiResponse<any>> => {
+      return this.request(`/professor/applications/${applicationId}/review`, {
+        method: 'POST',
+        body: JSON.stringify(reviewData),
+      });
+    },
+
+    // Update existing professor review
+    updateReview: async (applicationId: number, reviewId: number, reviewData: {
+      recommendation?: string;
+      items: Array<{
+        sub_type_code: string;
+        is_recommended: boolean;
+        comments?: string;
+      }>;
+    }): Promise<ApiResponse<any>> => {
+      return this.request(`/professor/applications/${applicationId}/review/${reviewId}`, {
+        method: 'PUT',
+        body: JSON.stringify(reviewData),
+      });
+    },
+
+    // Get available sub-types for an application
+    getSubTypes: async (applicationId: number): Promise<ApiResponse<Array<{
+      value: string;
+      label: string;
+      label_en: string;
+      is_default: boolean;
+    }>>> => {
+      return this.request(`/professor/applications/${applicationId}/sub-types`);
+    },
+
+    // Get basic review statistics
+    getStats: async (): Promise<ApiResponse<{
+      pending_reviews: number;
+      completed_reviews: number;
+      overdue_reviews: number;
+    }>> => {
+      return this.request('/professor/stats');
     }
   }
 }

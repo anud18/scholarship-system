@@ -18,7 +18,7 @@ from app.core.exceptions import (
 )
 from app.models.user import User, UserRole
 from app.models.application import Application, ApplicationStatus, ApplicationReview, ProfessorReview, ProfessorReviewItem, Semester
-from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
+from app.models.scholarship import ScholarshipType, ScholarshipConfiguration, SubTypeSelectionMode
 from app.schemas.application import (
     ApplicationCreate, ApplicationUpdate, ApplicationResponse,
     ApplicationListResponse, ApplicationStatusUpdate,
@@ -1595,3 +1595,541 @@ class ApplicationService:
         }
         
         return document_type_names.get(file_type, file_type)
+    
+    # Professor Review Methods
+    async def get_professor_pending_applications(
+        self, 
+        professor_id: int, 
+        status_filter: Optional[str] = None
+    ) -> List[ApplicationResponse]:
+        """Get applications requiring professor review"""
+        try:
+            # Build query for applications that need professor review
+            query = select(Application).options(
+                selectinload(Application.scholarship_type_ref),
+                selectinload(Application.scholarship_configuration),
+                selectinload(Application.professor_reviews),
+                selectinload(Application.student)
+            ).join(
+                Application.scholarship_configuration
+            ).where(
+                # Only applications that require professor recommendation
+                Application.scholarship_configuration.has(
+                    ScholarshipConfiguration.requires_professor_recommendation.is_(True)
+                ),
+                # Within professor review period
+                and_(
+                    Application.scholarship_configuration.has(
+                        ScholarshipConfiguration.professor_review_start <= datetime.now(timezone.utc)
+                    ),
+                    Application.scholarship_configuration.has(
+                        ScholarshipConfiguration.professor_review_end >= datetime.now(timezone.utc)
+                    )
+                )
+            )
+            
+            # Apply status filter
+            if status_filter == "pending":
+                query = query.where(
+                    Application.status.in_([
+                        ApplicationStatus.SUBMITTED.value,
+                        ApplicationStatus.PENDING_RECOMMENDATION.value
+                    ])
+                )
+            elif status_filter == "completed":
+                query = query.where(
+                    Application.status == ApplicationStatus.RECOMMENDED.value
+                )
+            # "all" or None shows all applications in review period
+            
+            result = await self.db.execute(query)
+            applications = result.scalars().all()
+            
+            # Filter applications based on professor assignment logic
+            # This could be based on student-professor relationships, department, or other criteria
+            filtered_applications = []
+            for app in applications:
+                if await self.can_professor_review_application(app.id, professor_id):
+                    filtered_applications.append(app)
+            
+            # Convert to response format
+            responses = []
+            for app in filtered_applications:
+                response = await self._build_application_response(app)
+                responses.append(response)
+            
+            return responses
+            
+        except Exception as e:
+            logger.error(f"Error fetching professor applications: {e}")
+            raise
+    
+    async def can_professor_review_application(self, application_id: int, professor_id: int) -> bool:
+        """Check if professor can review this application"""
+        try:
+            # Get the application
+            stmt = select(Application).options(
+                selectinload(Application.scholarship_configuration),
+                selectinload(Application.student)
+            ).where(Application.id == application_id)
+            result = await self.db.execute(stmt)
+            application = result.scalar_one_or_none()
+            
+            if not application or not application.scholarship_configuration:
+                return False
+            
+            # Check if scholarship requires professor recommendation
+            if not application.scholarship_configuration.requires_professor_recommendation:
+                return False
+            
+            # Check if within professor review period
+            config = application.scholarship_configuration
+            now = datetime.now(timezone.utc)
+            
+            # Handle timezone awareness
+            prof_start = config.professor_review_start
+            prof_end = config.professor_review_end
+            
+            if prof_start and prof_start.tzinfo is None:
+                prof_start = prof_start.replace(tzinfo=timezone.utc)
+            if prof_end and prof_end.tzinfo is None:
+                prof_end = prof_end.replace(tzinfo=timezone.utc)
+                
+            if not (prof_start and prof_end and prof_start <= now <= prof_end):
+                # Also check renewal professor review period
+                renewal_start = config.renewal_professor_review_start
+                renewal_end = config.renewal_professor_review_end
+                
+                if renewal_start and renewal_start.tzinfo is None:
+                    renewal_start = renewal_start.replace(tzinfo=timezone.utc)
+                if renewal_end and renewal_end.tzinfo is None:
+                    renewal_end = renewal_end.replace(tzinfo=timezone.utc)
+                    
+                if not (renewal_start and renewal_end and renewal_start <= now <= renewal_end):
+                    return False
+            
+            # TODO: Add actual professor-student relationship logic
+            # For now, allow any professor to review any application
+            # In a real system, this might check:
+            # - Student department vs professor department
+            # - Assigned advisor relationships
+            # - Scholarship type permissions
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error checking professor review authorization: {e}")
+            return False
+    
+    async def get_professor_review(
+        self, 
+        application_id: int, 
+        professor_id: int
+    ) -> Optional[dict]:
+        """Get existing professor review"""
+        try:
+            stmt = select(ProfessorReview).options(
+                selectinload(ProfessorReview.items),
+                selectinload(ProfessorReview.application)
+            ).where(
+                and_(
+                    ProfessorReview.application_id == application_id,
+                    ProfessorReview.professor_id == professor_id
+                )
+            )
+            
+            result = await self.db.execute(stmt)
+            review = result.scalar_one_or_none()
+            
+            if not review:
+                return None
+            
+            return {
+                "id": review.id,
+                "application_id": review.application_id,
+                "professor_id": review.professor_id,
+                "recommendation": review.recommendation,
+                "review_status": review.review_status,
+                "reviewed_at": review.reviewed_at,
+                "items": [
+                    {
+                        "id": item.id,
+                        "sub_type_code": item.sub_type_code,
+                        "is_recommended": item.is_recommended,
+                        "comments": item.comments
+                    }
+                    for item in review.items
+                ]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching professor review: {e}")
+            raise
+    
+    async def submit_professor_review(
+        self, 
+        application_id: int, 
+        professor_id: int, 
+        review_data: dict
+    ) -> dict:
+        """Submit professor review for an application"""
+        try:
+            # Check if review already exists
+            existing_review = await self.get_professor_review(application_id, professor_id)
+            if existing_review:
+                # Update existing review
+                return await self.update_professor_review(existing_review["id"], review_data)
+            
+            # Create new professor review
+            professor_review = ProfessorReview(
+                application_id=application_id,
+                professor_id=professor_id,
+                recommendation=review_data.get("recommendation"),
+                review_status="completed",
+                reviewed_at=datetime.now(timezone.utc)
+            )
+            
+            self.db.add(professor_review)
+            await self.db.flush()  # Get the review ID
+            
+            # Create review items for each sub-type
+            review_items = review_data.get("items", [])
+            for item_data in review_items:
+                review_item = ProfessorReviewItem(
+                    review_id=professor_review.id,
+                    sub_type_code=item_data.get("sub_type_code"),
+                    is_recommended=item_data.get("is_recommended", False),
+                    comments=item_data.get("comments")
+                )
+                self.db.add(review_item)
+            
+            # Update application status
+            stmt = select(Application).where(Application.id == application_id)
+            result = await self.db.execute(stmt)
+            application = result.scalar_one_or_none()
+            
+            if application:
+                application.status = ApplicationStatus.RECOMMENDED.value
+                application.status_name = "已推薦"
+            
+            await self.db.commit()
+            
+            # Return the created review
+            return await self.get_professor_review(application_id, professor_id)
+            
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Error submitting professor review: {e}")
+            raise
+    
+    async def update_professor_review(self, review_id: int, review_data: dict) -> dict:
+        """Update an existing professor review"""
+        try:
+            # Get existing review
+            stmt = select(ProfessorReview).options(
+                selectinload(ProfessorReview.items)
+            ).where(ProfessorReview.id == review_id)
+            
+            result = await self.db.execute(stmt)
+            review = result.scalar_one_or_none()
+            
+            if not review:
+                raise NotFoundError("Professor review not found")
+            
+            # Update review fields
+            review.recommendation = review_data.get("recommendation", review.recommendation)
+            review.review_status = "completed"
+            review.reviewed_at = datetime.now(timezone.utc)
+            
+            # Update review items
+            existing_items = {item.sub_type_code: item for item in review.items}
+            new_items = review_data.get("items", [])
+            
+            for item_data in new_items:
+                sub_type_code = item_data.get("sub_type_code")
+                if sub_type_code in existing_items:
+                    # Update existing item
+                    existing_item = existing_items[sub_type_code]
+                    existing_item.is_recommended = item_data.get("is_recommended", False)
+                    existing_item.comments = item_data.get("comments")
+                else:
+                    # Create new item
+                    new_item = ProfessorReviewItem(
+                        review_id=review.id,
+                        sub_type_code=sub_type_code,
+                        is_recommended=item_data.get("is_recommended", False),
+                        comments=item_data.get("comments")
+                    )
+                    self.db.add(new_item)
+            
+            await self.db.commit()
+            
+            # Return updated review
+            return await self.get_professor_review(review.application_id, review.professor_id)
+            
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Error updating professor review: {e}")
+            raise
+    
+    async def get_application_available_sub_types(self, application_id: int) -> List[dict]:
+        """Get available sub-types for an application (config-driven)"""
+        try:
+            # Get application with scholarship configuration
+            stmt = select(Application).options(
+                selectinload(Application.scholarship_configuration),
+                selectinload(Application.scholarship_type_ref)
+            ).where(Application.id == application_id)
+            
+            result = await self.db.execute(stmt)
+            application = result.scalar_one_or_none()
+            
+            if not application or not application.scholarship_type_ref:
+                return []
+            
+            # Get sub-types from scholarship type
+            scholarship_type = application.scholarship_type_ref
+            sub_types = scholarship_type.sub_type_list or []
+            
+            # Get translations for sub-types
+            translations = scholarship_type.get_sub_type_translations()
+            
+            # Build response
+            sub_type_list = []
+            for sub_type in sub_types:
+                sub_type_list.append({
+                    "value": sub_type,
+                    "label": translations.get("zh", {}).get(sub_type, sub_type),
+                    "label_en": translations.get("en", {}).get(sub_type, sub_type),
+                    "is_default": sub_type == "general"
+                })
+            
+            return sub_type_list
+            
+        except Exception as e:
+            logger.error(f"Error fetching application sub-types: {e}")
+            raise
+    
+    async def get_professor_review_stats(self, professor_id: int) -> dict:
+        """Get basic review statistics for a professor"""
+        try:
+            now = datetime.now(timezone.utc)
+            
+            # Get applications in current review period
+            pending_query = select(func.count(Application.id)).select_from(Application).join(
+                Application.scholarship_configuration
+            ).where(
+                Application.scholarship_configuration.has(
+                    requires_professor_recommendation=True
+                ),
+                or_(
+                    # General review period
+                    and_(
+                        Application.scholarship_configuration.has(
+                            professor_review_start <= now
+                        ),
+                        Application.scholarship_configuration.has(
+                            professor_review_end >= now
+                        )
+                    ),
+                    # Renewal review period
+                    and_(
+                        Application.scholarship_configuration.has(
+                            renewal_professor_review_start <= now
+                        ),
+                        Application.scholarship_configuration.has(
+                            renewal_professor_review_end >= now
+                        )
+                    )
+                ),
+                Application.status.in_([
+                    ApplicationStatus.SUBMITTED.value,
+                    ApplicationStatus.PENDING_RECOMMENDATION.value
+                ])
+            )
+            
+            completed_query = select(func.count(ProfessorReview.id)).where(
+                ProfessorReview.professor_id == professor_id,
+                ProfessorReview.review_status == "completed"
+            )
+            
+            # Execute queries
+            pending_result = await self.db.execute(pending_query)
+            completed_result = await self.db.execute(completed_query)
+            
+            pending_count = pending_result.scalar() or 0
+            completed_count = completed_result.scalar() or 0
+            
+            # For overdue reviews, check applications past deadline
+            overdue_query = select(func.count(Application.id)).select_from(Application).join(
+                Application.scholarship_configuration
+            ).where(
+                Application.scholarship_configuration.has(
+                    requires_professor_recommendation=True
+                ),
+                Application.scholarship_configuration.has(
+                    professor_review_end < now
+                ),
+                Application.status.in_([
+                    ApplicationStatus.SUBMITTED.value,
+                    ApplicationStatus.PENDING_RECOMMENDATION.value
+                ])
+            )
+            
+            overdue_result = await self.db.execute(overdue_query)
+            overdue_count = overdue_result.scalar() or 0
+            
+            return {
+                "pending_reviews": pending_count,
+                "completed_reviews": completed_count,
+                "overdue_reviews": overdue_count
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching professor stats: {e}")
+            return {
+                "pending_reviews": 0,
+                "completed_reviews": 0,
+                "overdue_reviews": 0
+            }
+
+    async def get_available_professors(
+        self, 
+        user: User, 
+        search: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get professors based on user role:
+        - College admin: only same dept_code
+        - Admin/Super Admin: all professors
+        """
+        try:
+            from app.models.user import UserRole
+            
+            query = select(User).where(User.role == UserRole.PROFESSOR)
+            
+            # Filter by college for college admins
+            if user.role == UserRole.COLLEGE:
+                query = query.where(User.dept_code == user.dept_code)
+            
+            # Add search filter
+            if search:
+                query = query.where(
+                    or_(
+                        User.name.ilike(f"%{search}%"),
+                        User.nycu_id.ilike(f"%{search}%")
+                    )
+                )
+            
+            # Order by name for consistent results
+            query = query.order_by(User.name)
+            
+            result = await self.db.execute(query)
+            professors = result.scalars().all()
+            
+            return [{
+                "nycu_id": prof.nycu_id,
+                "name": prof.name,
+                "dept_code": prof.dept_code,
+                "dept_name": prof.dept_name,
+                "email": prof.email
+            } for prof in professors]
+            
+        except Exception as e:
+            logger.error(f"Error fetching available professors: {e}")
+            raise
+
+    async def assign_professor(
+        self,
+        application_id: int,
+        professor_nycu_id: str,
+        assigned_by: User
+    ) -> Application:
+        """Assign professor to application with notification"""
+        try:
+            from app.models.user import UserRole
+            from app.services.email_service import EmailService
+            from app.services.notification_service import NotificationService
+            from app.models.notification import NotificationType, NotificationPriority, NotificationChannel
+            from app.core.exceptions import NotFoundError, ValidationError
+            
+            # Get application
+            application = await self.get_application_by_id(application_id, assigned_by)
+            if not application:
+                raise NotFoundError(f"Application {application_id} not found")
+            
+            # Get professor
+            stmt = select(User).where(
+                User.nycu_id == professor_nycu_id,
+                User.role == UserRole.PROFESSOR
+            )
+            result = await self.db.execute(stmt)
+            professor = result.scalar_one_or_none()
+            
+            if not professor:
+                raise NotFoundError(f"Professor with NYCU ID {professor_nycu_id} not found")
+            
+            # Check if scholarship requires professor review
+            config = application.scholarship_configuration
+            if not config or not config.requires_professor_recommendation:
+                raise ValidationError("This scholarship does not require professor review")
+            
+            # Check permission for college admins
+            if assigned_by.role == UserRole.COLLEGE:
+                if assigned_by.dept_code != professor.dept_code:
+                    raise ValidationError("College admins can only assign professors from their own college")
+            
+            # Update application
+            old_professor_id = application.professor_id
+            application.professor_id = professor.id
+            application.updated_at = datetime.now(timezone.utc)
+            
+            await self.db.commit()
+            await self.db.refresh(application)
+            
+            # Send email notification to professor
+            if professor.email:
+                try:
+                    email_service = EmailService()
+                    await email_service.send_to_professor(application, self.db)
+                    logger.info(f"Email notification sent to professor {professor.nycu_id}")
+                except Exception as e:
+                    logger.error(f"Failed to send email to professor {professor.nycu_id}: {e}")
+            
+            # Create in-app notification
+            try:
+                notification_service = NotificationService(self.db)
+                await notification_service.create_notification(
+                    user_id=professor.id,
+                    notification_type=NotificationType.PROFESSOR_ASSIGNMENT,
+                    data={
+                        "title": f"新的獎學金申請需要您的審查",
+                        "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
+                        "application_id": application.id,
+                        "app_id": application.app_id,
+                        "student_name": application.student_data.get("name") if application.student_data else "Unknown",
+                        "scholarship_name": application.scholarship_name,
+                        "assigned_by": assigned_by.name
+                    },
+                    href=f"/professor/applications/{application.id}",
+                    priority=NotificationPriority.HIGH,
+                    channels=[NotificationChannel.IN_APP, NotificationChannel.EMAIL]
+                )
+                logger.info(f"In-app notification created for professor {professor.nycu_id}")
+            except Exception as e:
+                logger.error(f"Failed to create notification for professor {professor.nycu_id}: {e}")
+            
+            # Log the assignment change
+            if old_professor_id != professor.id:
+                logger.info(
+                    f"Professor assignment changed for application {application.app_id}: "
+                    f"from professor_id={old_professor_id} to professor_id={professor.id} "
+                    f"by user {assigned_by.nycu_id}"
+                )
+            
+            return application
+            
+        except Exception as e:
+            logger.error(f"Error assigning professor: {e}")
+            await self.db.rollback()
+            raise

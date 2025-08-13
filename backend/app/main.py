@@ -69,8 +69,9 @@ app.add_middleware(
 )
 
 # Add schema validation middleware (development only)
-if settings.debug:
-    app.add_middleware(SchemaValidationMiddleware)
+# Temporarily disabled due to logger scoping issue
+# if settings.debug:
+#     app.add_middleware(SchemaValidationMiddleware)
 
 
 # Request tracing middleware
@@ -105,6 +106,9 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Handle request validation errors"""
+    # Get logger instance for this function
+    validation_logger = logging.getLogger(__name__)
+    
     errors = []
     for error in exc.errors():
         field = " -> ".join(str(x) for x in error["loc"])
@@ -117,9 +121,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         if k.lower() not in ['authorization', 'cookie', 'x-api-key', 'x-auth-token']
     }
     
-    logger.error(f"Validation error - Path: {request.url.path}, Method: {request.method}")
-    logger.error(f"Validation error - Headers (sanitized): {sanitized_headers}")
-    logger.error(f"Validation error - Field errors: {[error['loc'] for error in exc.errors()]}")
+    try:
+        validation_logger.error(f"Validation error - Path: {request.url.path}, Method: {request.method}")
+        validation_logger.error(f"Validation error - Headers (sanitized): {sanitized_headers}")
+        validation_logger.error(f"Validation error - Field errors: {[error['loc'] for error in exc.errors()]}")
+    except Exception as log_error:
+        # Fallback logging if logger fails
+        print(f"Validation error (logger failed) - Path: {request.url.path}, Method: {request.method}")
+        print(f"Logger error: {log_error}")
     # Do not log request body as it may contain sensitive data
     
     return JSONResponse(
@@ -172,7 +181,13 @@ async def health_check():
             }
         }
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
+        # Get logger instance for this function
+        health_logger = logging.getLogger(__name__)
+        try:
+            health_logger.error(f"Health check failed: {e}")
+        except Exception:
+            # Fallback logging if logger fails
+            print(f"Health check failed (logger error): {e}")
         return {
             "success": False,
             "status": "unhealthy",

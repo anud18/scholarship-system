@@ -275,9 +275,7 @@ class ProfessorReviewItemResponse(BaseModel):
 
 
 class ProfessorReviewCreate(BaseModel):
-    application_id: int
     recommendation: Optional[str] = None
-    review_status: Optional[str] = None
     items: List[ProfessorReviewItemCreate] = Field(default=[], description="Individual sub-type recommendations")
 
 
@@ -429,6 +427,11 @@ class DashboardStats(BaseModel):
     pending_review: int = Field(0, description="Number of applications pending review")
     total_amount: Decimal = Field(0, description="Total scholarship amount approved")
     recent_activities: List[Dict[str, Any]] = Field([], description="Recent application activities")
+
+
+class ProfessorAssignmentRequest(BaseModel):
+    """Professor assignment request schema"""
+    professor_nycu_id: str = Field(..., description="Professor NYCU ID to assign")
 
 
 

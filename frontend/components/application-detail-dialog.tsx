@@ -9,11 +9,12 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ProgressTimeline } from "@/components/progress-timeline"
 import { FilePreviewDialog } from "@/components/file-preview-dialog"
-import { FileText, Eye, Loader2 } from "lucide-react"
+import { FileText, Eye, Loader2, User, AlertCircle } from "lucide-react"
 import { Locale } from "@/lib/validators"
-import { Application } from "@/lib/api"
+import { Application, User as UserType } from "@/lib/api"
 import api from "@/lib/api"
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display"
+import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown"
 import { 
   getApplicationTimeline, 
   getStatusColor, 
@@ -29,13 +30,15 @@ interface ApplicationDetailDialogProps {
   onClose: () => void
   application: Application | null
   locale: Locale
+  user?: UserType
 }
 
 export function ApplicationDetailDialog({ 
   isOpen, 
   onClose, 
   application, 
-  locale 
+  locale,
+  user
 }: ApplicationDetailDialogProps) {
   const [applicationFiles, setApplicationFiles] = useState<any[]>([])
   const [isLoadingFiles, setIsLoadingFiles] = useState(false)
@@ -47,6 +50,8 @@ export function ApplicationDetailDialog({
   const [applicationFields, setApplicationFields] = useState<string[]>([])
   const [isLoadingFields, setIsLoadingFields] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [professorInfo, setProfessorInfo] = useState<any>(null)
+  const [professorReview, setProfessorReview] = useState<any>(null)
 
   // 獲取欄位標籤（優先使用動態標籤，後備使用靜態標籤）
   const getFieldLabel = (fieldName: string, locale: Locale, fieldLabels?: {[key: string]: { zh?: string, en?: string }}) => {
@@ -54,6 +59,33 @@ export function ApplicationDetailDialog({
       return locale === "zh" ? fieldLabels[fieldName].zh : (fieldLabels[fieldName].en || fieldLabels[fieldName].zh || fieldName)
     }
     return formatFieldName(fieldName, locale)
+  }
+
+  // Check if scholarship requires professor review
+  const requiresProfessorReview = application?.scholarship_configuration?.requires_professor_recommendation || false
+
+  // Check if user can assign professors
+  const canAssignProfessor = user && ['admin', 'super_admin', 'college'].includes(user.role)
+
+  // Handle professor assignment
+  const handleProfessorAssigned = (professor: any) => {
+    setProfessorInfo(professor)
+    // You might want to refresh the application data here
+  }
+
+  // Get professor review status badge variant
+  const getReviewStatusVariant = (status: string) => {
+    switch (status) {
+      case 'completed':
+      case 'approved':
+        return 'default'
+      case 'pending':
+        return 'secondary'
+      case 'rejected':
+        return 'destructive'
+      default:
+        return 'outline'
+    }
   }
 
   // 載入申請文件
@@ -487,6 +519,95 @@ export function ApplicationDetailDialog({
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm p-2 bg-muted rounded">{application.personal_statement}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Professor Review Section - Only show if scholarship requires professor review */}
+            {requiresProfessorReview && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    {locale === "zh" ? "教授審查" : "Professor Review"}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Current Professor Info */}
+                    {(application.professor_id || professorInfo) && (
+                      <div>
+                        <Label className="text-sm font-medium">
+                          {locale === "zh" ? "目前指派教授" : "Current Assigned Professor"}
+                        </Label>
+                        <div className="flex items-center gap-2 mt-2">
+                          <User className="h-4 w-4" />
+                          <Badge variant="secondary">
+                            {professorInfo?.name || application.professor?.name || application.professor_id}
+                          </Badge>
+                          {(professorInfo?.nycu_id || application.professor?.nycu_id) && (
+                            <span className="text-sm text-muted-foreground">
+                              ({professorInfo?.nycu_id || application.professor?.nycu_id})
+                            </span>
+                          )}
+                        </div>
+                        {(professorInfo?.dept_name || application.professor?.dept_name) && (
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {professorInfo?.dept_name || application.professor?.dept_name}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Professor Assignment Dropdown - Only for admins */}
+                    {canAssignProfessor && (
+                      <div>
+                        <Label className="text-sm font-medium">
+                          {locale === "zh" ? "指派/變更教授" : "Assign/Change Professor"}
+                        </Label>
+                        <div className="mt-2">
+                          <ProfessorAssignmentDropdown
+                            applicationId={application.id}
+                            currentProfessorId={application.professor?.nycu_id || professorInfo?.nycu_id}
+                            onAssigned={handleProfessorAssigned}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Review Status */}
+                    {professorReview && (
+                      <div>
+                        <Label className="text-sm font-medium">
+                          {locale === "zh" ? "審查狀態" : "Review Status"}
+                        </Label>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant={getReviewStatusVariant(professorReview.status)}>
+                            {professorReview.status}
+                          </Badge>
+                          {professorReview.reviewed_at && (
+                            <span className="text-sm text-muted-foreground">
+                              {locale === "zh" ? "審查時間:" : "Reviewed at:"} {new Date(professorReview.reviewed_at).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        {professorReview.recommendation && (
+                          <p className="text-sm text-muted-foreground mt-2 p-2 bg-muted rounded">
+                            {professorReview.recommendation}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* No Professor Assigned */}
+                    {!application.professor_id && !professorInfo && (
+                      <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-200 rounded-md">
+                        <AlertCircle className="h-4 w-4 text-orange-600" />
+                        <span className="text-sm text-orange-700">
+                          {locale === "zh" ? "尚未指派教授" : "Professor not assigned yet"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )}

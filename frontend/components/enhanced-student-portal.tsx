@@ -1660,6 +1660,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         isOpen={isDetailsDialogOpen}
         onClose={() => setIsDetailsDialogOpen(false)}
         locale={locale}
+        user={user}
       />
 
     </div>
