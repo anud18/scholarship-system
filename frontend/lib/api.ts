@@ -107,6 +107,22 @@ export interface Application {
   user?: User  // 關聯的使用者資訊
   student?: Student  // 關聯的學生資訊
   scholarship?: ScholarshipType  // 關聯的獎學金資訊
+  
+  // Professor assignment fields
+  professor_id?: number | string  // 指導教授ID
+  professor?: {
+    id: number
+    nycu_id: string
+    name: string
+    email: string
+  }  // 關聯的教授資訊
+  
+  // Scholarship configuration
+  scholarship_configuration?: {
+    requires_professor_recommendation: boolean
+    requires_college_review: boolean
+    config_name: string
+  }  // 獎學金配置資訊
 }
 
 export interface ApplicationCreate {

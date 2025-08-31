@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { ErrorBoundary, useErrorHandler } from "@/components/error-boundary"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -49,7 +50,8 @@ interface ReviewData {
   items: ReviewItem[]
 }
 
-export function ProfessorReviewComponent({ user }: ProfessorReviewComponentProps) {
+function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) {
+  const handleError = useErrorHandler()
   const [applications, setApplications] = useState<Application[]>([])
   const [filteredApplications, setFilteredApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(false)
@@ -681,5 +683,19 @@ export function ProfessorReviewComponent({ user }: ProfessorReviewComponentProps
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// Export wrapped component with error boundary
+export function ProfessorReviewComponent({ user }: ProfessorReviewComponentProps) {
+  return (
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        console.error('Professor Review Component Error:', error, errorInfo)
+        // In production, send to error reporting service
+      }}
+    >
+      <ProfessorReviewComponentInner user={user} />
+    </ErrorBoundary>
   )
 }

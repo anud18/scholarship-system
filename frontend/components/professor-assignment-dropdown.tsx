@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { Check, ChevronsUpDown, Search, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -33,13 +34,15 @@ interface ProfessorAssignmentDropdownProps {
   currentProfessorId?: string
   onAssigned?: (professor: Professor) => void
   disabled?: boolean
+  compact?: boolean
 }
 
-export function ProfessorAssignmentDropdown({
+function ProfessorAssignmentDropdownInner({
   applicationId,
   currentProfessorId,
   onAssigned,
-  disabled = false
+  disabled = false,
+  compact = false
 }: ProfessorAssignmentDropdownProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
@@ -75,13 +78,19 @@ export function ProfessorAssignmentDropdown({
     }
   }
 
+  // Debounced search effect to prevent memory leaks
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (search !== undefined) { // Only fetch if search has been set
+        fetchProfessors(search)
+      }
+    }, 300)
+    
+    return () => clearTimeout(timer) // Proper cleanup
+  }, [search])
+
   const handleSearch = (value: string) => {
     setSearch(value)
-    // Debounce search
-    const timer = setTimeout(() => {
-      fetchProfessors(value)
-    }, 300)
-    return () => clearTimeout(timer)
   }
 
   const handleAssign = async (professor: Professor) => {
@@ -108,18 +117,28 @@ export function ProfessorAssignmentDropdown({
           role="combobox"
           aria-expanded={open}
           disabled={disabled || assigning}
-          className="w-full justify-between"
+          className={compact ? "h-8 px-2 text-xs" : "w-full justify-between"}
         >
-          {selectedProfessor ? (
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              <span>{selectedProfessor.name}</span>
-              <Badge variant="secondary">{selectedProfessor.nycu_id}</Badge>
-            </div>
+          {compact ? (
+            // Compact mode for when professor is already assigned
+            selectedProfessor ? (
+              <span className="text-xs">修改</span>
+            ) : (
+              <span className="text-xs">選擇</span>
+            )
           ) : (
-            <span className="text-muted-foreground">選擇教授...</span>
+            // Full mode for when no professor is assigned
+            selectedProfessor ? (
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                <span>{selectedProfessor.name}</span>
+                <Badge variant="secondary">{selectedProfessor.nycu_id}</Badge>
+              </div>
+            ) : (
+              <span className="text-muted-foreground">選擇教授...</span>
+            )
           )}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          {!compact && <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0">
@@ -169,5 +188,18 @@ export function ProfessorAssignmentDropdown({
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+// Export wrapped component with error boundary
+export function ProfessorAssignmentDropdown(props: ProfessorAssignmentDropdownProps) {
+  return (
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        console.error('Professor Assignment Dropdown Error:', error, errorInfo)
+      }}
+    >
+      <ProfessorAssignmentDropdownInner {...props} />
+    </ErrorBoundary>
   )
 }

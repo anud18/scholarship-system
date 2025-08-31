@@ -61,7 +61,7 @@ async def get_professor_applications(
         logger.error(f"Error fetching professor applications: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch applications: {str(e)}"
+            detail="An internal error occurred while fetching applications"
         )
 
 
@@ -108,7 +108,7 @@ async def get_professor_review(
         logger.error(f"Error fetching professor review: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch review: {str(e)}"
+            detail="An internal error occurred while fetching review"
         )
 
 
@@ -133,9 +133,9 @@ async def submit_professor_review(
             raise NotFoundError("Application not found")
             
         # Check if professor can submit a review (with time restrictions)
-        # Skip time restrictions in testing environment
-        import os
-        if os.getenv("TESTING") != "true" and not await service.can_professor_submit_review(application_id, current_user.id):
+        # Skip time restrictions only if configured to do so (testing environments)
+        from app.core.config import settings
+        if not settings.bypass_time_restrictions and not await service.can_professor_submit_review(application_id, current_user.id):
             raise AuthorizationError("Professor not authorized to submit review at this time or for this application")
             
         # Submit the review
@@ -162,7 +162,7 @@ async def submit_professor_review(
         logger.error(f"Error submitting professor review: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit review: {str(e)}"
+            detail="An internal error occurred while submitting review"
         )
 
 
@@ -214,7 +214,7 @@ async def update_professor_review(
         logger.error(f"Error updating professor review: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update review: {str(e)}"
+            detail="An internal error occurred while updating review"
         )
 
 
@@ -240,7 +240,7 @@ async def get_application_sub_types(
         logger.error(f"Error fetching application sub-types: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch sub-types: {str(e)}"
+            detail="An internal error occurred while fetching sub-types"
         )
 
 
@@ -268,5 +268,5 @@ async def get_professor_review_stats(
         logger.error(f"Error fetching professor stats: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch statistics: {str(e)}"
+            detail="An internal error occurred while fetching statistics"
         )

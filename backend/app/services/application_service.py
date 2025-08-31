@@ -6,7 +6,7 @@ import uuid
 import json
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, func
@@ -205,17 +205,8 @@ class ApplicationService:
         if result.scalar_one_or_none():
             raise ConflictError("You already have an active application for this scholarship")
     
-    async def create_application(
-        self,
-        user_id: int,
-        student_code: str,  # User's nycu_id for fetching student data
-        application_data: ApplicationCreate,
-        is_draft: bool = False
-    ) -> ApplicationResponse:
-        """Create a new application (draft or submitted)"""
-        logger.debug(f"Starting application creation for user_id={user_id}, student_code={student_code}, is_draft={is_draft}")
-        logger.debug(f"Application data received: {application_data.dict(exclude_none=True)}")
-        
+    async def _get_user_and_student_data(self, user_id: int, student_code: str) -> Tuple[User, Dict[str, Any]]:
+        """Get user and fetch student data from external API"""
         # Get user
         stmt = select(User).where(User.id == user_id)
         result = await self.db.execute(stmt)
@@ -226,6 +217,10 @@ class ApplicationService:
         student_snapshot = await self.student_service.get_student_snapshot(student_code)
         logger.debug(f"Student snapshot: {student_snapshot}")
         
+        return user, student_snapshot
+    
+    async def _get_scholarship_and_config(self, application_data: ApplicationCreate) -> Tuple[ScholarshipType, 'ScholarshipConfiguration']:
+        """Get and validate scholarship type and configuration"""
         # Get scholarship type
         stmt = select(ScholarshipType).where(ScholarshipType.code == application_data.scholarship_type)
         result = await self.db.execute(stmt)
@@ -247,53 +242,90 @@ class ApplicationService:
         if config.scholarship_type_id != scholarship.id:
             raise ValueError(f"Configuration {application_data.configuration_id} does not belong to scholarship type {application_data.scholarship_type}")
         
-        # TODO: Add eligibility verification here
-        # We should verify that the student is actually eligible for this specific configuration
-        # by calling the eligibility service to check if this configuration appears in their eligible scholarships
-        
-        # Use configuration's academic year and semester
+        return scholarship, config
+    
+    async def _create_application_instance(
+        self, 
+        user: User, 
+        student_snapshot: Dict[str, Any],
+        scholarship: ScholarshipType,
+        config: 'ScholarshipConfiguration',
+        application_data: ApplicationCreate,
+        is_draft: bool
+    ) -> Application:
+        """Create the application instance with all data"""
         academic_year = config.academic_year
         semester = config.semester  # This can be None for yearly scholarships
         logger.debug(f"Using config {config.id}: academic_year={academic_year}, semester={semester}")
         
-        # Create application ID
-        app_id = f"APP-{datetime.now().year}-{str(uuid.uuid4())[:8]}"
+        # Generate unique application ID
+        app_id = self._generate_app_id()
+        logger.debug(f"Generated app_id: {app_id}")
         
-        # Serialize form data for JSON storage
-        serialized_form_data = self._serialize_for_json(application_data.form_data.dict())
-        
-        # Determine status based on is_draft flag
-        if is_draft:
-            status = ApplicationStatus.DRAFT.value
-            status_name = "草稿"
-        else:
-            status = ApplicationStatus.SUBMITTED.value
-            status_name = "已提交"
+        # Extract names from student data snapshot
+        cname = student_snapshot.get("cname", "")
+        ename = student_snapshot.get("ename", "")
+        std_stdcode = student_snapshot.get("std_stdcode", "")
         
         # Create application
         application = Application(
             app_id=app_id,
-            user_id=user_id,
-            # student_id removed - student data is now in student_data JSON field
+            user_id=user.id,
             scholarship_type_id=scholarship.id,
-            scholarship_configuration_id=config.id,  # Store the specific configuration
-            scholarship_name=config.config_name,  # Use configuration name
-            amount=config.amount,  # Use amount from configuration
-            scholarship_subtype_list=application_data.scholarship_subtype_list,
-            sub_type_selection_mode=scholarship.sub_type_selection_mode or "single",
-            status=status,
-            status_name=status_name,
-            is_renewal=application_data.is_renewal or False,  # 設置續領申請標識
+            scholarship_configuration_id=config.id,
+            scholarship_type=application_data.scholarship_type,
+            scholarship_name=config.config_name or scholarship.name,
+            amount=config.amount,
+            currency=config.currency or "TWD",
+            scholarship_subtype_list=application_data.scholarship_subtype_list or [],
+            sub_type_selection_mode=application_data.sub_type_selection_mode or "SINGLE",
+            main_scholarship_type=application_data.main_scholarship_type,
+            sub_scholarship_type=application_data.sub_scholarship_type,
+            is_renewal=application_data.is_renewal or False,
             academic_year=academic_year,
-            semester=self._convert_semester_to_string(semester),  # Convert to string or None
+            semester=semester,
             student_data=student_snapshot,
-            submitted_form_data=serialized_form_data,
-            agree_terms=application_data.agree_terms or False
+            submitted_form_data=application_data.submitted_form_data or {},
+            # Extract names for easier access
+            student_name=cname,
+            student_no=std_stdcode,
+            student_id=self._get_student_id_from_user(user),
+            agree_terms=application_data.agree_terms or False,
+            status="draft" if is_draft else "submitted",
+            created_by=user.id,
+            updated_by=user.id
         )
         
-        # Set submission timestamp if not draft
         if not is_draft:
-            application.submitted_at = datetime.now(timezone.utc)
+            application.submitted_at = datetime.utcnow()
+        
+        return application
+
+    async def create_application(
+        self,
+        user_id: int,
+        student_code: str,  # User's nycu_id for fetching student data
+        application_data: ApplicationCreate,
+        is_draft: bool = False
+    ) -> ApplicationResponse:
+        """Create a new application (draft or submitted)"""
+        logger.debug(f"Starting application creation for user_id={user_id}, student_code={student_code}, is_draft={is_draft}")
+        logger.debug(f"Application data received: {application_data.dict(exclude_none=True)}")
+        
+        # Get user and student data
+        user, student_snapshot = await self._get_user_and_student_data(user_id, student_code)
+        
+        # Get and validate scholarship type and configuration
+        scholarship, config = await self._get_scholarship_and_config(application_data)
+        
+        # TODO: Add eligibility verification here
+        # We should verify that the student is actually eligible for this specific configuration
+        # by calling the eligibility service to check if this configuration appears in their eligible scholarships
+        
+        # Create application instance using helper method
+        application = await self._create_application_instance(
+            user, student_snapshot, scholarship, config, application_data, is_draft
+        )
         
         self.db.add(application)
         await self.db.commit()
@@ -321,6 +353,92 @@ class ApplicationService:
     
 
     
+    def _integrate_application_file_data(self, application: Application, user: User) -> Dict[str, Any]:
+        """Integrate application file information into form data"""
+        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+        
+        if not application.files:
+            return integrated_form_data
+            
+        # Generate file access token
+        from app.core.config import settings
+        from app.core.security import create_access_token
+        
+        token_data = {"sub": str(user.id)}
+        access_token = create_access_token(token_data)
+        base_url = f"{settings.base_url}{settings.api_v1_str}"
+        
+        # Ensure documents array exists
+        if 'documents' not in integrated_form_data:
+            integrated_form_data['documents'] = []
+        
+        # Create or update document records for each ApplicationFile
+        for file in application.files:
+            # Check if a record for this file already exists
+            existing_doc = next((doc for doc in integrated_form_data['documents'] 
+                               if doc.get('document_type') == file.file_type or doc.get('document_id') == file.file_type), None)
+            
+            # Create file information
+            file_info = {
+                "document_id": file.file_type,
+                "document_type": file.file_type,
+                "document_name": self._get_document_display_name(file.file_type),
+                "file_id": file.id,
+                "filename": file.filename,
+                "original_filename": file.original_filename,
+                "file_size": file.file_size,
+                "mime_type": file.mime_type or file.content_type,
+                "file_path": f"{base_url}/files/applications/{application.id}/files/{file.id}?token={access_token}",
+                "download_url": f"{base_url}/files/applications/{application.id}/files/{file.id}/download?token={access_token}",
+                "is_verified": file.is_verified,
+                "object_name": file.object_name,
+                "upload_time": file.uploaded_at.isoformat() if file.uploaded_at else None
+            }
+            
+            if existing_doc:
+                # Update existing record
+                existing_doc.update(file_info)
+            else:
+                # Add new record
+                integrated_form_data['documents'].append(file_info)
+                
+        return integrated_form_data
+    
+    def _create_application_list_response(self, application: Application, user: User, integrated_form_data: Dict[str, Any]) -> ApplicationListResponse:
+        """Create ApplicationListResponse from application data"""
+        app_data = ApplicationListResponse(
+            id=application.id,
+            app_id=application.app_id,
+            user_id=application.user_id,
+            student_id=user.nycu_id if user else None,
+            scholarship_type=application.scholarship.code if application.scholarship else None,
+            scholarship_type_id=application.scholarship_type_id,
+            scholarship_subtype_list=application.scholarship_subtype_list or [],
+            status=application.status,
+            status_name=application.status_name,
+            is_renewal=application.is_renewal,
+            academic_year=application.academic_year,
+            semester=self._convert_semester_to_string(application.semester),
+            student_data=application.student_data,
+            submitted_form_data=integrated_form_data,
+            agree_terms=application.agree_terms,
+            professor_id=application.professor_id,
+            reviewer_id=application.reviewer_id,
+            final_approver_id=application.final_approver_id,
+            review_score=application.review_score,
+            review_comments=application.review_comments,
+            rejection_reason=application.rejection_reason,
+            submitted_at=application.submitted_at,
+            reviewed_at=application.reviewed_at,
+            approved_at=application.approved_at,
+            created_at=application.created_at,
+            updated_at=application.updated_at,
+            meta_data=application.meta_data
+        )
+        
+        # Add Chinese scholarship type name
+        return self._add_scholarship_type_zh(app_data)
+    
     async def get_user_applications(
         self, 
         user: User, 
@@ -341,85 +459,11 @@ class ApplicationService:
         
         response_list = []
         for application in applications:
-            # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+            # Integrate file information into submitted_form_data.documents
+            integrated_form_data = self._integrate_application_file_data(application, user)
             
-            if application.files:
-                # 生成文件訪問 token
-                from app.core.config import settings
-                from app.core.security import create_access_token
-                
-                token_data = {"sub": str(user.id)}
-                access_token = create_access_token(token_data)
-                base_url = f"{settings.base_url}{settings.api_v1_str}"
-                
-                # 確保 documents 陣列存在
-                if 'documents' not in integrated_form_data:
-                    integrated_form_data['documents'] = []
-                
-                # 為每個 ApplicationFile 創建或更新對應的 document 記錄
-                for file in application.files:
-                    # 檢查是否已存在此文件的記錄
-                    existing_doc = next((doc for doc in integrated_form_data['documents'] 
-                                       if doc.get('document_type') == file.file_type or doc.get('document_id') == file.file_type), None)
-                    
-                    # 創建文件資訊
-                    file_info = {
-                        "document_id": file.file_type,
-                        "document_type": file.file_type,
-                        "document_name": self._get_document_display_name(file.file_type),
-                        "file_id": file.id,
-                        "filename": file.filename,
-                        "original_filename": file.original_filename,
-                        "file_size": file.file_size,
-                        "mime_type": file.mime_type or file.content_type,
-                        "file_path": f"{base_url}/files/applications/{application.id}/files/{file.id}?token={access_token}",
-                        "download_url": f"{base_url}/files/applications/{application.id}/files/{file.id}/download?token={access_token}",
-                        "is_verified": file.is_verified,
-                        "object_name": file.object_name,
-                        "upload_time": file.uploaded_at.isoformat() if file.uploaded_at else None
-                    }
-                    
-                    if existing_doc:
-                        # 更新現有記錄
-                        existing_doc.update(file_info)
-                    else:
-                        # 新增記錄
-                        integrated_form_data['documents'].append(file_info)
-            
-            # 創建響應數據
-            app_data = ApplicationListResponse(
-                id=application.id,
-                app_id=application.app_id,
-                user_id=application.user_id,
-                student_id=user.nycu_id if user else None,
-                scholarship_type=application.scholarship.code if application.scholarship else None,
-                scholarship_type_id=application.scholarship_type_id,
-                scholarship_subtype_list=application.scholarship_subtype_list or [],
-                status=application.status,
-                status_name=application.status_name,
-                is_renewal=application.is_renewal,  # 添加續領申請標識
-                academic_year=application.academic_year,
-                semester=self._convert_semester_to_string(application.semester),
-                student_data=application.student_data,
-                submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
-                agree_terms=application.agree_terms,
-                professor_id=application.professor_id,
-                reviewer_id=application.reviewer_id,
-                final_approver_id=application.final_approver_id,
-                review_score=application.review_score,
-                review_comments=application.review_comments,
-                rejection_reason=application.rejection_reason,
-                submitted_at=application.submitted_at,
-                reviewed_at=application.reviewed_at,
-                approved_at=application.approved_at,
-                created_at=application.created_at,
-                updated_at=application.updated_at,
-                meta_data=application.meta_data
-            )
-            
-            # Add Chinese scholarship type name
-            app_data = self._add_scholarship_type_zh(app_data)
+            # Create response data
+            app_data = self._create_application_list_response(application, user, integrated_form_data)
             response_list.append(app_data)
         
         return response_list

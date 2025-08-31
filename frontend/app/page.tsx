@@ -36,11 +36,13 @@ import { apiClient } from "@/lib/api"
 import { User } from "@/types/user"
 
 export default function ScholarshipManagementSystem() {
-  const [locale, setLocale] = useState<"zh" | "en">("zh")
   const [activeTab, setActiveTab] = useState("main")
   
   // 使用認證 hook
   const { user, isAuthenticated, isLoading: authLoading, error: authError, login, logout } = useAuth()
+  
+  // 使用語言偏好 Hook
+  const { locale, changeLocale, isLanguageSwitchEnabled } = useLanguagePreference(user?.role || "student", "zh")
   
   // 使用 admin dashboard hook
   const { 
@@ -102,9 +104,6 @@ export default function ScholarshipManagementSystem() {
   }, [activeTab, user])
 
   const t = (key: string) => getTranslation(locale, key)
-
-  // 使用語言偏好 Hook
-  const { changeLocale, isLanguageSwitchEnabled } = useLanguagePreference(user?.role || "student", "zh")
 
   // Show loading screen while checking authentication
   if (authLoading) {

@@ -24,22 +24,25 @@ import {
   Star,
   TrendingUp,
   RefreshCw,
-  Calendar
+  Calendar,
+  User,
+  Minus
 } from "lucide-react"
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin"
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
 import { AdminScholarshipManagementInterface } from "@/components/admin-scholarship-management-interface"
 import { SemesterSelector } from "@/components/semester-selector"
+import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown"
 import { Locale } from "@/lib/validators"
 import { apiClient } from "@/lib/api"
 
 // Use the Application type from the API
 import { Application } from "@/lib/api"
-import { User } from "@/types/user"
+import { User as UserType } from "@/types/user"
 import { useScholarshipPermissions } from "@/hooks/use-scholarship-permissions"
 
 interface AdminScholarshipDashboardProps {
-  user: User
+  user: UserType
 }
 
 // Dashboard-specific Application interface for the data we actually receive
@@ -86,6 +89,13 @@ interface DashboardApplication {
   }
   agree_terms?: boolean
   professor_id?: number
+  professor?: {
+    id: number
+    name: string
+    nycu_id?: string
+    email?: string
+    error?: boolean
+  }
   reviewer_id?: number
   final_approver_id?: number
   review_score?: number
@@ -96,6 +106,12 @@ interface DashboardApplication {
   academic_year?: string
   semester?: string
   meta_data?: any
+  // Scholarship configuration for professor review requirements
+  scholarship_configuration?: {
+    requires_professor_recommendation: boolean
+    requires_college_review: boolean
+    config_name?: string
+  }
   // API response structure
   student_data?: {
     id: number
@@ -131,7 +147,8 @@ interface DashboardApplication {
 
 // Data transformation function to map API response to expected format
 const transformApplicationData = (app: any): DashboardApplication => {
-  console.log('Transforming application data:', app)
+  console.log('🔍 Transforming application data:', app.app_id)
+  console.log('📊 Professor data in raw API response:', app.professor)
   
   // Ensure submitted_form_data has the correct structure for file preview
   let submittedFormData = app.submitted_form_data
@@ -188,6 +205,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
     personal_statement: app.personal_statement,
     agree_terms: app.agree_terms,
     professor_id: app.professor_id,
+    professor: app.professor,
     reviewer_id: app.reviewer_id,
     final_approver_id: app.final_approver_id,
     review_score: app.review_score,
@@ -197,11 +215,16 @@ const transformApplicationData = (app: any): DashboardApplication => {
     approved_at: app.approved_at,
     academic_year: app.academic_year,
     semester: app.semester,
-    meta_data: app.meta_data
+    meta_data: app.meta_data,
+    // Pass through scholarship configuration for professor review requirements
+    scholarship_configuration: app.scholarship_configuration
   }
   
-  console.log('Transformed result:', transformed)
-  console.log('Documents in transformed data:', transformed.submitted_form_data?.documents)
+  console.log('✅ Transformed result:', transformed.app_id)
+  console.log('📋 Professor in transformed data:', transformed.professor)
+  console.log('🎯 Professor name in transformed:', transformed.professor?.name)
+  console.log('🔢 Professor ID in transformed:', transformed.professor_id)
+  console.log('⚙️ Scholarship configuration:', app.scholarship_configuration)
   return transformed
 }
 
@@ -249,6 +272,15 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>()
   const [selectedSemester, setSelectedSemester] = useState<string>()
   const [selectedCombination, setSelectedCombination] = useState<string>()
+
+  // 檢查用戶是否可以指派教授
+  const canAssignProfessor = user && ['admin', 'super_admin', 'college'].includes(user.role)
+
+  // 處理教授指派回調
+  const handleProfessorAssigned = (applicationId: number, professor: any) => {
+    // 刷新相應的申請資料
+    refetch()
+  }
 
   // 動態獲取各類型申請資料
   const getApplicationsByType = (type: string) => {
@@ -536,24 +568,105 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                       </TableCell>
                     )}
                     <TableCell>
-                      {app.professor_id ? (
-                        <div className="flex items-center gap-1">
-                          <User className="h-3 w-3" />
-                          <span className="text-sm">
-                            {app.professor?.name || app.professor_id}
-                          </span>
-                          {app.professor?.nycu_id && (
-                            <Badge variant="outline" className="text-xs">
-                              {app.professor.nycu_id}
-                            </Badge>
-                          )}
-                        </div>
-                      ) : (
-                        app.scholarship_configuration?.requires_professor_recommendation && (
-                          <Badge variant="outline" className="text-orange-600">
-                            待指派
-                          </Badge>
+                      {app.scholarship_configuration?.requires_professor_recommendation ? (
+                        canAssignProfessor && ['submitted', 'under_review'].includes(app.status) ? (
+                          app.professor_id ? (
+                            // 已指派教授但可以修改
+                            <div className="min-w-[200px]">
+                              <div className="flex items-center justify-between gap-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                                <div className="flex items-center gap-1">
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                  <span className="text-sm font-medium text-green-800">
+                                    {(() => {
+                                      console.log('🎯 Display logic - App:', app.app_id)
+                                      console.log('📋 Professor object:', app.professor)
+                                      console.log('📝 Professor name:', app.professor?.name)
+                                      console.log('🔢 Professor ID:', app.professor_id)
+                                      const displayName = app.professor?.name || `教授 #${app.professor_id}`
+                                      console.log('✨ Final display name:', displayName)
+                                      return displayName
+                                    })()}
+                                  </span>
+                                  {app.professor?.error && (
+                                    <span className="text-xs text-red-600 ml-1">
+                                      (用戶不存在)
+                                    </span>
+                                  )}
+                                  {app.professor?.nycu_id && (
+                                    <Badge variant="outline" className="text-xs bg-white">
+                                      {app.professor.nycu_id}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <ProfessorAssignmentDropdown
+                                  applicationId={app.id}
+                                  currentProfessorId={app.professor?.nycu_id || app.professor_id}
+                                  onAssigned={(professor) => handleProfessorAssigned(app.id, professor)}
+                                  compact={true}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            // 尚未指派教授
+                            <div className="min-w-[200px]">
+                              <div className="flex items-center justify-between gap-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
+                                <div className="flex items-center gap-1">
+                                  <AlertCircle className="h-4 w-4 text-orange-600" />
+                                  <span className="text-sm font-medium text-orange-800">
+                                    待指派教授
+                                  </span>
+                                </div>
+                                <ProfessorAssignmentDropdown
+                                  applicationId={app.id}
+                                  currentProfessorId={app.professor?.nycu_id || app.professor_id}
+                                  onAssigned={(professor) => handleProfessorAssigned(app.id, professor)}
+                                />
+                              </div>
+                            </div>
+                          )
+                        ) : app.professor_id ? (
+                          // 已指派教授但無法修改（只顯示）
+                          <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <div className="flex items-center gap-1">
+                              <span className="text-sm font-medium text-green-800">
+                                {(() => {
+                                  console.log('🎯 Display logic (readonly) - App:', app.app_id)
+                                  console.log('📋 Professor object:', app.professor)
+                                  console.log('📝 Professor name:', app.professor?.name)
+                                  console.log('🔢 Professor ID:', app.professor_id)
+                                  const displayName = app.professor?.name || `教授 #${app.professor_id}`
+                                  console.log('✨ Final display name:', displayName)
+                                  return displayName
+                                })()}
+                              </span>
+                              {app.professor?.error && (
+                                <span className="text-xs text-red-600 ml-1">
+                                  (用戶不存在)
+                                </span>
+                              )}
+                              {app.professor?.nycu_id && (
+                                <Badge variant="outline" className="text-xs bg-white">
+                                  {app.professor.nycu_id}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          // 待指派狀態（無法修改）
+                          <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
+                            <AlertCircle className="h-4 w-4 text-orange-600" />
+                            <span className="text-sm font-medium text-orange-800">
+                              待指派教授
+                            </span>
+                          </div>
                         )
+                      ) : (
+                        // 不需要教授推薦的獎學金
+                        <div className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-200 rounded-md">
+                          <Minus className="h-4 w-4 text-gray-500" />
+                          <span className="text-sm text-gray-600">不需要</span>
+                        </div>
                       )}
                     </TableCell>
                     <TableCell>

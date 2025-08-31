@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     enable_mock_sso: bool = True
     mock_sso_domain: str = "dev.university.edu"
     
+    # Security configurations
+    bypass_time_restrictions: bool = False  # Only True in testing environments
+    
     # Student API Configuration
     student_api_enabled: bool = True
     student_api_base_url: str = "http://localhost:8080"  # Mock API in development
@@ -120,6 +123,15 @@ class Settings(BaseSettings):
             else:
                 raise ValueError("SECRET_KEY must be at least 32 characters long")
         return v
+    
+    @field_validator("bypass_time_restrictions", mode="before")
+    @classmethod
+    def validate_time_restrictions_bypass(cls, v) -> bool:
+        """Only allow bypassing time restrictions in test environments"""
+        import os
+        if v and not (os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING") == "true"):
+            raise ValueError("Time restrictions bypass only allowed in test environments")
+        return bool(v)
     
     @field_validator("cors_origins", mode="before")
     @classmethod

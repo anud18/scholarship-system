@@ -831,11 +831,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         <CardContent className="p-6 text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
           <p className="text-muted-foreground">
-            {locale === "zh" ? "正在載入資料..." : "Loading data..."}
+            {t("messages.loading_data")}
           </p>
           {isLoadingScholarships && (
             <p className="text-sm text-muted-foreground mt-2">
-              {locale === "zh" ? "載入獎學金資訊..." : "Loading scholarship information..."}
+              {t("messages.loading_scholarship_info")}
             </p>
           )}
         </CardContent>
@@ -864,12 +864,10 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         <CardContent className="p-6 text-center">
           <AlertTriangle className="h-8 w-8 text-orange-500 mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">
-            {locale === "zh" ? "目前沒有符合資格的獎學金" : "No Eligible Scholarships"}
+            {t("messages.no_eligible_scholarships")}
           </h3>
           <p className="text-muted-foreground">
-            {locale === "zh"
-              ? "很抱歉，您目前沒有符合申請資格的獎學金。請稍後再試或聯繫獎學金辦公室。"
-              : "Sorry, you are not currently eligible for any scholarships. Please try again later or contact the scholarship office."}
+            {t("messages.no_eligible_scholarships_desc")}
           </p>
         </CardContent>
       </Card>
@@ -933,12 +931,12 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                 {isEligible ? (
                   <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-100">
                     <Check className="h-3 w-3 mr-1" />
-                    {locale === "zh" ? "可申請" : "Eligible"}
+                    {t("messages.eligible")}
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-100">
                     <AlertTriangle className="h-3 w-3 mr-1" />
-                    {locale === "zh" ? "不符合申請資格" : "Not Eligible"}
+                    {t("messages.not_eligible")}
                   </Badge>
                 )}
               </div>
@@ -1107,7 +1105,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       <p className="text-sm font-medium">{locale === "zh" ? "申請資訊" : "Application Info"}</p>
                     </div>
                     <p className="text-sm text-gray-600 mt-2">
-                      {locale === "zh" ? "載入中..." : "Loading..."}
+                      {t("applications.loading")}
                     </p>
                   </div>
                 )}
@@ -1117,7 +1115,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                   <div className="rounded-lg border border-rose-100 bg-rose-50/50 p-3">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="h-4 w-4 text-rose-500" />
-                      <p className="text-sm font-medium text-rose-700">{locale === "zh" ? "載入錯誤" : "Load Error"}</p>
+                      <p className="text-sm font-medium text-rose-700">{t("applications.load_error")}</p>
                     </div>
                     <p className="text-sm text-rose-600 mt-2">{applicationInfo.error}</p>
                     <Button 
@@ -1126,7 +1124,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       onClick={() => fetchScholarshipApplicationInfo(scholarship.code)}
                       className="mt-2"
                     >
-                      {locale === "zh" ? "重試" : "Retry"}
+                      {t("applications.retry")}
                     </Button>
                   </div>
                 )}
@@ -1214,15 +1212,15 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="applications">{locale === "zh" ? "我的申請" : "My Applications"}</TabsTrigger>
-          <TabsTrigger value="new-application">{locale === "zh" ? "新增申請" : "New Application"}</TabsTrigger>
-          <TabsTrigger value="profile">{locale === "zh" ? "個人資料" : "Profile"}</TabsTrigger>
+          <TabsTrigger value="applications">{t("portal.my_applications")}</TabsTrigger>
+          <TabsTrigger value="new-application">{t("applications.new_application")}</TabsTrigger>
+          <TabsTrigger value="profile">{t("nav.profile")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="applications" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>{locale === "zh" ? "申請記錄" : "Application Records"}</CardTitle>
+              <CardTitle>{t("portal.application_records")}</CardTitle>
               <CardDescription>
                 {locale === "zh"
                   ? "查看您的獎學金申請狀態與進度"
