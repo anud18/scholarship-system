@@ -3,7 +3,7 @@ Professor review management API endpoints
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -11,34 +11,51 @@ from app.db.deps import get_db
 from app.schemas.application import (
     ApplicationResponse, ApplicationListResponse, ProfessorReviewCreate, ProfessorReviewResponse
 )
-from app.schemas.common import MessageResponse
+from app.schemas.common import MessageResponse, PaginatedResponse
 from app.services.application_service import ApplicationService
 from app.core.security import get_current_user, require_professor
 from app.models.user import User
 from app.core.exceptions import NotFoundError, AuthorizationError
+from app.core.rate_limiting import professor_rate_limit
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/applications", response_model=List[ApplicationListResponse])
+@router.get("/applications", response_model=PaginatedResponse[ApplicationListResponse])
+@professor_rate_limit(requests=30, window_seconds=600)  # 30 requests per 10 minutes
 async def get_professor_applications(
+    request: Request,
     status_filter: Optional[str] = Query(None, description="Filter by review status: pending, completed, all"),
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(20, ge=1, le=100, description="Items per page"),
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get applications requiring professor review"""
-    logger.info(f"Professor {current_user.id} requesting applications for review")
+    """Get applications requiring professor review with pagination"""
+    logger.info(f"Professor {current_user.id} requesting applications for review (page {page}, size {size})")
     
     try:
         service = ApplicationService(db)
-        applications = await service.get_professor_pending_applications(
+        applications, total_count = await service.get_professor_applications_paginated(
             professor_id=current_user.id,
-            status_filter=status_filter
+            status_filter=status_filter,
+            page=page,
+            size=size
         )
         
-        logger.info(f"Found {len(applications)} applications for professor {current_user.id}")
-        return applications
+        # Calculate pagination metadata
+        total_pages = (total_count + size - 1) // size  # Ceiling division
+        
+        logger.info(f"Found {len(applications)} applications (page {page}/{total_pages}, total: {total_count}) for professor {current_user.id}")
+        
+        return PaginatedResponse(
+            items=applications,
+            total=total_count,
+            page=page,
+            size=size,
+            pages=total_pages
+        )
         
     except Exception as e:
         logger.error(f"Error fetching professor applications: {str(e)}")
@@ -49,7 +66,9 @@ async def get_professor_applications(
 
 
 @router.get("/applications/{application_id}/review", response_model=ProfessorReviewResponse)
+@professor_rate_limit(requests=60, window_seconds=600)  # 60 requests per 10 minutes
 async def get_professor_review(
+    request: Request,
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db)
@@ -94,7 +113,9 @@ async def get_professor_review(
 
 
 @router.post("/applications/{application_id}/review", response_model=ProfessorReviewResponse)
+@professor_rate_limit(requests=20, window_seconds=600)  # 20 review submissions per 10 minutes
 async def submit_professor_review(
+    request: Request,
     review_data: ProfessorReviewCreate,
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(require_professor),
@@ -146,7 +167,9 @@ async def submit_professor_review(
 
 
 @router.put("/applications/{application_id}/review/{review_id}", response_model=ProfessorReviewResponse)
+@professor_rate_limit(requests=15, window_seconds=600)  # 15 review updates per 10 minutes
 async def update_professor_review(
+    request: Request,
     review_data: ProfessorReviewCreate,
     application_id: int = Path(..., description="Application ID"),
     review_id: int = Path(..., description="Review ID"),
@@ -196,7 +219,9 @@ async def update_professor_review(
 
 
 @router.get("/applications/{application_id}/sub-types", response_model=List[dict])
+@professor_rate_limit(requests=100, window_seconds=600)  # 100 requests per 10 minutes (lighter endpoint)
 async def get_application_sub_types(
+    request: Request,
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db)
@@ -220,7 +245,9 @@ async def get_application_sub_types(
 
 
 @router.get("/stats", response_model=dict)
+@professor_rate_limit(requests=50, window_seconds=600)  # 50 requests per 10 minutes
 async def get_professor_review_stats(
+    request: Request,
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db)
 ):

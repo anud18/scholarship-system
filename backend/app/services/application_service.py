@@ -1672,10 +1672,63 @@ class ApplicationService:
         return document_type_names.get(file_type, file_type)
     
     # Professor Review Methods
+    async def get_professor_applications_paginated(
+        self, 
+        professor_id: int, 
+        status_filter: Optional[str] = None,
+        page: int = 1,
+        size: int = 20
+    ) -> tuple[List[ApplicationListResponse], int]:
+        """Get paginated applications assigned to professor with total count"""
+        try:
+            # Build base query for counting
+            base_query = select(Application).join(
+                Application.scholarship_configuration
+            ).where(
+                # Only applications that require professor recommendation
+                Application.scholarship_configuration.has(
+                    ScholarshipConfiguration.requires_professor_recommendation.is_(True)
+                ),
+                # Only applications assigned to this specific professor
+                Application.professor_id == professor_id
+            )
+            
+            # Apply status filter to base query
+            if status_filter == "pending":
+                base_query = base_query.where(
+                    Application.status.in_([
+                        ApplicationStatus.SUBMITTED.value,
+                        ApplicationStatus.PENDING_RECOMMENDATION.value
+                    ])
+                )
+            elif status_filter == "completed":
+                base_query = base_query.where(
+                    Application.status == ApplicationStatus.RECOMMENDED.value
+                )
+            
+            # Get total count (before filtering by professor review access)
+            from sqlalchemy import func
+            count_query = select(func.count(Application.id)).select_from(base_query.subquery())
+            count_result = await self.db.execute(count_query)
+            total_count = count_result.scalar()
+            
+            # Get paginated applications
+            applications = await self.get_professor_pending_applications(
+                professor_id, status_filter, page, size
+            )
+            
+            return applications, total_count
+            
+        except Exception as e:
+            logger.error(f"Error fetching paginated professor applications: {e}")
+            raise
+
     async def get_professor_pending_applications(
         self, 
         professor_id: int, 
-        status_filter: Optional[str] = None
+        status_filter: Optional[str] = None,
+        page: int = 1,
+        size: int = 20
     ) -> List[ApplicationListResponse]:
         """Get all applications assigned to professor (not limited by review period for viewing)"""
         try:
@@ -1709,6 +1762,10 @@ class ApplicationService:
                     Application.status == ApplicationStatus.RECOMMENDED.value
                 )
             # "all" or None shows all applications in review period
+            
+            # Add pagination - offset and limit
+            offset = (page - 1) * size
+            query = query.offset(offset).limit(size)
             
             result = await self.db.execute(query)
             applications = result.scalars().all()
