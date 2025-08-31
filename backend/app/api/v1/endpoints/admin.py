@@ -47,8 +47,10 @@ async def get_all_applications(
 ):
     """Get all applications with pagination (admin only)"""
     
-    # Build query with joins
-    stmt = select(Application, User, ScholarshipType).join(
+    # Build query with joins and load configurations
+    stmt = select(Application, User, ScholarshipType).options(
+        selectinload(Application.scholarship_configuration)
+    ).join(
         User, Application.user_id == User.id
     ).outerjoin(
         ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
@@ -115,10 +117,16 @@ async def get_all_applications(
             "created_at": app.created_at,
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
-            # Additional fields for display
-            "student_name": user.name if user else None,
-            "student_no": getattr(user, 'nycu_id', None),
-            "days_waiting": None
+            # Additional fields for display - get from student_data first, fallback to user
+            "student_name": (app.student_data.get('cname') if app.student_data else None) or (user.name if user else None),
+            "student_no": (app.student_data.get('stdNo') if app.student_data else None) or getattr(user, 'nycu_id', None),
+            "days_waiting": None,
+            # Include scholarship configuration for professor review settings
+            "scholarship_configuration": {
+                "requires_professor_recommendation": app.scholarship_configuration.requires_professor_recommendation if app.scholarship_configuration else False,
+                "requires_college_review": app.scholarship_configuration.requires_college_review if app.scholarship_configuration else False,
+                "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None
+            } if app.scholarship_configuration else None
         }
         
         # Calculate days waiting
@@ -377,8 +385,10 @@ async def get_recent_applications(
                 data=[]
             )
     
-    # Build query with joins
-    stmt = select(Application, User, ScholarshipType).join(
+    # Build query with joins and load configurations
+    stmt = select(Application, User, ScholarshipType).options(
+        selectinload(Application.scholarship_configuration)
+    ).join(
         User, Application.user_id == User.id
     ).outerjoin(
         ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
@@ -439,10 +449,16 @@ async def get_recent_applications(
             "created_at": app.created_at,
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
-            # Additional fields for display
-            "student_name": user.name if user else None,
-            "student_no": getattr(user, 'nycu_id', None),
-            "days_waiting": None
+            # Additional fields for display - get from student_data first, fallback to user
+            "student_name": (app.student_data.get('cname') if app.student_data else None) or (user.name if user else None),
+            "student_no": (app.student_data.get('stdNo') if app.student_data else None) or getattr(user, 'nycu_id', None),
+            "days_waiting": None,
+            # Include scholarship configuration for professor review settings
+            "scholarship_configuration": {
+                "requires_professor_recommendation": app.scholarship_configuration.requires_professor_recommendation if app.scholarship_configuration else False,
+                "requires_college_review": app.scholarship_configuration.requires_college_review if app.scholarship_configuration else False,
+                "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None
+            } if app.scholarship_configuration else None
         }
         
         # Calculate days waiting
@@ -909,9 +925,11 @@ async def get_applications_by_scholarship(
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
     
-    # Build query with joins and load files
+    # Build query with joins and load files, configurations, and professor
     stmt = select(Application, User).options(
-        selectinload(Application.files)
+        selectinload(Application.files),
+        selectinload(Application.scholarship_configuration),
+        selectinload(Application.professor)
     ).join(
         User, Application.user_id == User.id
     ).where(Application.scholarship_type_id == scholarship.id)
@@ -975,6 +993,9 @@ async def get_applications_by_scholarship(
             "scholarship_type": scholarship.code,
             "scholarship_type_id": app.scholarship_type_id or scholarship.id,
             "scholarship_type_zh": scholarship.name,
+            "scholarship_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None,
+            "amount": app.scholarship_configuration.amount if app.scholarship_configuration else None,
+            "currency": app.scholarship_configuration.currency if app.scholarship_configuration else "TWD",
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
@@ -984,6 +1005,18 @@ async def get_applications_by_scholarship(
             "submitted_form_data": processed_form_data,
             "agree_terms": app.agree_terms or False,
             "professor_id": app.professor_id,
+            "professor": {
+                "id": app.professor.id,
+                "name": app.professor.name,
+                "nycu_id": app.professor.nycu_id,
+                "email": app.professor.email
+            } if app.professor else ({
+                "id": app.professor_id,
+                "name": f"[教授不存在] ID: {app.professor_id}",
+                "nycu_id": None,
+                "email": None,
+                "error": True
+            } if app.professor_id else None),
             "reviewer_id": app.reviewer_id,
             "final_approver_id": app.final_approver_id,
             "review_score": app.review_score,
@@ -995,10 +1028,16 @@ async def get_applications_by_scholarship(
             "created_at": app.created_at,
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
-            # Additional fields for display
-            "student_name": user.name if user else None,
-            "student_no": getattr(user, 'nycu_id', None),
-            "days_waiting": None
+            # Additional fields for display - get from student_data first, fallback to user
+            "student_name": (app.student_data.get('cname') if app.student_data else None) or (user.name if user else None),
+            "student_no": (app.student_data.get('stdNo') if app.student_data else None) or getattr(user, 'nycu_id', None),
+            "days_waiting": None,
+            # Include scholarship configuration for professor review settings
+            "scholarship_configuration": {
+                "requires_professor_recommendation": app.scholarship_configuration.requires_professor_recommendation if app.scholarship_configuration else False,
+                "requires_college_review": app.scholarship_configuration.requires_college_review if app.scholarship_configuration else False,
+                "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None
+            } if app.scholarship_configuration else None
         }
         
         # Calculate days waiting
@@ -2740,8 +2779,43 @@ async def assign_professor_to_application(
             assigned_by=current_user
         )
         
-        # Convert to response format
-        response_data = ApplicationResponse.from_orm(application)
+        # Create a safe response that doesn't trigger lazy loading
+        # Extract student info from student_data JSON field
+        student_data = application.student_data or {}
+        student_id = (student_data.get("std_stdcode") or 
+                     student_data.get("student_id") or 
+                     student_data.get("stdNo"))
+        
+        response_data = {
+            "id": application.id,
+            "app_id": application.app_id,
+            "user_id": application.user_id,
+            "student_id": student_id,
+            "scholarship_type_id": application.scholarship_type_id,
+            "scholarship_subtype_list": application.scholarship_subtype_list or [],
+            "status": application.status,
+            "status_name": getattr(application, 'status_name', application.status),
+            "is_renewal": application.is_renewal or False,
+            "academic_year": application.academic_year,
+            "semester": application.semester,
+            "student_data": application.student_data or {},
+            "submitted_form_data": application.submitted_form_data or {},
+            "agree_terms": application.agree_terms or False,
+            "professor_id": application.professor_id,
+            "reviewer_id": application.reviewer_id,
+            "final_approver_id": application.final_approver_id,
+            "review_score": application.review_score,
+            "review_comments": application.review_comments,
+            "rejection_reason": application.rejection_reason,
+            "submitted_at": application.submitted_at.isoformat() if application.submitted_at else None,
+            "reviewed_at": application.reviewed_at.isoformat() if application.reviewed_at else None,
+            "approved_at": application.approved_at.isoformat() if application.approved_at else None,
+            "created_at": application.created_at.isoformat(),
+            "updated_at": application.updated_at.isoformat(),
+            "meta_data": application.meta_data,
+            "reviews": [],  # Empty to avoid lazy loading
+            "professor_reviews": []  # Empty to avoid lazy loading
+        }
         
         return ApiResponse(
             success=True,

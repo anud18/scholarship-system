@@ -110,6 +110,29 @@ export function ProfessorReviewComponent({ user }: ProfessorReviewComponentProps
     }
   }, [searchQuery, applications])
 
+  // Ensure reviewData.items is always initialized when subTypes change
+  useEffect(() => {
+    console.log('SubTypes changed, checking reviewData initialization')
+    console.log('SubTypes:', subTypes)
+    console.log('Current reviewData.items:', reviewData.items)
+    
+    if (subTypes.length > 0 && reviewData.items.length === 0) {
+      console.log('Initializing reviewData.items from subTypes effect')
+      const initialItems = subTypes.map(subType => ({
+        sub_type_code: subType.value,
+        is_recommended: false,
+        comments: ""
+      }))
+      
+      setReviewData(prev => ({
+        ...prev,
+        items: initialItems
+      }))
+      
+      console.log('ReviewData.items initialized:', initialItems)
+    }
+  }, [subTypes, reviewData.items.length])
+
   // Get status badge variant
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -145,50 +168,90 @@ export function ProfessorReviewComponent({ user }: ProfessorReviewComponentProps
     setError(null)
     
     try {
+      console.log('=== OPENING REVIEW MODAL ===')
+      console.log('Application ID:', application.id)
+      
       // Get available sub-types
       const subTypesResponse = await apiClient.professor.getSubTypes(application.id)
+      console.log('Sub-types response:', subTypesResponse)
+      
+      let availableSubTypes: SubTypeOption[] = []
       if (subTypesResponse.success && subTypesResponse.data) {
-        setSubTypes(subTypesResponse.data)
+        availableSubTypes = subTypesResponse.data
+        setSubTypes(availableSubTypes)
+        console.log('Set sub-types:', availableSubTypes)
+      }
+
+      // Always initialize items based on available sub-types
+      const initializeItems = (subTypes: SubTypeOption[]) => {
+        console.log('Initializing items for sub-types:', subTypes)
+        return subTypes.map(subType => ({
+          sub_type_code: subType.value,
+          is_recommended: false,
+          comments: ""
+        }))
       }
 
       // Get existing review if any
+      let initialItems = initializeItems(availableSubTypes)
+      console.log('Initial items created:', initialItems)
+
       try {
         const reviewResponse = await apiClient.professor.getReview(application.id)
-        if (reviewResponse.success && reviewResponse.data) {
+        console.log('Existing review response:', reviewResponse)
+        
+        // Check if this is an actual existing review (id > 0) or a new review (id = 0)
+        if (reviewResponse.success && reviewResponse.data && reviewResponse.data.id && reviewResponse.data.id > 0) {
+          console.log('Found existing review with ID:', reviewResponse.data.id)
+          console.log('Existing review items:', reviewResponse.data.items)
           setExistingReview(reviewResponse.data)
+          
+          // Merge existing review items with all available sub-types
+          const existingItems = reviewResponse.data.items || []
+          const mergedItems = availableSubTypes.map(subType => {
+            const existingItem = existingItems.find(item => item.sub_type_code === subType.value)
+            return existingItem || {
+              sub_type_code: subType.value,
+              is_recommended: false,
+              comments: ""
+            }
+          })
+          
+          console.log('Merged items with existing review:', mergedItems)
           setReviewData({
             recommendation: reviewResponse.data.recommendation || "",
-            items: reviewResponse.data.items || []
+            items: mergedItems
           })
         } else {
-          // No existing review, initialize with sub-types
+          // No existing review (id = 0 or no data), use initial items
+          console.log('No existing review found, using initial items')
           setExistingReview(null)
-          const initialItems = subTypesResponse.data?.map(subType => ({
-            sub_type_code: subType.value,
-            is_recommended: false,
-            comments: ""
-          })) || []
           setReviewData({
             recommendation: "",
             items: initialItems
           })
         }
       } catch (e) {
-        // No existing review, create initial form
+        // No existing review, use initial items
+        console.log('Error getting existing review, using initial items:', e)
         setExistingReview(null)
-        const initialItems = subTypesResponse.data?.map(subType => ({
-          sub_type_code: subType.value,
-          is_recommended: false,
-          comments: ""
-        })) || []
         setReviewData({
           recommendation: "",
           items: initialItems
         })
       }
 
+      // Final verification
+      setTimeout(() => {
+        console.log('=== FINAL STATE VERIFICATION ===')
+        console.log('SubTypes length:', availableSubTypes.length)
+        console.log('ReviewData items length:', initialItems.length)
+        console.log('ReviewData items:', initialItems)
+      }, 100)
+
       setReviewModalOpen(true)
     } catch (e: any) {
+      console.error('Error opening review modal:', e)
       setError(e.message || "Failed to load review data")
     } finally {
       setLoading(false)
@@ -241,14 +304,32 @@ export function ProfessorReviewComponent({ user }: ProfessorReviewComponentProps
 
   // Update review item
   const updateReviewItem = (subTypeCode: string, field: string, value: any) => {
-    setReviewData(prev => ({
-      ...prev,
-      items: prev.items.map(item =>
-        item.sub_type_code === subTypeCode
-          ? { ...item, [field]: value }
-          : item
-      )
-    }))
+    console.log('=== updateReviewItem START ===')
+    console.log('Parameters:', { subTypeCode, field, value })
+    console.log('Current reviewData before update:', JSON.stringify(reviewData, null, 2))
+    
+    setReviewData(prev => {
+      console.log('Previous state in setter:', JSON.stringify(prev, null, 2))
+      
+      const itemFound = prev.items.find(item => item.sub_type_code === subTypeCode)
+      console.log('Item found for subTypeCode:', subTypeCode, '=', itemFound)
+      
+      const newData = {
+        ...prev,
+        items: prev.items.map(item => {
+          if (item.sub_type_code === subTypeCode) {
+            const updatedItem = { ...item, [field]: value }
+            console.log('Updating item from:', item, 'to:', updatedItem)
+            return updatedItem
+          }
+          return item
+        })
+      }
+      
+      console.log('New reviewData:', JSON.stringify(newData, null, 2))
+      console.log('=== updateReviewItem END ===')
+      return newData
+    })
   }
 
   // Get sub-type label
@@ -447,46 +528,116 @@ export function ProfessorReviewComponent({ user }: ProfessorReviewComponentProps
                 </CardContent>
               </Card>
 
-              {/* Sub-type Reviews */}
+              {/* Sub-type Reviews - SIMPLIFIED VERSION */}
               {subTypes.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">子類型推薦</CardTitle>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <CheckCircle className="h-5 w-5 text-blue-600" />
+                      子類型推薦評估
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      請針對每個獎學金子類型進行評估，並提供您的推薦意見
+                    </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {subTypes.map((subType) => {
                       const reviewItem = reviewData.items.find(item => item.sub_type_code === subType.value)
+                      const isRecommended = reviewItem?.is_recommended || false
+                      
                       return (
-                        <div key={subType.value} className="border rounded-lg p-4 space-y-3">
-                          <div className="flex items-center space-x-3">
-                            <Checkbox
-                              id={`recommend-${subType.value}`}
-                              checked={reviewItem?.is_recommended || false}
-                              onCheckedChange={(checked) => 
-                                updateReviewItem(subType.value, 'is_recommended', checked)
-                              }
-                            />
-                            <label 
-                              htmlFor={`recommend-${subType.value}`}
-                              className="font-medium cursor-pointer"
-                            >
-                              推薦 {subType.label}
-                            </label>
+                        <div key={subType.value} className="border rounded-lg p-4 space-y-4">
+                          {/* Simple checkbox approach */}
+                          <div className="flex items-start gap-4">
+                            <div className="flex items-center space-x-2 pt-1">
+                              <Checkbox
+                                id={`recommend-${subType.value}`}
+                                checked={isRecommended}
+                                onCheckedChange={(checked) => {
+                                  console.log('Checkbox changed:', subType.value, 'to:', checked)
+                                  updateReviewItem(subType.value, 'is_recommended', !!checked)
+                                }}
+                              />
+                              <label 
+                                htmlFor={`recommend-${subType.value}`}
+                                className="text-sm font-medium cursor-pointer"
+                              >
+                                推薦
+                              </label>
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-lg mb-1">
+                                {subType.label}
+                              </h3>
+                              {subType.label_en && (
+                                <p className="text-sm text-muted-foreground mb-2">
+                                  {subType.label_en}
+                                </p>
+                              )}
+                              <Badge variant={isRecommended ? "default" : "secondary"}>
+                                {isRecommended ? '✓ 推薦' : '未推薦'}
+                              </Badge>
+                            </div>
                           </div>
+
+                          {/* Alternative buttons */}
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant={isRecommended ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => {
+                                console.log('Direct recommend button clicked:', subType.value)
+                                updateReviewItem(subType.value, 'is_recommended', true)
+                              }}
+                            >
+                              推薦此項目
+                            </Button>
+                            <Button
+                              type="button"
+                              variant={!isRecommended ? "secondary" : "outline"}
+                              size="sm"
+                              onClick={() => {
+                                console.log('Direct not recommend button clicked:', subType.value)
+                                updateReviewItem(subType.value, 'is_recommended', false)
+                              }}
+                            >
+                              不推薦
+                            </Button>
+                          </div>
+
+                          {/* Comments Section */}
                           <div>
-                            <label className="text-sm font-medium">備註意見</label>
+                            <label className="text-sm font-medium mb-2 block">
+                              評估意見 (可選)
+                            </label>
                             <Textarea
-                              placeholder={`針對${subType.label}的具體意見...`}
+                              placeholder={`請說明您對「${subType.label}」的評估意見...`}
                               value={reviewItem?.comments || ""}
-                              onChange={(e) => 
+                              onChange={(e) => {
+                                console.log('Comments updated for:', subType.value)
                                 updateReviewItem(subType.value, 'comments', e.target.value)
-                              }
-                              className="mt-1"
+                              }}
+                              rows={3}
                             />
                           </div>
                         </div>
                       )
                     })}
+
+                    {/* Debug Info */}
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm">
+                      <p className="font-medium">Debug Info:</p>
+                      <p>Sub-types count: {subTypes.length}</p>
+                      <p>Review items count: {reviewData.items.length}</p>
+                      <p>Recommended count: {reviewData.items.filter(item => item.is_recommended).length}</p>
+                      <div className="mt-2">
+                        <p>Current review data:</p>
+                        <pre className="text-xs bg-white p-2 rounded mt-1">
+                          {JSON.stringify(reviewData.items, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               )}

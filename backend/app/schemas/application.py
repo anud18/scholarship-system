@@ -302,6 +302,11 @@ class ApplicationResponse(BaseModel):
     user_id: int
     student_id: Optional[str] = None
     scholarship_type_id: int
+    scholarship_type: Optional[str] = None  # Scholarship type code
+    scholarship_type_zh: Optional[str] = None  # Chinese scholarship type name
+    scholarship_name: Optional[str] = None  # Full scholarship configuration name
+    amount: Optional[Decimal] = None  # Scholarship amount
+    currency: Optional[str] = "TWD"  # Scholarship currency
     scholarship_subtype_list: Optional[List[str]] = []
     status: str
     status_name: Optional[str]
@@ -326,6 +331,10 @@ class ApplicationResponse(BaseModel):
     
     reviews: List[ApplicationReviewResponse] = []
     professor_reviews: List[ProfessorReviewResponse] = []
+    
+    # Additional display fields
+    student_name: Optional[str] = None
+    student_no: Optional[str] = None
     
     @property
     def is_editable(self) -> bool:
@@ -367,6 +376,9 @@ class ApplicationListResponse(BaseModel):
     scholarship_type: Optional[str] = None
     scholarship_type_id: int
     scholarship_type_zh: Optional[str] = None  # 中文獎學金類型名稱
+    scholarship_name: Optional[str] = None  # Full scholarship configuration name
+    amount: Optional[Decimal] = None  # Scholarship amount
+    currency: Optional[str] = "TWD"  # Scholarship currency
     scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
     status: str
     status_name: Optional[str]
@@ -388,6 +400,17 @@ class ApplicationListResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
+    
+    # Additional display fields
+    student_name: Optional[str] = None
+    student_no: Optional[str] = None  
+    days_waiting: Optional[int] = None
+    
+    # Professor information
+    professor: Optional[Dict[str, Any]] = None
+    
+    # Scholarship configuration for professor review requirements
+    scholarship_configuration: Optional[Dict[str, Any]] = None
     
     @property
     def is_editable(self) -> bool:
