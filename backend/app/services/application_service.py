@@ -267,33 +267,39 @@ class ApplicationService:
         ename = student_snapshot.get("ename", "")
         std_stdcode = student_snapshot.get("std_stdcode", "")
         
+        # Determine sub_type_selection_mode from scholarship configuration
+        sub_type_selection_mode = SubTypeSelectionMode.SINGLE  # Default
+        if scholarship.sub_type_selection_mode:
+            sub_type_selection_mode = scholarship.sub_type_selection_mode
+        
+        # Determine main scholarship type from scholarship type code
+        main_scholarship_type = application_data.scholarship_type.upper()
+        
+        # Determine sub scholarship type from selected subtypes (use first one if any)
+        scholarship_subtype_list = application_data.scholarship_subtype_list or []
+        sub_scholarship_type = "GENERAL"  # Default
+        if scholarship_subtype_list:
+            sub_scholarship_type = scholarship_subtype_list[0].upper()
+
         # Create application
         application = Application(
             app_id=app_id,
             user_id=user.id,
             scholarship_type_id=scholarship.id,
             scholarship_configuration_id=config.id,
-            scholarship_type=application_data.scholarship_type,
             scholarship_name=config.config_name or scholarship.name,
             amount=config.amount,
-            currency=config.currency or "TWD",
-            scholarship_subtype_list=application_data.scholarship_subtype_list or [],
-            sub_type_selection_mode=application_data.sub_type_selection_mode or "SINGLE",
-            main_scholarship_type=application_data.main_scholarship_type,
-            sub_scholarship_type=application_data.sub_scholarship_type,
-            is_renewal=application_data.is_renewal or False,
+            scholarship_subtype_list=scholarship_subtype_list,
+            sub_type_selection_mode=sub_type_selection_mode,
+            main_scholarship_type=main_scholarship_type,
+            sub_scholarship_type=sub_scholarship_type,
+            is_renewal=False,  # New applications are never renewals
             academic_year=academic_year,
             semester=semester,
             student_data=student_snapshot,
-            submitted_form_data=application_data.submitted_form_data or {},
-            # Extract names for easier access
-            student_name=cname,
-            student_no=std_stdcode,
-            student_id=self._get_student_id_from_user(user),
+            submitted_form_data=application_data.form_data.dict() if application_data.form_data else {},
             agree_terms=application_data.agree_terms or False,
-            status="draft" if is_draft else "submitted",
-            created_by=user.id,
-            updated_by=user.id
+            status="draft" if is_draft else "submitted"
         )
         
         if not is_draft:
@@ -348,7 +354,7 @@ class ApplicationService:
         result = await self.db.execute(stmt)
         application = result.scalar_one()
         
-        logger.debug(f"Application created successfully: {app_id} with status: {status}")
+        logger.debug(f"Application created successfully: {application.app_id} with status: {application.status}")
         return await self._build_application_response(application, user)
     
 
@@ -1725,60 +1731,8 @@ class ApplicationService:
     ) -> tuple[List[ApplicationListResponse], int]:
         """Get paginated applications assigned to professor with total count"""
         try:
-            # Build base query for counting
-            base_query = select(Application).join(
-                Application.scholarship_configuration
-            ).where(
-                # Only applications that require professor recommendation
-                Application.scholarship_configuration.has(
-                    ScholarshipConfiguration.requires_professor_recommendation.is_(True)
-                ),
-                # Only applications assigned to this specific professor
-                Application.professor_id == professor_id
-            )
-            
-            # Apply status filter to base query
-            if status_filter == "pending":
-                base_query = base_query.where(
-                    Application.status.in_([
-                        ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.PENDING_RECOMMENDATION.value
-                    ])
-                )
-            elif status_filter == "completed":
-                base_query = base_query.where(
-                    Application.status == ApplicationStatus.RECOMMENDED.value
-                )
-            
-            # Get total count (before filtering by professor review access)
-            from sqlalchemy import func
-            count_query = select(func.count(Application.id)).select_from(base_query.subquery())
-            count_result = await self.db.execute(count_query)
-            total_count = count_result.scalar()
-            
-            # Get paginated applications
-            applications = await self.get_professor_pending_applications(
-                professor_id, status_filter, page, size
-            )
-            
-            return applications, total_count
-            
-        except Exception as e:
-            logger.error(f"Error fetching paginated professor applications: {e}")
-            raise
-
-    async def get_professor_pending_applications(
-        self, 
-        professor_id: int, 
-        status_filter: Optional[str] = None,
-        page: int = 1,
-        size: int = 20
-    ) -> List[ApplicationListResponse]:
-        """Get all applications assigned to professor (not limited by review period for viewing)"""
-        try:
-            # Build query for applications that need professor review
-            # Modified: Remove time restriction for viewing - professors can see ALL assigned applications
-            query = select(Application).options(
+            # Build base query with ALL required filters (consistent with what will be returned)
+            base_query = select(Application).options(
                 selectinload(Application.scholarship_configuration).selectinload(ScholarshipConfiguration.scholarship_type),
                 selectinload(Application.professor_reviews),
                 selectinload(Application.student)
@@ -1790,83 +1744,81 @@ class ApplicationService:
                     ScholarshipConfiguration.requires_professor_recommendation.is_(True)
                 ),
                 # Only applications assigned to this specific professor
-                Application.professor_id == professor_id
+                Application.professor_id == professor_id,
+                # Only applications in valid statuses for professor viewing
+                Application.status.in_([
+                    ApplicationStatus.SUBMITTED.value,
+                    ApplicationStatus.UNDER_REVIEW.value,
+                    ApplicationStatus.PENDING_RECOMMENDATION.value,
+                    ApplicationStatus.RECOMMENDED.value,
+                    ApplicationStatus.APPROVED.value,
+                    ApplicationStatus.REJECTED.value
+                ])
             )
             
-            # Apply status filter
+            # Apply status filter to base query
             if status_filter == "pending":
-                query = query.where(
+                base_query = base_query.where(
                     Application.status.in_([
                         ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.PENDING_RECOMMENDATION.value
+                        ApplicationStatus.PENDING_RECOMMENDATION.value,
+                        ApplicationStatus.UNDER_REVIEW.value  # Include under_review in pending
                     ])
                 )
             elif status_filter == "completed":
-                query = query.where(
-                    Application.status == ApplicationStatus.RECOMMENDED.value
+                base_query = base_query.where(
+                    Application.status.in_([
+                        ApplicationStatus.RECOMMENDED.value,
+                        ApplicationStatus.APPROVED.value,
+                        ApplicationStatus.REJECTED.value
+                    ])
                 )
-            # "all" or None shows all applications in review period
+            # "all" or None shows all applications (no additional status filter)
             
-            # Add pagination - offset and limit
+            # Get total count with same filters
+            count_query = select(func.count()).select_from(base_query.subquery())
+            count_result = await self.db.execute(count_query)
+            total_count = count_result.scalar()
+            
+            # Apply pagination and get results
             offset = (page - 1) * size
-            query = query.offset(offset).limit(size)
+            paginated_query = base_query.offset(offset).limit(size).order_by(desc(Application.created_at))
             
-            result = await self.db.execute(query)
-            applications = result.scalars().all()
+            result = await self.db.execute(paginated_query)
+            applications = result.unique().scalars().all()
             
-            # Filter applications based on professor assignment logic
-            # This could be based on student-professor relationships, department, or other criteria
-            filtered_applications = []
-            for app in applications:
-                if await self.can_professor_review_application(app.id, professor_id):
-                    filtered_applications.append(app)
-            
-            # Convert to response format with display fields
+            # Convert to response format - no additional filtering needed since SQL query is already correct
             responses = []
-            for app in filtered_applications:
+            for app in applications:
                 # Get scholarship type information for display
                 scholarship_type_name = None
                 scholarship_type_zh = None
                 if app.scholarship_configuration and app.scholarship_configuration.scholarship_type:
-                    scholarship_type_name = app.scholarship_configuration.scholarship_type.code
+                    scholarship_type_name = app.scholarship_configuration.scholarship_type.name
+                    # Use name for Chinese display since name_zh doesn't exist
                     scholarship_type_zh = app.scholarship_configuration.scholarship_type.name
                 
-                # Extract student name and student number from student_data
-                student_name = None
-                student_no = None
-                if app.student_data:
-                    student_name = app.student_data.get('cname')
-                    student_no = app.student_data.get('stdNo')
-                
-                # Get user information as fallback
-                if not student_name or not student_no:
-                    if app.student:  # User loaded via relationship
-                        if not student_name:
-                            student_name = app.student.name
-                        if not student_no:
-                            student_no = app.student.nycu_id
-                
-                # Build ApplicationListResponse with display fields
-                response = ApplicationListResponse(
+                # Create response with all required fields
+                responses.append(ApplicationListResponse(
                     id=app.id,
                     app_id=app.app_id,
                     user_id=app.user_id,
                     student_id=app.student.nycu_id if app.student else None,
-                    scholarship_type=scholarship_type_name,
+                    scholarship_type=app.main_scholarship_type.lower() if app.main_scholarship_type else "",
                     scholarship_type_id=app.scholarship_type_id,
-                    scholarship_type_zh=scholarship_type_zh,
-                    scholarship_name=app.scholarship_configuration.config_name if app.scholarship_configuration else None,
-                    amount=app.scholarship_configuration.amount if app.scholarship_configuration else None,
+                    scholarship_type_zh=scholarship_type_zh or "未設定",
+                    scholarship_name=app.scholarship_name or "",
+                    amount=app.amount or 0,
                     currency=app.scholarship_configuration.currency if app.scholarship_configuration else "TWD",
                     scholarship_subtype_list=app.scholarship_subtype_list or [],
                     status=app.status,
-                    status_name=app.status_name,
-                    is_renewal=app.is_renewal,
-                    academic_year=app.academic_year,
-                    semester=self._convert_semester_to_string(app.semester),
+                    status_name=app.status,  # Using status as status_name for now
+                    is_renewal=app.is_renewal or False,
+                    academic_year=app.academic_year or 0,
+                    semester=app.semester.value if app.semester else None,
                     student_data=app.student_data or {},
                     submitted_form_data=app.submitted_form_data or {},
-                    agree_terms=app.agree_terms,
+                    agree_terms=app.agree_terms or False,
                     professor_id=app.professor_id,
                     reviewer_id=app.reviewer_id,
                     final_approver_id=app.final_approver_id,
@@ -1880,8 +1832,8 @@ class ApplicationService:
                     updated_at=app.updated_at,
                     meta_data=app.meta_data,
                     # Display fields
-                    student_name=student_name,
-                    student_no=student_no,
+                    student_name=app.student_data.get("cname", "") if app.student_data else "",
+                    student_no=app.student_data.get("stdNo", "") if app.student_data else "",
                     days_waiting=None,  # Calculate if needed
                     professor=None,  # Professor info not needed in professor view
                     scholarship_configuration={
@@ -1889,15 +1841,14 @@ class ApplicationService:
                         "requires_college_review": app.scholarship_configuration.requires_college_review if app.scholarship_configuration else False,
                         "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None
                     } if app.scholarship_configuration else None
-                )
-                responses.append(response)
+                ))
             
-            return responses
+            return responses, total_count
             
         except Exception as e:
-            logger.error(f"Error fetching professor applications: {e}")
+            logger.error(f"Error fetching paginated professor applications: {e}")
             raise
-    
+
     async def can_professor_review_application(self, application_id: int, professor_id: int) -> bool:
         """Check if professor can view this application (no time restrictions for viewing)"""
         try:

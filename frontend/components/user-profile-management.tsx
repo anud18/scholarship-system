@@ -42,6 +42,8 @@ import {
 } from 'lucide-react'
 import { FileUpload } from "@/components/file-upload"
 import { FilePreviewDialog } from "@/components/file-preview-dialog"
+import { useLanguagePreference } from "@/hooks/use-language-preference"
+import { getTranslation } from "@/lib/i18n"
 
 interface UserInfo {
   id: number
@@ -114,6 +116,10 @@ export default function UserProfileManagement() {
   
   const { toast } = useToast()
 
+  // Language preference and translation
+  const { locale } = useLanguagePreference("student")
+  const t = (key: string) => getTranslation(locale, key)
+
   useEffect(() => {
     loadProfile()
   }, [])
@@ -137,8 +143,8 @@ export default function UserProfileManagement() {
         // 如果 API 返回失敗，顯示錯誤但不阻止頁面渲染
         console.warn('Profile API returned error:', response.message)
         toast({
-          title: "提示",
-          description: response.message || "個人資料可能尚未建立，您可以開始填寫資料",
+          title: t("profile_management.update_success"),
+          description: response.message || t("profile_management.profile_may_not_exist"),
           variant: "default"
         })
         
@@ -170,14 +176,14 @@ export default function UserProfileManagement() {
       // 網絡錯誤或其他嚴重錯誤
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
         toast({
-          title: "連線錯誤",
-          description: "無法連接到伺服器，請檢查網路連線",
+          title: t("profile_management.connection_error"),
+          description: t("profile_management.connection_error_desc"),
           variant: "destructive"
         })
       } else {
         toast({
-          title: "載入錯誤",
-          description: error.message || "載入個人資料時發生錯誤",
+          title: t("profile_management.load_error"),
+          description: error.message || t("profile_management.load_profile_error"),
           variant: "destructive"
         })
       }
@@ -267,8 +273,8 @@ export default function UserProfileManagement() {
     
     if (!isValid) {
       toast({
-        title: "驗證失敗",
-        description: "請檢查並修正表單中的錯誤",
+        title: t("profile_management.validation_failed"),
+        description: t("profile_management.validation_failed_desc"),
         variant: "destructive"
       })
       return
@@ -288,7 +294,7 @@ export default function UserProfileManagement() {
           })
           data = {
             ...bankData,
-            change_reason: "使用者更新銀行帳戶資訊"
+            change_reason: "Bank account information updated by user"
           }
           break
         case 'advisor':
@@ -300,7 +306,7 @@ export default function UserProfileManagement() {
           })
           data = {
             ...advisorData,
-            change_reason: "使用者更新指導教授資訊"
+            change_reason: "Advisor information updated by user"
           }
           break
         default:
@@ -324,15 +330,15 @@ export default function UserProfileManagement() {
       }
       
       toast({
-        title: "成功",
-        description: "個人資料已更新",
+        title: t("profile_management.update_success"),
+        description: t("profile_management.profile_updated"),
       })
       
       await loadProfile()
     } catch (error: any) {
       toast({
-        title: "更新失敗",
-        description: error.response?.data?.detail || "更新個人資料時發生錯誤",
+        title: t("profile_management.update_failed"),
+        description: error.response?.data?.detail || t("profile_management.update_profile_error"),
         variant: "destructive"
       })
     } finally {
@@ -347,8 +353,8 @@ export default function UserProfileManagement() {
   const handleBankDocumentUpload = async () => {
     if (bankDocumentFiles.length === 0) {
       toast({
-        title: "請選擇文件",
-        description: "請先選擇要上傳的銀行帳戶證明文件",
+        title: t("profile_management.select_file"),
+        description: t("profile_management.select_file_desc"),
         variant: "destructive"
       })
       return
@@ -358,8 +364,8 @@ export default function UserProfileManagement() {
 
     if (file.size > 10 * 1024 * 1024) {
       toast({
-        title: "檔案太大",
-        description: "檔案大小不能超過 10MB",
+        title: t("profile_management.file_too_large"),
+        description: t("profile_management.file_size_error"),
         variant: "destructive"
       })
       return
@@ -374,8 +380,8 @@ export default function UserProfileManagement() {
       }
 
       toast({
-        title: "成功",
-        description: "銀行帳戶證明文件已上傳",
+        title: t("profile_management.update_success"),
+        description: t("profile_management.document_uploaded_success"),
       })
 
       // 清空已選擇的文件
@@ -383,8 +389,8 @@ export default function UserProfileManagement() {
       await loadProfile()
     } catch (error: any) {
       toast({
-        title: "上傳失敗",
-        description: error.response?.data?.detail || "上傳檔案時發生錯誤",
+        title: t("profile_management.upload_failed"),
+        description: error.response?.data?.detail || t("profile_management.upload_error"),
         variant: "destructive"
       })
     } finally {
@@ -398,8 +404,8 @@ export default function UserProfileManagement() {
       
       if (response.success) {
         toast({
-          title: "成功",
-          description: "銀行帳戶證明文件已刪除",
+          title: t("profile_management.update_success"),
+          description: t("profile_management.document_deleted"),
         })
         await loadProfile()
       } else {
@@ -407,8 +413,8 @@ export default function UserProfileManagement() {
       }
     } catch (error: any) {
       toast({
-        title: "刪除失敗",
-        description: error.message || "刪除檔案時發生錯誤",
+        title: t("profile_management.delete_failed"),
+        description: error.message || t("profile_management.delete_error"),
         variant: "destructive"
       })
     }
@@ -440,7 +446,7 @@ export default function UserProfileManagement() {
     
     // 對於個人資料的銀行文件，使用檔名作為 fileId
     const fileId = filename
-    const fileType = encodeURIComponent('銀行帳戶證明文件')
+    const fileType = encodeURIComponent('bank_document')
     // 對於個人資料，使用用戶 ID 作為標識符，而不是 applicationId
     const userId = profile.user_info.id || 0
     
@@ -485,8 +491,8 @@ export default function UserProfileManagement() {
       }
     } catch (error: any) {
       toast({
-        title: "載入失敗",
-        description: error.message || "載入異動紀錄時發生錯誤",
+        title: t("profile_management.load_error"),
+        description: error.message || t("profile_management.load_history_error"),
         variant: "destructive"
       })
     }
@@ -495,7 +501,7 @@ export default function UserProfileManagement() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">載入中...</div>
+        <div className="text-lg">{t("profile_management.loading")}</div>
       </div>
     )
   }
@@ -506,7 +512,7 @@ export default function UserProfileManagement() {
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            正在載入個人資料...
+            {t("profile_management.loading_profile")}
           </AlertDescription>
         </Alert>
       </div>
@@ -519,8 +525,8 @@ export default function UserProfileManagement() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">個人資料管理</h1>
-          <p className="text-gray-600 mt-2">管理您的個人資訊與學籍資料</p>
+          <h1 className="text-3xl font-bold">{t("profile_management.title")}</h1>
+          <p className="text-gray-600 mt-2">{t("profile_management.subtitle")}</p>
         </div>
         <Button 
           variant="outline" 
@@ -528,7 +534,7 @@ export default function UserProfileManagement() {
           className="flex items-center gap-2"
         >
           <History className="w-4 h-4" />
-          異動紀錄
+          {t("profile_management.history")}
         </Button>
       </div>
 
@@ -537,18 +543,18 @@ export default function UserProfileManagement() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CheckCircle className="w-5 h-5" />
-            個人資料完整度
+            {t("profile_management.completion")}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span>完整度</span>
+              <span>{t("profile_management.completion")}</span>
               <span>{completionPercentage}%</span>
             </div>
             <Progress value={completionPercentage} className="h-2" />
             <div className="text-sm text-gray-500">
-              {completionPercentage < 100 && "建議完善個人資料以便更好地使用系統功能"}
+              {completionPercentage < 100 && t("profile_management.completion_description")}
             </div>
           </div>
         </CardContent>
@@ -556,10 +562,10 @@ export default function UserProfileManagement() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">總覽</TabsTrigger>
-          <TabsTrigger value="basic">基本資料</TabsTrigger>
-          <TabsTrigger value="bank">銀行帳戶</TabsTrigger>
-          <TabsTrigger value="advisor">指導教授</TabsTrigger>
+          <TabsTrigger value="overview">{t("profile_management.tabs.overview")}</TabsTrigger>
+          <TabsTrigger value="basic">{t("profile_management.tabs.basic")}</TabsTrigger>
+          <TabsTrigger value="bank">{t("profile_management.tabs.bank")}</TabsTrigger>
+          <TabsTrigger value="advisor">{t("profile_management.tabs.advisor")}</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -568,26 +574,26 @@ export default function UserProfileManagement() {
             {/* Basic Info Summary */}
             <Card>
               <CardHeader>
-                <CardTitle>基本資料</CardTitle>
+                <CardTitle>{t("profile_management.basic_info")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-gray-500" />
                   <div>
-                    <div className="font-medium">{profile.user_info.name || '未設定'}</div>
-                    <div className="text-sm text-gray-500">{profile.user_info.nycu_id || '未設定'}</div>
+                    <div className="font-medium">{profile.user_info.name || t("profile_management.not_set")}</div>
+                    <div className="text-sm text-gray-500">{profile.user_info.nycu_id || t("profile_management.not_set")}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-gray-500" />
-                  <div className="text-sm">{profile.user_info.dept_name || '未設定'}</div>
+                  <div className="text-sm">{profile.user_info.dept_name || t("profile_management.not_set")}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={profile.user_info.role === 'student' ? 'default' : 'secondary'}>
-                    {profile.user_info.role === 'student' ? '學生' : '職員'}
+                    {profile.user_info.role === 'student' ? t("profile_management.student") : t("profile_management.staff")}
                   </Badge>
                   <Badge variant="outline">
-                    {profile.user_info.status || '未設定'}
+                    {profile.user_info.status || t("profile_management.not_set")}
                   </Badge>
                 </div>
               </CardContent>
@@ -596,7 +602,7 @@ export default function UserProfileManagement() {
             {/* Contact Summary */}
             <Card>
               <CardHeader>
-                <CardTitle>聯絡資訊</CardTitle>
+                <CardTitle>{t("profile_management.contact_info")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -606,7 +612,7 @@ export default function UserProfileManagement() {
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    聯絡資訊來自校務系統，如需修改請洽學務處。
+                    {t("profile_management.contact_notice")}
                   </AlertDescription>
                 </Alert>
               </CardContent>
@@ -620,12 +626,12 @@ export default function UserProfileManagement() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CreditCard className="w-5 h-5 text-blue-500" />
-                    <span>銀行帳戶</span>
+                    <span>{t("profile_management.bank_info")}</span>
                   </div>
                   {profile.profile?.has_complete_bank_info ? (
-                    <Badge variant="default">已完成</Badge>
+                    <Badge variant="default">{t("profile_management.completed")}</Badge>
                   ) : (
-                    <Badge variant="destructive">未完成</Badge>
+                    <Badge variant="destructive">{t("profile_management.incomplete")}</Badge>
                   )}
                 </div>
               </CardContent>
@@ -636,12 +642,12 @@ export default function UserProfileManagement() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <School className="w-5 h-5 text-green-500" />
-                    <span>指導教授</span>
+                    <span>{t("profile_management.advisor_info")}</span>
                   </div>
                   {profile.profile?.has_advisor_info ? (
-                    <Badge variant="default">已完成</Badge>
+                    <Badge variant="default">{t("profile_management.completed")}</Badge>
                   ) : (
-                    <Badge variant="destructive">未完成</Badge>
+                    <Badge variant="destructive">{t("profile_management.incomplete")}</Badge>
                   )}
                 </div>
               </CardContent>
@@ -653,47 +659,47 @@ export default function UserProfileManagement() {
         <TabsContent value="basic" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>基本資料 (從 API 取得，無法修改)</CardTitle>
+              <CardTitle>{t("profile_management.basic_readonly_title")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  以下資料來自校務系統，如需修改請聯繫相關單位。
+                  {t("profile_management.basic_readonly_notice")}
                 </AlertDescription>
               </Alert>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>姓名</Label>
+                  <Label>{t("profile_management.name")}</Label>
                   <Input value={profile.user_info.name} disabled />
                 </div>
                 <div className="space-y-2">
-                  <Label>學號/員工編號</Label>
+                  <Label>{t("profile_management.id_number")}</Label>
                   <Input value={profile.user_info.nycu_id} disabled />
                 </div>
                 <div className="space-y-2">
-                  <Label>Email</Label>
+                  <Label>{t("profile_management.email")}</Label>
                   <Input value={profile.user_info.email} disabled />
                 </div>
                 <div className="space-y-2">
-                  <Label>身份類別</Label>
+                  <Label>{t("profile_management.user_type")}</Label>
                   <Input value={profile.user_info.user_type} disabled />
                 </div>
                 <div className="space-y-2">
-                  <Label>狀態</Label>
+                  <Label>{t("profile_management.status")}</Label>
                   <Input value={profile.user_info.status} disabled />
                 </div>
                 <div className="space-y-2">
-                  <Label>系所代碼</Label>
+                  <Label>{t("profile_management.dept_code")}</Label>
                   <Input value={profile.user_info.dept_code || ''} disabled />
                 </div>
                 <div className="space-y-2">
-                  <Label>系所名稱</Label>
+                  <Label>{t("profile_management.dept_name")}</Label>
                   <Input value={profile.user_info.dept_name || ''} disabled />
                 </div>
                 <div className="space-y-2">
-                  <Label>系統角色</Label>
+                  <Label>{t("profile_management.system_role")}</Label>
                   <Input value={profile.user_info.role} disabled />
                 </div>
               </div>
@@ -702,22 +708,22 @@ export default function UserProfileManagement() {
               {profile.student_info && (
                 <div className="mt-6">
                   <Separator />
-                  <h3 className="text-lg font-semibold mt-4 mb-4">學籍資料</h3>
+                  <h3 className="text-lg font-semibold mt-4 mb-4">{t("profile_management.student_records")}</h3>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>學位</Label>
+                      <Label>{t("profile_management.degree")}</Label>
                       <Input value={profile.student_info.student?.std_degree || ''} disabled />
                     </div>
                     <div className="space-y-2">
-                      <Label>學籍狀態</Label>
+                      <Label>{t("profile_management.enrollment_status")}</Label>
                       <Input value={profile.student_info.student?.std_studingstatus || ''} disabled />
                     </div>
                     <div className="space-y-2">
-                      <Label>入學年度</Label>
+                      <Label>{t("profile_management.enrollment_year")}</Label>
                       <Input value={profile.student_info.student?.std_enrollyear || ''} disabled />
                     </div>
                     <div className="space-y-2">
-                      <Label>在學期數</Label>
+                      <Label>{t("profile_management.semester_count")}</Label>
                       <Input value={profile.student_info.student?.std_termcount || ''} disabled />
                     </div>
                   </div>
@@ -733,7 +739,7 @@ export default function UserProfileManagement() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CreditCard className="w-5 h-5" />
-                銀行帳戶資訊
+                {t("profile_management.bank_account_info")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -753,10 +759,10 @@ export default function UserProfileManagement() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="bank_code">銀行代碼</Label>
+                  <Label htmlFor="bank_code">{t("profile_management.bank_code")}</Label>
                   <Input
                     id="bank_code"
-                    placeholder="例：808"
+                    placeholder={t("profile_management.bank_code_placeholder")}
                     value={editingProfile.bank_code || ''}
                     onChange={(e) => {
                       setEditingProfile({
@@ -768,14 +774,14 @@ export default function UserProfileManagement() {
                         setBankErrors([])
                       }
                     }}
-                    className={bankErrors.some(error => error.includes('銀行代碼')) ? 'border-red-500' : ''}
+                    className={bankErrors.some(error => error.toLowerCase().includes('bank') || error.includes('銀行代碼')) ? 'border-red-500' : ''}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="account_number">帳戶號碼</Label>
+                  <Label htmlFor="account_number">{t("profile_management.account_number")}</Label>
                   <Input
                     id="account_number"
-                    placeholder="請輸入完整帳戶號碼"
+                    placeholder={t("profile_management.account_number_placeholder")}
                     value={editingProfile.account_number || ''}
                     onChange={(e) => {
                       setEditingProfile({
@@ -787,7 +793,7 @@ export default function UserProfileManagement() {
                         setBankErrors([])
                       }
                     }}
-                    className={bankErrors.some(error => error.includes('帳戶號碼')) ? 'border-red-500' : ''}
+                    className={bankErrors.some(error => error.toLowerCase().includes('account') || error.includes('帳戶號碼')) ? 'border-red-500' : ''}
                   />
                 </div>
               </div>
@@ -795,7 +801,7 @@ export default function UserProfileManagement() {
               {/* Bank Document Upload */}
               <div className="space-y-4">
                 <div className="space-y-4">
-                  <Label>銀行帳戶證明文件</Label>
+                  <Label>{t("profile_management.bank_document")}</Label>
                   
                   {/* Display current uploaded document */}
                   {profile.profile?.bank_document_photo_url && (
@@ -804,8 +810,8 @@ export default function UserProfileManagement() {
                         <div className="flex items-center gap-2">
                           <CheckCircle className="w-5 h-5 text-green-600" />
                           <div>
-                            <span className="text-sm font-medium text-green-800">已上傳證明文件</span>
-                            <p className="text-xs text-green-600">點擊預覽按鈕查看已上傳的文件</p>
+                            <span className="text-sm font-medium text-green-800">{t("profile_management.document_uploaded")}</span>
+                            <p className="text-xs text-green-600">{t("profile_management.document_preview_notice")}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -815,7 +821,7 @@ export default function UserProfileManagement() {
                             onClick={handlePreviewBankDocument}
                           >
                             <Eye className="w-4 h-4 mr-1" />
-                            預覽
+                            {t("profile_management.preview")}
                           </Button>
                           <Button 
                             variant="destructive" 
@@ -823,7 +829,7 @@ export default function UserProfileManagement() {
                             onClick={handleDeleteBankDocument}
                           >
                             <X className="w-4 h-4 mr-1" />
-                            刪除
+                            {t("profile_management.delete")}
                           </Button>
                         </div>
                       </div>
@@ -852,12 +858,12 @@ export default function UserProfileManagement() {
                         {uploadingBankDoc ? (
                           <>
                             <Upload className="w-4 h-4 mr-2 animate-pulse" />
-                            上傳中...
+                            {t("profile_management.uploading")}
                           </>
                         ) : (
                           <>
                             <Upload className="w-4 h-4 mr-2" />
-                            上傳銀行帳戶證明文件
+                            {t("profile_management.upload_bank_document")}
                           </>
                         )}
                       </Button>
@@ -865,9 +871,9 @@ export default function UserProfileManagement() {
                   </div>
                   
                   <div className="text-xs text-muted-foreground">
-                    <p>• 接受格式：JPG, JPEG, PNG, WebP, PDF</p>
-                    <p>• 檔案大小限制：10MB</p>
-                    <p>• 建議上傳清晰的銀行存摺封面或銀行開戶證明文件</p>
+                    <p>{t("profile_management.file_formats")}</p>
+                    <p>{t("profile_management.file_size_limit")}</p>
+                    <p>{t("profile_management.upload_suggestion")}</p>
                   </div>
                 </div>
               </div>
@@ -877,10 +883,10 @@ export default function UserProfileManagement() {
                 disabled={saving}
                 className="w-full"
               >
-                {saving ? "儲存中..." : (
+                {saving ? t("profile_management.saving") : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    儲存銀行帳戶資訊
+                    {t("profile_management.save_bank_info")}
                   </>
                 )}
               </Button>
@@ -894,7 +900,7 @@ export default function UserProfileManagement() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <School className="w-5 h-5" />
-                指導教授資訊
+                {t("profile_management.advisor_info")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -914,10 +920,10 @@ export default function UserProfileManagement() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="advisor_name">指導教授 姓名</Label>
+                  <Label htmlFor="advisor_name">{t("profile_management.advisor_name")}</Label>
                   <Input
                     id="advisor_name"
-                    placeholder="例：王小明"
+                    placeholder={t("profile_management.advisor_name_placeholder")}
                     value={editingProfile.advisor_name || ''}
                     onChange={(e) => {
                       setEditingProfile({
@@ -929,11 +935,11 @@ export default function UserProfileManagement() {
                         setAdvisorErrors([])
                       }
                     }}
-                    className={advisorErrors.some(error => error.includes('姓名')) ? 'border-red-500' : ''}
+                    className={advisorErrors.some(error => error.toLowerCase().includes('name') || error.includes('姓名')) ? 'border-red-500' : ''}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="advisor_email">指導教授 Email</Label>
+                  <Label htmlFor="advisor_email">{t("profile_management.advisor_email")}</Label>
                   <Input
                     id="advisor_email"
                     type="email"
@@ -950,10 +956,10 @@ export default function UserProfileManagement() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="advisor_nycu_id">指導教授 學校工號</Label>
+                  <Label htmlFor="advisor_nycu_id">{t("profile_management.advisor_id")}</Label>
                   <Input
                     id="advisor_nycu_id"
-                    placeholder="例：professor123"
+                    placeholder={t("profile_management.advisor_id_placeholder")}
                     value={editingProfile.advisor_nycu_id || ''}
                     onChange={(e) => {
                       setEditingProfile({
@@ -965,7 +971,7 @@ export default function UserProfileManagement() {
                         setAdvisorErrors([])
                       }
                     }}
-                    className={advisorErrors.some(error => error.includes('學校工號')) ? 'border-red-500' : ''}
+                    className={advisorErrors.some(error => error.toLowerCase().includes('id') || error.includes('學校工號')) ? 'border-red-500' : ''}
                   />
                 </div>
               </div>
@@ -975,10 +981,10 @@ export default function UserProfileManagement() {
                 disabled={saving}
                 className="w-full"
               >
-                {saving ? "儲存中..." : (
+                {saving ? t("profile_management.saving") : (
                   <>
                     <Save className="w-4 h-4 mr-2" />
-                    儲存指導教授資訊
+                    {t("profile_management.save_advisor_info")}
                   </>
                 )}
               </Button>
@@ -993,7 +999,7 @@ export default function UserProfileManagement() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <Card className="w-full max-w-4xl max-h-[80vh] overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>個人資料異動紀錄</CardTitle>
+              <CardTitle>{t("profile_management.profile_history")}</CardTitle>
               <Button
                 variant="ghost"
                 size="sm"
@@ -1012,13 +1018,13 @@ export default function UserProfileManagement() {
                           <div className="font-medium">{entry.field_name}</div>
                           <div className="text-sm text-gray-600">
                             {entry.old_value && (
-                              <span>舊值: {entry.old_value} → </span>
+                              <span>{t("profile_management.old_value")}: {entry.old_value} → </span>
                             )}
-                            新值: {entry.new_value}
+                            {t("profile_management.new_value")}: {entry.new_value}
                           </div>
                           {entry.change_reason && (
                             <div className="text-sm text-gray-500">
-                              原因: {entry.change_reason}
+                              {t("profile_management.reason")}: {entry.change_reason}
                             </div>
                           )}
                         </div>
@@ -1031,7 +1037,7 @@ export default function UserProfileManagement() {
                 </div>
               ) : (
                 <div className="text-center text-gray-500 py-8">
-                  尚無異動紀錄
+                  {t("profile_management.no_history")}
                 </div>
               )}
             </CardContent>

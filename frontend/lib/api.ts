@@ -1966,7 +1966,18 @@ class ApiClient {
     // Get applications requiring professor review
     getApplications: async (statusFilter?: string): Promise<ApiResponse<Application[]>> => {
       const params = statusFilter ? `?status_filter=${statusFilter}` : '';
-      return this.request(`/professor/applications${params}`);
+      const response = await this.request<PaginatedResponse<Application>>(`/professor/applications${params}`);
+      
+      // Extract items from paginated response
+      if (response.success && response.data && 'items' in response.data) {
+        return {
+          success: true,
+          message: response.message,
+          data: response.data.items
+        };
+      }
+      
+      return response as ApiResponse<Application[]>;
     },
 
     // Get existing professor review for an application

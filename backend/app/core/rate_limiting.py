@@ -74,7 +74,7 @@ def get_rate_limiter() -> RateLimiter:
     if _rate_limiter is None:
         try:
             from app.core.config import settings
-            redis_url = getattr(settings, 'REDIS_URL', 'redis://localhost:6379')
+            redis_url = settings.redis_url
             _rate_limiter = RateLimiter(redis_url)
         except Exception as e:
             logger.warning(f"Could not initialize rate limiter: {e}")
