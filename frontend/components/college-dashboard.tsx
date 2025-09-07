@@ -148,14 +148,18 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
     }
   }
 
-  const createNewRanking = async () => {
+  const createNewRanking = async (scholarshipTypeId?: number, subTypeCode?: string) => {
     try {
+      // Get current academic year dynamically
+      const currentYear = new Date().getFullYear()
+      const academicYear = currentYear - 1911  // Convert to ROC year
+      
       const newRanking = {
-        scholarship_type_id: 1,
-        sub_type_code: "phd_excellence",
-        academic_year: 113,
-        semester: "first",
-        ranking_name: "新建排名"
+        scholarship_type_id: scholarshipTypeId || 1,  // Default or provided value
+        sub_type_code: subTypeCode || "default",     // Default or provided value
+        academic_year: academicYear,                  // Dynamic academic year
+        semester: "first",                          // Could be made dynamic
+        ranking_name: `新建排名 - ${academicYear}學年度`
       }
       
       const response = await apiClient.college.createRanking(newRanking)

@@ -72,9 +72,9 @@ class CollegeReview(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
-    # Relationships temporarily disabled due to circular dependency issues
-    # application = relationship("Application", lazy="select", back_populates=None)
-    # reviewer = relationship("User", lazy="select", back_populates=None)
+    # Relationships with proper foreign key setup to avoid circular dependencies
+    application = relationship("Application", lazy="select", foreign_keys=[application_id])
+    reviewer = relationship("User", lazy="select", foreign_keys=[reviewer_id])
     
     def __repr__(self):
         return f"<CollegeReview(id={self.id}, application_id={self.application_id}, ranking_score={self.ranking_score})>"

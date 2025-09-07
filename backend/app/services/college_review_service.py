@@ -127,11 +127,12 @@ class CollegeReviewService:
     ) -> List[Dict[str, Any]]:
         """Get applications that are ready for college review"""
         
-        # Base query for applications in reviewable state
+        # Base query for applications in reviewable state with proper eager loading
         stmt = select(Application).options(
             selectinload(Application.scholarship_type_ref),
-            # selectinload(Application.college_review),  # Temporarily disabled due to circular dependency
-            selectinload(Application.professor_reviews)
+            selectinload(Application.professor_reviews),
+            selectinload(Application.files),  # Load files for complete data
+            joinedload(Application.student)  # Eagerly load student data
         ).where(
             or_(
                 Application.status == 'recommended',
@@ -158,16 +159,19 @@ class CollegeReviewService:
         result = await self.db.execute(stmt)
         applications = result.scalars().all()
         
-        # Get college review data for all applications
+        # Get college review data for all applications in a single batch query
         application_ids = [app.id for app in applications]
-        college_reviews_stmt = select(CollegeReview).where(
-            CollegeReview.application_id.in_(application_ids)
-        )
-        college_reviews_result = await self.db.execute(college_reviews_stmt)
-        college_reviews = college_reviews_result.scalars().all()
-        
-        # Create lookup dictionary for college reviews
-        college_review_lookup = {review.application_id: review for review in college_reviews}
+        if application_ids:
+            college_reviews_stmt = select(CollegeReview).where(
+                CollegeReview.application_id.in_(application_ids)
+            )
+            college_reviews_result = await self.db.execute(college_reviews_stmt)
+            college_reviews = college_reviews_result.scalars().all()
+            
+            # Create lookup dictionary for college reviews
+            college_review_lookup = {review.application_id: review for review in college_reviews}
+        else:
+            college_review_lookup = {}
         
         # Format response with additional review information
         formatted_applications = []
@@ -203,22 +207,28 @@ class CollegeReviewService:
         creator_id: int,
         ranking_name: Optional[str] = None
     ) -> CollegeRanking:
-        """Create a new ranking for a scholarship sub-type"""
+        """Create a new ranking for a scholarship sub-type with race condition protection"""
         
-        # Check if ranking already exists
-        existing_stmt = select(CollegeRanking).where(
-            and_(
-                CollegeRanking.scholarship_type_id == scholarship_type_id,
-                CollegeRanking.sub_type_code == sub_type_code,
-                CollegeRanking.academic_year == academic_year,
-                CollegeRanking.semester == semester
-            )
-        )
-        existing_result = await self.db.execute(existing_stmt)
-        existing_ranking = existing_result.scalar_one_or_none()
-        
-        if existing_ranking and not existing_ranking.is_finalized:
-            return existing_ranking
+        # Use transaction to prevent race conditions
+        async with self.db.begin():
+            # Check if ranking already exists with row-level locking
+            existing_stmt = select(CollegeRanking).where(
+                and_(
+                    CollegeRanking.scholarship_type_id == scholarship_type_id,
+                    CollegeRanking.sub_type_code == sub_type_code,
+                    CollegeRanking.academic_year == academic_year,
+                    CollegeRanking.semester == semester,
+                    CollegeRanking.is_finalized == False  # Only non-finalized rankings
+                )
+            ).with_for_update()  # Row-level lock to prevent concurrent creation
+            
+            existing_result = await self.db.execute(existing_stmt)
+            existing_ranking = existing_result.scalar_one_or_none()
+            
+            if existing_ranking:
+                return existing_ranking
+            
+            # Proceed with creation since no existing ranking found
         
         # Get applications for this sub-type that have college reviews
         # First get all applications for the sub-type

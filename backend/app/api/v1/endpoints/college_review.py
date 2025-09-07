@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 from app.db.deps import get_db
 from app.core.security import require_college, require_admin, get_current_user
@@ -22,6 +22,9 @@ from app.models.application import Application
 from app.schemas.response import ApiResponse
 from app.services.college_review_service import CollegeReviewService, QuotaDistributionService
 from sqlalchemy import select
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Pydantic schemas for request/response
@@ -31,12 +34,31 @@ class CollegeReviewCreate(BaseModel):
     professor_review_score: Optional[float] = Field(None, ge=0, le=100, description="Professor review score (0-100)")
     college_criteria_score: Optional[float] = Field(None, ge=0, le=100, description="College-specific criteria score (0-100)")
     special_circumstances_score: Optional[float] = Field(None, ge=0, le=100, description="Special circumstances score (0-100)")
-    review_comments: Optional[str] = Field(None, description="Detailed review comments")
+    review_comments: Optional[str] = Field(None, max_length=2000, description="Detailed review comments")
     recommendation: str = Field(..., description="Review recommendation", pattern="^(approve|reject|conditional)$")
-    decision_reason: Optional[str] = Field(None, description="Reason for the recommendation")
+    decision_reason: Optional[str] = Field(None, max_length=1000, description="Reason for the recommendation")
     is_priority: Optional[bool] = Field(False, description="Mark as priority application")
     needs_special_attention: Optional[bool] = Field(False, description="Flag for special review")
     scoring_weights: Optional[Dict[str, float]] = Field(None, description="Custom scoring weights")
+    
+    @validator('academic_score', 'professor_review_score', 'college_criteria_score', 'special_circumstances_score')
+    def validate_scores(cls, v):
+        if v is not None and (v < 0 or v > 100):
+            raise ValueError('Score must be between 0 and 100')
+        return v
+    
+    @validator('scoring_weights')
+    def validate_scoring_weights(cls, v):
+        if v is not None:
+            # Ensure all weight values are between 0 and 1
+            for key, weight in v.items():
+                if not isinstance(weight, (int, float)) or weight < 0 or weight > 1:
+                    raise ValueError(f'Weight for {key} must be between 0 and 1')
+            # Ensure weights sum to approximately 1.0
+            total_weight = sum(v.values())
+            if abs(total_weight - 1.0) > 0.01:  # Allow small floating point errors
+                raise ValueError('Scoring weights must sum to 1.0')
+        return v
 
 
 class CollegeReviewUpdate(BaseModel):
@@ -45,11 +67,17 @@ class CollegeReviewUpdate(BaseModel):
     professor_review_score: Optional[float] = Field(None, ge=0, le=100)
     college_criteria_score: Optional[float] = Field(None, ge=0, le=100)
     special_circumstances_score: Optional[float] = Field(None, ge=0, le=100)
-    review_comments: Optional[str] = None
+    review_comments: Optional[str] = Field(None, max_length=2000)
     recommendation: Optional[str] = Field(None, pattern="^(approve|reject|conditional)$")
-    decision_reason: Optional[str] = None
+    decision_reason: Optional[str] = Field(None, max_length=1000)
     is_priority: Optional[bool] = None
     needs_special_attention: Optional[bool] = None
+    
+    @validator('academic_score', 'professor_review_score', 'college_criteria_score', 'special_circumstances_score')
+    def validate_scores(cls, v):
+        if v is not None and (v < 0 or v > 100):
+            raise ValueError('Score must be between 0 and 100')
+        return v
 
 
 class CollegeReviewResponse(BaseModel):
@@ -102,6 +130,13 @@ async def get_applications_for_review(
 ):
     """Get applications that are ready for college review"""
     
+    # Additional authorization check
+    if not current_user.is_college() and current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="College role required for application review access"
+        )
+    
     try:
         service = CollegeReviewService(db)
         applications = await service.get_applications_for_review(
@@ -112,16 +147,45 @@ async def get_applications_for_review(
             semester=semester
         )
         
+        # Filter sensitive student data - only return necessary fields
+        filtered_applications = []
+        for app in applications:
+            filtered_app = {
+                "id": app.get("id"),
+                "app_id": app.get("app_id"),
+                "status": app.get("status"),
+                "scholarship_type": app.get("scholarship_type"),
+                "sub_type": app.get("sub_type"),
+                "created_at": app.get("created_at"),
+                "submitted_at": app.get("submitted_at"),
+                # Only include essential student info
+                "student_info": {
+                    "name": app.get("student_data", {}).get("cname", "N/A"),
+                    "student_no": app.get("student_data", {}).get("stdNo", "N/A"),
+                    "department": app.get("student_data", {}).get("department", "N/A")
+                } if app.get("student_data") else None
+            }
+            filtered_applications.append(filtered_app)
+        
         return ApiResponse(
             success=True,
             message="Applications for review retrieved successfully",
-            data=applications
+            data=filtered_applications
         )
     
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.warning(f"Invalid request parameters for college applications: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid request parameters: {str(e)}"
+        )
     except Exception as e:
+        logger.error(f"Failed to retrieve applications for review: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve applications: {str(e)}"
+            detail="Failed to retrieve applications for review"
         )
 
 
@@ -133,6 +197,20 @@ async def create_college_review(
     db: AsyncSession = Depends(get_db)
 ):
     """Create or update a college review for an application"""
+    
+    # Additional authorization check
+    if not current_user.is_college() and current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="College role required for application review"
+        )
+    
+    # Validate application_id
+    if application_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid application ID"
+        )
     
     try:
         service = CollegeReviewService(db)
@@ -148,10 +226,23 @@ async def create_college_review(
             data=CollegeReviewResponse.from_orm(college_review)
         )
     
+    except ValueError as e:
+        logger.warning(f"Invalid review data for application {application_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid review data: {str(e)}"
+        )
+    except PermissionError as e:
+        logger.warning(f"Permission denied for college review creation by user {current_user.id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to review this application"
+        )
     except Exception as e:
+        logger.error(f"Failed to create college review for application {application_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create college review: {str(e)}"
+            detail="Failed to create college review"
         )
 
 
@@ -199,10 +290,23 @@ async def update_college_review(
     
     except HTTPException:
         raise
+    except ValueError as e:
+        logger.warning(f"Invalid review data for review {review_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid review data: {str(e)}"
+        )
+    except PermissionError as e:
+        logger.warning(f"Permission denied for review update by user {current_user.id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this review"
+        )
     except Exception as e:
+        logger.error(f"Failed to update college review {review_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update college review: {str(e)}"
+            detail="Failed to update college review"
         )
 
 
@@ -359,10 +463,13 @@ async def get_ranking(
                 "application": {
                     "id": item.application.id,
                     "app_id": item.application.app_id,
-                    "student_name": item.application.student_data.get('cname') if item.application.student_data else 'N/A',
-                    "student_no": item.application.student_data.get('stdNo') if item.application.student_data else 'N/A',
+                    # Only expose essential student information
+                    "student_name": item.application.student_data.get('cname', 'N/A') if item.application.student_data else 'N/A',
+                    "student_no": item.application.student_data.get('stdNo', 'N/A') if item.application.student_data else 'N/A',
+                    "department": item.application.student_data.get('department', 'N/A') if item.application.student_data else 'N/A',
                     "scholarship_type": item.application.main_scholarship_type,
-                    "sub_type": item.application.sub_scholarship_type
+                    "sub_type": item.application.sub_scholarship_type,
+                    "status": item.application.status
                 }
             })
         
