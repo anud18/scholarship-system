@@ -511,23 +511,37 @@ class CollegeReviewService:
         ranking_id: int,
         finalizer_id: int
     ) -> CollegeRanking:
-        """Finalize a ranking (makes it read-only)"""
+        """Finalize a ranking (makes it read-only) with concurrent access protection"""
         
-        ranking = await self.get_ranking(ranking_id)
-        if not ranking:
-            raise NotFoundError("Ranking", str(ranking_id))
-        
-        if ranking.is_finalized:
-            raise BusinessLogicError("Ranking is already finalized")
-        
-        ranking.is_finalized = True
-        ranking.finalized_at = datetime.now(timezone.utc)
-        ranking.finalized_by = finalizer_id
-        ranking.ranking_status = 'finalized'
-        
-        await self.db.flush()  # Flush within transaction context
-        
-        return ranking
+        async with self.db.begin():  # Atomic transaction
+            try:
+                # Get ranking with pessimistic locking to prevent concurrent modifications
+                ranking_stmt = select(CollegeRanking).where(
+                    CollegeRanking.id == ranking_id
+                ).with_for_update()
+                
+                ranking_result = await self.db.execute(ranking_stmt)
+                ranking = ranking_result.scalar_one_or_none()
+                
+                if not ranking:
+                    raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
+                
+                if ranking.is_finalized:
+                    raise RankingModificationError("Ranking is already finalized")
+                
+                ranking.is_finalized = True
+                ranking.finalized_at = datetime.now(timezone.utc)
+                ranking.finalized_by = finalizer_id
+                ranking.ranking_status = 'finalized'
+                
+                await self.db.flush()  # Flush within transaction context
+                
+                return ranking
+                
+            except (RankingNotFoundError, RankingModificationError):
+                raise  # Re-raise specific exceptions
+            except Exception as e:
+                raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}: {str(e)}")
     
     async def get_quota_status(
         self,
