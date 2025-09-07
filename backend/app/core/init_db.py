@@ -22,6 +22,7 @@ from app.models.enums import Semester, ApplicationCycle, SubTypeSelectionMode, Q
 from app.models.notification import Notification, NotificationType, NotificationPriority
 from app.models.application_field import ApplicationField, ApplicationDocument
 from app.models.user_profile import UserProfile, UserProfileHistory
+from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem, QuotaDistribution
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)

@@ -33,6 +33,7 @@ from app.models.audit_log import AuditLog, AuditAction
 from app.models.system_setting import SystemSetting
 from app.models.application_field import ApplicationField, ApplicationDocument, FieldType
 from app.models.user_profile import UserProfile, UserProfileHistory
+from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem, QuotaDistribution
 
 __all__ = [
     "User",
@@ -83,5 +84,11 @@ __all__ = [
     
     # User profile models
     "UserProfile",
-    "UserProfileHistory"
+    "UserProfileHistory",
+    
+    # College review models
+    "CollegeReview",
+    "CollegeRanking", 
+    "CollegeRankingItem",
+    "QuotaDistribution"
 ]

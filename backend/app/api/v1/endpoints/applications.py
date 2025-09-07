@@ -353,7 +353,7 @@ async def submit_professor_review(
 
 @router.get("/college/review", response_model=List[ApplicationListResponse])
 async def get_college_applications_for_review(
-    status: Optional[str] = Query(None, description="Filter by status"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
     scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db)
@@ -362,7 +362,7 @@ async def get_college_applications_for_review(
     from fastapi import HTTPException
     
     # Ensure user has college role
-    if current_user.role != 'college':
+    if not current_user.is_college():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="College access required"
@@ -372,8 +372,10 @@ async def get_college_applications_for_review(
     # Get applications that are in submitted or under_review status for college review
     return await service.get_applications_for_review(
         current_user, 
-        status or 'submitted',  # Default to submitted for college review
-        scholarship_type
+        skip=0,
+        limit=100,
+        status=status_filter or 'submitted',  # Default to submitted for college review
+        scholarship_type=scholarship_type
     )
 
 

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/applications", response_model=PaginatedResponse[ApplicationListResponse])
-@professor_rate_limit(requests=30, window_seconds=600)  # 30 requests per 10 minutes
+@professor_rate_limit(requests=100, window_seconds=600)  # 100 requests per 10 minutes
 async def get_professor_applications(
     request: Request,
     status_filter: Optional[str] = Query(None, description="Filter by review status: pending, completed, all"),
@@ -66,7 +66,7 @@ async def get_professor_applications(
 
 
 @router.get("/applications/{application_id}/review", response_model=ProfessorReviewResponse)
-@professor_rate_limit(requests=60, window_seconds=600)  # 60 requests per 10 minutes
+@professor_rate_limit(requests=200, window_seconds=600)  # 200 requests per 10 minutes
 async def get_professor_review(
     request: Request,
     application_id: int = Path(..., description="Application ID"),
@@ -113,7 +113,7 @@ async def get_professor_review(
 
 
 @router.post("/applications/{application_id}/review", response_model=ProfessorReviewResponse)
-@professor_rate_limit(requests=20, window_seconds=600)  # 20 review submissions per 10 minutes
+@professor_rate_limit(requests=100, window_seconds=600)  # 100 review submissions per 10 minutes
 async def submit_professor_review(
     request: Request,
     review_data: ProfessorReviewCreate,
@@ -167,7 +167,7 @@ async def submit_professor_review(
 
 
 @router.put("/applications/{application_id}/review/{review_id}", response_model=ProfessorReviewResponse)
-@professor_rate_limit(requests=15, window_seconds=600)  # 15 review updates per 10 minutes
+@professor_rate_limit(requests=50, window_seconds=600)  # 50 review updates per 10 minutes
 async def update_professor_review(
     request: Request,
     review_data: ProfessorReviewCreate,
@@ -219,7 +219,7 @@ async def update_professor_review(
 
 
 @router.get("/applications/{application_id}/sub-types", response_model=List[dict])
-@professor_rate_limit(requests=100, window_seconds=600)  # 100 requests per 10 minutes (lighter endpoint)
+@professor_rate_limit(requests=300, window_seconds=600)  # 300 requests per 10 minutes (lighter endpoint)
 async def get_application_sub_types(
     request: Request,
     application_id: int = Path(..., description="Application ID"),
@@ -245,7 +245,7 @@ async def get_application_sub_types(
 
 
 @router.get("/stats", response_model=dict)
-@professor_rate_limit(requests=50, window_seconds=600)  # 50 requests per 10 minutes
+@professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_professor_review_stats(
     request: Request,
     current_user: User = Depends(require_professor),

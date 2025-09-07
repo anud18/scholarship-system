@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.db.deps import get_db
-from app.core.security import require_admin, get_current_user
+from app.core.security import require_admin, require_staff, get_current_user
 from app.models.user import User, AdminScholarship, UserRole
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
 from app.models.application import Application, ApplicationStatus
@@ -477,7 +477,7 @@ async def get_colleges(
 
 @router.get("/scholarship-types", response_model=ApiResponse)
 async def get_scholarship_types(
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db)
 ):
     """Get scholarship types that the user has access to"""

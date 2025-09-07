@@ -98,10 +98,11 @@ export default function ScholarshipManagementSystem() {
 
   // Set initial active tab based on user role
   useEffect(() => {
-    if (activeTab === "main" && user && user.role === "college") {
-      setActiveTab("dashboard")
+    if (user && user.role === "college") {
+      // College users only have one tab: main (審核管理)
+      setActiveTab("main")
     }
-  }, [activeTab, user])
+  }, [user])
 
   const t = (key: string) => getTranslation(locale, key)
 
@@ -162,14 +163,7 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "college") {
       return (
-        <TabsList className="grid w-full grid-cols-2 bg-nycu-blue-50 border border-nycu-blue-200">
-          <TabsTrigger
-            value="dashboard"
-            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
-          >
-            <TrendingUp className="h-4 w-4" />
-            儀表板
-          </TabsTrigger>
+        <TabsList className="grid w-full grid-cols-1 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="main"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -279,8 +273,8 @@ export default function ScholarshipManagementSystem() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           {getTabsList()}
 
-          {/* 儀表板 - 只有 admin 和 college 可見 */}
-          {(user.role === "admin" || user.role === "college" || user.role === "super_admin") && (
+          {/* 儀表板 - 只有 admin 和 super_admin 可見 */}
+          {(user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="dashboard" className="space-y-4">
               <AdminDashboard
                 stats={stats}
@@ -308,7 +302,8 @@ export default function ScholarshipManagementSystem() {
               studentType: "undergraduate" // 默認值，實際應該從用戶數據中獲取
             } as User & { studentType: "undergraduate" }} locale={locale} />}
             {user.role === "professor" && <ProfessorReviewComponent user={user} />}
-            {(user.role === "college" || user.role === "admin" || user.role === "super_admin") && <AdminScholarshipDashboard user={user} />}
+            {user.role === "college" && <CollegeDashboard user={user} locale={locale} />}
+            {(user.role === "admin" || user.role === "super_admin") && <AdminScholarshipDashboard user={user} />}
           </TabsContent>
 
           {/* 系統管理 - 只有 admin 和 super_admin 可見 */}

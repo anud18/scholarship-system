@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
@@ -17,14 +18,25 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { NationalityFlag } from "@/components/nationality-flag"
+import { CollegeRankingTable } from "@/components/college-ranking-table"
 import { getTranslation } from "@/lib/i18n"
-import { Search, Eye, CheckCircle, XCircle, Grid, List, Download, GraduationCap, Clock, Calendar, School, AlertCircle, Loader2 } from "lucide-react"
+import { Search, Eye, CheckCircle, XCircle, Grid, List, Download, GraduationCap, Clock, Calendar, School, AlertCircle, Loader2, Trophy, Users, Award, Send, Plus } from "lucide-react"
 import { useCollegeApplications } from "@/hooks/use-admin"
 import { User } from "@/types/user"
+import { apiClient } from "@/lib/api"
 
 interface CollegeDashboardProps {
   user: User
   locale?: "zh" | "en"
+}
+
+interface RankingData {
+  applications: any[]
+  totalQuota: number
+  subTypeCode: string
+  academicYear: number
+  semester?: string
+  isFinalized: boolean
 }
 
 export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps) {
@@ -33,6 +45,130 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
 
   const [viewMode, setViewMode] = useState<"card" | "table">("card")
   const [selectedApplication, setSelectedApplication] = useState<any>(null)
+  const [activeTab, setActiveTab] = useState("review")
+  const [rankingData, setRankingData] = useState<RankingData | null>(null)
+  const [rankings, setRankings] = useState<any[]>([])
+  const [selectedRanking, setSelectedRanking] = useState<number | null>(null)
+  const [isRankingLoading, setIsRankingLoading] = useState(false)
+
+  // Fetch rankings on component mount
+  useEffect(() => {
+    fetchRankings()
+  }, [])
+
+  const fetchRankings = async () => {
+    try {
+      const response = await apiClient.college.getRankings()
+      if (response.success && response.data) {
+        setRankings(response.data)
+      } else {
+        console.warn('No rankings found or error:', response.message)
+        setRankings([])
+      }
+    } catch (error) {
+      console.error('Failed to fetch rankings:', error)
+      setRankings([])
+    }
+  }
+
+  const fetchRankingDetails = async (rankingId: number) => {
+    setIsRankingLoading(true)
+    try {
+      const response = await apiClient.college.getRanking(rankingId)
+      if (response.success && response.data) {
+        // Transform the API response to match the expected format
+        setRankingData({
+          applications: response.data.items || [],
+          totalQuota: response.data.total_quota,
+          subTypeCode: response.data.sub_type_code,
+          academicYear: response.data.academic_year,
+          semester: response.data.semester,
+          isFinalized: response.data.is_finalized
+        })
+      } else {
+        console.error('Failed to load ranking details:', response.message)
+      }
+    } catch (error) {
+      console.error('Failed to fetch ranking details:', error)
+    } finally {
+      setIsRankingLoading(false)
+    }
+  }
+
+  const handleRankingChange = (newOrder: any[]) => {
+    if (rankingData) {
+      setRankingData({
+        ...rankingData,
+        applications: newOrder
+      })
+    }
+  }
+
+  const handleReviewApplication = async (applicationId: number) => {
+    // Handle application review
+    console.log('Reviewing application:', applicationId)
+  }
+
+  const handleExecuteDistribution = async () => {
+    if (selectedRanking) {
+      try {
+        const response = await apiClient.college.executeDistribution(selectedRanking, {})
+        if (response.success) {
+          // Refresh ranking data
+          await fetchRankingDetails(selectedRanking)
+        } else {
+          console.error('Failed to execute distribution:', response.message)
+        }
+      } catch (error) {
+        console.error('Failed to execute distribution:', error)
+      }
+    }
+  }
+
+  const handleFinalizeRanking = async () => {
+    if (selectedRanking) {
+      try {
+        const response = await apiClient.college.finalizeRanking(selectedRanking)
+        if (response.success) {
+          // Refresh rankings list
+          await fetchRankings()
+          // Update current ranking data
+          if (rankingData) {
+            setRankingData({
+              ...rankingData,
+              isFinalized: true
+            })
+          }
+        } else {
+          console.error('Failed to finalize ranking:', response.message)
+        }
+      } catch (error) {
+        console.error('Failed to finalize ranking:', error)
+      }
+    }
+  }
+
+  const createNewRanking = async () => {
+    try {
+      const newRanking = {
+        scholarship_type_id: 1,
+        sub_type_code: "phd_excellence",
+        academic_year: 113,
+        semester: "first",
+        ranking_name: "新建排名"
+      }
+      
+      const response = await apiClient.college.createRanking(newRanking)
+      if (response.success) {
+        // Refresh rankings
+        await fetchRankings()
+      } else {
+        console.error('Failed to create ranking:', response.message)
+      }
+    } catch (error) {
+      console.error('Failed to create ranking:', error)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     const statusMap = {
@@ -97,332 +233,428 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
     )
   }
 
-  if (applications.length === 0) {
-    return (
-      <div className="text-center py-8">
-        <School className="h-12 w-12 mx-auto mb-4 text-nycu-blue-300" />
-        <h3 className="text-lg font-semibold text-nycu-navy-800 mb-2">
-          {locale === "zh" ? "暫無待審核申請" : "No Applications Pending Review"}
-        </h3>
-        <p className="text-nycu-navy-600">
-          {locale === "zh" ? "目前沒有需要學院審核的申請案件" : "No applications currently require college review"}
-        </p>
-      </div>
-    )
-  }
+  return (
+    <div className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="review" className="flex items-center gap-2">
+            <GraduationCap className="h-4 w-4" />
+            申請審核
+          </TabsTrigger>
+          <TabsTrigger value="ranking" className="flex items-center gap-2">
+            <Trophy className="h-4 w-4" />
+            學生排序
+          </TabsTrigger>
+          <TabsTrigger value="distribution" className="flex items-center gap-2">
+            <Award className="h-4 w-4" />
+            獎學金分發
+          </TabsTrigger>
+        </TabsList>
 
-  const renderCardView = () => (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {applications.map((app) => (
-        <Card key={app.id} className="relative">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-lg">{app.student_id}</CardTitle>
-              </div>
-              <Badge variant="outline">
-                {locale === "zh" ? "學院審核" : "College Review"}
-              </Badge>
-            </div>
-            <CardDescription>{app.scholarship_type}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        {/* 申請審核標籤頁 */}
+        <TabsContent value="review" className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{app.scholarship_type}</p>
-              <p className="text-sm text-muted-foreground">
-                {locale === "zh" ? "申請編號" : "Application ID"}: {app.app_id || `APP-${app.id}`}
+              <h2 className="text-3xl font-bold tracking-tight">
+                {locale === "zh" ? "學院審核管理" : "College Review Management"}
+              </h2>
+              <p className="text-muted-foreground">
+                {locale === "zh" ? "學院層級的獎學金申請審核" : "College-level scholarship application reviews"}
               </p>
             </div>
 
-            <div className="flex items-center justify-between text-sm">
-              <span>
-                {locale === "zh" ? "狀態" : "Status"}: {getStatusName(app.status)}
-              </span>
-              <span>
-                {locale === "zh" ? "申請時間" : "Submitted"}: {new Date(app.created_at).toLocaleDateString()}
-              </span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-1" />
+                {locale === "zh" ? "匯出" : "Export"}
+              </Button>
+              <div className="flex items-center border rounded-md">
+                <Button
+                  variant={viewMode === "card" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("card")}
+                >
+                  <Grid className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={viewMode === "table" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("table")}
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
+          </div>
 
-            <div className="flex items-center justify-between">
-              <Badge variant={getStatusColor(app.status) as any}>{getStatusName(app.status)}</Badge>
+          {/* Statistics */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {locale === "zh" ? "待審核" : "Pending Review"}
+                </CardTitle>
+                <GraduationCap className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {applications.filter((app) => app.status === "submitted").length}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {locale === "zh" ? "需要學院審核" : "Requires college review"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {locale === "zh" ? "審核中" : "Under Review"}
+                </CardTitle>
+                <Eye className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {applications.filter((app) => app.status === "under_review").length}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {locale === "zh" ? "學院審核中" : "College reviewing"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {locale === "zh" ? "平均等待天數" : "Avg Wait Days"}
+                </CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {applications.length > 0 
+                    ? Math.round(applications.reduce((sum, app) => sum + (app.days_waiting || 0), 0) / applications.length)
+                    : 0
+                  }
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {locale === "zh" ? "天" : "days"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {locale === "zh" ? "總金額" : "Total Amount"}
+                </CardTitle>
+                <Award className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  NT$ {applications.reduce((sum, app) => sum + (app.amount || 0), 0).toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {locale === "zh" ? "申請金額" : "Application amount"}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {applications.length === 0 ? (
+            <div className="text-center py-8">
+              <School className="h-12 w-12 mx-auto mb-4 text-nycu-blue-300" />
+              <h3 className="text-lg font-semibold text-nycu-navy-800 mb-2">
+                {locale === "zh" ? "暫無待審核申請" : "No Applications Pending Review"}
+              </h3>
+              <p className="text-nycu-navy-600">
+                {locale === "zh" ? "目前沒有需要學院審核的申請案件" : "No applications currently require college review"}
+              </p>
             </div>
+          ) : (
+            <>
+              {/* Filters */}
+              <div className="flex items-center gap-4">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder={locale === "zh" ? "搜尋學生或學號..." : "Search student or ID..."} className="pl-8" />
+                </div>
+                <Select defaultValue="all">
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{locale === "zh" ? "全部狀態" : "All Status"}</SelectItem>
+                    <SelectItem value="pending">{locale === "zh" ? "待審核" : "Pending"}</SelectItem>
+                    <SelectItem value="under_review">{locale === "zh" ? "審核中" : "Under Review"}</SelectItem>
+                    <SelectItem value="approved">{locale === "zh" ? "已核准" : "Approved"}</SelectItem>
+                    <SelectItem value="rejected">{locale === "zh" ? "已駁回" : "Rejected"}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="flex gap-2 pt-2">
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" onClick={() => setSelectedApplication(app)}>
-                    <Eye className="h-4 w-4 mr-1" />
-                    {locale === "zh" ? "查看" : "View"}
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>
-                      {locale === "zh" ? "學院審核" : "College Review"} - {selectedApplication?.app_id || `APP-${selectedApplication?.id}`}
-                    </DialogTitle>
-                    <DialogDescription>
-                      {selectedApplication && (
-                        <span className="flex items-center gap-2">
-                          <span>{selectedApplication.student_id}</span>
-                          <span>({selectedApplication.scholarship_type})</span>
-                        </span>
-                      )}
-                    </DialogDescription>
-                  </DialogHeader>
-                  {selectedApplication && (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-sm font-medium">
-                            {locale === "zh" ? "獎學金類型" : "Scholarship Type"}
-                          </label>
-                          <p className="text-sm">{selectedApplication.scholarship_type}</p>
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium">
-                            {locale === "zh" ? "申請狀態" : "Status"}
-                          </label>
-                          <p className="text-sm">{getStatusName(selectedApplication.status)}</p>
-                        </div>
-                      </div>
+              {/* Applications View */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>{locale === "zh" ? "申請清單" : "Applications List"}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{locale === "zh" ? "學生" : "Student"}</TableHead>
+                        <TableHead>{locale === "zh" ? "獎學金類型" : "Scholarship Type"}</TableHead>
+                        <TableHead>{locale === "zh" ? "狀態" : "Status"}</TableHead>
+                        <TableHead>{locale === "zh" ? "申請時間" : "Applied"}</TableHead>
+                        <TableHead>{locale === "zh" ? "操作" : "Actions"}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {applications.map((app) => (
+                        <TableRow key={app.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">
+                                {app.student_id}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{app.scholarship_type}</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusColor(app.status) as any}>
+                              {getStatusName(app.status)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(app.created_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" size="sm" onClick={() => setSelectedApplication(app)}>
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-2xl">
+                                  <DialogHeader>
+                                    <DialogTitle>學院審核 - {app.app_id || `APP-${app.id}`}</DialogTitle>
+                                    <DialogDescription>
+                                      {app.student_id} ({app.scholarship_type})
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  {selectedApplication && (
+                                    <div className="space-y-4">
+                                      <div>
+                                        <label className="text-sm font-medium">學院審核意見</label>
+                                        <Textarea
+                                          placeholder="請輸入學院審核意見..."
+                                          className="mt-1"
+                                        />
+                                      </div>
+                                      <div className="flex gap-2 pt-4">
+                                        <Button onClick={() => handleApprove(selectedApplication.id)} className="flex-1">
+                                          <CheckCircle className="h-4 w-4 mr-1" />
+                                          學院核准
+                                        </Button>
+                                        <Button variant="destructive" onClick={() => handleReject(selectedApplication.id)} className="flex-1">
+                                          <XCircle className="h-4 w-4 mr-1" />
+                                          學院駁回
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </DialogContent>
+                              </Dialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
 
-                      <div>
-                        <label className="text-sm font-medium">
-                          {locale === "zh" ? "學院審核意見" : "College Review Comments"}
-                        </label>
-                        <Textarea
-                          placeholder={locale === "zh" ? "請輸入學院審核意見..." : "Enter college review comments..."}
-                          className="mt-1"
-                        />
-                      </div>
-
-                      <div className="flex gap-2 pt-4">
-                        <Button onClick={() => handleApprove(selectedApplication.id)} className="flex-1">
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          {locale === "zh" ? "學院核准" : "College Approve"}
-                        </Button>
-                        <Button variant="destructive" onClick={() => handleReject(selectedApplication.id)} className="flex-1">
-                          <XCircle className="h-4 w-4 mr-1" />
-                          {locale === "zh" ? "學院駁回" : "College Reject"}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </DialogContent>
-              </Dialog>
+        {/* 學生排序標籤頁 */}
+        <TabsContent value="ranking" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">學生排序管理</h2>
+              <p className="text-muted-foreground">管理獎學金申請的排序和排名</p>
             </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  )
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">
-            {locale === "zh" ? "學院審核管理" : "College Review Management"}
-          </h2>
-          <p className="text-muted-foreground">
-            {locale === "zh" ? "學院層級的獎學金申請審核" : "College-level scholarship application reviews"}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-1" />
-            {locale === "zh" ? "匯出" : "Export"}
-          </Button>
-          <div className="flex items-center border rounded-md">
-            <Button
-              variant={viewMode === "card" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("card")}
-            >
-              <Grid className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === "table" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("table")}
-            >
-              <List className="h-4 w-4" />
+            <Button onClick={createNewRanking}>
+              <Plus className="h-4 w-4 mr-2" />
+              建立新排名
             </Button>
           </div>
-        </div>
-      </div>
 
-      {/* Statistics */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {locale === "zh" ? "待審核" : "Pending Review"}
-            </CardTitle>
-            <GraduationCap className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {applications.filter((app) => app.status === "submitted").length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {locale === "zh" ? "需要學院審核" : "Requires college review"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {locale === "zh" ? "審核中" : "Under Review"}
-            </CardTitle>
-            <Eye className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {applications.filter((app) => app.status === "under_review").length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {locale === "zh" ? "學院審核中" : "College reviewing"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {locale === "zh" ? "平均等待天數" : "Avg Wait Days"}
-            </CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {applications.length > 0 
-                ? Math.round(applications.reduce((sum, app) => sum + (app.days_waiting || 0), 0) / applications.length)
-                : 0
-              }
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {locale === "zh" ? "天" : "days"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {locale === "zh" ? "總金額" : "Total Amount"}
-            </CardTitle>
-            <XCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              NT$ {applications.reduce((sum, app) => sum + (app.amount || 0), 0).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {locale === "zh" ? "申請金額" : "Application amount"}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder={locale === "zh" ? "搜尋學生或學號..." : "Search student or ID..."} className="pl-8" />
-        </div>
-        <Select defaultValue="all">
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{locale === "zh" ? "全部狀態" : "All Status"}</SelectItem>
-            <SelectItem value="pending">{locale === "zh" ? "待審核" : "Pending"}</SelectItem>
-            <SelectItem value="under_review">{locale === "zh" ? "審核中" : "Under Review"}</SelectItem>
-            <SelectItem value="approved">{locale === "zh" ? "已核准" : "Approved"}</SelectItem>
-            <SelectItem value="rejected">{locale === "zh" ? "已駁回" : "Rejected"}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select defaultValue="all">
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{locale === "zh" ? "全部學系" : "All Departments"}</SelectItem>
-            <SelectItem value="cs">{locale === "zh" ? "資訊工程" : "Computer Science"}</SelectItem>
-            <SelectItem value="ee">{locale === "zh" ? "電機工程" : "Electrical Engineering"}</SelectItem>
-            <SelectItem value="bio">{locale === "zh" ? "生物科技" : "Biotechnology"}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Applications View */}
-      {viewMode === "card" ? renderCardView() : (
-        <Card>
-          <CardHeader>
-            <CardTitle>{locale === "zh" ? "申請清單" : "Applications List"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{locale === "zh" ? "學生" : "Student"}</TableHead>
-                  <TableHead>{locale === "zh" ? "學系" : "Department"}</TableHead>
-                  <TableHead>{locale === "zh" ? "獎學金類型" : "Scholarship Type"}</TableHead>
-                  <TableHead>GPA</TableHead>
-                  <TableHead>{locale === "zh" ? "金額" : "Amount"}</TableHead>
-                  <TableHead>{locale === "zh" ? "狀態" : "Status"}</TableHead>
-                  <TableHead>{locale === "zh" ? "等待天數" : "Wait Days"}</TableHead>
-                  <TableHead>{locale === "zh" ? "操作" : "Actions"}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {applications.map((app) => (
-                  <TableRow key={app.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">
-                          {app.student_id}
-                        </span>
-                        <NationalityFlag 
-                          countryCode={app.nationality || "OTHER"} 
-                          locale={locale} 
-                          showLabel={false} 
-                        />
-                        <span className="text-sm text-muted-foreground">({app.student_id})</span>
+          {/* Ranking Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle>選擇排名</CardTitle>
+              <CardDescription>選擇要管理的排名清單</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {rankings.map((ranking) => (
+                  <Card 
+                    key={ranking.id} 
+                    className={`cursor-pointer transition-colors ${selectedRanking === ranking.id ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'}`}
+                    onClick={() => {
+                      setSelectedRanking(ranking.id)
+                      fetchRankingDetails(ranking.id)
+                    }}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Badge variant={ranking.is_finalized ? "default" : "secondary"}>
+                          {ranking.is_finalized ? "已確認" : "進行中"}
+                        </Badge>
+                        <Trophy className="h-4 w-4 text-blue-600" />
                       </div>
-                    </TableCell>
-                    <TableCell>{app.department || "N/A"}</TableCell>
-                    <TableCell>{app.scholarship_type}</TableCell>
-                    <TableCell>{app.gpa || "N/A"}</TableCell>
-                    <TableCell>NT$ {(app.amount || 0).toLocaleString()}</TableCell>
+                      <h3 className="font-medium mb-1">{ranking.ranking_name}</h3>
+                      <p className="text-sm text-gray-600">
+                        申請數: {ranking.total_applications} | 配額: {ranking.total_quota}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Ranking Details */}
+          {selectedRanking && rankingData && (
+            <div className="space-y-6">
+              {isRankingLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : (
+                <CollegeRankingTable
+                  applications={rankingData.applications}
+                  totalQuota={rankingData.totalQuota}
+                  subTypeCode={rankingData.subTypeCode}
+                  academicYear={rankingData.academicYear}
+                  semester={rankingData.semester}
+                  isFinalized={rankingData.isFinalized}
+                  onRankingChange={handleRankingChange}
+                  onReviewApplication={handleReviewApplication}
+                  onExecuteDistribution={handleExecuteDistribution}
+                  onFinalizeRanking={handleFinalizeRanking}
+                  locale={locale}
+                />
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* 獎學金分發標籤頁 */}
+        <TabsContent value="distribution" className="space-y-6">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">獎學金分發</h2>
+            <p className="text-muted-foreground">執行獎學金的分配和發放</p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5" />
+                  分發統計
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between">
+                  <span>總申請數</span>
+                  <span className="font-semibold">{applications.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>可分發配額</span>
+                  <span className="font-semibold text-green-600">10</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>已分發數量</span>
+                  <span className="font-semibold text-blue-600">8</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>剩餘配額</span>
+                  <span className="font-semibold text-orange-600">2</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="h-5 w-5" />
+                  分發操作
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  根據已確認的排名執行獎學金分配
+                </p>
+                <div className="space-y-2">
+                  <Button 
+                    className="w-full" 
+                    onClick={handleExecuteDistribution}
+                    disabled={!selectedRanking}
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    執行自動分發
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={handleFinalizeRanking}
+                    disabled={!selectedRanking}
+                  >
+                    <Trophy className="h-4 w-4 mr-2" />
+                    確認排名結果
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Distribution History */}
+          <Card>
+            <CardHeader>
+              <CardTitle>分發紀錄</CardTitle>
+              <CardDescription>查看歷史分發紀錄</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>分發批次</TableHead>
+                    <TableHead>獎學金類型</TableHead>
+                    <TableHead>分發數量</TableHead>
+                    <TableHead>執行時間</TableHead>
+                    <TableHead>狀態</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>2024-001</TableCell>
+                    <TableCell>博士生卓越獎學金</TableCell>
+                    <TableCell>8/10</TableCell>
+                    <TableCell>2024-01-15 14:30</TableCell>
                     <TableCell>
-                      <Badge variant={getStatusColor(app.status) as any}>{getStatusName(app.status)}</Badge>
-                    </TableCell>
-                    <TableCell>{app.days_waiting || 0} {locale === "zh" ? "天" : "days"}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="outline" size="sm">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <CheckCircle className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <XCircle className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <Badge>已完成</Badge>
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
-} 
+}

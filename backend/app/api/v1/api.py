@@ -3,7 +3,7 @@ API v1 router aggregation
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, applications, users, admin, scholarships, files, notifications, scholarship_management, quota_dashboard, application_fields, scholarship_configurations, reference_data, user_profiles, scholarship_rules, professor
+from app.api.v1.endpoints import auth, applications, users, admin, scholarships, files, notifications, scholarship_management, quota_dashboard, application_fields, scholarship_configurations, reference_data, user_profiles, scholarship_rules, professor, college_review
 
 api_router = APIRouter()
 
@@ -22,4 +22,5 @@ api_router.include_router(scholarship_configurations.router, prefix="/scholarshi
 api_router.include_router(reference_data.router, prefix="/reference-data", tags=["Reference Data"])
 api_router.include_router(user_profiles.router, prefix="/user-profiles", tags=["User Profiles"])
 api_router.include_router(scholarship_rules.router, prefix="/scholarship-rules", tags=["Scholarship Rules"])
-api_router.include_router(professor.router, prefix="/professor", tags=["Professor Review"]) 
+api_router.include_router(professor.router, prefix="/professor", tags=["Professor Review"])
+api_router.include_router(college_review.router, prefix="/college", tags=["College Review"]) 
