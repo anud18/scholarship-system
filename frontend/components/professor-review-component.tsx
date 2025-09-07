@@ -418,9 +418,14 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-8 text-center">
-              <Clock className="h-8 w-8 animate-spin mx-auto mb-2" />
-              <p>載入中...</p>
+            <div className="p-12 text-center">
+              <div className="flex flex-col items-center gap-4">
+                <Clock className="h-12 w-12 animate-spin text-blue-600" />
+                <div className="space-y-2">
+                  <p className="text-lg font-medium">載入申請資料中...</p>
+                  <p className="text-sm text-muted-foreground">正在取得需要您審查的獎學金申請</p>
+                </div>
+              </div>
             </div>
           ) : (
             <Table>
@@ -437,8 +442,30 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
               <TableBody>
                 {filteredApplications.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      {searchQuery ? "沒有符合搜尋條件的申請" : "目前沒有需要審查的申請"}
+                    <TableCell colSpan={6} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="p-4 bg-muted rounded-full">
+                          <Eye className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                        <div className="text-center space-y-2">
+                          <p className="text-lg font-medium text-muted-foreground">
+                            {error ? "載入申請時發生錯誤" : searchQuery ? "沒有符合搜尋條件的申請" : "目前沒有需要審查的申請"}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {error ? "請重新整理頁面或聯繫系統管理員" : searchQuery ? "請嘗試不同的搜尋關鍵字" : "新的申請提交後會顯示在這裡"}
+                          </p>
+                          {error && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={fetchApplications}
+                              className="mt-2"
+                            >
+                              重新載入
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : (

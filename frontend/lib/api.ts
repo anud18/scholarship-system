@@ -377,6 +377,7 @@ export interface PaginatedResponse<T> {
   total: number
   page: number
   size: number
+  pages: number
 }
 
 export interface UserCreate {
@@ -976,6 +977,11 @@ class ApiClient {
           this.clearToken()
         } else if (response.status === 403) {
           console.error('Authorization denied - user may not have proper permissions')
+        } else if (response.status === 429) {
+          console.warn('Rate limit exceeded - request throttled')
+          // Add user-friendly rate limit message
+          const rateLimitMessage = data.detail || data.message || 'Too many requests. Please wait a moment and try again.'
+          throw new Error(`請稍候再試：${rateLimitMessage}`)
         }
         
         throw new Error(data.message || data.detail || `HTTP error! status: ${response.status}`)
@@ -1965,19 +1971,50 @@ class ApiClient {
   professor = {
     // Get applications requiring professor review
     getApplications: async (statusFilter?: string): Promise<ApiResponse<Application[]>> => {
-      const params = statusFilter ? `?status_filter=${statusFilter}` : '';
-      const response = await this.request<PaginatedResponse<Application>>(`/professor/applications${params}`);
-      
-      // Extract items from paginated response
-      if (response.success && response.data && 'items' in response.data) {
+      try {
+        const params = statusFilter ? `?status_filter=${statusFilter}` : '';
+        console.log('🔍 Requesting professor applications with params:', params);
+        
+        // The /professor/applications endpoint returns PaginatedResponse directly, not wrapped in ApiResponse
+        const response = await this.request<PaginatedResponse<Application>>(`/professor/applications${params}`);
+        console.log('📨 Professor applications raw response:', response);
+        
+        // Check if response is a direct PaginatedResponse (backend returns this directly)
+        if (response && 'items' in response && 'total' in response && 'pages' in response) {
+          console.log('✅ Got direct PaginatedResponse:', response.items.length, 'applications, total:', response.total);
+          return {
+            success: true,
+            message: 'Applications loaded successfully',
+            data: response.items
+          };
+        }
+        // Handle wrapped ApiResponse format (fallback for consistency)
+        else if (response && 'success' in response && response.success && response.data) {
+          if ('items' in response.data && Array.isArray(response.data.items)) {
+            console.log('✅ Got wrapped ApiResponse with paginated data:', response.data.items.length, 'applications');
+            return {
+              success: true,
+              message: response.message || 'Applications loaded successfully',
+              data: response.data.items
+            };
+          }
+        }
+        
+        // Handle error or unexpected response format
+        console.warn('⚠️ Unexpected response format:', response);
         return {
-          success: true,
-          message: response.message,
-          data: response.data.items
+          success: false,
+          message: 'Failed to load applications - unexpected response format',
+          data: []
+        };
+      } catch (error: any) {
+        console.error('❌ Error in professor.getApplications:', error);
+        return {
+          success: false,
+          message: error.message || 'Failed to load applications',
+          data: []
         };
       }
-      
-      return response as ApiResponse<Application[]>;
     },
 
     // Get existing professor review for an application
@@ -2032,6 +2069,77 @@ class ApiClient {
       overdue_reviews: number;
     }>> => {
       return this.request('/professor/stats');
+    }
+  }
+
+  // College Review endpoints
+  college = {
+    // Get rankings list
+    getRankings: async (academicYear?: number, semester?: string): Promise<ApiResponse<any[]>> => {
+      const params = new URLSearchParams()
+      if (academicYear) params.append('academic_year', academicYear.toString())
+      if (semester) params.append('semester', semester)
+      return this.request(`/college/rankings${params.toString() ? `?${params.toString()}` : ''}`)
+    },
+    
+    // Get ranking details
+    getRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
+      return this.request(`/college/rankings/${rankingId}`)
+    },
+    
+    // Create new ranking
+    createRanking: async (data: {
+      scholarship_type_id: number;
+      sub_type_code: string;
+      academic_year: number;
+      semester?: string;
+      ranking_name?: string;
+    }): Promise<ApiResponse<any>> => {
+      return this.request('/college/rankings', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      })
+    },
+    
+    // Update ranking order
+    updateRankingOrder: async (rankingId: number, newOrder: Array<{item_id: number, position: number}>): Promise<ApiResponse<any>> => {
+      return this.request(`/college/rankings/${rankingId}/order`, {
+        method: 'PUT',
+        body: JSON.stringify(newOrder)
+      })
+    },
+    
+    // Execute distribution
+    executeDistribution: async (rankingId: number, distributionRules?: any): Promise<ApiResponse<any>> => {
+      return this.request(`/college/rankings/${rankingId}/distribute`, {
+        method: 'POST',
+        body: JSON.stringify({ distribution_rules: distributionRules })
+      })
+    },
+    
+    // Finalize ranking
+    finalizeRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
+      return this.request(`/college/rankings/${rankingId}/finalize`, {
+        method: 'POST'
+      })
+    },
+    
+    // Get quota status
+    getQuotaStatus: async (scholarshipTypeId: number, academicYear: number, semester?: string): Promise<ApiResponse<any>> => {
+      const params = new URLSearchParams({
+        scholarship_type_id: scholarshipTypeId.toString(),
+        academic_year: academicYear.toString()
+      })
+      if (semester) params.append('semester', semester)
+      return this.request(`/college/quota-status?${params.toString()}`)
+    },
+    
+    // Get college review statistics
+    getStatistics: async (academicYear?: number, semester?: string): Promise<ApiResponse<any>> => {
+      const params = new URLSearchParams()
+      if (academicYear) params.append('academic_year', academicYear.toString())
+      if (semester) params.append('semester', semester)
+      return this.request(`/college/statistics${params.toString() ? `?${params.toString()}` : ''}`)
     }
   }
 }

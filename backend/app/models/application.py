@@ -11,6 +11,7 @@ import enum
 
 from app.db.base_class import Base
 from app.models.scholarship import SubTypeSelectionMode
+from app.models.enums import Semester
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -75,15 +76,6 @@ class FileType(enum.Enum):
     OTHER = "other"  # 其他
 
 
-class Semester(enum.Enum):
-    """Semester enum"""
-    FIRST = "first"
-    SECOND = "second"
-
-
-
-
-
 class Application(Base):
     """Scholarship application model"""
     __tablename__ = "applications"
@@ -137,6 +129,11 @@ class Application(Base):
     review_comments = Column(Text)
     rejection_reason = Column(Text)
     
+    # 學院審查相關 (College Review)
+    college_ranking_score = Column(Numeric(8, 2))  # 學院排名分數
+    final_ranking_position = Column(Integer)  # 最終排名位置
+    quota_allocation_status = Column(String(20))  # 'allocated', 'rejected', 'waitlisted'
+    
     # 時間戳記
     submitted_at = Column(DateTime(timezone=True))
     reviewed_at = Column(DateTime(timezone=True))
@@ -163,6 +160,7 @@ class Application(Base):
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
     professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
+    # college_review = relationship("CollegeReview", back_populates="application", uselist=False, cascade="all, delete-orphan")  # Temporarily commented for testing
 
     # 唯一約束：確保每個用戶在每個學年、學期、獎學金組合下只能有一個申請
     # Use user_id instead of student_id since students are now from external API

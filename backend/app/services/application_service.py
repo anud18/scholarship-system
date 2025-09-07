@@ -1007,7 +1007,7 @@ class ApplicationService:
         query = select(Application).options(
             selectinload(Application.files),
             selectinload(Application.scholarship),
-            selectinload(Application.user)  # Eagerly load user to avoid N+1 queries
+            selectinload(Application.student)  # Eagerly load student to avoid N+1 queries
         )
         
         if current_user.role == UserRole.PROFESSOR:
@@ -1384,7 +1384,7 @@ class ApplicationService:
         query = select(Application).options(
             selectinload(Application.files),
             selectinload(Application.scholarship),
-            selectinload(Application.user)  # Eagerly load user to avoid N+1 queries
+            selectinload(Application.student)  # Eagerly load student to avoid N+1 queries
         )
         
         if current_user.role == UserRole.STUDENT:
