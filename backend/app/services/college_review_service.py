@@ -15,9 +15,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, func, and_, or_, desc, asc, case
 from sqlalchemy.orm import selectinload, joinedload
 
-from app.models.application import Application, ApplicationStatus
+from app.models.application import Application, ApplicationStatus, ProfessorReview
 from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem, QuotaDistribution
-from app.models.professor_review import ProfessorReview
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
 from app.models.user import User, UserRole
 from app.models.enums import Semester
