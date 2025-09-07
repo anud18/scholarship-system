@@ -98,9 +98,19 @@ export default function ScholarshipManagementSystem() {
 
   // Set initial active tab based on user role
   useEffect(() => {
-    if (user && user.role === "college") {
-      // College users only have one tab: main (審核管理)
-      setActiveTab("main")
+    if (user) {
+      // Set each role to their first available tab (index 0)
+      if (user.role === "student") {
+        setActiveTab("main")
+      } else if (user.role === "professor") {
+        setActiveTab("main")
+      } else if (user.role === "college") {
+        setActiveTab("main")
+      } else if (user.role === "admin") {
+        setActiveTab("dashboard")
+      } else if (user.role === "super_admin") {
+        setActiveTab("dashboard")
+      }
     }
   }, [user])
 
