@@ -30,6 +30,18 @@ interface CollegeDashboardProps {
   locale?: "zh" | "en"
 }
 
+interface ScholarshipConfig {
+  id: number
+  name: string
+  subTypes: { code: string; name: string }[]
+}
+
+interface AcademicConfig {
+  currentYear: number
+  currentSemester: 'first' | 'second'
+  availableYears: number[]
+}
+
 interface RankingData {
   applications: any[]
   totalQuota: number
@@ -42,6 +54,57 @@ interface RankingData {
 export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps) {
   const t = (key: string) => getTranslation(locale, key)
   const { applications, isLoading, error, updateApplicationStatus } = useCollegeApplications()
+  
+  // Configuration fetch functions
+  const getAcademicConfig = async (): Promise<AcademicConfig> => {
+    if (academicConfig) return academicConfig
+    
+    // Calculate current academic year (ROC system)
+    const currentDate = new Date()
+    const currentYear = currentDate.getFullYear() - 1911
+    const currentMonth = currentDate.getMonth() + 1
+    
+    // Determine semester based on month (Aug-Jan = first, Feb-July = second)
+    const currentSemester: 'first' | 'second' = currentMonth >= 8 || currentMonth <= 1 ? 'first' : 'second'
+    
+    const config: AcademicConfig = {
+      currentYear,
+      currentSemester,
+      availableYears: [currentYear - 1, currentYear, currentYear + 1]
+    }
+    
+    setAcademicConfig(config)
+    return config
+  }
+  
+  const getScholarshipConfig = async (): Promise<ScholarshipConfig[]> => {
+    if (scholarshipConfig.length > 0) return scholarshipConfig
+    
+    try {
+      // Fetch from API instead of hardcoding
+      const response = await apiClient.scholarshipConfigurations.getScholarshipTypes()
+      if (response.success && response.data) {
+        const configs = response.data.map((type: any) => ({
+          id: type.id,
+          name: type.name,
+          subTypes: type.sub_types || [{ code: 'default', name: 'Default' }]
+        }))
+        setScholarshipConfig(configs)
+        return configs
+      }
+    } catch (error) {
+      console.error('Failed to fetch scholarship config:', error)
+    }
+    
+    // Fallback configuration if API fails
+    const fallbackConfig = [{
+      id: 1,
+      name: 'Default Scholarship',
+      subTypes: [{ code: 'default', name: 'Default Type' }]
+    }]
+    setScholarshipConfig(fallbackConfig)
+    return fallbackConfig
+  }
 
   const [viewMode, setViewMode] = useState<"card" | "table">("card")
   const [selectedApplication, setSelectedApplication] = useState<any>(null)
@@ -50,10 +113,14 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
   const [rankings, setRankings] = useState<any[]>([])
   const [selectedRanking, setSelectedRanking] = useState<number | null>(null)
   const [isRankingLoading, setIsRankingLoading] = useState(false)
+  const [scholarshipConfig, setScholarshipConfig] = useState<ScholarshipConfig[]>([])
+  const [academicConfig, setAcademicConfig] = useState<AcademicConfig | null>(null)
 
-  // Fetch rankings on component mount
+  // Fetch rankings and configuration on component mount
   useEffect(() => {
     fetchRankings()
+    getAcademicConfig()
+    getScholarshipConfig()
   }, [])
 
   const fetchRankings = async () => {
@@ -150,16 +217,21 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
 
   const createNewRanking = async (scholarshipTypeId?: number, subTypeCode?: string) => {
     try {
-      // Get current academic year dynamically
-      const currentYear = new Date().getFullYear()
-      const academicYear = currentYear - 1911  // Convert to ROC year
+      // Get academic configuration from API or system settings
+      const academicConfig = await getAcademicConfig()
+      const scholarshipConfig = await getScholarshipConfig()
       
+      if (!scholarshipTypeId && scholarshipConfig.length === 0) {
+        throw new Error("No scholarship types available")
+      }
+      
+      const defaultScholarship = scholarshipConfig[0]
       const newRanking = {
-        scholarship_type_id: scholarshipTypeId || 1,  // Default or provided value
-        sub_type_code: subTypeCode || "default",     // Default or provided value
-        academic_year: academicYear,                  // Dynamic academic year
-        semester: "first",                          // Could be made dynamic
-        ranking_name: `新建排名 - ${academicYear}學年度`
+        scholarship_type_id: scholarshipTypeId || defaultScholarship?.id,
+        sub_type_code: subTypeCode || defaultScholarship?.subTypes[0]?.code,
+        academic_year: academicConfig.currentYear,
+        semester: academicConfig.currentSemester,
+        ranking_name: `新建排名 - ${academicConfig.currentYear}學年度 ${academicConfig.currentSemester === 'first' ? '上' : '下'}學期`
       }
       
       const response = await apiClient.college.createRanking(newRanking)

@@ -5,14 +5,20 @@ This module defines the database models for college-level review processes,
 including ranking, quota distribution, and final allocation decisions.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Numeric, ForeignKey, JSON, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Numeric, ForeignKey, JSON, Index, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+
+# Import types only for type checking to avoid circular imports
+if TYPE_CHECKING:
+    from app.models.application import Application
+    from app.models.user import User
+    from app.models.scholarship import ScholarshipType
 from app.models.application import ApplicationStatus
 
 
@@ -72,7 +78,16 @@ class CollegeReview(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
-    # Relationships with proper foreign key setup to avoid circular dependencies
+    # Database-level constraints for data integrity
+    __table_args__ = (
+        CheckConstraint('academic_score IS NULL OR (academic_score >= 0 AND academic_score <= 100)', name='check_academic_score_range'),
+        CheckConstraint('professor_review_score IS NULL OR (professor_review_score >= 0 AND professor_review_score <= 100)', name='check_professor_score_range'),
+        CheckConstraint('college_criteria_score IS NULL OR (college_criteria_score >= 0 AND college_criteria_score <= 100)', name='check_college_score_range'),
+        CheckConstraint('special_circumstances_score IS NULL OR (special_circumstances_score >= 0 AND special_circumstances_score <= 100)', name='check_special_score_range'),
+        CheckConstraint('ranking_score IS NULL OR (ranking_score >= 0 AND ranking_score <= 100)', name='check_ranking_score_range'),
+    )
+    
+    # Relationships using string references to avoid circular dependencies
     application = relationship("Application", lazy="select", foreign_keys=[application_id])
     reviewer = relationship("User", lazy="select", foreign_keys=[reviewer_id])
     
@@ -155,11 +170,11 @@ class CollegeRanking(Base):
     created_by = Column(Integer, ForeignKey("users.id"))
     finalized_by = Column(Integer, ForeignKey("users.id"))
     
-    # Relationships - temporarily disabled due to circular dependency issues
-    # scholarship_type = relationship("ScholarshipType")
+    # Relationships using string references to avoid circular imports
+    scholarship_type = relationship("ScholarshipType", lazy="select")
     items = relationship("CollegeRankingItem", back_populates="ranking", cascade="all, delete-orphan")
-    # creator = relationship("User", foreign_keys=[created_by])
-    # finalizer = relationship("User", foreign_keys=[finalized_by])
+    creator = relationship("User", foreign_keys=[created_by], lazy="select")
+    finalizer = relationship("User", foreign_keys=[finalized_by], lazy="select")
     
     def __repr__(self):
         return f"<CollegeRanking(id={self.id}, sub_type={self.sub_type_code}, total={self.total_applications})>"
@@ -214,10 +229,10 @@ class CollegeRankingItem(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
-    # Relationships - temporarily disabled due to circular dependency issues
+    # Relationships using string references to avoid circular imports
     ranking = relationship("CollegeRanking", back_populates="items")
-    # application = relationship("Application")
-    # college_review = relationship("CollegeReview")
+    application = relationship("Application", lazy="select", foreign_keys=[application_id])
+    college_review = relationship("CollegeReview", lazy="select", foreign_keys=[college_review_id])
     
     def __repr__(self):
         return f"<CollegeRankingItem(id={self.id}, rank={self.rank_position}, allocated={self.is_allocated})>"
@@ -266,8 +281,8 @@ class QuotaDistribution(Base):
     executed_at = Column(DateTime(timezone=True), server_default=func.now())
     executed_by = Column(Integer, ForeignKey("users.id"))
     
-    # Relationships - temporarily disabled due to circular dependency issues
-    # executor = relationship("User")
+    # Relationships using string references to avoid circular imports
+    executor = relationship("User", lazy="select", foreign_keys=[executed_by])
     
     def __repr__(self):
         return f"<QuotaDistribution(id={self.id}, name={self.distribution_name}, executed_at={self.executed_at})>"

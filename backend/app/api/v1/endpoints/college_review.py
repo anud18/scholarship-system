@@ -20,7 +20,11 @@ from app.models.user import User, UserRole
 from app.models.college_review import CollegeReview, CollegeRanking, QuotaDistribution
 from app.models.application import Application
 from app.schemas.response import ApiResponse
-from app.services.college_review_service import CollegeReviewService, QuotaDistributionService
+from app.services.college_review_service import (
+    CollegeReviewService, QuotaDistributionService,
+    CollegeReviewError, RankingNotFoundError, RankingModificationError, 
+    InvalidRankingDataError, ReviewPermissionError
+)
 from sqlalchemy import select
 import logging
 
@@ -147,23 +151,38 @@ async def get_applications_for_review(
             semester=semester
         )
         
-        # Filter sensitive student data - only return necessary fields
+        # Create lightweight DTOs with field-level filtering for security
         filtered_applications = []
         for app in applications:
+            # Extract only necessary fields to minimize data exposure
+            student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
+            
             filtered_app = {
                 "id": app.get("id"),
                 "app_id": app.get("app_id"),
                 "status": app.get("status"),
                 "scholarship_type": app.get("scholarship_type"),
                 "sub_type": app.get("sub_type"),
+                "academic_year": app.get("academic_year"),
+                "semester": app.get("semester"),
                 "created_at": app.get("created_at"),
                 "submitted_at": app.get("submitted_at"),
-                # Only include essential student info
+                # Minimal student info for identification purposes only
                 "student_info": {
-                    "name": app.get("student_data", {}).get("cname", "N/A"),
-                    "student_no": app.get("student_data", {}).get("stdNo", "N/A"),
-                    "department": app.get("student_data", {}).get("department", "N/A")
-                } if app.get("student_data") else None
+                    "display_name": student_data.get("cname", "未提供姓名"),
+                    "student_id": student_data.get("stdNo", "未提供學號"),
+                    "department_code": student_data.get("deptCode", "N/A")  # Use code instead of full name
+                } if student_data else {
+                    "display_name": "未提供學生資料",
+                    "student_id": "N/A",
+                    "department_code": "N/A"
+                },
+                # Add review status for UI purposes
+                "review_status": {
+                    "has_professor_review": len(app.get("professor_reviews", [])) > 0,
+                    "professor_review_count": len(app.get("professor_reviews", [])),
+                    "files_count": len(app.get("files", []))
+                }
             }
             filtered_applications.append(filtered_app)
         
@@ -180,6 +199,12 @@ async def get_applications_for_review(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid request parameters: {str(e)}"
+        )
+    except ReviewPermissionError as e:
+        logger.warning(f"Permission denied for college applications access: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e)
         )
     except Exception as e:
         logger.error(f"Failed to retrieve applications for review: {str(e)}")
@@ -460,16 +485,31 @@ async def get_ranking(
                 "is_allocated": item.is_allocated,
                 "status": item.status,
                 "total_score": float(item.total_score) if item.total_score else None,
+                # Lightweight DTO with minimal student exposure
                 "application": {
                     "id": item.application.id,
                     "app_id": item.application.app_id,
-                    # Only expose essential student information
-                    "student_name": item.application.student_data.get('cname', 'N/A') if item.application.student_data else 'N/A',
-                    "student_no": item.application.student_data.get('stdNo', 'N/A') if item.application.student_data else 'N/A',
-                    "department": item.application.student_data.get('department', 'N/A') if item.application.student_data else 'N/A',
+                    "status": item.application.status,
                     "scholarship_type": item.application.main_scholarship_type,
                     "sub_type": item.application.sub_scholarship_type,
-                    "status": item.application.status
+                    # Minimal student info - only what's needed for ranking display
+                    "student_info": {
+                        "display_name": (
+                            item.application.student_data.get('cname', '學生') 
+                            if item.application.student_data and isinstance(item.application.student_data, dict) 
+                            else '學生'
+                        ),
+                        "student_id_masked": (
+                            f"{item.application.student_data.get('stdNo', 'N/A')[:3]}***" 
+                            if item.application.student_data and isinstance(item.application.student_data, dict) and item.application.student_data.get('stdNo')
+                            else 'N/A'
+                        ),  # Partially mask student ID for privacy
+                        "dept_code": (
+                            item.application.student_data.get('deptCode', 'N/A')[:3] 
+                            if item.application.student_data and isinstance(item.application.student_data, dict)
+                            else 'N/A'
+                        )  # Use department code instead of full name
+                    }
                 }
             })
         
@@ -527,10 +567,35 @@ async def update_ranking_order(
             }
         )
     
+    except RankingNotFoundError as e:
+        logger.warning(f"Ranking not found for order update: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except RankingModificationError as e:
+        logger.warning(f"Cannot modify ranking: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e)
+        )
+    except InvalidRankingDataError as e:
+        logger.warning(f"Invalid ranking data: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except CollegeReviewError as e:
+        logger.error(f"College review error during ranking update: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
     except Exception as e:
+        logger.error(f"Unexpected error updating ranking order: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update ranking order: {str(e)}"
+            detail="Failed to update ranking order"
         )
 
 

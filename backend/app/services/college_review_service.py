@@ -17,10 +17,32 @@ from sqlalchemy.orm import selectinload, joinedload
 
 from app.models.application import Application, ApplicationStatus
 from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem, QuotaDistribution
+from app.models.professor_review import ProfessorReview
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
 from app.models.user import User, UserRole
 from app.models.enums import Semester
 from app.core.exceptions import BusinessLogicError, NotFoundError
+
+# Custom exceptions for college review operations
+class CollegeReviewError(Exception):
+    """Base exception for college review operations"""
+    pass
+
+class RankingNotFoundError(CollegeReviewError):
+    """Raised when a ranking is not found"""
+    pass
+
+class RankingModificationError(CollegeReviewError):
+    """Raised when attempting to modify a finalized ranking"""
+    pass
+
+class InvalidRankingDataError(CollegeReviewError):
+    """Raised when ranking data is invalid"""
+    pass
+
+class ReviewPermissionError(CollegeReviewError):
+    """Raised when user lacks permission for review operation"""
+    pass
 
 
 class CollegeReviewService:
@@ -37,13 +59,20 @@ class CollegeReviewService:
     ) -> CollegeReview:
         """Create or update a college review for an application"""
         
-        # Check if review already exists
-        stmt = select(CollegeReview).where(CollegeReview.application_id == application_id)
+        # Check if review already exists with eager loading
+        stmt = select(CollegeReview).options(
+            selectinload(CollegeReview.application),
+            selectinload(CollegeReview.reviewer)
+        ).where(CollegeReview.application_id == application_id)
         result = await self.db.execute(stmt)
         existing_review = result.scalar_one_or_none()
         
-        # Verify application exists and is in reviewable state
-        app_stmt = select(Application).where(Application.id == application_id)
+        # Verify application exists and is in reviewable state with eager loading
+        app_stmt = select(Application).options(
+            selectinload(Application.scholarship_type_ref),
+            selectinload(Application.professor_reviews),
+            selectinload(Application.files)
+        ).where(Application.id == application_id)
         app_result = await self.db.execute(app_stmt)
         application = app_result.scalar_one_or_none()
         
@@ -127,12 +156,13 @@ class CollegeReviewService:
     ) -> List[Dict[str, Any]]:
         """Get applications that are ready for college review"""
         
-        # Base query for applications in reviewable state with proper eager loading
+        # Base query for applications in reviewable state with comprehensive eager loading
         stmt = select(Application).options(
             selectinload(Application.scholarship_type_ref),
-            selectinload(Application.professor_reviews),
-            selectinload(Application.files),  # Load files for complete data
-            joinedload(Application.student)  # Eagerly load student data
+            selectinload(Application.professor_reviews).selectinload(ProfessorReview.professor),
+            selectinload(Application.files),
+            selectinload(Application.reviews),  # Load all application reviews
+            # Note: student is loaded via foreign key, not relationship
         ).where(
             or_(
                 Application.status == 'recommended',
@@ -315,13 +345,14 @@ class CollegeReviewService:
         return ranking
     
     async def get_ranking(self, ranking_id: int) -> Optional[CollegeRanking]:
-        """Get a ranking with all its items"""
+        """Get a ranking with all its items and relationships using proper eager loading"""
         
         stmt = select(CollegeRanking).options(
-            selectinload(CollegeRanking.items)
-            # selectinload(CollegeRankingItem.application),  # Disabled due to circular dependency
-            # selectinload(CollegeRankingItem.college_review),  # Disabled due to circular dependency
-            # selectinload(CollegeRanking.scholarship_type)  # Disabled due to circular dependency
+            selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application).selectinload(Application.scholarship_type_ref),
+            selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.college_review),
+            selectinload(CollegeRanking.scholarship_type),
+            selectinload(CollegeRanking.creator),
+            selectinload(CollegeRanking.finalizer)
         ).where(CollegeRanking.id == ranking_id)
         
         result = await self.db.execute(stmt)
@@ -332,37 +363,66 @@ class CollegeReviewService:
         ranking_id: int,
         new_order: List[Dict[str, Any]]
     ) -> CollegeRanking:
-        """Update the ranking order of applications"""
+        """Update the ranking order of applications with transaction safety"""
         
-        ranking = await self.get_ranking(ranking_id)
-        if not ranking:
-            raise NotFoundError("Ranking", str(ranking_id))
-        
-        if ranking.is_finalized:
-            raise BusinessLogicError("Cannot modify finalized ranking")
-        
-        # Update rank positions
-        for order_item in new_order:
-            item_id = order_item['item_id']
-            new_position = order_item['position']
-            
-            # Find the ranking item
-            ranking_item = next(
-                (item for item in ranking.items if item.id == item_id),
-                None
-            )
-            
-            if ranking_item:
-                ranking_item.rank_position = new_position
+        async with self.db.begin():  # Atomic transaction
+            try:
+                # Get ranking with pessimistic locking
+                ranking_stmt = select(CollegeRanking).options(
+                    selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application)
+                ).where(CollegeRanking.id == ranking_id).with_for_update()
                 
-                # Update application's ranking position
-                application = ranking_item.application
-                application.final_ranking_position = new_position
-        
-        ranking.updated_at = datetime.now(timezone.utc)
-        await self.db.commit()
-        
-        return ranking
+                ranking_result = await self.db.execute(ranking_stmt)
+                ranking = ranking_result.scalar_one_or_none()
+                
+                if not ranking:
+                    raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
+                
+                if ranking.is_finalized:
+                    raise RankingModificationError(f"Cannot modify finalized ranking {ranking_id}")
+                
+                # Validate input
+                if not new_order:
+                    raise InvalidRankingDataError("New order cannot be empty")
+                
+                positions = [item.get('position') for item in new_order]
+                if len(positions) != len(set(positions)):
+                    raise InvalidRankingDataError("Duplicate positions found in ranking update")
+                
+                # Update rank positions with validation
+                updated_count = 0
+                for order_item in new_order:
+                    item_id = order_item.get('item_id')
+                    new_position = order_item.get('position')
+                    
+                    if not item_id or new_position is None:
+                        continue
+                    
+                    # Find the ranking item
+                    ranking_item = next(
+                        (item for item in ranking.items if item.id == item_id),
+                        None
+                    )
+                    
+                    if ranking_item and ranking_item.rank_position != new_position:
+                        ranking_item.rank_position = new_position
+                        # Also update the application's ranking position for consistency
+                        if ranking_item.application:
+                            ranking_item.application.final_ranking_position = new_position
+                        updated_count += 1
+                
+                if updated_count == 0:
+                    raise InvalidRankingDataError("No valid position updates found in ranking data")
+                
+                ranking.updated_at = datetime.now(timezone.utc)
+                await self.db.flush()
+                await self.db.refresh(ranking)
+                
+                return ranking
+            
+            except Exception as e:
+                await self.db.rollback()
+                raise e
     
     async def execute_quota_distribution(
         self,
