@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError, DatabaseError
 from pydantic import BaseModel, Field, validator
 
 from app.db.deps import get_db
@@ -263,11 +264,23 @@ async def get_applications_for_review(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e)
         )
+    except ValueError as e:
+        logger.error(f"Invalid parameters for applications query: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid query parameters: {str(e)}"
+        )
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving applications: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service temporarily unavailable"
+        )
     except Exception as e:
-        logger.error(f"Failed to retrieve applications for review: {str(e)}")
+        logger.error(f"Unexpected error retrieving applications: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve applications for review"
+            detail="An unexpected error occurred while retrieving applications"
         )
 
 
@@ -323,11 +336,29 @@ async def create_college_review(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to review this application"
         )
+    except ValueError as e:
+        logger.error(f"Invalid review data for application {application_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid review data: {str(e)}"
+        )
+    except IntegrityError as e:
+        logger.error(f"Database integrity error creating review for application {application_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Review creation conflicts with existing data"
+        )
+    except DatabaseError as e:
+        logger.error(f"Database error creating review for application {application_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service temporarily unavailable"
+        )
     except Exception as e:
-        logger.error(f"Failed to create college review for application {application_id}: {str(e)}")
+        logger.error(f"Unexpected error creating college review for application {application_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create college review"
+            detail="An unexpected error occurred while creating the review"
         )
 
 
@@ -387,11 +418,29 @@ async def update_college_review(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this review"
         )
+    except ValueError as e:
+        logger.error(f"Invalid review data for update {review_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid review data: {str(e)}"
+        )
+    except IntegrityError as e:
+        logger.error(f"Database integrity error updating review {review_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Review update conflicts with existing data"
+        )
+    except DatabaseError as e:
+        logger.error(f"Database error updating review {review_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service temporarily unavailable"
+        )
     except Exception as e:
-        logger.error(f"Failed to update college review {review_id}: {str(e)}")
+        logger.error(f"Unexpected error updating college review {review_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update college review"
+            detail="An unexpected error occurred while updating the review"
         )
 
 
