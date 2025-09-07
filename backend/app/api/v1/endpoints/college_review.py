@@ -10,12 +10,13 @@ This module provides API endpoints for college-level review operations including
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field, validator
 
 from app.db.deps import get_db
 from app.core.security import require_college, require_admin, get_current_user
+from app.core.rate_limiting import professor_rate_limit  # Reuse existing rate limiter
 from app.models.user import User, UserRole
 from app.models.college_review import CollegeReview, CollegeRanking, QuotaDistribution
 from app.models.application import Application
@@ -25,7 +26,7 @@ from app.services.college_review_service import (
     CollegeReviewError, RankingNotFoundError, RankingModificationError, 
     InvalidRankingDataError, ReviewPermissionError
 )
-from sqlalchemy import select
+from sqlalchemy import select, and_
 import logging
 
 logger = logging.getLogger(__name__)
@@ -122,9 +123,61 @@ class QuotaDistributionRequest(BaseModel):
 
 router = APIRouter()
 
+# Helper functions for granular authorization checks
+async def _check_scholarship_permission(user: User, scholarship_type_id: int, db: AsyncSession) -> bool:
+    """Check if user has permission for specific scholarship type"""
+    if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        return True
+    
+    # Check if user is assigned to this scholarship type
+    from app.models.user import AdminScholarship
+    stmt = select(AdminScholarship).where(
+        and_(
+            AdminScholarship.user_id == user.id,
+            AdminScholarship.scholarship_type_id == scholarship_type_id
+        )
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none() is not None
+
+async def _check_academic_year_permission(user: User, academic_year: int, db: AsyncSession) -> bool:
+    """Check if user has permission for specific academic year"""
+    if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        return True
+    
+    # College users can only access current and previous academic year
+    current_year = datetime.now().year - 1911  # ROC year
+    allowed_years = [current_year - 1, current_year, current_year + 1]
+    return academic_year in allowed_years
+
+async def _check_application_review_permission(user: User, application_id: int, db: AsyncSession) -> bool:
+    """Check if user can review specific application"""
+    if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        return True
+    
+    # Get application details to check permissions
+    stmt = select(Application).where(Application.id == application_id)
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    
+    if not application:
+        return False
+    
+    # Check scholarship type permission
+    if application.scholarship_type_id:
+        return await _check_scholarship_permission(user, application.scholarship_type_id, db)
+    
+    # Check academic year permission  
+    if application.academic_year:
+        return await _check_academic_year_permission(user, application.academic_year, db)
+    
+    return True  # Default allow if no specific restrictions
+
 
 @router.get("/applications", response_model=ApiResponse[List[Dict[str, Any]]])
+@professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_applications_for_review(
+    request: Request,
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type"),
     sub_type: Optional[str] = Query(None, description="Filter by sub-type"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
@@ -134,12 +187,16 @@ async def get_applications_for_review(
 ):
     """Get applications that are ready for college review"""
     
-    # Additional authorization check
+    # Granular authorization checks
     if not current_user.is_college() and current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="College role required for application review access"
-        )
+        raise ReviewPermissionError("College role required for application review access")
+    
+    # Additional checks for specific operations
+    if scholarship_type_id and not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+        raise ReviewPermissionError(f"User {current_user.id} not authorized for scholarship type {scholarship_type_id}")
+    
+    if academic_year and not await _check_academic_year_permission(current_user, academic_year, db):
+        raise ReviewPermissionError(f"User {current_user.id} not authorized for academic year {academic_year}")
     
     try:
         service = CollegeReviewService(db)
@@ -215,7 +272,9 @@ async def get_applications_for_review(
 
 
 @router.post("/applications/{application_id}/review", response_model=ApiResponse[CollegeReviewResponse])
+@professor_rate_limit(requests=50, window_seconds=600)  # 50 review submissions per 10 minutes
 async def create_college_review(
+    request: Request,
     application_id: int,
     review_data: CollegeReviewCreate,
     current_user: User = Depends(require_college),
@@ -223,12 +282,13 @@ async def create_college_review(
 ):
     """Create or update a college review for an application"""
     
-    # Additional authorization check
+    # Granular authorization checks for review creation
     if not current_user.is_college() and current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="College role required for application review"
-        )
+        raise ReviewPermissionError("College role required for application review")
+    
+    # Check if user can review this specific application
+    if not await _check_application_review_permission(current_user, application_id, db):
+        raise ReviewPermissionError(f"User {current_user.id} not authorized to review application {application_id}")
     
     # Validate application_id
     if application_id <= 0:
@@ -395,10 +455,23 @@ async def get_rankings(
             data=rankings_data
         )
     
+    except ValueError as e:
+        logger.warning(f"Invalid query parameters for rankings: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid query parameters: {str(e)}"
+        )
+    except CollegeReviewError as e:
+        logger.error(f"College review error retrieving rankings: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
     except Exception as e:
+        logger.error(f"Unexpected error retrieving rankings: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve rankings: {str(e)}"
+            detail="Failed to retrieve rankings"
         )
 
 
@@ -451,15 +524,30 @@ async def create_ranking(
             }
         )
     
+    except ValueError as e:
+        logger.warning(f"Invalid ranking creation data: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid ranking data: {str(e)}"
+        )
+    except CollegeReviewError as e:
+        logger.error(f"College review error creating ranking: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
     except Exception as e:
+        logger.error(f"Unexpected error creating ranking: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create ranking: {str(e)}"
+            detail="Failed to create ranking"
         )
 
 
 @router.get("/rankings/{ranking_id}", response_model=ApiResponse[Dict[str, Any]])
+@professor_rate_limit(requests=200, window_seconds=600)  # 200 requests per 10 minutes
 async def get_ranking(
+    request: Request,
     ranking_id: int,
     current_user: User = Depends(require_college),
     db: AsyncSession = Depends(get_db)
@@ -535,15 +623,30 @@ async def get_ranking(
     
     except HTTPException:
         raise
+    except RankingNotFoundError as e:
+        logger.warning(f"Ranking not found: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except CollegeReviewError as e:
+        logger.error(f"College review error retrieving ranking: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
     except Exception as e:
+        logger.error(f"Unexpected error retrieving ranking: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve ranking: {str(e)}"
+            detail="Failed to retrieve ranking"
         )
 
 
 @router.put("/rankings/{ranking_id}/order", response_model=ApiResponse[Dict[str, Any]])
+@professor_rate_limit(requests=30, window_seconds=600)  # 30 ranking updates per 10 minutes
 async def update_ranking_order(
+    request: Request,
     ranking_id: int,
     new_order: List[RankingOrderUpdate],
     current_user: User = Depends(require_college),
@@ -631,10 +734,29 @@ async def execute_quota_distribution(
             }
         )
     
+    except RankingNotFoundError as e:
+        logger.warning(f"Ranking not found for distribution: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except RankingModificationError as e:
+        logger.warning(f"Cannot execute distribution: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e)
+        )
+    except CollegeReviewError as e:
+        logger.error(f"College review error during distribution: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
     except Exception as e:
+        logger.error(f"Unexpected error executing distribution: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to execute distribution: {str(e)}"
+            detail="Failed to execute distribution"
         )
 
 
@@ -664,10 +786,29 @@ async def finalize_ranking(
             }
         )
     
+    except RankingNotFoundError as e:
+        logger.warning(f"Ranking not found for finalization: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except RankingModificationError as e:
+        logger.warning(f"Cannot finalize ranking: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e)
+        )
+    except CollegeReviewError as e:
+        logger.error(f"College review error during finalization: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
     except Exception as e:
+        logger.error(f"Unexpected error finalizing ranking: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to finalize ranking: {str(e)}"
+            detail="Failed to finalize ranking"
         )
 
 
@@ -695,10 +836,23 @@ async def get_quota_status(
             data=quota_status
         )
     
+    except ValueError as e:
+        logger.warning(f"Invalid quota status parameters: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid parameters: {str(e)}"
+        )
+    except CollegeReviewError as e:
+        logger.error(f"College review error retrieving quota status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
     except Exception as e:
+        logger.error(f"Unexpected error retrieving quota status: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve quota status: {str(e)}"
+            detail="Failed to retrieve quota status"
         )
 
 
@@ -762,8 +916,21 @@ async def get_college_review_statistics(
             data=statistics
         )
     
+    except ValueError as e:
+        logger.warning(f"Invalid statistics parameters: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid parameters: {str(e)}"
+        )
+    except CollegeReviewError as e:
+        logger.error(f"College review error retrieving statistics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
     except Exception as e:
+        logger.error(f"Unexpected error retrieving statistics: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve statistics: {str(e)}"
+            detail="Failed to retrieve statistics"
         )

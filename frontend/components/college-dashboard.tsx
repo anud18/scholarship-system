@@ -94,16 +94,12 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
       }
     } catch (error) {
       console.error('Failed to fetch scholarship config:', error)
+      // Per CLAUDE.md guidelines: throw error instead of using fallback data
+      throw new Error(`Failed to retrieve scholarship configuration: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
     
-    // Fallback configuration if API fails
-    const fallbackConfig = [{
-      id: 1,
-      name: 'Default Scholarship',
-      subTypes: [{ code: 'default', name: 'Default Type' }]
-    }]
-    setScholarshipConfig(fallbackConfig)
-    return fallbackConfig
+    // If no data returned from successful API call, throw error instead of fallback
+    throw new Error('No scholarship configuration data available from database')
   }
 
   const [viewMode, setViewMode] = useState<"card" | "table">("card")

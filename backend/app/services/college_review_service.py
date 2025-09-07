@@ -114,7 +114,8 @@ class CollegeReviewService:
         application.college_ranking_score = college_review.ranking_score
         application.status = 'college_reviewed'
         
-        await self.db.commit()
+        # Note: commit handled by transaction context manager
+        await self.db.flush()  # Ensure changes are written to DB within transaction
         await self.db.refresh(college_review)
         
         return college_review
@@ -324,7 +325,7 @@ class CollegeReviewService:
         )
         
         self.db.add(ranking)
-        await self.db.commit()
+        await self.db.flush()  # Flush within transaction context
         await self.db.refresh(ranking)
         
         # Create ranking items sorted by college review score
@@ -340,7 +341,7 @@ class CollegeReviewService:
             )
             self.db.add(ranking_item)
         
-        await self.db.commit()
+        await self.db.flush()  # Flush changes within transaction
         
         return ranking
     
@@ -501,7 +502,7 @@ class CollegeReviewService:
         )
         
         self.db.add(distribution)
-        await self.db.commit()
+        await self.db.flush()  # Flush within transaction context
         await self.db.refresh(distribution)
         
         return distribution
@@ -525,7 +526,7 @@ class CollegeReviewService:
         ranking.finalized_by = finalizer_id
         ranking.ranking_status = 'finalized'
         
-        await self.db.commit()
+        await self.db.flush()  # Flush within transaction context
         
         return ranking
     
