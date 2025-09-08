@@ -1,4 +1,6 @@
 name: Performance Monitoring
+permissions:
+  contents: read
 
 on:
   push:
@@ -286,6 +288,8 @@ jobs:
   api-performance:
     name: API Performance Tests
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     
     services:
       postgres:
