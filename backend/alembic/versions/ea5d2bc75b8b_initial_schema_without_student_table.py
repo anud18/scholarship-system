@@ -110,21 +110,21 @@ def upgrade() -> None:
         END $$;
     """)
     
-    # Create notifications table
+    # Create notifications table using raw SQL to avoid enum creation issues
     if not table_exists('notifications'):
-        op.create_table('notifications',
-            sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-            sa.Column('user_id', sa.Integer(), nullable=True),
-            sa.Column('title', sa.String(255), nullable=False),
-            sa.Column('message', sa.Text(), nullable=False),
-            sa.Column('notification_type', sa.Enum('INFO', 'WARNING', 'ERROR', 'SUCCESS', 'REMINDER', name='notificationtype', create_type=False), nullable=False),
-            sa.Column('priority', sa.Enum('LOW', 'NORMAL', 'HIGH', 'URGENT', name='notificationpriority', create_type=False), nullable=False),
-            sa.Column('is_read', sa.Boolean(), default=False, nullable=False),
-            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=False),
-            sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('NOW()'), nullable=False),
-            sa.ForeignKeyConstraint(['user_id'], ['users.id']),
-            sa.PrimaryKeyConstraint('id')
-        )
+        op.execute("""
+            CREATE TABLE notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                notification_type notificationtype NOT NULL,
+                priority notificationpriority NOT NULL,
+                is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """)
     # ### end Alembic commands ###
 
 
