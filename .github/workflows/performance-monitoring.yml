@@ -191,8 +191,8 @@ jobs:
       - name: Analyze bundle size
         working-directory: ./frontend
         run: |
-          # Install bundle analyzer
-          npm install --no-save webpack-bundle-analyzer next-bundle-analyzer
+          # Install bundle analyzer compatible with Next.js 15
+          npm install --no-save webpack-bundle-analyzer @next/bundle-analyzer --legacy-peer-deps
           
           # Create bundle analysis
           echo "## 📦 Bundle Size Analysis" > bundle-analysis.md
