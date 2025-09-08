@@ -86,7 +86,7 @@ def upgrade():
                 elif isinstance(default_value, bool):
                     kwargs['server_default'] = 'true' if default_value else 'false'
                 elif default_value == '{}':
-                    kwargs['server_default'] = "'{}'"
+                    kwargs['server_default'] = "{}"
                 else:
                     kwargs['server_default'] = str(default_value)
             op.add_column('notifications', sa.Column(col_name, col_type, **kwargs))
