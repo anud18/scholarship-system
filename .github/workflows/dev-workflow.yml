@@ -473,25 +473,30 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Auto-merge minor and patch updates
+      - name: Wait for CI completion and auto-merge
         if: steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor' || steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Wait for CI to complete
-          sleep 30
+          # Wait for all required CI checks to complete successfully
+          echo "Waiting for CI checks to complete..."
+          gh pr checks --required --watch ${{ github.event.number }} || {
+            echo "CI checks failed, skipping auto-merge"
+            exit 1
+          }
           
-          # Auto-approve the PR
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.number }}/reviews" \
-            -d '{"event": "APPROVE", "body": "Auto-approving dependabot minor/patch update"}'
+          # Verify security scans passed
+          echo "Verifying security scans passed..."
+          if ! gh pr status --json statusCheckRollup --jq '.statusCheckRollup[] | select(.name | contains("security")) | .conclusion' | grep -q "SUCCESS"; then
+            echo "Security checks not all passing, skipping auto-merge"
+            exit 1
+          fi
           
-          # Enable auto-merge
-          curl -X PUT \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.number }}/merge" \
-            -d '{"merge_method": "squash"}'
+          # Auto-approve the PR after CI passes
+          gh pr review --approve --body "Auto-approving dependabot minor/patch update after successful CI" ${{ github.event.number }}
+          
+          # Enable auto-merge with squash
+          gh pr merge --squash --auto ${{ github.event.number }}
 
   # PR readiness check
   pr-readiness:

@@ -132,7 +132,7 @@ repos:
       # Python dependency security check
       - id: python-safety-check
         name: Python Safety Check
-        entry: bash -c 'cd backend && safety check --json || true'
+        entry: bash -c 'cd backend && safety check --json; [ $? -lt 2 ] || exit 1'
         language: system
         files: ^backend/requirements.*\.txt$
         pass_filenames: false
@@ -140,7 +140,7 @@ repos:
       # Frontend dependency security check
       - id: npm-audit
         name: NPM Audit
-        entry: bash -c 'cd frontend && npm audit --audit-level=moderate || true'
+        entry: bash -c 'cd frontend && npm audit --audit-level=moderate; [ $? -lt 2 ] || exit 1'
         language: system
         files: ^frontend/package.*\.json$
         pass_filenames: false

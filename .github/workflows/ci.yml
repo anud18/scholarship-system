@@ -145,6 +145,7 @@ jobs:
         include:
           - component: backend
             cache-key: pip
+            cache-path: ~/.cache/pip
             setup-cmd: |
               python -m pip install --upgrade pip
               pip install -r requirements.txt
@@ -154,6 +155,7 @@ jobs:
             coverage-path: backend/coverage.xml
           - component: frontend
             cache-key: npm
+            cache-path: ~/.npm
             setup-cmd: npm ci
             test-cmd: npm run test:ci || echo "Tests completed with warnings"
             coverage-path: frontend/coverage/lcov.info
