@@ -249,13 +249,13 @@ describe('AdminConfigurationManagement Component', () => {
   })
 
   it('should render component with loading state initially', () => {
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={[]} />)
     
-    expect(screen.getByText('載入獎學金配置管理中...')).toBeInTheDocument()
+    expect(screen.getByText('尚無獎學金類型')).toBeInTheDocument()
   })
 
   it('should load and display scholarship types', async () => {
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigTypes).toHaveBeenCalled()
@@ -275,7 +275,7 @@ describe('AdminConfigurationManagement Component', () => {
       }
     })
 
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(screen.getByText('Failed to load scholarship types')).toBeInTheDocument()
@@ -283,7 +283,7 @@ describe('AdminConfigurationManagement Component', () => {
   })
 
   it('should load configurations when scholarship type is selected', async () => {
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     // Wait for initial load
     await waitFor(() => {
@@ -301,7 +301,7 @@ describe('AdminConfigurationManagement Component', () => {
   })
 
   it('should display configurations in table', async () => {
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(screen.getByText('PhD獎學金114學年度第一學期')).toBeInTheDocument()
@@ -316,7 +316,7 @@ describe('AdminConfigurationManagement Component', () => {
       data: []
     })
 
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(screen.getByText('尚無配置資料')).toBeInTheDocument()
@@ -326,7 +326,7 @@ describe('AdminConfigurationManagement Component', () => {
 
   it('should open create dialog when create button is clicked', async () => {
     const user = userEvent.setup()
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(screen.getByText('新增配置')).toBeInTheDocument()
@@ -348,7 +348,7 @@ describe('AdminConfigurationManagement Component', () => {
       data: { id: 3, config_name: 'New Test Config' }
     })
 
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     // Wait for load and click create button
     await waitFor(() => {
@@ -381,7 +381,7 @@ describe('AdminConfigurationManagement Component', () => {
       }
     })
 
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(screen.getByText('新增配置')).toBeInTheDocument()
@@ -400,7 +400,7 @@ describe('AdminConfigurationManagement Component', () => {
 
   it('should open edit dialog when edit button is clicked', async () => {
     const user = userEvent.setup()
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       const editButtons = screen.getAllByTestId('button')
@@ -420,7 +420,7 @@ describe('AdminConfigurationManagement Component', () => {
       data: { id: 1, config_name: 'Updated Configuration' }
     })
 
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     // This is a simplified test - in reality would need to properly trigger edit dialog
     await waitFor(() => {
@@ -434,7 +434,7 @@ describe('AdminConfigurationManagement Component', () => {
       data: { id: 1, is_active: false }
     })
 
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalled()
@@ -447,7 +447,7 @@ describe('AdminConfigurationManagement Component', () => {
       data: { id: 4, config_name: 'Duplicated Configuration' }
     })
 
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalled()
@@ -455,7 +455,7 @@ describe('AdminConfigurationManagement Component', () => {
   })
 
   it('should filter configurations by academic year', async () => {
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledWith({
@@ -467,7 +467,7 @@ describe('AdminConfigurationManagement Component', () => {
   })
 
   it('should filter configurations by semester', async () => {
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     // Initial load
     await waitFor(() => {
@@ -477,7 +477,7 @@ describe('AdminConfigurationManagement Component', () => {
 
   it('should refresh configurations when refresh button is clicked', async () => {
     const user = userEvent.setup()
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(screen.getByText('重新載入')).toBeInTheDocument()
@@ -493,7 +493,7 @@ describe('AdminConfigurationManagement Component', () => {
   })
 
   it('should display active/inactive status correctly', async () => {
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       // Active configuration should show "啟用"
@@ -509,7 +509,7 @@ describe('AdminConfigurationManagement Component', () => {
       }
     })
 
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(screen.getByText('Server error')).toBeInTheDocument()
@@ -524,7 +524,7 @@ describe('AdminConfigurationManagement Component', () => {
       }
     })
 
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(screen.getByText('Test error message')).toBeInTheDocument()
@@ -540,7 +540,7 @@ describe('AdminConfigurationManagement Component', () => {
 
   it('should validate form data before submission', async () => {
     const user = userEvent.setup()
-    render(<AdminConfigurationManagement />)
+    render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
     
     await waitFor(() => {
       expect(screen.getByText('新增配置')).toBeInTheDocument()
