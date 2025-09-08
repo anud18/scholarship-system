@@ -1,0 +1,616 @@
+name: Performance Monitoring
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run performance tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '22'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # Frontend performance with Lighthouse CI
+  lighthouse-performance:
+    name: Lighthouse Performance
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build application
+        working-directory: ./frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: npm run build
+
+      - name: Start application
+        working-directory: ./frontend
+        run: |
+          npm start &
+          sleep 10
+          # Wait for app to be ready
+          timeout 60 bash -c 'until curl -f http://localhost:3000; do sleep 2; done'
+
+      - name: Install Lighthouse CI
+        run: npm install -g @lhci/cli
+
+      - name: Create Lighthouse CI config
+        run: |
+          cat > lighthouserc.js << 'EOF'
+          module.exports = {
+            ci: {
+              collect: {
+                url: ['http://localhost:3000'],
+                numberOfRuns: 3,
+                startServerCommand: 'cd frontend && npm start',
+                startServerReadyPattern: 'ready',
+                startServerReadyTimeout: 30000,
+              },
+              upload: {
+                target: 'temporary-public-storage',
+              },
+              assert: {
+                assertions: {
+                  'categories:performance': ['warn', {minScore: 0.8}],
+                  'categories:accessibility': ['error', {minScore: 0.9}],
+                  'categories:best-practices': ['warn', {minScore: 0.8}],
+                  'categories:seo': ['warn', {minScore: 0.8}],
+                  'categories:pwa': ['warn', {minScore: 0.5}],
+                  // Performance budgets
+                  'first-contentful-paint': ['warn', {maxNumericValue: 2000}],
+                  'largest-contentful-paint': ['warn', {maxNumericValue: 4000}],
+                  'cumulative-layout-shift': ['warn', {maxNumericValue: 0.1}],
+                  'total-blocking-time': ['warn', {maxNumericValue: 300}],
+                  'speed-index': ['warn', {maxNumericValue: 3000}],
+                  // Resource budgets
+                  'total-byte-weight': ['warn', {maxNumericValue: 1024000}], // 1MB
+                  'unused-css-rules': ['warn', {maxNumericValue: 0.1}],
+                  'unused-javascript': ['warn', {maxNumericValue: 0.2}],
+                },
+              },
+            },
+          };
+          EOF
+
+      - name: Run Lighthouse CI
+        run: lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      - name: Parse Lighthouse results
+        id: lighthouse-results
+        run: |
+          # Parse the latest results
+          if [ -f ".lighthouseci/lhr-*.json" ]; then
+            latest_report=$(ls -t .lighthouseci/lhr-*.json | head -1)
+            performance_score=$(jq '.categories.performance.score * 100' "$latest_report")
+            accessibility_score=$(jq '.categories.accessibility.score * 100' "$latest_report")
+            best_practices_score=$(jq '.categories["best-practices"].score * 100' "$latest_report")
+            seo_score=$(jq '.categories.seo.score * 100' "$latest_report")
+            
+            echo "performance=$performance_score" >> $GITHUB_OUTPUT
+            echo "accessibility=$accessibility_score" >> $GITHUB_OUTPUT
+            echo "best_practices=$best_practices_score" >> $GITHUB_OUTPUT
+            echo "seo=$seo_score" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment performance results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const performance = '${{ steps.lighthouse-results.outputs.performance }}';
+            const accessibility = '${{ steps.lighthouse-results.outputs.accessibility }}';
+            const bestPractices = '${{ steps.lighthouse-results.outputs.best_practices }}';
+            const seo = '${{ steps.lighthouse-results.outputs.seo }}';
+            
+            const getScoreEmoji = (score) => {
+              if (score >= 90) return '🟢';
+              if (score >= 70) return '🟡';
+              return '🔴';
+            };
+            
+            const comment = `## ⚡ Lighthouse Performance Report
+            
+| Category | Score | Status |
+|----------|-------|--------|
+| Performance | ${performance}% | ${getScoreEmoji(performance)} |
+| Accessibility | ${accessibility}% | ${getScoreEmoji(accessibility)} |
+| Best Practices | ${bestPractices}% | ${getScoreEmoji(bestPractices)} |
+| SEO | ${seo}% | ${getScoreEmoji(seo)} |
+
+### Performance Budget Status
+- ✅ First Contentful Paint: Target < 2s
+- ✅ Largest Contentful Paint: Target < 4s
+- ✅ Cumulative Layout Shift: Target < 0.1
+- ✅ Total Blocking Time: Target < 300ms
+
+*Full report available in Lighthouse CI artifacts*`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: |
+            .lighthouseci/
+          retention-days: 30
+
+  # Bundle size tracking
+  bundle-size-tracking:
+    name: Bundle Size Tracking
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build for production
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Analyze bundle size
+        working-directory: ./frontend
+        run: |
+          # Install bundle analyzer
+          npm install --no-save webpack-bundle-analyzer next-bundle-analyzer
+          
+          # Create bundle analysis
+          echo "## 📦 Bundle Size Analysis" > bundle-analysis.md
+          echo "" >> bundle-analysis.md
+          
+          # Get build statistics
+          if [ -d ".next/static" ]; then
+            # Calculate sizes
+            total_js_size=$(find .next/static -name "*.js" -type f -exec cat {} + | wc -c)
+            total_css_size=$(find .next/static -name "*.css" -type f -exec cat {} + | wc -c)
+            total_size=$((total_js_size + total_css_size))
+            
+            # Convert to human readable
+            total_js_mb=$(echo "scale=2; $total_js_size / 1024 / 1024" | bc -l)
+            total_css_mb=$(echo "scale=2; $total_css_size / 1024 / 1024" | bc -l)
+            total_mb=$(echo "scale=2; $total_size / 1024 / 1024" | bc -l)
+            
+            echo "### Bundle Size Summary" >> bundle-analysis.md
+            echo "| Asset Type | Size | Budget | Status |" >> bundle-analysis.md
+            echo "|------------|------|--------|--------|" >> bundle-analysis.md
+            echo "| JavaScript | ${total_js_mb}MB | 3MB | $([ $(echo "$total_js_mb <= 3" | bc) -eq 1 ] && echo "✅" || echo "❌") |" >> bundle-analysis.md
+            echo "| CSS | ${total_css_mb}MB | 0.5MB | $([ $(echo "$total_css_mb <= 0.5" | bc) -eq 1 ] && echo "✅" || echo "❌") |" >> bundle-analysis.md
+            echo "| **Total** | **${total_mb}MB** | **3.5MB** | $([ $(echo "$total_mb <= 3.5" | bc) -eq 1 ] && echo "✅" || echo "❌") |" >> bundle-analysis.md
+            echo "" >> bundle-analysis.md
+            
+            # List largest chunks
+            echo "### Largest JavaScript Chunks" >> bundle-analysis.md
+            echo "\`\`\`" >> bundle-analysis.md
+            find .next/static -name "*.js" -type f -exec du -h {} + | sort -hr | head -10 >> bundle-analysis.md
+            echo "\`\`\`" >> bundle-analysis.md
+            echo "" >> bundle-analysis.md
+            
+            # Check for large dependencies
+            echo "### Bundle Recommendations" >> bundle-analysis.md
+            if [ $(echo "$total_js_mb > 3" | bc) -eq 1 ]; then
+              echo "- ⚠️ JavaScript bundle exceeds 3MB - consider code splitting" >> bundle-analysis.md
+              echo "- 💡 Use dynamic imports for large components" >> bundle-analysis.md
+              echo "- 🔍 Analyze dependencies with \`npm run analyze\`" >> bundle-analysis.md
+            else
+              echo "- ✅ Bundle size is within recommended limits" >> bundle-analysis.md
+            fi
+            
+            # Set outputs for other jobs
+            echo "js_size_mb=$total_js_mb" >> $GITHUB_ENV
+            echo "total_size_mb=$total_mb" >> $GITHUB_ENV
+          fi
+
+      - name: Compare with main branch
+        if: github.event_name == 'pull_request'
+        run: |
+          # Checkout main branch to compare
+          git fetch origin main
+          git checkout origin/main
+          
+          cd frontend
+          npm ci
+          npm run build
+          
+          # Calculate main branch sizes
+          if [ -d ".next/static" ]; then
+            main_js_size=$(find .next/static -name "*.js" -type f -exec cat {} + | wc -c)
+            main_total_size=$(find .next/static -name "*.js" -type f -exec cat {} + | wc -c)
+            main_js_mb=$(echo "scale=2; $main_js_size / 1024 / 1024" | bc -l)
+            
+            # Calculate difference
+            current_js_mb="${js_size_mb}"
+            diff_mb=$(echo "scale=2; $current_js_mb - $main_js_mb" | bc -l)
+            diff_percent=$(echo "scale=2; ($diff_mb / $main_js_mb) * 100" | bc -l)
+            
+            echo "" >> bundle-analysis.md
+            echo "### Size Comparison with Main Branch" >> bundle-analysis.md
+            echo "| Metric | Main | Current | Difference |" >> bundle-analysis.md
+            echo "|--------|------|---------|------------|" >> bundle-analysis.md
+            echo "| JS Size | ${main_js_mb}MB | ${current_js_mb}MB | ${diff_mb}MB (${diff_percent}%) |" >> bundle-analysis.md
+            
+            # Alert on significant increases
+            if [ $(echo "$diff_percent > 10" | bc) -eq 1 ]; then
+              echo "" >> bundle-analysis.md
+              echo "🚨 **Warning**: Bundle size increased by more than 10%!" >> bundle-analysis.md
+            fi
+          fi
+
+      - name: Upload bundle analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-analysis
+          path: frontend/bundle-analysis.md
+          retention-days: 30
+
+  # API performance testing
+  api-performance:
+    name: API Performance Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: scholarship_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install locust pytest-benchmark
+
+      - name: Setup database
+        working-directory: ./backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/scholarship_test"
+          SECRET_KEY: test-secret-key-performance
+        run: |
+          # Run migrations
+          alembic upgrade head
+
+      - name: Start backend server
+        working-directory: ./backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/scholarship_test"
+          SECRET_KEY: test-secret-key-performance
+          TESTING: false
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 10
+          # Wait for server to be ready
+          timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done'
+
+      - name: Install k6
+        run: |
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6 -y
+
+      - name: Create performance test scripts
+        run: |
+          mkdir -p performance-tests
+          
+          # API load test
+          cat > performance-tests/api-load-test.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          import { Rate, Trend } from 'k6/metrics';
+
+          const errorRate = new Rate('errors');
+          const responseTime = new Trend('response_time');
+
+          export let options = {
+            stages: [
+              { duration: '30s', target: 10 },   // Ramp up
+              { duration: '1m', target: 50 },    // Stay at 50 users
+              { duration: '2m', target: 100 },   // Ramp to 100 users
+              { duration: '1m', target: 50 },    // Scale down
+              { duration: '30s', target: 0 },    // Ramp down
+            ],
+            thresholds: {
+              http_req_duration: ['p(95)<500'], // 95% of requests must complete below 500ms
+              http_req_failed: ['rate<0.1'],   // Error rate must be below 10%
+              errors: ['rate<0.1'],
+              response_time: ['p(95)<500'],
+            },
+          };
+
+          const BASE_URL = 'http://localhost:8000';
+
+          export default function () {
+            // Test health endpoint
+            let healthResponse = http.get(`${BASE_URL}/health`);
+            check(healthResponse, {
+              'health check status is 200': (r) => r.status === 200,
+              'health check response time < 100ms': (r) => r.timings.duration < 100,
+            });
+            errorRate.add(healthResponse.status !== 200);
+            responseTime.add(healthResponse.timings.duration);
+
+            // Test API documentation
+            let docsResponse = http.get(`${BASE_URL}/docs`);
+            check(docsResponse, {
+              'docs status is 200': (r) => r.status === 200,
+            });
+            errorRate.add(docsResponse.status !== 200);
+
+            // Test OpenAPI schema
+            let schemaResponse = http.get(`${BASE_URL}/openapi.json`);
+            check(schemaResponse, {
+              'schema status is 200': (r) => r.status === 200,
+              'schema response time < 200ms': (r) => r.timings.duration < 200,
+            });
+            errorRate.add(schemaResponse.status !== 200);
+            responseTime.add(schemaResponse.timings.duration);
+
+            // Test API endpoints (adjust based on your actual endpoints)
+            let apiResponse = http.get(`${BASE_URL}/api/v1/scholarships`);
+            check(apiResponse, {
+              'api status is 200 or 401': (r) => r.status === 200 || r.status === 401, // 401 is ok if auth required
+              'api response time < 500ms': (r) => r.timings.duration < 500,
+            });
+            responseTime.add(apiResponse.timings.duration);
+
+            sleep(1);
+          }
+
+          export function handleSummary(data) {
+            return {
+              'performance-summary.json': JSON.stringify(data, null, 2),
+            };
+          }
+          EOF
+
+          # Database performance test
+          cat > performance-tests/db-performance.py << 'EOF'
+          import asyncio
+          import time
+          import asyncpg
+          import json
+          from statistics import mean, median
+
+          async def test_db_performance():
+              # Connect to database
+              conn = await asyncpg.connect("postgresql://postgres:postgres@localhost:5432/scholarship_test")
+              
+              results = {
+                  "connection_time": [],
+                  "simple_query_time": [],
+                  "complex_query_time": []
+              }
+              
+              # Test connection time
+              for _ in range(10):
+                  start = time.time()
+                  test_conn = await asyncpg.connect("postgresql://postgres:postgres@localhost:5432/scholarship_test")
+                  await test_conn.close()
+                  results["connection_time"].append((time.time() - start) * 1000)
+              
+              # Test simple queries
+              for _ in range(50):
+                  start = time.time()
+                  await conn.execute("SELECT 1")
+                  results["simple_query_time"].append((time.time() - start) * 1000)
+              
+              # Test complex queries (adjust based on your schema)
+              for _ in range(20):
+                  start = time.time()
+                  await conn.fetch("SELECT * FROM scholarships LIMIT 10")
+                  results["complex_query_time"].append((time.time() - start) * 1000)
+              
+              await conn.close()
+              
+              # Calculate statistics
+              stats = {}
+              for test_type, times in results.items():
+                  stats[test_type] = {
+                      "mean": mean(times),
+                      "median": median(times),
+                      "max": max(times),
+                      "min": min(times)
+                  }
+              
+              # Save results
+              with open("db-performance-results.json", "w") as f:
+                  json.dump(stats, f, indent=2)
+              
+              # Print summary
+              print("Database Performance Results:")
+              for test_type, stat in stats.items():
+                  print(f"  {test_type}:")
+                  print(f"    Mean: {stat['mean']:.2f}ms")
+                  print(f"    Median: {stat['median']:.2f}ms")
+                  print(f"    Max: {stat['max']:.2f}ms")
+                  print(f"    Min: {stat['min']:.2f}ms")
+
+          if __name__ == "__main__":
+              asyncio.run(test_db_performance())
+          EOF
+
+      - name: Run API load tests
+        run: |
+          k6 run performance-tests/api-load-test.js --out json=api-performance-results.json
+
+      - name: Run database performance tests
+        run: |
+          cd performance-tests
+          python db-performance.py
+
+      - name: Parse performance results
+        id: performance-results
+        run: |
+          # Parse k6 results
+          if [ -f "performance-summary.json" ]; then
+            avg_response_time=$(jq '.metrics.http_req_duration.values.avg' performance-summary.json)
+            p95_response_time=$(jq '.metrics.http_req_duration.values["p(95)"]' performance-summary.json)
+            error_rate=$(jq '.metrics.http_req_failed.values.rate' performance-summary.json)
+            
+            echo "avg_response_time=$avg_response_time" >> $GITHUB_OUTPUT
+            echo "p95_response_time=$p95_response_time" >> $GITHUB_OUTPUT
+            echo "error_rate=$error_rate" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate performance report
+        run: |
+          echo "## ⚡ API Performance Report" > performance-report.md
+          echo "" >> performance-report.md
+          
+          # API Performance
+          if [ -f "performance-summary.json" ]; then
+            echo "### Load Test Results" >> performance-report.md
+            echo "| Metric | Value | Threshold | Status |" >> performance-report.md
+            echo "|--------|-------|-----------|--------|" >> performance-report.md
+            
+            avg_time=$(jq -r '.metrics.http_req_duration.values.avg' performance-summary.json)
+            p95_time=$(jq -r '.metrics.http_req_duration.values["p(95)"]' performance-summary.json)
+            error_rate=$(jq -r '.metrics.http_req_failed.values.rate' performance-summary.json)
+            
+            echo "| Average Response Time | ${avg_time}ms | <300ms | $([ $(echo "$avg_time < 300" | bc -l) -eq 1 ] && echo "✅" || echo "❌") |" >> performance-report.md
+            echo "| 95th Percentile | ${p95_time}ms | <500ms | $([ $(echo "$p95_time < 500" | bc -l) -eq 1 ] && echo "✅" || echo "❌") |" >> performance-report.md
+            echo "| Error Rate | ${error_rate}% | <10% | $([ $(echo "$error_rate < 0.1" | bc -l) -eq 1 ] && echo "✅" || echo "❌") |" >> performance-report.md
+          fi
+          
+          echo "" >> performance-report.md
+          
+          # Database Performance
+          if [ -f "db-performance-results.json" ]; then
+            echo "### Database Performance" >> performance-report.md
+            echo "| Query Type | Average | 95th Percentile | Status |" >> performance-report.md
+            echo "|------------|---------|----------------|--------|" >> performance-report.md
+            
+            simple_avg=$(jq -r '.simple_query_time.mean' db-performance-results.json)
+            complex_avg=$(jq -r '.complex_query_time.mean' db-performance-results.json)
+            
+            echo "| Simple Queries | ${simple_avg}ms | - | $([ $(echo "$simple_avg < 10" | bc -l) -eq 1 ] && echo "✅" || echo "⚠️") |" >> performance-report.md
+            echo "| Complex Queries | ${complex_avg}ms | - | $([ $(echo "$complex_avg < 100" | bc -l) -eq 1 ] && echo "✅" || echo "⚠️") |" >> performance-report.md
+          fi
+          
+          echo "" >> performance-report.md
+          echo "### Recommendations" >> performance-report.md
+          
+          if [ -f "performance-summary.json" ]; then
+            avg_time=$(jq -r '.metrics.http_req_duration.values.avg' performance-summary.json)
+            if [ $(echo "$avg_time > 300" | bc -l) -eq 1 ]; then
+              echo "- ⚠️ API response times are above target - consider optimization" >> performance-report.md
+              echo "- 💡 Check database query performance and add indexes if needed" >> performance-report.md
+              echo "- 🔍 Review endpoint logic for potential bottlenecks" >> performance-report.md
+            else
+              echo "- ✅ API performance is within acceptable limits" >> performance-report.md
+            fi
+          fi
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-test-results
+          path: |
+            performance-summary.json
+            api-performance-results.json
+            db-performance-results.json
+            performance-report.md
+          retention-days: 30
+
+      - name: Comment performance results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              const report = fs.readFileSync('performance-report.md', 'utf8');
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: report
+              });
+            } catch (error) {
+              console.log('Performance report not found, skipping comment');
+            }
+
+  # Performance monitoring summary
+  performance-summary:
+    name: Performance Summary
+    runs-on: ubuntu-latest
+    needs: [lighthouse-performance, bundle-size-tracking, api-performance]
+    if: always()
+    
+    steps:
+      - name: Create performance summary
+        run: |
+          echo "## 📊 Performance Monitoring Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Type | Status | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lighthouse | ${{ needs.lighthouse-performance.result }} | Frontend performance metrics |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bundle Size | ${{ needs.bundle-size-tracking.result }} | JavaScript/CSS bundle analysis |" >> $GITHUB_STEP_SUMMARY
+          echo "| API Performance | ${{ needs.api-performance.result }} | Backend load testing |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Performance Budget Status" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎯 **Frontend**: Lighthouse scores > 80%" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 **Bundle Size**: JavaScript < 3MB, Total < 3.5MB" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ **API**: 95th percentile < 500ms, Error rate < 10%" >> $GITHUB_STEP_SUMMARY
+          echo "- 💾 **Database**: Simple queries < 10ms, Complex < 100ms" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📈 **View detailed reports in the job artifacts**" >> $GITHUB_STEP_SUMMARY

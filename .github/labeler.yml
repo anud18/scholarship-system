@@ -1,0 +1,113 @@
+# Auto-labeling configuration for PRs
+# This file defines rules for automatically labeling pull requests based on changed files
+
+# Backend changes
+backend:
+  - 'backend/**/*'
+  - 'backend/**/*.py'
+  - 'requirements*.txt'
+  - 'alembic/**/*'
+
+# Frontend changes  
+frontend:
+  - 'frontend/**/*'
+  - 'frontend/**/*.{ts,tsx,js,jsx}'
+  - 'package*.json'
+  - 'frontend/package*.json'
+
+# Database changes
+database:
+  - 'backend/alembic/**/*'
+  - 'backend/app/models/**/*'
+  - '**/*migration*'
+  - '**/*.sql'
+
+# API changes
+api:
+  - 'backend/app/api/**/*'
+  - 'backend/app/services/**/*'
+  - 'backend/app/schemas/**/*'
+
+# UI/UX changes
+ui:
+  - 'frontend/components/**/*'
+  - 'frontend/app/**/*.tsx'
+  - 'frontend/styles/**/*'
+  - '**/*.css'
+  - '**/*.scss'
+
+# Configuration changes
+config:
+  - 'docker-compose*.yml'
+  - 'Dockerfile*'
+  - '.github/**/*'
+  - '*.json'
+  - '*.yml'
+  - '*.yaml'
+  - '*.toml'
+  - '.env*'
+
+# Documentation changes
+documentation:
+  - '**/*.md'
+  - 'docs/**/*'
+  - 'README*'
+  - 'CHANGELOG*'
+  - 'LICENSE*'
+
+# Testing changes
+testing:
+  - '**/*test*'
+  - '**/*spec*'
+  - 'pytest.ini'
+  - 'jest.config*'
+  - 'playwright.config*'
+  - 'cypress/**/*'
+
+# CI/CD changes
+ci-cd:
+  - '.github/workflows/**/*'
+  - 'scripts/**/*'
+  - '*.sh'
+
+# Security related
+security:
+  - 'backend/app/core/security.py'
+  - '**/*auth*'
+  - '**/*security*'
+  - 'requirements*.txt'
+
+# Dependencies
+dependencies:
+  - 'requirements*.txt'
+  - 'package*.json'
+  - 'poetry.lock'
+  - 'Pipfile*'
+
+# Performance related
+performance:
+  - '**/*cache*'
+  - '**/*performance*'
+  - '**/*optimization*'
+  - 'backend/app/core/config.py'
+
+# Bug fixes (based on branch names or keywords)
+bug:
+  - 'fix/**/*'
+  - 'bugfix/**/*'
+  - 'hotfix/**/*'
+
+# Features
+feature:
+  - 'feat/**/*'
+  - 'feature/**/*'
+
+# Refactoring
+refactor:
+  - 'refactor/**/*'
+  - 'cleanup/**/*'
+
+# Chores
+chore:
+  - 'chore/**/*'
+  - 'maintenance/**/*'
