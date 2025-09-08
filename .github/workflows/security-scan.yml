@@ -490,6 +490,8 @@ jobs:
   security-summary:
     name: Security Summary
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [sast-analysis, container-security, secret-detection, license-compliance]
     if: always()
     
