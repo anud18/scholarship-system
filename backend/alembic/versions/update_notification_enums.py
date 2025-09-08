@@ -81,8 +81,8 @@ def upgrade():
             kwargs = {'nullable': True}
             if default_value is not None:
                 if isinstance(default_value, str) and default_value not in ['{}']:
-                    # For enum values, use the enum default
-                    kwargs['server_default'] = f"'{default_value}'"
+                    # For enum values, let SQLAlchemy handle the quoting
+                    kwargs['server_default'] = default_value
                 elif isinstance(default_value, bool):
                     kwargs['server_default'] = 'true' if default_value else 'false'
                 elif default_value == '{}':
