@@ -77,17 +77,17 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: `⚠️ **Large PR Detected**
+                body: \`⚠️ **Large PR Detected**
                 
-This PR contains ${totalChanges} line changes across ${changedFiles} files. Consider:
+This PR contains \${totalChanges} line changes across \${changedFiles} files. Consider:
 - Breaking it into smaller, focused PRs
 - Ensuring adequate test coverage
 - Adding detailed description of changes
 
 **Changes:**
-- 📝 ${additions} additions
-- 🗑️ ${deletions} deletions
-- 📁 ${changedFiles} files changed`
+- 📝 \${additions} additions
+- 🗑️ \${deletions} deletions
+- 📁 \${changedFiles} files changed\`
               });
             }
 
