@@ -150,12 +150,17 @@ jobs:
               '*Full report available in Lighthouse CI artifacts*'
             ].join('\n');
             
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: comment
-            });
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+              console.log('✅ Posted Lighthouse performance report');
+            } catch (error) {
+              console.log('⚠️ Unable to post comment (insufficient permissions):', error.message);
+            }
 
       - name: Upload Lighthouse reports
         uses: actions/upload-artifact@v4
@@ -590,8 +595,13 @@ jobs:
                 issue_number: context.issue.number,
                 body: report
               });
+              console.log('✅ Posted performance report comment');
             } catch (error) {
-              console.log('Performance report not found, skipping comment');
+              if (error.message.includes('Resource not accessible by integration')) {
+                console.log('⚠️ Unable to post comment (insufficient permissions):', error.message);
+              } else {
+                console.log('Performance report not found, skipping comment:', error.message);
+              }
             }
 
   # Performance monitoring summary

@@ -95,12 +95,17 @@ jobs:
                 `- 📁 ${changedFiles} files changed`
               ].join('\n');
               
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: warningMessage
-              });
+              try {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: warningMessage
+                });
+                console.log('✅ Posted large PR warning comment');
+              } catch (error) {
+                console.log('⚠️ Unable to post comment (insufficient permissions):', error.message);
+              }
             }
 
   # Check for merge conflicts
@@ -152,12 +157,17 @@ jobs:
               'The CI will re-run automatically after conflicts are resolved.'
             ].join('\n');
             
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: conflictMessage
-            });
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: conflictMessage
+              });
+              console.log('✅ Posted merge conflict comment');
+            } catch (error) {
+              console.log('⚠️ Unable to post comment (insufficient permissions):', error.message);
+            }
 
   # Code quality checks
   code-quality:
@@ -550,12 +560,17 @@ jobs:
               '*This check runs automatically on every PR. Address any issues above for faster review.*'
             ].join('\n');
             
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: statusComment
-            });
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: statusComment
+              });
+              console.log('✅ Posted PR readiness checklist comment');
+            } catch (error) {
+              console.log('⚠️ Unable to post comment (insufficient permissions):', error.message);
+            }
 
   # Summary job
   dev-workflow-summary:
