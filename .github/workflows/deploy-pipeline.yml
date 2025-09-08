@@ -89,6 +89,8 @@ jobs:
   # Build and push Docker images
   build-images:
     name: Build & Push Images
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     needs: pre-deployment-checks
     if: needs.pre-deployment-checks.outputs.deploy-staging == 'true' || needs.pre-deployment-checks.outputs.deploy-production == 'true'
