@@ -129,22 +129,24 @@ jobs:
               return '🔴';
             };
             
-            const comment = \`## ⚡ Lighthouse Performance Report
-            
-| Category | Score | Status |
-|----------|-------|--------|
-| Performance | \${performance}% | \${getScoreEmoji(performance)} |
-| Accessibility | \${accessibility}% | \${getScoreEmoji(accessibility)} |
-| Best Practices | \${bestPractices}% | \${getScoreEmoji(bestPractices)} |
-| SEO | \${seo}% | \${getScoreEmoji(seo)} |
-
-### Performance Budget Status
-- ✅ First Contentful Paint: Target < 2s
-- ✅ Largest Contentful Paint: Target < 4s
-- ✅ Cumulative Layout Shift: Target < 0.1
-- ✅ Total Blocking Time: Target < 300ms
-
-*Full report available in Lighthouse CI artifacts*\`;
+            const comment = [
+              '## ⚡ Lighthouse Performance Report',
+              '',
+              '| Category | Score | Status |',
+              '|----------|-------|--------|',
+              `| Performance | ${performance}% | ${getScoreEmoji(performance)} |`,
+              `| Accessibility | ${accessibility}% | ${getScoreEmoji(accessibility)} |`,
+              `| Best Practices | ${bestPractices}% | ${getScoreEmoji(bestPractices)} |`,
+              `| SEO | ${seo}% | ${getScoreEmoji(seo)} |`,
+              '',
+              '### Performance Budget Status',
+              '- ✅ First Contentful Paint: Target < 2s',
+              '- ✅ Largest Contentful Paint: Target < 4s',
+              '- ✅ Cumulative Layout Shift: Target < 0.1',
+              '- ✅ Total Blocking Time: Target < 300ms',
+              '',
+              '*Full report available in Lighthouse CI artifacts*'
+            ].join('\n');
             
             await github.rest.issues.createComment({
               owner: context.repo.owner,

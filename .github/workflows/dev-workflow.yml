@@ -73,21 +73,25 @@ jobs:
             
             // Add warning comment for large PRs
             if (totalChanges > 500) {
+              const warningMessage = [
+                '⚠️ **Large PR Detected**',
+                '',
+                `This PR contains ${totalChanges} line changes across ${changedFiles} files. Consider:`,
+                '- Breaking it into smaller, focused PRs',
+                '- Ensuring adequate test coverage',
+                '- Adding detailed description of changes',
+                '',
+                '**Changes:**',
+                `- 📝 ${additions} additions`,
+                `- 🗑️ ${deletions} deletions`,
+                `- 📁 ${changedFiles} files changed`
+              ].join('\n');
+              
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: \`⚠️ **Large PR Detected**
-                
-This PR contains \${totalChanges} line changes across \${changedFiles} files. Consider:
-- Breaking it into smaller, focused PRs
-- Ensuring adequate test coverage
-- Adding detailed description of changes
-
-**Changes:**
-- 📝 \${additions} additions
-- 🗑️ \${deletions} deletions
-- 📁 \${changedFiles} files changed\`
+                body: warningMessage
               });
             }
 
