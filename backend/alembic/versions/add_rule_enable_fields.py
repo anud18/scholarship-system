@@ -1,7 +1,7 @@
 """Add initial and renewal enable fields to scholarship rules
 
 Revision ID: add_rule_enable_fields
-Revises: update_notification_enums
+Revises: update_notification_enums_v2
 Create Date: 2025-01-06 12:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'add_rule_enable_fields'
-down_revision = 'update_notification_enums'
+down_revision = 'update_notification_enums_v2'
 branch_labels = None
 depends_on = None
 
