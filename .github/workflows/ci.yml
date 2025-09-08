@@ -57,6 +57,8 @@ jobs:
   # Quick validation jobs - run in parallel
   quick-checks:
     name: Quick Checks
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     needs: changes
     if: ${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' }}
