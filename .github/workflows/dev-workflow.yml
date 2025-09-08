@@ -524,17 +524,19 @@ jobs:
             }
             
             // Create status comment
-            const statusComment = `## 📋 PR Readiness Checklist
-            
-${checks.join('\n')}
-
-**Branch:** \`${pr.head.ref}\` → \`${pr.base.ref}\`
-**Commits:** ${pr.commits}
-**Changed Files:** ${pr.changed_files}
-**Additions:** +${pr.additions} **Deletions:** -${pr.deletions}
-
----
-*This check runs automatically on every PR. Address any issues above for faster review.*`;
+            const statusComment = [
+              '## 📋 PR Readiness Checklist',
+              '',
+              checks.join('\n'),
+              '',
+              `**Branch:** \`${pr.head.ref}\` → \`${pr.base.ref}\``,
+              `**Commits:** ${pr.commits}`,
+              `**Changed Files:** ${pr.changed_files}`,
+              `**Additions:** +${pr.additions} **Deletions:** -${pr.deletions}`,
+              '',
+              '---',
+              '*This check runs automatically on every PR. Address any issues above for faster review.*'
+            ].join('\n');
             
             await github.rest.issues.createComment({
               owner: context.repo.owner,
