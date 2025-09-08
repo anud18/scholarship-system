@@ -22,6 +22,7 @@ jobs:
     permissions:
       pull-requests: write
       contents: read
+      issues: write
     
     steps:
       - name: Checkout
@@ -480,6 +481,10 @@ jobs:
     name: PR Readiness Check
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+      contents: read
+      issues: write
     
     steps:
       - name: Check PR readiness

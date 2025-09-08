@@ -3,111 +3,79 @@
 
 # Backend changes
 backend:
-  - 'backend/**/*'
-  - 'backend/**/*.py'
-  - 'requirements*.txt'
-  - 'alembic/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'backend/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'requirements*.txt'
 
 # Frontend changes  
 frontend:
-  - 'frontend/**/*'
-  - 'frontend/**/*.{ts,tsx,js,jsx}'
-  - 'package*.json'
-  - 'frontend/package*.json'
+  - changed-files:
+    - any-glob-to-any-file: 'frontend/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'package*.json'
 
 # Database changes
 database:
-  - 'backend/alembic/**/*'
-  - 'backend/app/models/**/*'
-  - '**/*migration*'
-  - '**/*.sql'
+  - changed-files:
+    - any-glob-to-any-file: 'backend/alembic/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'backend/app/models/**/*'
 
 # API changes
 api:
-  - 'backend/app/api/**/*'
-  - 'backend/app/services/**/*'
-  - 'backend/app/schemas/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'backend/app/api/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'backend/app/services/**/*'
 
 # UI/UX changes
 ui:
-  - 'frontend/components/**/*'
-  - 'frontend/app/**/*.tsx'
-  - 'frontend/styles/**/*'
-  - '**/*.css'
-  - '**/*.scss'
+  - changed-files:
+    - any-glob-to-any-file: 'frontend/components/**/*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*.css'
 
 # Configuration changes
 config:
-  - 'docker-compose*.yml'
-  - 'Dockerfile*'
-  - '.github/**/*'
-  - '*.json'
-  - '*.yml'
-  - '*.yaml'
-  - '*.toml'
-  - '.env*'
+  - changed-files:
+    - any-glob-to-any-file: 'docker-compose*.yml'
+  - changed-files:
+    - any-glob-to-any-file: 'Dockerfile*'
+  - changed-files:
+    - any-glob-to-any-file: '.github/**/*'
 
 # Documentation changes
 documentation:
-  - '**/*.md'
-  - 'docs/**/*'
-  - 'README*'
-  - 'CHANGELOG*'
-  - 'LICENSE*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*.md'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**/*'
 
 # Testing changes
 testing:
-  - '**/*test*'
-  - '**/*spec*'
-  - 'pytest.ini'
-  - 'jest.config*'
-  - 'playwright.config*'
-  - 'cypress/**/*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*test*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*spec*'
 
 # CI/CD changes
 ci-cd:
-  - '.github/workflows/**/*'
-  - 'scripts/**/*'
-  - '*.sh'
+  - changed-files:
+    - any-glob-to-any-file: '.github/workflows/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'scripts/**/*'
 
 # Security related
 security:
-  - 'backend/app/core/security.py'
-  - '**/*auth*'
-  - '**/*security*'
-  - 'requirements*.txt'
+  - changed-files:
+    - any-glob-to-any-file: '**/*auth*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*security*'
 
 # Dependencies
 dependencies:
-  - 'requirements*.txt'
-  - 'package*.json'
-  - 'poetry.lock'
-  - 'Pipfile*'
-
-# Performance related
-performance:
-  - '**/*cache*'
-  - '**/*performance*'
-  - '**/*optimization*'
-  - 'backend/app/core/config.py'
-
-# Bug fixes (based on branch names or keywords)
-bug:
-  - 'fix/**/*'
-  - 'bugfix/**/*'
-  - 'hotfix/**/*'
-
-# Features
-feature:
-  - 'feat/**/*'
-  - 'feature/**/*'
-
-# Refactoring
-refactor:
-  - 'refactor/**/*'
-  - 'cleanup/**/*'
-
-# Chores
-chore:
-  - 'chore/**/*'
-  - 'maintenance/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'requirements*.txt'
+  - changed-files:
+    - any-glob-to-any-file: 'package*.json'
