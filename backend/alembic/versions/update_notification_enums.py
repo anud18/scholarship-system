@@ -20,40 +20,84 @@ def upgrade():
     # Get the connection
     conn = op.get_bind()
     
+    # Check if we need to migrate existing data or if this is a fresh installation
+    inspector = sa.inspect(conn)
+    existing_columns = [col['name'] for col in inspector.get_columns('notifications')]
+    
+    # If the table already has the new structure, skip this migration
+    if 'notification_type' in existing_columns and 'notification_type_old' not in existing_columns:
+        # Check if the current enum already has the new values
+        result = conn.execute(text("SELECT unnest(enum_range(NULL::notificationtype))")).fetchall()
+        current_values = [row[0] for row in result]
+        if 'application_submitted' in current_values:
+            # Migration already applied or table created with new structure
+            return
+    
     # First, we need to handle the existing notification enums
     # Drop the existing enum types and recreate them with new values
     
-    # Temporarily rename the columns to avoid conflicts
-    op.alter_column('notifications', 'notification_type', new_column_name='notification_type_old', 
-                    existing_type=sa.Enum(name='notificationtype'))
-    op.alter_column('notifications', 'priority', new_column_name='priority_old',
-                    existing_type=sa.Enum(name='notificationpriority'))
+    # Only rename columns if they exist and haven't been renamed already
+    if 'notification_type' in existing_columns and 'notification_type_old' not in existing_columns:
+        # Temporarily rename the columns to avoid conflicts
+        op.alter_column('notifications', 'notification_type', new_column_name='notification_type_old', 
+                        existing_type=sa.Enum(name='notificationtype'))
+        op.alter_column('notifications', 'priority', new_column_name='priority_old',
+                        existing_type=sa.Enum(name='notificationpriority'))
     
-    # Drop existing enum types if they exist
-    conn.execute(text("DROP TYPE IF EXISTS notificationtype CASCADE"))
-    conn.execute(text("DROP TYPE IF EXISTS notificationpriority CASCADE"))
+    # Only drop and recreate enums if we have old columns (meaning this is an upgrade from old schema)
+    has_old_columns = 'notification_type_old' in [col['name'] for col in inspector.get_columns('notifications')]
+    
+    if has_old_columns:
+        # Drop existing enum types if they exist
+        conn.execute(text("DROP TYPE IF EXISTS notificationtype CASCADE"))
+        conn.execute(text("DROP TYPE IF EXISTS notificationpriority CASCADE"))
+    
+    # Drop other new enum types if they exist (safe to recreate)
     conn.execute(text("DROP TYPE IF EXISTS notificationchannel CASCADE"))
     conn.execute(text("DROP TYPE IF EXISTS notificationfrequency CASCADE"))
     
-    # Create new enum types
+    # Create new enum types with extended values
     notificationtype_enum = sa.Enum(
-        'info', 'warning', 'error', 'success', 'reminder',
-        'application_submitted', 'application_approved', 'application_rejected',
-        'application_requires_review', 'application_under_review',
-        'document_required', 'document_approved', 'document_rejected',
-        'deadline_approaching', 'deadline_extended', 'review_deadline', 'application_deadline',
-        'new_scholarship_available', 'matching_scholarship', 'scholarship_opening_soon',
-        'professor_review_requested', 'professor_review_completed', 'admin_review_requested',
-        'system_maintenance', 'admin_message', 'account_update', 'security_alert',
+        'INFO', 'WARNING', 'ERROR', 'SUCCESS', 'REMINDER',  # Keep original case for compatibility
+        'APPLICATION_SUBMITTED', 'APPLICATION_APPROVED', 'APPLICATION_REJECTED',
+        'APPLICATION_REQUIRES_REVIEW', 'APPLICATION_UNDER_REVIEW',
+        'DOCUMENT_REQUIRED', 'DOCUMENT_APPROVED', 'DOCUMENT_REJECTED',
+        'DEADLINE_APPROACHING', 'DEADLINE_EXTENDED', 'REVIEW_DEADLINE', 'APPLICATION_DEADLINE',
+        'NEW_SCHOLARSHIP_AVAILABLE', 'MATCHING_SCHOLARSHIP', 'SCHOLARSHIP_OPENING_SOON',
+        'PROFESSOR_REVIEW_REQUESTED', 'PROFESSOR_REVIEW_COMPLETED', 'ADMIN_REVIEW_REQUESTED',
+        'SYSTEM_MAINTENANCE', 'ADMIN_MESSAGE', 'ACCOUNT_UPDATE', 'SECURITY_ALERT',
         name='notificationtype'
     )
-    notificationtype_enum.create(conn)
+    
+    if has_old_columns:
+        notificationtype_enum.create(conn)
+    else:
+        # For fresh installs, the enum already exists, just add new values
+        # Use ALTER TYPE to add new enum values
+        new_values = [
+            'APPLICATION_SUBMITTED', 'APPLICATION_APPROVED', 'APPLICATION_REJECTED',
+            'APPLICATION_REQUIRES_REVIEW', 'APPLICATION_UNDER_REVIEW',
+            'DOCUMENT_REQUIRED', 'DOCUMENT_APPROVED', 'DOCUMENT_REJECTED',
+            'DEADLINE_APPROACHING', 'DEADLINE_EXTENDED', 'REVIEW_DEADLINE', 'APPLICATION_DEADLINE',
+            'NEW_SCHOLARSHIP_AVAILABLE', 'MATCHING_SCHOLARSHIP', 'SCHOLARSHIP_OPENING_SOON',
+            'PROFESSOR_REVIEW_REQUESTED', 'PROFESSOR_REVIEW_COMPLETED', 'ADMIN_REVIEW_REQUESTED',
+            'SYSTEM_MAINTENANCE', 'ADMIN_MESSAGE', 'ACCOUNT_UPDATE', 'SECURITY_ALERT'
+        ]
+        for value in new_values:
+            try:
+                conn.execute(text(f"ALTER TYPE notificationtype ADD VALUE '{value}'"))
+            except Exception:
+                # Value might already exist, ignore
+                pass
     
     notificationpriority_enum = sa.Enum(
-        'critical', 'high', 'normal', 'low',
+        'LOW', 'NORMAL', 'HIGH', 'URGENT',  # Keep original enum values with consistent casing
         name='notificationpriority'
     )
-    notificationpriority_enum.create(conn)
+    
+    if has_old_columns:
+        notificationpriority_enum.create(conn)
+    # For fresh installs, the priority enum already has the correct values
     
     notificationchannel_enum = sa.Enum(
         'in_app', 'email', 'sms', 'push',
@@ -99,33 +143,35 @@ def upgrade():
             op.add_column('notifications', sa.Column(col_name, col_type, **kwargs))
     
     # Copy data from old columns to new columns with type mapping
-    conn.execute(text("""
-        UPDATE notifications 
-        SET notification_type = CASE 
-            WHEN notification_type_old::text = '0' THEN 'info'
-            WHEN notification_type_old::text = '1' THEN 'warning'
-            WHEN notification_type_old::text = '2' THEN 'error'
-            WHEN notification_type_old::text = '3' THEN 'success'
-            WHEN notification_type_old::text = '4' THEN 'reminder'
-            ELSE LOWER(notification_type_old::text)
-        END
-    """))
-    
-    conn.execute(text("""
-        UPDATE notifications 
-        SET priority = CASE
-            WHEN priority_old::text IN ('0', 'low') THEN 'low'
-            WHEN priority_old::text IN ('1', 'normal') THEN 'normal'
-            WHEN priority_old::text IN ('2', 'high') THEN 'high'
-            WHEN priority_old::text IN ('3', 'urgent') THEN 'high'
-            WHEN priority_old::text = 'critical' THEN 'critical'
-            ELSE 'normal'
-        END
-    """))
-    
-    # Drop old columns
-    op.drop_column('notifications', 'notification_type_old')
-    op.drop_column('notifications', 'priority_old')
+    # Only do this if we have old columns to migrate from
+    if 'notification_type_old' in [col['name'] for col in inspector.get_columns('notifications')]:
+        conn.execute(text("""
+            UPDATE notifications 
+            SET notification_type = CASE 
+                WHEN notification_type_old::text = '0' THEN 'info'
+                WHEN notification_type_old::text = '1' THEN 'warning'
+                WHEN notification_type_old::text = '2' THEN 'error'
+                WHEN notification_type_old::text = '3' THEN 'success'
+                WHEN notification_type_old::text = '4' THEN 'reminder'
+                ELSE LOWER(notification_type_old::text)
+            END
+        """))
+        
+        conn.execute(text("""
+            UPDATE notifications 
+            SET priority = CASE
+                WHEN priority_old::text IN ('0', 'low') THEN 'low'
+                WHEN priority_old::text IN ('1', 'normal') THEN 'normal'
+                WHEN priority_old::text IN ('2', 'high') THEN 'high'
+                WHEN priority_old::text IN ('3', 'urgent') THEN 'high'
+                WHEN priority_old::text = 'critical' THEN 'critical'
+                ELSE 'normal'
+            END
+        """))
+        
+        # Drop old columns
+        op.drop_column('notifications', 'notification_type_old')
+        op.drop_column('notifications', 'priority_old')
     
     # Create new tables for Facebook-style features
     op.create_table('notification_preferences',
