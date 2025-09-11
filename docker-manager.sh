@@ -46,10 +46,12 @@ show_usage() {
     echo "  logs        - Show service logs"
     echo "  init-db     - Initialize database (dev/test only)"
     echo "  backup-db   - Backup database (prod-db only)"
+    echo "  setup-ssl   - Setup self-signed SSL certificates (test only)"
     echo "  health      - Check service health"
     echo ""
     echo "Examples:"
     echo "  $0 dev start              # Start development environment"
+    echo "  $0 test setup-ssl         # Setup SSL certificates for test env"
     echo "  $0 test init-db           # Initialize test database"
     echo "  $0 prod restart           # Restart production services"
     echo "  $0 prod-db backup-db      # Backup production database"
@@ -95,6 +97,64 @@ check_env_file() {
     fi
 }
 
+setup_ssl_certificates() {
+    local env=$1
+    
+    case $env in
+        "test")
+            log_info "Setting up self-signed SSL certificates for test environment..."
+            
+            # Create ssl directory if it doesn't exist
+            mkdir -p nginx/ssl
+            
+            # Check if certificates already exist
+            if [ -f "nginx/ssl/test-server.crt" ] && [ -f "nginx/ssl/test-server.key" ]; then
+                log_warning "SSL certificates already exist. Do you want to regenerate them? [y/N]"
+                read -r response
+                if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                    log_info "Using existing SSL certificates"
+                    return 0
+                fi
+            fi
+            
+            log_info "Generating self-signed SSL certificate for CN=140.113.7.148..."
+            
+            # Generate self-signed certificate
+            openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                -keyout nginx/ssl/test-server.key \
+                -out nginx/ssl/test-server.crt \
+                -subj "/C=TW/ST=Hsinchu/L=Hsinchu/O=NYCU/OU=IT Department/CN=140.113.7.148" \
+                -extensions v3_req \
+                -config <(echo '[req]'; echo 'distinguished_name=req'; echo '[v3_req]'; echo 'subjectAltName=@alt_names'; echo '[alt_names]'; echo 'DNS.1=140.113.7.148'; echo 'DNS.2=localhost'; echo 'IP.1=140.113.7.148'; echo 'IP.2=127.0.0.1')
+            
+            if [ $? -eq 0 ]; then
+                log_success "SSL certificates generated successfully!"
+                log_info "Certificate details:"
+                log_info "- Certificate: nginx/ssl/test-server.crt"
+                log_info "- Private key: nginx/ssl/test-server.key"
+                log_info "- Valid for: 365 days"
+                log_info "- Common Name: 140.113.7.148"
+                log_info "- Alternative Names: localhost, 127.0.0.1"
+                
+                # Set proper permissions
+                chmod 600 nginx/ssl/test-server.key
+                chmod 644 nginx/ssl/test-server.crt
+                
+                log_success "SSL certificate setup completed for test environment!"
+                log_info "You can now start the test environment with: $0 test start"
+            else
+                log_error "Failed to generate SSL certificates"
+                return 1
+            fi
+            ;;
+        *)
+            log_error "SSL certificate setup is only available for test environment"
+            log_info "For production, use real SSL certificates from a trusted CA"
+            return 1
+            ;;
+    esac
+}
+
 start_services() {
     local env=$1
     local compose_file=$(get_compose_file $env)
@@ -125,13 +185,10 @@ start_services() {
         "test")
             log_info "Checking SSL certificates for test environment..."
             if [ ! -f "nginx/ssl/test-server.crt" ]; then
-                log_warning "SSL certificates not found, creating self-signed certificates..."
-                mkdir -p nginx/ssl
-                openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-                    -keyout nginx/ssl/test-server.key \
-                    -out nginx/ssl/test-server.crt \
-                    -subj "/C=TW/ST=Hsinchu/L=Hsinchu/O=NYCU/OU=IT Department/CN=140.113.7.148"
-                log_success "SSL certificates created"
+                log_warning "SSL certificates not found, setting up automatically..."
+                setup_ssl_certificates $env
+            else
+                log_success "SSL certificates found"
             fi
             ;;
     esac
@@ -368,6 +425,9 @@ case $COMMAND in
         ;;
     "backup-db")
         backup_database $ENVIRONMENT
+        ;;
+    "setup-ssl")
+        setup_ssl_certificates $ENVIRONMENT
         ;;
     "health")
         check_health $ENVIRONMENT
