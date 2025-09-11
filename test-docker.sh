@@ -1,54 +1,68 @@
 #!/bin/bash
 
-# Simple test Docker script for CI/CD
+# Development Docker script for hot reload development
 set -e
 
 case "$1" in
     "start")
-        echo "Starting test services..."
-        if [ -f "docker-compose.test.yml" ]; then
-            docker compose -f docker-compose.test.yml up -d --build
+        echo "Starting development services..."
+        if [ -f "docker-compose.dev.yml" ]; then
+            docker compose -f docker-compose.dev.yml up -d --build
         elif [ -f "docker-compose.yml" ]; then
             docker compose up -d --build
         else
             echo "No docker-compose file found, skipping Docker start"
         fi
-        echo "Services started successfully"
+        echo "Development services started successfully with hot reload"
         ;;
     "stop")
-        echo "Stopping test services..."
-        if [ -f "docker-compose.test.yml" ]; then
-            docker compose -f docker-compose.test.yml down -v
+        echo "Stopping development services..."
+        if [ -f "docker-compose.dev.yml" ]; then
+            docker compose -f docker-compose.dev.yml down -v
         elif [ -f "docker-compose.yml" ]; then
             docker compose down -v
         else
             echo "No docker-compose file found, skipping Docker stop"
         fi
-        echo "Services stopped successfully"
+        echo "Development services stopped successfully"
         ;;
     "status")
-        echo "Checking service status..."
-        docker compose ps || true
+        echo "Checking development service status..."
+        if [ -f "docker-compose.dev.yml" ]; then
+            docker compose -f docker-compose.dev.yml ps
+        else
+            docker compose ps || true
+        fi
         echo ""
-        echo "Service URLs:"
-        echo "- Frontend: http://localhost:3000"
-        echo "- Backend API: http://localhost:8000"
+        echo "🚀 Development Service URLs:"
+        echo "- Frontend (Hot Reload): http://localhost:3000"
+        echo "- Backend API (Hot Reload): http://localhost:8000"
+        echo "- API Docs: http://localhost:8000/docs"
         echo "- Mock Student API: http://localhost:8080"
-        echo "- PgAdmin: http://localhost:8081"
         echo "- MinIO Console: http://localhost:9001"
+        echo "- PostgreSQL: localhost:5432"
+        echo "- Redis: localhost:6379"
         echo ""
-        echo "Mock Student API Health Check:"
+        echo "🔧 Development Features:"
+        echo "- Hot reload enabled for both frontend and backend"
+        echo "- Mock SSO enabled (no real Portal login required)"
+        echo "- All services accessible directly (no nginx)"
+        echo "- Source code mounted for live editing"
+        echo ""
+        echo "📊 Service Health Check:"
+        curl -s http://localhost:8000/health | jq . || echo "Backend not responding"
+        echo ""
         curl -s http://localhost:8080/health | jq . || echo "Mock Student API not responding"
         ;;
     "init-lookup")
         echo "Initializing lookup tables (reference data)..."
         
         # Check if backend service is running
-        if ! docker compose ps backend | grep -q "Up"; then
-            echo "⚠️  Backend service is not running. Starting services first..."
-            echo "Starting test services..."
-            if [ -f "docker-compose.test.yml" ]; then
-                docker compose -f docker-compose.test.yml up -d --build
+        if ! docker compose -f docker-compose.dev.yml ps backend | grep -q "Up" 2>/dev/null; then
+            echo "⚠️  Backend service is not running. Starting development services first..."
+            echo "Starting development services..."
+            if [ -f "docker-compose.dev.yml" ]; then
+                docker compose -f docker-compose.dev.yml up -d --build
             elif [ -f "docker-compose.yml" ]; then
                 docker compose up -d --build
             else
@@ -63,7 +77,7 @@ case "$1" in
             # Check if database is ready
             echo "🔍 Checking database connection..."
             for i in {1..30}; do
-                if docker exec scholarship_postgres_test pg_isready -U scholarship_user -d scholarship_db > /dev/null 2>&1; then
+                if docker exec scholarship_postgres_dev pg_isready -U scholarship_user -d scholarship_db > /dev/null 2>&1; then
                     echo "✅ Database is ready"
                     break
                 fi
@@ -80,7 +94,7 @@ case "$1" in
         
         # Run lookup tables initialization
         echo "🚀 Running lookup tables initialization..."
-        docker exec scholarship_backend_test python -m app.core.init_lookup_tables
+        docker exec scholarship_backend_dev python -m app.core.init_lookup_tables
         
         if [ $? -eq 0 ]; then
             echo "✅ Lookup tables initialization completed successfully!"
@@ -102,14 +116,14 @@ case "$1" in
         echo "Initializing test data (users, scholarships, etc.)..."
         
         # Check if backend service is running
-        if ! docker compose ps backend | grep -q "Up"; then
+        if ! docker compose -f docker-compose.dev.yml ps backend | grep -q "Up" 2>/dev/null; then
             echo "❌ Backend service is not running. Please start services first with 'start' command"
             exit 1
         fi
         
         # Check if lookup tables exist
         echo "🔍 Checking if lookup tables are initialized..."
-        DEGREE_COUNT=$(docker exec scholarship_postgres_test psql -U scholarship_user -d scholarship_db -t -c "SELECT COUNT(*) FROM degrees;" 2>/dev/null | tr -d ' ')
+        DEGREE_COUNT=$(docker exec scholarship_postgres_dev psql -U scholarship_user -d scholarship_db -t -c "SELECT COUNT(*) FROM degrees;" 2>/dev/null | tr -d ' ')
         
         if [ "$DEGREE_COUNT" -eq 0 ] 2>/dev/null; then
             echo "⚠️  Lookup tables not found. Initializing lookup tables first..."
@@ -120,7 +134,7 @@ case "$1" in
         
         # Run test data initialization (without lookup tables)
         echo "🚀 Running test data initialization..."
-        docker exec scholarship_backend_test python -c "
+        docker exec scholarship_backend_dev python -c "
 import asyncio
 from app.core.init_db import createTestUsers, createTestStudents, createTestScholarships, createApplicationFields, createSystemAnnouncements
 from app.db.session import AsyncSessionLocal
@@ -159,11 +173,11 @@ asyncio.run(init_test_data())
         echo "Initializing complete database (lookup tables + test data)..."
         
         # Check if backend service is running
-        if ! docker compose ps backend | grep -q "Up"; then
-            echo "⚠️  Backend service is not running. Starting services first..."
-            echo "Starting test services..."
-            if [ -f "docker-compose.test.yml" ]; then
-                docker compose -f docker-compose.test.yml up -d --build
+        if ! docker compose -f docker-compose.dev.yml ps backend | grep -q "Up" 2>/dev/null; then
+            echo "⚠️  Backend service is not running. Starting development services first..."
+            echo "Starting development services..."
+            if [ -f "docker-compose.dev.yml" ]; then
+                docker compose -f docker-compose.dev.yml up -d --build
             elif [ -f "docker-compose.yml" ]; then
                 docker compose up -d --build
             else
@@ -178,7 +192,7 @@ asyncio.run(init_test_data())
             # Check if database is ready
             echo "🔍 Checking database connection..."
             for i in {1..30}; do
-                if docker exec scholarship_postgres_test pg_isready -U scholarship_user -d scholarship_db > /dev/null 2>&1; then
+                if docker exec scholarship_postgres_dev pg_isready -U scholarship_user -d scholarship_db > /dev/null 2>&1; then
                     echo "✅ Database is ready"
                     break
                 fi
@@ -195,7 +209,7 @@ asyncio.run(init_test_data())
         
         # Run complete database initialization
         echo "🚀 Running complete database initialization..."
-        docker exec scholarship_backend_test python -m app.core.init_db
+        docker exec scholarship_backend_dev python -m app.core.init_db
         
         if [ $? -eq 0 ]; then
             echo "✅ Database initialization completed successfully!"
@@ -211,7 +225,7 @@ asyncio.run(init_test_data())
             echo "- Student (碩士): stu_master / stumaster123"
             echo "- Student (陸生): stu_china / stuchina123"
             echo ""
-            echo "🌐 Access the application:"
+            echo "🌐 Access the development application:"
             echo "- Frontend: http://localhost:3000"
             echo "- Backend API: http://localhost:8000"
             echo "- API Docs: http://localhost:8000/docs"
@@ -221,26 +235,76 @@ asyncio.run(init_test_data())
         fi
         ;;
     "restart")
-        echo "Restarting services..."
+        echo "Restarting development services..."
         $0 stop
         $0 start
         ;;
+    "logs")
+        echo "Showing development service logs..."
+        if [ -n "$2" ]; then
+            echo "Logs for service: $2"
+            docker compose -f docker-compose.dev.yml logs -f "$2"
+        else
+            echo "Logs for all services:"
+            docker compose -f docker-compose.dev.yml logs -f
+        fi
+        ;;
+    "dev")
+        echo "🚀 Development Environment Information"
+        echo ""
+        echo "📁 File Structure:"
+        echo "- Backend code: ./backend/ (auto-reload enabled)"
+        echo "- Frontend code: ./frontend/ (auto-reload enabled)"
+        echo "- Mock API: ./mock-student-api/ (auto-reload enabled)"
+        echo ""
+        echo "🔧 Development Tips:"
+        echo "- Edit backend files in ./backend/ - changes reload automatically"
+        echo "- Edit frontend files in ./frontend/ - Next.js hot reload active"
+        echo "- Mock SSO is enabled - no real Portal login needed"
+        echo "- Use mock student data for testing"
+        echo "- Database persists between restarts (use 'stop' to reset)"
+        echo ""
+        echo "🐛 Debugging:"
+        echo "- Backend logs: ./test-docker.sh logs backend"
+        echo "- Frontend logs: ./test-docker.sh logs frontend"
+        echo "- Database logs: ./test-docker.sh logs postgres"
+        echo "- All logs: ./test-docker.sh logs"
+        echo ""
+        echo "📚 Useful Commands:"
+        echo "- ./test-docker.sh status    # Check all services"
+        echo "- ./test-docker.sh init-db   # Reset & initialize database"
+        echo "- ./test-docker.sh restart   # Restart all services"
+        ;;
     *)
-        echo "Usage: $0 {start|stop|status|init-lookup|init-testdata|init-db|restart}"
+        echo "🚀 Development Docker Script - Hot Reload Environment"
+        echo "Usage: $0 {start|stop|status|init-lookup|init-testdata|init-db|restart|logs|dev}"
         echo ""
         echo "Commands:"
-        echo "  start        - Start Docker services"
-        echo "  stop         - Stop Docker services and remove volumes"
-        echo "  status       - Check service status"
+        echo "  start        - Start development services with hot reload"
+        echo "  stop         - Stop development services and remove volumes"
+        echo "  status       - Check service status and show URLs"
+        echo "  restart      - Restart all development services"
+        echo "  logs [service] - Show logs (optional: specify service name)"
+        echo "  dev          - Show development info and tips"
+        echo ""
+        echo "Database Commands:"
         echo "  init-lookup  - Initialize lookup tables (reference data only)"
         echo "  init-testdata- Initialize test data (users, scholarships, etc.)"
-        echo "  init-db      - Initialize complete database (lookup + test data)"
-        echo "  restart      - Restart all services"
+        echo "  init-db      - Initialize complete database (recommended for fresh setup)"
         echo ""
         echo "Data Initialization Options:"
         echo "  init-lookup   : Only reference data (degrees, academies, etc.)"
         echo "  init-testdata : Only test users and scholarships (requires lookup data)"
         echo "  init-db       : Complete initialization (recommended for fresh setup)"
+        echo ""
+        echo "🔧 Development Features:"
+        echo "  - Hot reload for backend and frontend"
+        echo "  - Mock SSO enabled (no Portal login required)"
+        echo "  - All services accessible directly"
+        echo "  - Source code mounted for live editing"
+        echo "  - PostgreSQL, Redis, MinIO included locally"
+        echo ""
+        echo "For production/test environments, use: ./docker-manager.sh"
         exit 1
         ;;
 esac

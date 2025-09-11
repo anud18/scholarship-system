@@ -7,8 +7,8 @@ import enum
 
 class Semester(enum.Enum):
     """Semester enum"""
-    FIRST = "first"
-    SECOND = "second"
+    FIRST = "FIRST"
+    SECOND = "SECOND"
 
 
 class SubTypeSelectionMode(enum.Enum):

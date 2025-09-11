@@ -79,8 +79,8 @@ services:
       dockerfile: Dockerfile
     container_name: scholarship_backend_test
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
       DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
@@ -94,9 +94,14 @@ services:
       MINIO_SECRET_KEY: minioadmin123
       MINIO_BUCKET_NAME: scholarship-documents
       MINIO_SECURE: "false"
-      # Mock SSO Configuration for Testing
+      # Mock SSO Configuration for Testing (fallback)
       ENABLE_MOCK_SSO: "true"
-      MOCK_SSO_DOMAIN: dev.university.edu
+      MOCK_SSO_DOMAIN: test.university.edu
+      # Portal SSO Configuration (real Portal for testing)
+      PORTAL_SSO_ENABLED: "true"
+      PORTAL_JWT_SERVER_URL: "https://portal.test.nycu.edu.tw/jwt/portal"
+      PORTAL_TEST_MODE: "false"
+      PORTAL_SSO_TIMEOUT: "10.0"
       # Student API Configuration
       STUDENT_API_ENABLED: "true"
       STUDENT_API_BASE_URL: "http://mock-student-api:8080"
@@ -143,6 +148,28 @@ services:
       - scholarship_test_network
     restart: unless-stopped
 
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: scholarship_nginx_test
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.test.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - scholarship_test_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost/health", "-k"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # Next.js Frontend
   frontend:
     build:
@@ -151,10 +178,10 @@ services:
       target: builder
     container_name: scholarship_frontend_test
     command: npm run dev
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://140.113.207.40:8000
+      NEXT_PUBLIC_API_URL: http://140.113.7.148
       NODE_ENV: development
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000

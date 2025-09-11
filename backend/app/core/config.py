@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     enable_mock_sso: bool = True
     mock_sso_domain: str = "dev.university.edu"
     
+    # Portal SSO Configuration
+    portal_sso_enabled: bool = True
+    portal_jwt_server_url: str = "https://portal.test.nycu.edu.tw/jwt/portal"
+    portal_test_mode: bool = False  # Set to True for testing with mock data
+    portal_sso_timeout: float = 10.0  # Timeout for Portal JWT verification
+    
     # Security configurations
     bypass_time_restrictions: bool = False  # Only True in testing environments
     

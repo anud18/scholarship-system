@@ -78,7 +78,7 @@ class CollegeReviewService:
         if not application:
             raise NotFoundError("Application", str(application_id))
         
-        if application.status not in ['recommended', 'under_review']:
+        if application.status not in [ApplicationStatus.RECOMMENDED.value, ApplicationStatus.UNDER_REVIEW.value]:
             raise BusinessLogicError(f"Application {application_id} is not in reviewable state")
         
         # Calculate scores if not provided
@@ -149,6 +149,7 @@ class CollegeReviewService:
     async def get_applications_for_review(
         self,
         scholarship_type_id: Optional[int] = None,
+        scholarship_type: Optional[str] = None,
         sub_type: Optional[str] = None,
         reviewer_id: Optional[int] = None,
         academic_year: Optional[int] = None,
@@ -165,14 +166,18 @@ class CollegeReviewService:
             # Note: student is loaded via foreign key, not relationship
         ).where(
             or_(
-                Application.status == 'recommended',
-                Application.status == 'under_review'
+                Application.status == ApplicationStatus.RECOMMENDED.value,
+                Application.status == ApplicationStatus.UNDER_REVIEW.value
             )
         )
         
         # Apply filters
         if scholarship_type_id:
             stmt = stmt.where(Application.scholarship_type_id == scholarship_type_id)
+        
+        # Filter by scholarship type code
+        if scholarship_type:
+            stmt = stmt.where(Application.main_scholarship_type == scholarship_type)
         
         if sub_type:
             stmt = stmt.where(Application.sub_scholarship_type == sub_type)
@@ -181,7 +186,26 @@ class CollegeReviewService:
             stmt = stmt.where(Application.academic_year == academic_year)
         
         if semester:
-            stmt = stmt.where(Application.semester == semester)
+            # Handle special "YEARLY" semester option
+            if semester == "YEARLY":
+                stmt = stmt.where(Application.semester.is_(None))
+            else:
+                # Convert string to Semester enum if needed
+                try:
+                    if isinstance(semester, str):
+                        semester_enum = Semester(semester)
+                    else:
+                        semester_enum = semester
+                    # Include both semester-specific applications AND yearly applications (semester=NULL)
+                    stmt = stmt.where(
+                        or_(
+                            Application.semester == semester_enum,
+                            Application.semester.is_(None)  # Include yearly scholarships
+                        )
+                    )
+                except ValueError:
+                    # If invalid semester value, only show yearly scholarships
+                    stmt = stmt.where(Application.semester.is_(None))
         
         # Order by submission date (FIFO)
         stmt = stmt.order_by(asc(Application.submitted_at))
@@ -212,14 +236,16 @@ class CollegeReviewService:
             app_data = {
                 'id': app.id,
                 'app_id': app.app_id,
-                'student_name': app.student_data.get('cname') if app.student_data else 'N/A',
-                'student_no': app.student_data.get('stdNo') if app.student_data else 'N/A',
+                'student_id': app.student_data.get('std_stdcode') if app.student_data else 'N/A',
+                'student_name': app.student_data.get('std_cname') if app.student_data else 'N/A',
                 'scholarship_type': app.main_scholarship_type,
                 'sub_type': app.sub_scholarship_type,
                 'academic_year': app.academic_year,
                 'semester': app.semester.value if app.semester else None,
                 'submitted_at': app.submitted_at,
-                'current_status': app.status,
+                'status': app.status,
+                'created_at': app.created_at,
+                'student_data': app.student_data,  # Include full student_data for API endpoint processing
                 'professor_review_completed': len(app.professor_reviews) > 0,
                 'college_review_completed': college_review is not None,
                 'college_review_score': college_review.ranking_score if college_review else None

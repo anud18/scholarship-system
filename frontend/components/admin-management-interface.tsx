@@ -495,18 +495,8 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       const response = await apiClient.users.getAll(params);
       
       if (response.success && response.data) {
-        // 根據當前使用者角色決定顯示哪些使用者
-        let allowedRoles = ['college', 'admin', 'super_admin', 'professor'];
-        
-        // 如果當前使用者是 admin，則不顯示 super_admin 使用者
-        if (user.role === 'admin') {
-          allowedRoles = ['college', 'admin', 'professor'];
-        }
-        
-        // 先過濾出允許的角色使用者
-        const managementUsers = (response.data.items || []).filter((targetUser: any) => 
-          allowedRoles.includes(targetUser.role)
-        );
+        // 後端已經根據roles參數過濾了正確的角色，不需要前端再過濾
+        const managementUsers = response.data.items || [];
         
         // 對使用者列表進行角色排序
         const sortedUsers = managementUsers.sort((a, b) => {

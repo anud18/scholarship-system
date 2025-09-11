@@ -143,6 +143,7 @@ async def get_all_users(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
     role: Optional[str] = Query(None, description="Filter by role"),
+    roles: Optional[str] = Query(None, description="Filter by multiple roles (comma-separated)"),
     search: Optional[str] = Query(None, description="Search by name, email, or nycu_id"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -152,8 +153,17 @@ async def get_all_users(
     # Base query
     stmt = select(User)
     
-    # Apply filters
-    if role:
+    # Apply role filters
+    if roles:
+        # Handle multiple roles (comma-separated)
+        role_list = [r.strip() for r in roles.split(',') if r.strip()]
+        try:
+            user_roles = [UserRole(r) for r in role_list]
+            stmt = stmt.where(User.role.in_(user_roles))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid role in roles parameter: {e}")
+    elif role:
+        # Handle single role (backward compatibility)
         try:
             user_role = UserRole(role)
             stmt = stmt.where(User.role == user_role)

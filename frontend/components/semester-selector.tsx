@@ -215,28 +215,52 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
     try {
       setLoading(true);
       
-      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      let url = `${API_BASE}/api/v1/reference-data/semester-academic-year-combinations`;
-      if (showStatistics) {
-        url += '?include_statistics=true';
-      }
+      // 使用 college API 來獲取可用的組合資料
+      const response = await apiClient.college.getAvailableCombinations();
       
-      if (activePeriodsOnly) {
-        url = `${API_BASE}/api/v1/reference-data/active-academic-periods`;
-      }
-      
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch combination data');
-      
-      const data = await response.json();
-      
-      if (activePeriodsOnly) {
-        setCombinations(data.active_periods || []);
+      if (response.success && response.data) {
+        // 將 API 回傳的資料轉換為組合選項格式
+        const combinationOptions: CombinationOption[] = [];
+        
+        // 基於學年和學期創建組合選項
+        response.data.academic_years.forEach(year => {
+          response.data.semesters.forEach(semester => {
+            const semesterLabel = semester === 'FIRST' ? '第一學期' : '第二學期';
+            const semesterNum = semester === 'FIRST' ? '1' : '2';
+            
+            combinationOptions.push({
+              value: `${year}-${semesterNum}`,
+              academic_year: year,
+              semester: semester.toLowerCase(), // Convert to lowercase to match enum
+              label: `${year}學年${semesterLabel}`,
+              label_en: `Academic Year ${year + 1911}-${year + 1912} ${semester === 'FIRST' ? 'First' : 'Second'} Semester`,
+              is_current: false // TODO: Add current period detection
+            });
+          });
+        });
+        
+        // 如果只有一個學期選項，可能是學年制
+        if (response.data.semesters.length === 0) {
+          response.data.academic_years.forEach(year => {
+            combinationOptions.push({
+              value: year.toString(),
+              academic_year: year,
+              semester: null,
+              label: `${year}學年`,
+              label_en: `Academic Year ${year + 1911}-${year + 1912}`,
+              is_current: false
+            });
+          });
+        }
+        
+        setCombinations(combinationOptions);
       } else {
-        setCombinations(data.combinations || []);
+        console.error('Failed to fetch available combinations:', response.message);
+        setCombinations([]);
       }
     } catch (error) {
       console.error('Error loading combination data:', error);
+      setCombinations([]);
     } finally {
       setLoading(false);
     }

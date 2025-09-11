@@ -10,6 +10,7 @@ from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse
 from app.schemas.common import MessageResponse
 from app.services.auth_service import AuthService
 from app.services.mock_sso_service import MockSSOService
+from app.services.portal_sso_service import PortalSSOService
 from app.services.developer_profile_service import DeveloperProfileService, DeveloperProfile, DeveloperProfileManager
 from app.core.security import get_current_user
 from app.core.config import settings
@@ -157,34 +158,60 @@ async def portal_sso_verify(
     request_data: dict,
     db: AsyncSession = Depends(get_db)
 ):
-    """Verify portal SSO token and return user data in portal format"""
-    if not settings.enable_mock_sso:
+    """
+    Verify portal SSO token and perform user login
+    
+    This endpoint receives POST requests from NYCU Portal with JWT token.
+    It verifies the token with Portal JWT server and logs in the user.
+    """
+    if not settings.portal_sso_enabled:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Portal SSO is disabled"
         )
     
-    nycu_id = request_data.get("nycu_id") or request_data.get("username")  # 支持兩種參數名稱
-    if not nycu_id:
+    # Handle both real Portal tokens and mock/test data
+    token = request_data.get("token")
+    nycu_id = request_data.get("nycu_id") or request_data.get("username")
+    
+    # If no token provided, fall back to mock SSO for testing
+    if not token and nycu_id and settings.enable_mock_sso:
+        try:
+            mock_sso_service = MockSSOService(db)
+            portal_data = await mock_sso_service.get_portal_sso_data(nycu_id)
+            
+            # Return in exact portal format for testing
+            return {
+                "status": "success", 
+                "message": "jwt pass",
+                "data": portal_data
+            }
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+    
+    # Real Portal SSO flow
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="NYCU ID is required"
+            detail="Token is required for Portal SSO"
         )
     
     try:
-        mock_sso_service = MockSSOService(db)
-        portal_data = await mock_sso_service.get_portal_sso_data(nycu_id)
+        portal_sso_service = PortalSSOService(db)
+        login_data = await portal_sso_service.process_portal_login(token)
         
-        # Return in exact portal format
         return {
-            "status": "success",
-            "message": "jwt pass",
-            "data": portal_data
+            "success": True,
+            "message": "Portal SSO login successful",
+            "data": login_data
         }
-    except ValueError as e:
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail=f"Portal SSO verification failed: {str(e)}"
         )
 
 
