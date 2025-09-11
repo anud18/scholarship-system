@@ -523,7 +523,7 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {applications.filter((app) => app.status === "submitted").length}
+                        {applications.filter((app) => app.status === "recommended" || app.status === "submitted").length}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {locale === "zh" ? "需要學院審核" : "Requires college review"}
@@ -540,7 +540,7 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {applications.filter((app) => app.status === "under_review").length}
+                        {applications.filter((app) => app.status === "under_review" || (app.status === "recommended" && app.college_review_completed)).length}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {locale === "zh" ? "學院審核中" : "College reviewing"}
