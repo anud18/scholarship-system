@@ -79,8 +79,8 @@ services:
       dockerfile: Dockerfile
     container_name: scholarship_backend_test
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
       DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
@@ -143,6 +143,25 @@ services:
       - scholarship_test_network
     restart: unless-stopped
 
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: scholarship_nginx_test
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.test.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    networks:
+      - scholarship_test_network
+    restart: unless-stopped
+
   # Next.js Frontend
   frontend:
     build:
@@ -151,10 +170,10 @@ services:
       target: builder
     container_name: scholarship_frontend_test
     command: npm run dev
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://140.113.207.40:8000
+      NEXT_PUBLIC_API_URL: http://140.113.7.148
       NODE_ENV: development
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
