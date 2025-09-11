@@ -1,0 +1,81 @@
+# Auto-labeling configuration for PRs
+# This file defines rules for automatically labeling pull requests based on changed files
+
+# Backend changes
+backend:
+  - changed-files:
+    - any-glob-to-any-file: 'backend/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'requirements*.txt'
+
+# Frontend changes  
+frontend:
+  - changed-files:
+    - any-glob-to-any-file: 'frontend/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'package*.json'
+
+# Database changes
+database:
+  - changed-files:
+    - any-glob-to-any-file: 'backend/alembic/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'backend/app/models/**/*'
+
+# API changes
+api:
+  - changed-files:
+    - any-glob-to-any-file: 'backend/app/api/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'backend/app/services/**/*'
+
+# UI/UX changes
+ui:
+  - changed-files:
+    - any-glob-to-any-file: 'frontend/components/**/*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*.css'
+
+# Configuration changes
+config:
+  - changed-files:
+    - any-glob-to-any-file: 'docker-compose*.yml'
+  - changed-files:
+    - any-glob-to-any-file: 'Dockerfile*'
+  - changed-files:
+    - any-glob-to-any-file: '.github/**/*'
+
+# Documentation changes
+documentation:
+  - changed-files:
+    - any-glob-to-any-file: '**/*.md'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**/*'
+
+# Testing changes
+testing:
+  - changed-files:
+    - any-glob-to-any-file: '**/*test*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*spec*'
+
+# CI/CD changes
+ci-cd:
+  - changed-files:
+    - any-glob-to-any-file: '.github/workflows/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'scripts/**/*'
+
+# Security related
+security:
+  - changed-files:
+    - any-glob-to-any-file: '**/*auth*'
+  - changed-files:
+    - any-glob-to-any-file: '**/*security*'
+
+# Dependencies
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file: 'requirements*.txt'
+  - changed-files:
+    - any-glob-to-any-file: 'package*.json'
