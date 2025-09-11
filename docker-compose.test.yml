@@ -94,9 +94,14 @@ services:
       MINIO_SECRET_KEY: minioadmin123
       MINIO_BUCKET_NAME: scholarship-documents
       MINIO_SECURE: "false"
-      # Mock SSO Configuration for Testing
+      # Mock SSO Configuration for Testing (fallback)
       ENABLE_MOCK_SSO: "true"
-      MOCK_SSO_DOMAIN: dev.university.edu
+      MOCK_SSO_DOMAIN: test.university.edu
+      # Portal SSO Configuration (real Portal for testing)
+      PORTAL_SSO_ENABLED: "true"
+      PORTAL_JWT_SERVER_URL: "https://portal.test.nycu.edu.tw/jwt/portal"
+      PORTAL_TEST_MODE: "false"
+      PORTAL_SSO_TIMEOUT: "10.0"
       # Student API Configuration
       STUDENT_API_ENABLED: "true"
       STUDENT_API_BASE_URL: "http://mock-student-api:8080"
