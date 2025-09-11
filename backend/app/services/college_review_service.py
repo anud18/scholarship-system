@@ -186,7 +186,16 @@ class CollegeReviewService:
             stmt = stmt.where(Application.academic_year == academic_year)
         
         if semester:
-            stmt = stmt.where(Application.semester == semester)
+            # Convert string to Semester enum if needed
+            try:
+                if isinstance(semester, str):
+                    semester_enum = Semester(semester)
+                else:
+                    semester_enum = semester
+                stmt = stmt.where(Application.semester == semester_enum)
+            except ValueError:
+                # If invalid semester value, skip filtering (no results)
+                stmt = stmt.where(Application.semester == None)
         
         # Order by submission date (FIFO)
         stmt = stmt.order_by(asc(Application.submitted_at))
