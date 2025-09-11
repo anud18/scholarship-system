@@ -153,13 +153,25 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
         const hasCurrentCombination = response.data.academic_years?.includes(currentConfig.currentYear) && 
           response.data.semesters?.includes(currentConfig.currentSemester)
         
+        // 檢查是否有學年制獎學金（YEARLY 選項）
+        const hasYearlyOption = response.data.semesters?.includes('YEARLY')
+        
         // 設定預設學期組合
         if (hasCurrentCombination && !selectedCombination) {
           setSelectedCombination(currentCombination)
           setSelectedAcademicYear(currentConfig.currentYear)
           setSelectedSemester(currentConfig.currentSemester)
+        } else if (hasYearlyOption && !selectedCombination && response.data.academic_years?.length > 0) {
+          // 如果有學年制獎學金，優先選擇當前年度的全年選項
+          const yearlyYear = response.data.academic_years.includes(currentConfig.currentYear) 
+            ? currentConfig.currentYear 
+            : response.data.academic_years[0]
+          const yearlyCombination = `${yearlyYear}-YEARLY`
+          setSelectedCombination(yearlyCombination)
+          setSelectedAcademicYear(yearlyYear)
+          setSelectedSemester('YEARLY')
         } else if (!selectedCombination && response.data.academic_years?.length > 0 && response.data.semesters?.length > 0) {
-          // 如果當前學期不可用，設定第一個可用的學期
+          // 否則設定第一個可用的學期
           const firstYear = response.data.academic_years[0]
           const firstSemester = response.data.semesters[0]
           const fallbackCombination = `${firstYear}-${firstSemester}`
@@ -174,8 +186,19 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
           setActiveScholarshipTab(firstType)
           
           // 使用已設定的學期載入申請資料
-          const useYear = hasCurrentCombination ? currentConfig.currentYear : (response.data.academic_years?.[0] || undefined)
-          const useSemester = hasCurrentCombination ? currentConfig.currentSemester : (response.data.semesters?.[0] || undefined)
+          let useYear, useSemester
+          if (hasCurrentCombination) {
+            useYear = currentConfig.currentYear
+            useSemester = currentConfig.currentSemester
+          } else if (hasYearlyOption) {
+            useYear = response.data.academic_years.includes(currentConfig.currentYear) 
+              ? currentConfig.currentYear 
+              : response.data.academic_years[0]
+            useSemester = 'YEARLY'
+          } else {
+            useYear = response.data.academic_years?.[0] || undefined
+            useSemester = response.data.semesters?.[0] || undefined
+          }
           
           fetchCollegeApplications(useYear, useSemester, firstType)
         }
@@ -440,7 +463,12 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                           <div className="flex items-center">
                             <Calendar className="h-4 w-4 mr-2" />
                             {selectedCombination ? 
-                              `${selectedCombination.split('-')[0]} ${selectedCombination.split('-')[1] === 'FIRST' ? '上學期' : '下學期'}` 
+                              `${selectedCombination.split('-')[0]} ${
+                                selectedCombination.split('-')[1] === 'FIRST' ? '上學期' : 
+                                selectedCombination.split('-')[1] === 'SECOND' ? '下學期' : 
+                                selectedCombination.split('-')[1] === 'YEARLY' ? '全年' : 
+                                selectedCombination.split('-')[1]
+                              }` 
                               : "選擇學期"
                             }
                           </div>
@@ -450,7 +478,11 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                         {availableOptions?.academic_years?.map((year) => 
                           availableOptions?.semesters?.map((semester) => (
                             <SelectItem key={`${year}-${semester}`} value={`${year}-${semester}`}>
-                              {year} 學年度 {semester === 'FIRST' ? '上學期' : '下學期'}
+                              {year} 學年度 {
+                                semester === 'FIRST' ? '上學期' : 
+                                semester === 'SECOND' ? '下學期' : 
+                                semester === 'YEARLY' ? '全年' : semester
+                              }
                             </SelectItem>
                           ))
                         )}

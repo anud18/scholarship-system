@@ -1018,18 +1018,26 @@ async def get_available_combinations(
         year_result = await db.execute(year_query)
         academic_years = sorted([y for y in year_result.scalars().all() if y is not None])
         
-        # Query distinct semesters from applications
-        semester_query = select(Application.semester).distinct().where(Application.semester.isnot(None))
+        # Query distinct semesters from applications (including NULL for yearly scholarships)
+        semester_query = select(Application.semester).distinct()
         semester_result = await db.execute(semester_query)
-        semesters = [s for s in semester_result.scalars().all() if s is not None]
+        semesters = semester_result.scalars().all()
         
         # Convert semester enum values to strings if needed
         semester_strings = []
+        has_yearly_scholarships = False
+        
         for sem in semesters:
-            if hasattr(sem, 'value'):
+            if sem is None:
+                has_yearly_scholarships = True
+            elif hasattr(sem, 'value'):
                 semester_strings.append(sem.value)
             else:
                 semester_strings.append(str(sem))
+        
+        # Add a special "YEARLY" option if there are yearly scholarships
+        if has_yearly_scholarships:
+            semester_strings.append("YEARLY")
         
         response_data = {
             "scholarship_types": scholarship_types,

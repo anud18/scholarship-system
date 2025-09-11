@@ -186,16 +186,26 @@ class CollegeReviewService:
             stmt = stmt.where(Application.academic_year == academic_year)
         
         if semester:
-            # Convert string to Semester enum if needed
-            try:
-                if isinstance(semester, str):
-                    semester_enum = Semester(semester)
-                else:
-                    semester_enum = semester
-                stmt = stmt.where(Application.semester == semester_enum)
-            except ValueError:
-                # If invalid semester value, skip filtering (no results)
-                stmt = stmt.where(Application.semester == None)
+            # Handle special "YEARLY" semester option
+            if semester == "YEARLY":
+                stmt = stmt.where(Application.semester.is_(None))
+            else:
+                # Convert string to Semester enum if needed
+                try:
+                    if isinstance(semester, str):
+                        semester_enum = Semester(semester)
+                    else:
+                        semester_enum = semester
+                    # Include both semester-specific applications AND yearly applications (semester=NULL)
+                    stmt = stmt.where(
+                        or_(
+                            Application.semester == semester_enum,
+                            Application.semester.is_(None)  # Include yearly scholarships
+                        )
+                    )
+                except ValueError:
+                    # If invalid semester value, only show yearly scholarships
+                    stmt = stmt.where(Application.semester.is_(None))
         
         # Order by submission date (FIFO)
         stmt = stmt.order_by(asc(Application.submitted_at))
