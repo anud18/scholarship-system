@@ -204,7 +204,7 @@ export function useCollegeApplications() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchCollegeApplications = useCallback(async () => {
+  const fetchCollegeApplications = useCallback(async (academicYear?: number, semester?: string, scholarshipType?: string) => {
     // Only fetch if user is authenticated and has college privileges
     if (!isAuthenticated || !user || user.role !== 'college') {
       return
@@ -214,8 +214,16 @@ export function useCollegeApplications() {
       setIsLoading(true)
       setError(null)
       
+      // Build query parameters
+      const params = new URLSearchParams()
+      if (academicYear) params.append('academic_year', academicYear.toString())
+      if (semester) params.append('semester', semester)
+      if (scholarshipType) params.append('scholarship_type', scholarshipType)
+      
+      const queryString = params.toString()
+      
       // Use the new college-specific endpoint
-      const response = await apiClient.applications.getCollegeReview('submitted')
+      const response = await apiClient.college.getApplicationsForReview(queryString)
       
       if (response.success && response.data) {
         setApplications(response.data)

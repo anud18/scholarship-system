@@ -2074,6 +2074,11 @@ class ApiClient {
 
   // College Review endpoints
   college = {
+    // Get applications for review
+    getApplicationsForReview: async (params?: string): Promise<ApiResponse<any[]>> => {
+      return this.request(`/college/applications${params ? `?${params}` : ''}`)
+    },
+    
     // Get rankings list
     getRankings: async (academicYear?: number, semester?: string): Promise<ApiResponse<any[]>> => {
       const params = new URLSearchParams()
@@ -2140,6 +2145,15 @@ class ApiClient {
       if (academicYear) params.append('academic_year', academicYear.toString())
       if (semester) params.append('semester', semester)
       return this.request(`/college/statistics${params.toString() ? `?${params.toString()}` : ''}`)
+    },
+    
+    // Get available combinations of scholarship types, years, and semesters
+    getAvailableCombinations: async (): Promise<ApiResponse<{
+      scholarship_types: Array<{ code: string; name: string; name_en?: string }>;
+      academic_years: number[];
+      semesters: string[];
+    }>> => {
+      return this.request('/college/available-combinations')
     }
   }
 }

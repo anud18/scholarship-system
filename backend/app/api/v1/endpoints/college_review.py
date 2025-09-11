@@ -179,7 +179,8 @@ async def _check_application_review_permission(user: User, application_id: int, 
 @professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_applications_for_review(
     request: Request,
-    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type"),
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type code"),
     sub_type: Optional[str] = Query(None, description="Filter by sub-type"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
@@ -203,6 +204,7 @@ async def get_applications_for_review(
         service = CollegeReviewService(db)
         applications = await service.get_applications_for_review(
             scholarship_type_id=scholarship_type_id,
+            scholarship_type=scholarship_type,
             sub_type=sub_type,
             reviewer_id=current_user.id,
             academic_year=academic_year,
@@ -225,16 +227,10 @@ async def get_applications_for_review(
                 "semester": app.get("semester"),
                 "created_at": app.get("created_at"),
                 "submitted_at": app.get("submitted_at"),
-                # Minimal student info for identification purposes only
-                "student_info": {
-                    "display_name": student_data.get("cname", "未提供姓名"),
-                    "student_id": student_data.get("stdNo", "未提供學號"),
-                    "department_code": student_data.get("deptCode", "N/A")  # Use code instead of full name
-                } if student_data else {
-                    "display_name": "未提供學生資料",
-                    "student_id": "N/A",
-                    "department_code": "N/A"
-                },
+                # Student info in flat format for frontend compatibility
+                "student_id": student_data.get("std_stdcode", "未提供學號") if student_data else "N/A",
+                "student_name": student_data.get("std_cname", "未提供姓名") if student_data else "未提供學生資料",
+                "department_code": student_data.get("std_depno", "N/A") if student_data else "N/A",
                 # Add review status for UI purposes
                 "review_status": {
                     "has_professor_review": len(app.get("professor_reviews", [])) > 0,
@@ -982,4 +978,76 @@ async def get_college_review_statistics(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve statistics"
+        )
+
+
+@router.get("/available-combinations", response_model=ApiResponse[Dict[str, Any]])
+async def get_available_combinations(
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get available combinations of scholarship types, academic years, and semesters from database"""
+    
+    try:
+        logger.info("College user requesting available combinations from database")
+        
+        # Query distinct scholarship types from applications and get their full names
+        from app.models.scholarship import ScholarshipType
+        
+        scholarship_query = select(Application.main_scholarship_type).distinct()
+        scholarship_result = await db.execute(scholarship_query)
+        scholarship_types_raw = scholarship_result.scalars().all()
+        
+        # Get scholarship type details from ScholarshipType table
+        scholarship_types = []
+        for st in scholarship_types_raw:
+            if st:  # Only include non-None values
+                # Query the ScholarshipType table for the full name (case insensitive)
+                type_query = select(ScholarshipType).where(ScholarshipType.code.ilike(st))
+                type_result = await db.execute(type_query)
+                type_obj = type_result.scalar_one_or_none()
+                
+                scholarship_types.append({
+                    "code": st,
+                    "name": type_obj.name if type_obj else st,
+                    "name_en": type_obj.name_en if type_obj else st
+                })
+        
+        # Query distinct academic years from applications
+        year_query = select(Application.academic_year).distinct().where(Application.academic_year.isnot(None))
+        year_result = await db.execute(year_query)
+        academic_years = sorted([y for y in year_result.scalars().all() if y is not None])
+        
+        # Query distinct semesters from applications
+        semester_query = select(Application.semester).distinct().where(Application.semester.isnot(None))
+        semester_result = await db.execute(semester_query)
+        semesters = [s for s in semester_result.scalars().all() if s is not None]
+        
+        # Convert semester enum values to strings if needed
+        semester_strings = []
+        for sem in semesters:
+            if hasattr(sem, 'value'):
+                semester_strings.append(sem.value)
+            else:
+                semester_strings.append(str(sem))
+        
+        response_data = {
+            "scholarship_types": scholarship_types,
+            "academic_years": academic_years,
+            "semesters": sorted(list(set(semester_strings)))  # Remove duplicates and sort
+        }
+        
+        logger.info(f"Retrieved {len(scholarship_types)} scholarship types, {len(academic_years)} years, {len(semester_strings)} semesters")
+        
+        return ApiResponse(
+            success=True,
+            message="Available combinations retrieved successfully",
+            data=response_data
+        )
+        
+    except Exception as e:
+        logger.error(f"Error retrieving available combinations: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve available combinations from database"
         )

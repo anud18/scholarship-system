@@ -141,6 +141,189 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
             "dept_code": "CS",
             "dept_name": "資訊工程學系",
             "role": UserRole.STUDENT
+        },
+        # Computer Science College Users
+        {
+            "nycu_id": "cs_professor",
+            "name": "李資訊教授",
+            "email": "cs_professor@nycu.edu.tw",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.PROFESSOR
+        },
+        {
+            "nycu_id": "cs_college",
+            "name": "資訊學院審核員",
+            "email": "cs_college@nycu.edu.tw",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.COLLEGE
+        },
+        {
+            "nycu_id": "cs_phd001",
+            "name": "王博士研究生",
+            "email": "cs_phd001@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.STUDENT
+        },
+        {
+            "nycu_id": "cs_phd002",
+            "name": "陳AI博士",
+            "email": "cs_phd002@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.STUDENT
+        },
+        {
+            "nycu_id": "cs_phd003",
+            "name": "林機器學習博士",
+            "email": "cs_phd003@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.STUDENT
+        },
+        {
+            "nycu_id": "cs_phd_intl",
+            "name": "國際博士生",
+            "email": "cs_phd_intl@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
+            "role": UserRole.STUDENT
+        },
+        # Electrical Engineering College Users
+        {
+            "nycu_id": "ee_professor",
+            "name": "黃電機教授",
+            "email": "ee_professor@nycu.edu.tw",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "EE",
+            "dept_name": "電機工程學系",
+            "role": UserRole.PROFESSOR
+        },
+        {
+            "nycu_id": "ee_college",
+            "name": "電機學院審核員",
+            "email": "ee_college@nycu.edu.tw",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "EE",
+            "dept_name": "電機工程學系",
+            "role": UserRole.COLLEGE
+        },
+        {
+            "nycu_id": "ee_phd001",
+            "name": "吳電力博士",
+            "email": "ee_phd001@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "EE",
+            "dept_name": "電機工程學系",
+            "role": UserRole.STUDENT
+        },
+        {
+            "nycu_id": "ee_phd002",
+            "name": "劉通訊博士",
+            "email": "ee_phd002@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "EE",
+            "dept_name": "電機工程學系",
+            "role": UserRole.STUDENT
+        },
+        {
+            "nycu_id": "ee_phd003",
+            "name": "蔡半導體博士",
+            "email": "ee_phd003@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "EE",
+            "dept_name": "電機工程學系",
+            "role": UserRole.STUDENT
+        },
+        {
+            "nycu_id": "ee_phd_exchange",
+            "name": "交換博士生",
+            "email": "ee_phd_exchange@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "EE",
+            "dept_name": "電機工程學系",
+            "role": UserRole.STUDENT
+        },
+        # Mechanical Engineering College Users
+        {
+            "nycu_id": "me_professor",
+            "name": "趙機械教授",
+            "email": "me_professor@nycu.edu.tw",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "ME",
+            "dept_name": "機械工程學系",
+            "role": UserRole.PROFESSOR
+        },
+        {
+            "nycu_id": "me_college",
+            "name": "工學院審核員",
+            "email": "me_college@nycu.edu.tw",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "ME",
+            "dept_name": "機械工程學系",
+            "role": UserRole.COLLEGE
+        },
+        {
+            "nycu_id": "me_phd001",
+            "name": "許製造博士",
+            "email": "me_phd001@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "ME",
+            "dept_name": "機械工程學系",
+            "role": UserRole.STUDENT
+        },
+        {
+            "nycu_id": "me_phd002",
+            "name": "周熱流博士",
+            "email": "me_phd002@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "ME",
+            "dept_name": "機械工程學系",
+            "role": UserRole.STUDENT
+        },
+        {
+            "nycu_id": "me_phd003",
+            "name": "楊材料博士",
+            "email": "me_phd003@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "ME",
+            "dept_name": "機械工程學系",
+            "role": UserRole.STUDENT
+        },
+        {
+            "nycu_id": "me_phd_robotics",
+            "name": "機器人博士研究員",
+            "email": "me_phd_robotics@nycu.edu.tw",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "ME",
+            "dept_name": "機械工程學系",
+            "role": UserRole.STUDENT
         }
     ]
     
