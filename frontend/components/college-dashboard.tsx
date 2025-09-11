@@ -130,10 +130,13 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
 
   // Fetch rankings and configuration on component mount
   useEffect(() => {
-    fetchRankings()
-    getAcademicConfig()
-    getScholarshipConfig()
-    fetchAvailableOptions()
+    const initializeData = async () => {
+      await getAcademicConfig()
+      await fetchAvailableOptions()
+      await fetchRankings()
+      await getScholarshipConfig()
+    }
+    initializeData()
   }, [])
 
   const fetchAvailableOptions = async () => {
@@ -141,12 +144,40 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
       const response = await apiClient.college.getAvailableCombinations()
       if (response.success && response.data) {
         setAvailableOptions(response.data)
+        
+        // 取得當前學期資訊
+        const currentConfig = await getAcademicConfig()
+        const currentCombination = `${currentConfig.currentYear}-${currentConfig.currentSemester}`
+        
+        // 檢查當前學期組合是否存在於可用選項中
+        const hasCurrentCombination = response.data.academic_years?.includes(currentConfig.currentYear) && 
+          response.data.semesters?.includes(currentConfig.currentSemester)
+        
+        // 設定預設學期組合
+        if (hasCurrentCombination && !selectedCombination) {
+          setSelectedCombination(currentCombination)
+          setSelectedAcademicYear(currentConfig.currentYear)
+          setSelectedSemester(currentConfig.currentSemester)
+        } else if (!selectedCombination && response.data.academic_years?.length > 0 && response.data.semesters?.length > 0) {
+          // 如果當前學期不可用，設定第一個可用的學期
+          const firstYear = response.data.academic_years[0]
+          const firstSemester = response.data.semesters[0]
+          const fallbackCombination = `${firstYear}-${firstSemester}`
+          setSelectedCombination(fallbackCombination)
+          setSelectedAcademicYear(firstYear)
+          setSelectedSemester(firstSemester)
+        }
+        
         // 設定第一個獎學金類型為預設 tab
         if (response.data.scholarship_types && response.data.scholarship_types.length > 0 && !activeScholarshipTab) {
           const firstType = response.data.scholarship_types[0].code
           setActiveScholarshipTab(firstType)
-          // 載入該獎學金類型的申請資料
-          fetchCollegeApplications(selectedAcademicYear, selectedSemester, firstType)
+          
+          // 使用已設定的學期載入申請資料
+          const useYear = hasCurrentCombination ? currentConfig.currentYear : (response.data.academic_years?.[0] || undefined)
+          const useSemester = hasCurrentCombination ? currentConfig.currentSemester : (response.data.semesters?.[0] || undefined)
+          
+          fetchCollegeApplications(useYear, useSemester, firstType)
         }
       } else {
         console.error('Failed to fetch available options:', response.message)
@@ -401,19 +432,25 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                       const [year, semester] = value.split('-')
                       setSelectedAcademicYear(parseInt(year))
                       setSelectedSemester(semester || undefined)
+                      // 重新載入該獎學金類型的申請資料
                       fetchCollegeApplications(parseInt(year), semester || undefined, activeScholarshipTab)
                     }}>
-                      <SelectTrigger className="w-40">
+                      <SelectTrigger className="w-48">
                         <SelectValue placeholder="選擇學期">
-                          <Calendar className="h-4 w-4 mr-2" />
-                          {selectedCombination ? selectedCombination.replace('-', ' ') : "選擇學期"}
+                          <div className="flex items-center">
+                            <Calendar className="h-4 w-4 mr-2" />
+                            {selectedCombination ? 
+                              `${selectedCombination.split('-')[0]} ${selectedCombination.split('-')[1] === 'FIRST' ? '上學期' : '下學期'}` 
+                              : "選擇學期"
+                            }
+                          </div>
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {availableOptions?.academic_years?.map((year) => 
                           availableOptions?.semesters?.map((semester) => (
                             <SelectItem key={`${year}-${semester}`} value={`${year}-${semester}`}>
-                              {year} {semester === 'FIRST' ? '上學期' : '下學期'}
+                              {year} 學年度 {semester === 'FIRST' ? '上學期' : '下學期'}
                             </SelectItem>
                           ))
                         )}
