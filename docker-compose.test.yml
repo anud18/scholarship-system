@@ -149,18 +149,21 @@ services:
     container_name: scholarship_nginx_test
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.test.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_started
-      minio:
-        condition: service_healthy
+      - backend
+      - frontend
     networks:
       - scholarship_test_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost/health", "-k"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Next.js Frontend
   frontend:
