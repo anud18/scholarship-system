@@ -132,7 +132,7 @@ class PortalSSOService:
                 return False, None
                 
             # Try to get student data from the API
-            student_data = await self.student_service.get_student_info(nycu_id)
+            student_data = await self.student_service.get_student_basic_info(nycu_id)
             
             if student_data:
                 logger.info(f"User {nycu_id} verified as student via Student API")
