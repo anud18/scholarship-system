@@ -175,9 +175,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: runner
+      target: builder
     container_name: scholarship_frontend_test
-    command: node server.js
+    command: npm start
     expose:
       - "3000"
     environment:
