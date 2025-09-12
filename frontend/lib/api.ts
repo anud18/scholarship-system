@@ -879,13 +879,22 @@ class ApiClient {
   constructor() {
     // Dynamically determine backend URL
     if (typeof window !== 'undefined') {
-      // Browser environment - use current host with port 8000
-      const protocol = window.location.protocol
-      const hostname = window.location.hostname
-      this.baseURL = process.env.NEXT_PUBLIC_API_URL || `${protocol}//${hostname}:8000`
+      // Browser environment
+      if (process.env.NODE_ENV === 'production') {
+        // Production: use current host (nginx will proxy /api/ requests to backend)
+        this.baseURL = process.env.NEXT_PUBLIC_API_URL || `${window.location.protocol}//${window.location.host}`
+        console.log('🏭 API Client Production mode - using nginx proxy via:', this.baseURL)
+      } else {
+        // Development: use port 8000 directly
+        const protocol = window.location.protocol
+        const hostname = window.location.hostname
+        this.baseURL = process.env.NEXT_PUBLIC_API_URL || `${protocol}//${hostname}:8000`
+        console.log('🛠️ API Client Development mode - using direct backend:', this.baseURL)
+      }
     } else {
       // Server-side environment - use environment variable or localhost
       this.baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      console.log('🖥️ API Client Server-side mode - using:', this.baseURL)
     }
     
     // Try to get token from localStorage on client side
