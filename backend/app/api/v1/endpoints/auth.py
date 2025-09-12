@@ -180,10 +180,20 @@ async def get_portal_sso_data(
 @router.post("/portal-sso/verify")
 async def portal_sso_verify(
     request: Request,
+    db: AsyncSession = Depends(get_db),
+    # Accept all possible form fields to debug what's being sent
     token: Optional[str] = Form(None),
     nycu_id: Optional[str] = Form(None),
     username: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db)
+    # Common JWT field names in SSO systems
+    jwt: Optional[str] = Form(None),
+    jwt_token: Optional[str] = Form(None),
+    access_token: Optional[str] = Form(None),
+    id_token: Optional[str] = Form(None),
+    # Other possible field names
+    user_id: Optional[str] = Form(None),
+    userid: Optional[str] = Form(None),
+    student_id: Optional[str] = Form(None)
 ):
     """
     Verify portal SSO token and perform user login
@@ -197,9 +207,24 @@ async def portal_sso_verify(
             detail="Portal SSO is disabled"
         )
     
-    # Extract data from form parameters (primary method for Portal SSO)
-    final_token = token
-    final_nycu_id = nycu_id or username
+    # Debug logging to see what parameters are being sent
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    received_params = {
+        "token": token, "nycu_id": nycu_id, "username": username,
+        "jwt": jwt, "jwt_token": jwt_token, "access_token": access_token,
+        "id_token": id_token, "user_id": user_id, "userid": userid,
+        "student_id": student_id
+    }
+    
+    # Log only non-None parameters
+    non_none_params = {k: v for k, v in received_params.items() if v is not None}
+    logger.info(f"Portal SSO received parameters: {non_none_params}")
+    
+    # Extract data from form parameters (try multiple possible token field names)
+    final_token = token or jwt or jwt_token or access_token or id_token
+    final_nycu_id = nycu_id or username or user_id or userid or student_id
     
     # If no token provided, fall back to mock SSO for testing
     if not final_token and final_nycu_id and settings.enable_mock_sso:
