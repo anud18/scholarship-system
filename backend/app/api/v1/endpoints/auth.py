@@ -255,166 +255,25 @@ async def portal_sso_verify(
     try:
         portal_sso_service = PortalSSOService(db)
         
-        # Try direct JWT processing first (bypass Portal verification for testing)
-        from jose import jwt as jwt_lib
-        import json
+        # Use the Portal SSO service to handle authentication
+        auth_result = await portal_sso_service.process_portal_login(final_token)
         
-        try:
-            # Decode JWT without verification to extract user data
-            # This is for testing - in production you'd verify the signature
-            decoded_token = jwt_lib.get_unverified_claims(final_token)
-            logger.info(f"Decoded JWT payload: {decoded_token}")
-            
-            # Extract user information from JWT
-            nycu_id = decoded_token.get('nycuID') or decoded_token.get('txtID')
-            user_name = decoded_token.get('txtName', '')
-            user_type = decoded_token.get('userType', 'student')
-            dept_code = decoded_token.get('deptCode', '')
-            dept_name = decoded_token.get('dept', '')
-            employee_status = decoded_token.get('employeestatus', '')
-            
-            if not nycu_id:
-                raise ValueError("No user ID found in JWT")
-                
-            logger.info(f"Processing Portal login for user: {nycu_id} ({user_name})")
-            
-            # Create or get user account and generate access token
-            from app.services.auth_service import AuthService
-            from app.schemas.user import UserCreate
-            from fastapi.responses import RedirectResponse
-            
-            auth_service = AuthService(db)
-            
-            # Map Portal user type to our system roles
-            role_mapping = {
-                "student": UserRole.STUDENT,
-                "staff": UserRole.PROFESSOR,  # Staff mapped to professor
-                "teacher": UserRole.PROFESSOR,  # Teacher mapped to professor
-                "admin": UserRole.ADMIN
-            }
-            user_role = role_mapping.get(user_type.lower(), UserRole.STUDENT)
-            
-            # Map Portal user type to our UserType enum
-            user_type_mapping = {
-                "student": UserType.STUDENT,
-                "staff": UserType.EMPLOYEE,  # Staff mapped to employee
-                "teacher": UserType.EMPLOYEE,  # Teacher mapped to employee
-                "admin": UserType.EMPLOYEE  # Admin mapped to employee
-            }
-            mapped_user_type = user_type_mapping.get(user_type.lower(), UserType.STUDENT)
-            
-            # Map employee status
-            status_mapping = {
-                "在學": EmployeeStatus.STUDENT,
-                "在職": EmployeeStatus.ACTIVE,
-                "退休": EmployeeStatus.RETIRED,
-                "畢業": EmployeeStatus.GRADUATED,
-                "離職": EmployeeStatus.RETIRED  # Map to RETIRED as closest match
-            }
-            mapped_status = status_mapping.get(employee_status, EmployeeStatus.ACTIVE)
-            
-            try:
-                # Try to get existing user
-                from sqlalchemy import select
-                result = await db.execute(select(User).where(User.nycu_id == nycu_id))
-                existing_user = result.scalar_one_or_none()
-                
-                if existing_user:
-                    # Update existing user info
-                    existing_user.name = user_name
-                    existing_user.user_type = mapped_user_type
-                    existing_user.status = mapped_status
-                    existing_user.dept_code = dept_code
-                    existing_user.dept_name = dept_name
-                    existing_user.role = user_role
-                    existing_user.last_login_at = datetime.utcnow()
-                    
-                    await db.commit()
-                    user = existing_user
-                    logger.info(f"Updated existing user: {nycu_id}")
-                else:
-                    # Create new user
-                    user_data = UserCreate(
-                        nycu_id=nycu_id,
-                        name=user_name,
-                        email=f"{nycu_id}@nycu.edu.tw",  # Generate email if not provided
-                        user_type=mapped_user_type,
-                        status=mapped_status,
-                        dept_code=dept_code,
-                        dept_name=dept_name,
-                        role=user_role,
-                        comment=f"Portal SSO user created on {datetime.utcnow()}"
-                    )
-                    
-                    user = await auth_service.register_user(user_data)
-                    logger.info(f"Created new user: {nycu_id}")
-                
-                # Generate access token
-                token_response = await auth_service.create_tokens(user)
-                
-                # Create redirect URL with token (for frontend to handle)
-                frontend_url = "https://140.113.7.148"  # Your frontend URL
-                redirect_url = f"{frontend_url}/auth/sso-callback?token={token_response.access_token}&redirect=dashboard"
-                
-                logger.info(f"Redirecting user {nycu_id} to frontend: {redirect_url}")
-                
-                # Return redirect response
-                return RedirectResponse(
-                    url=redirect_url,
-                    status_code=302,
-                    headers={"Set-Cookie": f"access_token={token_response.access_token}; Path=/; HttpOnly; Secure"}
-                )
-                
-            except Exception as user_error:
-                logger.error(f"User creation/login error: {user_error}")
-                # Fallback: return data without redirect
-                return {
-                    "success": True,
-                    "message": "Portal SSO login successful (direct JWT processing)",
-                    "data": {
-                        "nycu_id": nycu_id,
-                        "name": user_name,
-                        "user_type": user_type,
-                        "dept_code": dept_code,
-                        "dept_name": dept_name,
-                        "employee_status": employee_status,
-                        "error": str(user_error)
-                    }
-                }
-            
-        except Exception as jwt_error:
-            logger.error(f"JWT decode error: {jwt_error}")
-            # Fall back to Portal verification if JWT decode fails
-            pass
+        # Create redirect URL with token (for frontend to handle)
+        from fastapi.responses import RedirectResponse
         
-        # Fallback: Try Portal verification
-        login_data = await portal_sso_service.process_portal_login(final_token)
+        frontend_url = "https://140.113.7.148"  # Your frontend URL
+        redirect_url = f"{frontend_url}/auth/sso-callback?token={auth_result['access_token']}&redirect=dashboard"
         
-        # Get access token from login data
-        access_token = login_data.get("access_token")
-        user_data = login_data.get("user", {})
-        user_nycu_id = user_data.get("nycu_id", "unknown")
+        user_info = auth_result.get('user', {})
+        nycu_id = user_info.get('nycu_id', 'unknown')
+        logger.info(f"Redirecting user {nycu_id} to frontend via Portal verification: {redirect_url}")
         
-        if access_token:
-            # Create redirect URL with token
-            frontend_url = "https://140.113.7.148"  # Your frontend URL
-            redirect_url = f"{frontend_url}/auth/sso-callback?token={access_token}&redirect=dashboard"
-            
-            logger.info(f"Redirecting user {user_nycu_id} to frontend via Portal verification: {redirect_url}")
-            
-            # Return redirect response
-            return RedirectResponse(
-                url=redirect_url,
-                status_code=302,
-                headers={"Set-Cookie": f"access_token={access_token}; Path=/; HttpOnly; Secure"}
-            )
-        else:
-            # Fallback to JSON response
-            return {
-                "success": True,
-                "message": "Portal SSO login successful",
-                "data": login_data
-            }
+        # Return redirect response
+        return RedirectResponse(
+            url=redirect_url,
+            status_code=302,
+            headers={"Set-Cookie": f"access_token={auth_result['access_token']}; Path=/; HttpOnly; Secure"}
+        )
     except Exception as e:
         logger.error(f"Portal SSO error: {str(e)}")
         raise HTTPException(
