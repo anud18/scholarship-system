@@ -32,10 +32,26 @@ function SSOCallbackContent() {
 
         // Verify token by making a request to /auth/me
         console.log('🌐 Making API request to verify token...')
+        console.log('🌍 Environment:', process.env.NODE_ENV)
+        console.log('🔗 Base URL config:', process.env.NEXT_PUBLIC_API_URL)
         try {
-          const response = await fetch('/api/v1/auth/me', {
+          // In Docker production, use relative path through nginx proxy
+          // In development, use direct backend URL
+          let requestUrl: string
+          if (process.env.NODE_ENV === 'production') {
+            requestUrl = '/api/v1/auth/me'  // Nginx will proxy to backend
+            console.log('🏭 Production mode - using nginx proxy path')
+          } else {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`
+            requestUrl = `${apiUrl}/api/v1/auth/me`
+            console.log('🛠️ Development mode - using direct backend URL')
+          }
+          console.log('🌐 Final API request URL:', requestUrl)
+          
+          const response = await fetch(requestUrl, {
             headers: {
-              'Authorization': `Bearer ${token}`
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
             }
           })
           
