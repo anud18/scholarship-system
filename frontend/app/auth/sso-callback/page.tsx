@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default function SSOCallbackPage() {
+function SSOCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
@@ -115,5 +115,30 @@ export default function SSOCallbackPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function SSOCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl text-nycu-navy-800">
+              Portal SSO 登入
+            </CardTitle>
+            <CardDescription>
+              正在處理您的登入請求...
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-nycu-blue-600" />
+            <p className="text-nycu-navy-600">正在載入頁面...</p>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <SSOCallbackContent />
+    </Suspense>
   )
 }
