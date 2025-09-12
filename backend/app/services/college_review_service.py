@@ -265,47 +265,100 @@ class CollegeReviewService:
     ) -> CollegeRanking:
         """Create a new ranking for a scholarship sub-type with race condition protection"""
         
-        # Use transaction to prevent race conditions
-        async with self.db.begin():
-            # Check if ranking already exists with row-level locking
-            existing_stmt = select(CollegeRanking).where(
-                and_(
-                    CollegeRanking.scholarship_type_id == scholarship_type_id,
-                    CollegeRanking.sub_type_code == sub_type_code,
-                    CollegeRanking.academic_year == academic_year,
-                    CollegeRanking.semester == semester,
-                    CollegeRanking.is_finalized == False  # Only non-finalized rankings
-                )
-            ).with_for_update()  # Row-level lock to prevent concurrent creation
-            
-            existing_result = await self.db.execute(existing_stmt)
-            existing_ranking = existing_result.scalar_one_or_none()
-            
-            if existing_ranking:
-                return existing_ranking
-            
-            # Proceed with creation since no existing ranking found
+        # Normalize semester value - handle "YEARLY" special case  
+        normalized_semester = None
+        if semester == "YEARLY":
+            # YEARLY means semester is NULL in database
+            normalized_semester = None
+        elif semester:
+            try:
+                # Try to convert to Semester enum
+                normalized_semester = Semester(semester)
+            except ValueError:
+                # If invalid semester, treat as NULL (yearly)
+                normalized_semester = None
+        else:
+            normalized_semester = semester
+        
+        # Check if ranking already exists (without manual transaction management)
+        # The transaction is managed by FastAPI's get_db dependency
+        existing_stmt = select(CollegeRanking).where(
+            and_(
+                CollegeRanking.scholarship_type_id == scholarship_type_id,
+                CollegeRanking.sub_type_code == sub_type_code,
+                CollegeRanking.academic_year == academic_year,
+                CollegeRanking.semester == normalized_semester,
+                CollegeRanking.is_finalized == False  # Only non-finalized rankings
+            )
+        )
+        
+        existing_result = await self.db.execute(existing_stmt)
+        existing_ranking = existing_result.scalar_one_or_none()
+        
+        if existing_ranking:
+            return existing_ranking
         
         # Get applications for this sub-type that have college reviews
-        # First get all applications for the sub-type
-        apps_stmt = select(Application).where(
-            and_(
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.sub_scholarship_type == sub_type_code,
-                Application.academic_year == academic_year,
-                Application.semester == semester
+        # Use the same semester filtering logic as in get_applications_for_review
+        if semester == "YEARLY":
+            # For YEARLY, only get applications where semester is NULL
+            semester_filter = Application.semester.is_(None)
+        elif semester:
+            try:
+                semester_enum = Semester(semester)
+                # Include both semester-specific applications AND yearly applications (semester=NULL)
+                semester_filter = or_(
+                    Application.semester == semester_enum,
+                    Application.semester.is_(None)  # Include yearly scholarships
+                )
+            except ValueError:
+                # If invalid semester value, only show yearly scholarships
+                semester_filter = Application.semester.is_(None)
+        else:
+            # If semester is None, get all applications
+            semester_filter = True
+            
+        # Get all applications for the scholarship type (if sub_type_code is "default", include all sub-types)
+        if sub_type_code == "default":
+            # Include all applications for this scholarship type, regardless of sub-type
+            apps_stmt = select(Application).where(
+                and_(
+                    Application.scholarship_type_id == scholarship_type_id,
+                    Application.academic_year == academic_year,
+                    semester_filter
+                )
             )
-        )
+        else:
+            # Only include applications for the specific sub-type
+            apps_stmt = select(Application).where(
+                and_(
+                    Application.scholarship_type_id == scholarship_type_id,
+                    Application.sub_scholarship_type == sub_type_code,
+                    Application.academic_year == academic_year,
+                    semester_filter
+                )
+            )
         
-        # Get college reviews for this sub-type
-        college_reviews_stmt = select(CollegeReview).join(Application).where(
-            and_(
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.sub_scholarship_type == sub_type_code,
-                Application.academic_year == academic_year,
-                Application.semester == semester
+        # Get college reviews for the scholarship type
+        if sub_type_code == "default":
+            # Include college reviews for all applications of this scholarship type
+            college_reviews_stmt = select(CollegeReview).join(Application).where(
+                and_(
+                    Application.scholarship_type_id == scholarship_type_id,
+                    Application.academic_year == academic_year,
+                    semester_filter
+                )
             )
-        )
+        else:
+            # Only include college reviews for the specific sub-type
+            college_reviews_stmt = select(CollegeReview).join(Application).where(
+                and_(
+                    Application.scholarship_type_id == scholarship_type_id,
+                    Application.sub_scholarship_type == sub_type_code,
+                    Application.academic_year == academic_year,
+                    semester_filter
+                )
+            )
         apps_result = await self.db.execute(apps_stmt)
         applications = apps_result.scalars().all()
         
@@ -313,20 +366,36 @@ class CollegeReviewService:
         college_reviews_result = await self.db.execute(college_reviews_stmt)
         college_reviews = college_reviews_result.scalars().all()
         
-        # Filter applications to only those that have college reviews
-        applications_with_reviews = []
+        # Ensure all applications have college reviews (create default ones if needed)
+        from app.models.college_review import CollegeReview
         college_review_lookup = {review.application_id: review for review in college_reviews}
         
+        # Create default college reviews for applications that don't have them
+        applications_with_reviews = []
         for app in applications:
-            if app.id in college_review_lookup:
-                applications_with_reviews.append((app, college_review_lookup[app.id]))
+            college_review = college_review_lookup.get(app.id)
+            if not college_review:
+                # Create a default college review for applications without one
+                default_review = CollegeReview(
+                    application_id=app.id,
+                    reviewer_id=creator_id,  # Use the ranking creator as default reviewer
+                    status="pending",
+                    ranking_score=0.0,  # Default score
+                    comments="Auto-created for ranking purposes"
+                )
+                self.db.add(default_review)
+                await self.db.flush()  # Flush to get the ID
+                await self.db.refresh(default_review)
+                college_review = default_review
+                
+            applications_with_reviews.append((app, college_review))
         
         # Get quota information from configuration
         config_stmt = select(ScholarshipConfiguration).where(
             and_(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
-                ScholarshipConfiguration.semester == semester,
+                ScholarshipConfiguration.semester == normalized_semester,
                 ScholarshipConfiguration.is_active == True
             )
         )
@@ -335,14 +404,19 @@ class CollegeReviewService:
         
         total_quota = None
         if config and config.has_quota_limit:
-            total_quota = config.get_sub_type_total_quota(sub_type_code)
+            if sub_type_code == "default":
+                # For "default", calculate total quota across all sub-types
+                total_quota = config.total_quota
+            else:
+                # For specific sub-types, get the sub-type quota
+                total_quota = config.get_sub_type_total_quota(sub_type_code)
         
         # Create ranking
         ranking = CollegeRanking(
             scholarship_type_id=scholarship_type_id,
             sub_type_code=sub_type_code,
             academic_year=academic_year,
-            semester=semester,
+            semester=normalized_semester,
             ranking_name=ranking_name or f"{sub_type_code} Ranking AY{academic_year}",
             total_applications=len(applications_with_reviews),
             total_quota=total_quota,
@@ -353,14 +427,22 @@ class CollegeReviewService:
         await self.db.flush()  # Flush within transaction context
         await self.db.refresh(ranking)
         
-        # Create ranking items sorted by college review score
-        applications_with_reviews.sort(key=lambda x: x[1].ranking_score, reverse=True)
+        # Create ranking items - sort by college review score (if available), then by submission date
+        def sort_key(item):
+            app, college_review = item
+            # If college review exists, use its ranking score; otherwise use 0 (lowest priority)
+            score = college_review.ranking_score if college_review else 0
+            # Use submitted_at as secondary sort (earlier submissions get higher priority if same score)
+            submitted_at = app.submitted_at or app.created_at
+            return (score, -submitted_at.timestamp())  # Negative timestamp for descending order
+            
+        applications_with_reviews.sort(key=sort_key, reverse=True)
         
         for rank_position, (app, college_review) in enumerate(applications_with_reviews, 1):
             ranking_item = CollegeRankingItem(
                 ranking_id=ranking.id,
                 application_id=app.id,
-                college_review_id=college_review.id,
+                college_review_id=college_review.id,  # Now guaranteed to exist
                 rank_position=rank_position,
                 total_score=college_review.ranking_score
             )
