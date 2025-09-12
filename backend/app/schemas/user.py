@@ -82,6 +82,23 @@ class UserStatsResponse(BaseModel):
     recent_registrations: int
 
 
+class PortalSSORequest(BaseModel):
+    """Portal SSO verification request schema"""
+    token: Optional[str] = None
+    nycu_id: Optional[str] = None
+    username: Optional[str] = None
+
+
+class DeveloperProfileRequest(BaseModel):
+    """Developer profile creation request schema"""
+    full_name: Optional[str] = None
+    chinese_name: Optional[str] = None
+    english_name: Optional[str] = None
+    role: UserRole
+    email_domain: Optional[str] = "dev.local"
+    custom_attributes: Optional[dict] = None
+
+
 class TokenResponse(BaseModel):
     """Token response schema"""
     access_token: str

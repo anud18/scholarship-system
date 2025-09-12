@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.deps import get_db
-from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse
+from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse, PortalSSORequest, DeveloperProfileRequest
 from app.schemas.common import MessageResponse
 from app.services.auth_service import AuthService
 from app.services.mock_sso_service import MockSSOService
@@ -115,7 +115,7 @@ async def get_mock_users(
 
 @router.post("/mock-sso/login")
 async def mock_sso_login(
-    request_data: dict,
+    request_data: PortalSSORequest,
     db: AsyncSession = Depends(get_db)
 ):
     """Login as mock user for development"""
@@ -155,7 +155,7 @@ async def mock_sso_login(
 
 @router.post("/portal-sso/verify")
 async def portal_sso_verify(
-    request_data: dict,
+    request_data: PortalSSORequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -347,7 +347,7 @@ async def quick_setup_developer(
 @router.post("/dev-profiles/{developer_id}/create-custom")
 async def create_custom_profile(
     developer_id: str,
-    profile_data: dict,
+    profile_data: DeveloperProfileRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """Create a custom test profile for a developer"""
@@ -358,18 +358,15 @@ async def create_custom_profile(
         )
     
     try:
-        # Validate role
-        role = UserRole(profile_data.get("role"))
-        
         # Create profile
         profile = DeveloperProfile(
             developer_id=developer_id,
-            name=profile_data.get("full_name"),  # Keep compatibility with frontend
-            chinese_name=profile_data.get("chinese_name"),
-            english_name=profile_data.get("english_name"),
-            role=role,
-            email_domain=profile_data.get("email_domain", "dev.local"),
-            custom_attributes=profile_data.get("custom_attributes", {})
+            name=profile_data.full_name,  # Keep compatibility with frontend
+            chinese_name=profile_data.chinese_name,
+            english_name=profile_data.english_name,
+            role=profile_data.role,
+            email_domain=profile_data.email_domain,
+            custom_attributes=profile_data.custom_attributes or {}
         )
         
         dev_service = DeveloperProfileService(db)
