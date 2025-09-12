@@ -5,6 +5,7 @@ Authentication API endpoints
 from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
+from datetime import datetime
 
 from app.db.deps import get_db
 from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse, PortalSSORequest, DeveloperProfileRequest
@@ -15,7 +16,7 @@ from app.services.portal_sso_service import PortalSSOService
 from app.services.developer_profile_service import DeveloperProfileService, DeveloperProfile, DeveloperProfileManager
 from app.core.security import get_current_user
 from app.core.config import settings
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserType, EmployeeStatus
 
 router = APIRouter()
 
@@ -277,25 +278,107 @@ async def portal_sso_verify(
                 
             logger.info(f"Processing Portal login for user: {nycu_id} ({user_name})")
             
-            # Create or get user account
+            # Create or get user account and generate access token
             from app.services.auth_service import AuthService
+            from app.models.user import UserRole, UserType, EmployeeStatus
+            from app.schemas.user import UserCreate
+            from fastapi.responses import RedirectResponse
+            
             auth_service = AuthService(db)
             
-            # TODO: Implement proper user creation/login logic
-            # For now, return the extracted data
-            return {
-                "success": True,
-                "message": "Portal SSO login successful (direct JWT processing)",
-                "data": {
-                    "nycu_id": nycu_id,
-                    "name": user_name,
-                    "user_type": user_type,
-                    "dept_code": dept_code,
-                    "dept_name": dept_name,
-                    "employee_status": employee_status,
-                    "raw_jwt_data": decoded_token
-                }
+            # Map Portal user type to our system roles
+            role_mapping = {
+                "student": UserRole.STUDENT,
+                "staff": UserRole.STAFF,
+                "teacher": UserRole.STAFF,
+                "admin": UserRole.ADMIN
             }
+            user_role = role_mapping.get(user_type.lower(), UserRole.STUDENT)
+            
+            # Map Portal user type to our UserType enum
+            user_type_mapping = {
+                "student": UserType.STUDENT,
+                "staff": UserType.STAFF,
+                "teacher": UserType.STAFF,
+                "admin": UserType.STAFF
+            }
+            mapped_user_type = user_type_mapping.get(user_type.lower(), UserType.STUDENT)
+            
+            # Map employee status
+            status_mapping = {
+                "在學": EmployeeStatus.ACTIVE,
+                "在職": EmployeeStatus.ACTIVE,
+                "畢業": EmployeeStatus.INACTIVE,
+                "離職": EmployeeStatus.INACTIVE
+            }
+            mapped_status = status_mapping.get(employee_status, EmployeeStatus.ACTIVE)
+            
+            try:
+                # Try to get existing user
+                from sqlalchemy import select
+                result = await db.execute(select(User).where(User.nycu_id == nycu_id))
+                existing_user = result.scalar_one_or_none()
+                
+                if existing_user:
+                    # Update existing user info
+                    existing_user.name = user_name
+                    existing_user.user_type = mapped_user_type
+                    existing_user.status = mapped_status
+                    existing_user.dept_code = dept_code
+                    existing_user.dept_name = dept_name
+                    existing_user.role = user_role
+                    existing_user.last_login_at = datetime.utcnow()
+                    
+                    await db.commit()
+                    user = existing_user
+                    logger.info(f"Updated existing user: {nycu_id}")
+                else:
+                    # Create new user
+                    user_data = UserCreate(
+                        nycu_id=nycu_id,
+                        name=user_name,
+                        email=f"{nycu_id}@nycu.edu.tw",  # Generate email if not provided
+                        user_type=mapped_user_type,
+                        status=mapped_status,
+                        dept_code=dept_code,
+                        dept_name=dept_name,
+                        role=user_role,
+                        comment=f"Portal SSO user created on {datetime.utcnow()}"
+                    )
+                    
+                    user = await auth_service.register_user(user_data)
+                    logger.info(f"Created new user: {nycu_id}")
+                
+                # Generate access token
+                token_response = await auth_service.create_tokens(user)
+                
+                # Create redirect URL with token (for frontend to handle)
+                frontend_url = "https://140.113.7.148"  # Your frontend URL
+                redirect_url = f"{frontend_url}/auth/sso-callback?token={token_response.access_token}&redirect=dashboard"
+                
+                # Return redirect response
+                return RedirectResponse(
+                    url=redirect_url,
+                    status_code=302,
+                    headers={"Set-Cookie": f"access_token={token_response.access_token}; Path=/; HttpOnly; Secure"}
+                )
+                
+            except Exception as user_error:
+                logger.error(f"User creation/login error: {user_error}")
+                # Fallback: return data without redirect
+                return {
+                    "success": True,
+                    "message": "Portal SSO login successful (direct JWT processing)",
+                    "data": {
+                        "nycu_id": nycu_id,
+                        "name": user_name,
+                        "user_type": user_type,
+                        "dept_code": dept_code,
+                        "dept_name": dept_name,
+                        "employee_status": employee_status,
+                        "error": str(user_error)
+                    }
+                }
             
         except Exception as jwt_error:
             logger.error(f"JWT decode error: {jwt_error}")
