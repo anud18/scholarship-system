@@ -48,10 +48,11 @@ class PortalSSOService:
         try:
             async with httpx.AsyncClient(timeout=settings.portal_sso_timeout) as client:
                 # Post token to Portal JWT server for verification
+                # Portal expects form data, not JSON
                 response = await client.post(
                     settings.portal_jwt_server_url,
-                    json={"token": token},
-                    headers={"Content-Type": "application/json"}
+                    data={"jwt": token},  # Use 'jwt' parameter name like the SSO endpoint
+                    headers={"Content-Type": "application/x-www-form-urlencoded"}
                 )
                 
                 if response.status_code != 200:
