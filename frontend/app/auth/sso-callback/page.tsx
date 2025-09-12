@@ -4,10 +4,12 @@ import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useAuth } from "@/hooks/use-auth"
 
 function SSOCallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { login } = useAuth()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [message, setMessage] = useState('')
 
@@ -22,10 +24,7 @@ function SSOCallbackContent() {
           throw new Error('No token provided')
         }
 
-        // Store token in localStorage
-        localStorage.setItem('auth_token', token)
-        
-        // Optional: Verify token by making a request to /auth/me
+        // Verify token by making a request to /auth/me
         try {
           const response = await fetch('/api/v1/auth/me', {
             headers: {
@@ -35,7 +34,10 @@ function SSOCallbackContent() {
           
           if (response.ok) {
             const userData = await response.json()
-            localStorage.setItem('user', JSON.stringify(userData.data))
+            
+            // Use the login function from useAuth to properly set authentication state
+            login(token, userData.data)
+            
             setStatus('success')
             setMessage('登入成功！正在重導向...')
             
@@ -61,15 +63,14 @@ function SSOCallbackContent() {
             throw new Error('Token verification failed')
           }
         } catch (verifyError) {
-          // If verification fails, still proceed with the token
-          console.warn('Token verification failed, proceeding anyway:', verifyError)
-          setStatus('success')
-          setMessage('登入成功！正在重導向...')
+          console.error('Token verification failed:', verifyError)
+          setStatus('error')
+          setMessage('登入驗證失敗，請重新嘗試')
           
-          // Default redirect to main page when verification fails
+          // Redirect to login page after error
           setTimeout(() => {
-            router.push('/#main')
-          }, 1500)
+            router.push('/')
+          }, 3000)
         }
 
       } catch (error) {
