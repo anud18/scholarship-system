@@ -305,10 +305,11 @@ async def portal_sso_verify(
             
             # Map employee status
             status_mapping = {
-                "在學": EmployeeStatus.ACTIVE,
+                "在學": EmployeeStatus.STUDENT,
                 "在職": EmployeeStatus.ACTIVE,
-                "畢業": EmployeeStatus.INACTIVE,
-                "離職": EmployeeStatus.INACTIVE
+                "退休": EmployeeStatus.RETIRED,
+                "畢業": EmployeeStatus.GRADUATED,
+                "離職": EmployeeStatus.RETIRED  # Map to RETIRED as closest match
             }
             mapped_status = status_mapping.get(employee_status, EmployeeStatus.ACTIVE)
             

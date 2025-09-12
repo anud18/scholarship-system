@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.exceptions import AuthenticationError
 from app.models.user import User, UserRole, UserType, EmployeeStatus
 from app.services.auth_service import AuthService
+from app.services.student_service import StudentService
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class PortalSSOService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.auth_service = AuthService(db)
+        self.student_service = StudentService()
     
     async def verify_portal_token(self, token: str) -> Dict:
         """
@@ -114,6 +116,35 @@ class PortalSSOService:
         required_fields = ["txtID", "nycuID", "txtName"]
         return all(field in data and data[field] for field in required_fields)
     
+    async def _verify_student_status(self, nycu_id: str) -> tuple[bool, Optional[Dict]]:
+        """
+        Verify if user is a student using Student API
+        
+        Args:
+            nycu_id: NYCU ID to verify
+            
+        Returns:
+            tuple: (is_student, student_data)
+        """
+        try:
+            if not self.student_service.api_enabled:
+                logger.warning("Student API is disabled, cannot verify student status")
+                return False, None
+                
+            # Try to get student data from the API
+            student_data = await self.student_service.get_student_info(nycu_id)
+            
+            if student_data:
+                logger.info(f"User {nycu_id} verified as student via Student API")
+                return True, student_data
+            else:
+                logger.info(f"User {nycu_id} not found in Student API")
+                return False, None
+                
+        except Exception as e:
+            logger.error(f"Error verifying student status for {nycu_id}: {str(e)}")
+            return False, None
+    
     def _get_test_portal_data(self) -> Dict:
         """Return test portal data for development"""
         return {
@@ -149,11 +180,35 @@ class PortalSSOService:
         email = portal_data.get("mail")
         dept_name = portal_data.get("dept")
         dept_code = portal_data.get("deptCode")
-        user_type = portal_data.get("userType", "student")
+        portal_user_type = portal_data.get("userType", "student")  # Portal's claimed user type
         status = portal_data.get("employeestatus", "在學")
         
         if not nycu_id or not name:
             raise AuthenticationError("Incomplete user data from Portal")
+        
+        # Verify actual student status using Student API (don't rely on Portal's dept)
+        is_student, student_data = await self._verify_student_status(nycu_id)
+        
+        # Determine actual user type and role based on Student API verification
+        if is_student:
+            user_type = "student"
+            user_role = UserRole.STUDENT
+            mapped_user_type = UserType.STUDENT
+            logger.info(f"User {nycu_id} confirmed as student via Student API")
+        else:
+            # Not a student according to Student API, use Portal's classification
+            user_type = portal_user_type
+            if portal_user_type.lower() in ["employee", "staff", "teacher"]:
+                user_role = UserRole.PROFESSOR  # Default employees to professor
+                mapped_user_type = UserType.EMPLOYEE
+            elif portal_user_type.lower() == "admin":
+                user_role = UserRole.ADMIN
+                mapped_user_type = UserType.EMPLOYEE
+            else:
+                # Fallback to student if uncertain
+                user_role = UserRole.STUDENT
+                mapped_user_type = UserType.STUDENT
+            logger.info(f"User {nycu_id} classified as {user_type} based on Portal data")
         
         # Generate email if not provided
         if not email:
@@ -166,9 +221,11 @@ class PortalSSOService:
             email=email,
             dept_name=dept_name,
             dept_code=dept_code,
-            user_type=user_type,
+            user_type=mapped_user_type,
+            user_role=user_role,
             status=status,
-            raw_data=portal_data
+            raw_data=portal_data,
+            student_data=student_data
         )
         
         # Update last login time
@@ -192,9 +249,11 @@ class PortalSSOService:
         email: str,
         dept_name: Optional[str] = None,
         dept_code: Optional[str] = None,
-        user_type: str = "student",
+        user_type: UserType = UserType.STUDENT,
+        user_role: UserRole = UserRole.STUDENT,
         status: str = "在學",
-        raw_data: Optional[Dict] = None
+        raw_data: Optional[Dict] = None,
+        student_data: Optional[Dict] = None
     ) -> User:
         """Find existing user or create new one"""
         
@@ -207,35 +266,47 @@ class PortalSSOService:
             # Update existing user data
             user.name = name
             user.email = email
+            user.role = user_role  # Update role based on Student API verification
+            user.user_type = user_type  # Update user type based on verification
             if dept_name:
                 user.dept_name = dept_name
             if dept_code:
                 user.dept_code = dept_code
             user.raw_data = raw_data
+            # Store student data if available
+            if student_data:
+                if user.raw_data:
+                    user.raw_data["student_api_data"] = student_data
+                else:
+                    user.raw_data = {"student_api_data": student_data}
+            logger.info(f"Updated existing user {nycu_id} with role {user_role.value}")
             return user
         
-        # Create new user
-        user_role = self._map_user_type_to_role(user_type)
-        user_type_enum = self._map_user_type_to_enum(user_type)
+        # Create new user  
         user_status_enum = self._map_status_to_enum(status)
+        
+        # Prepare raw data with student information
+        combined_raw_data = raw_data or {}
+        if student_data:
+            combined_raw_data["student_api_data"] = student_data
         
         new_user = User(
             nycu_id=nycu_id,
             name=name,
             email=email,
             role=user_role,
-            user_type=user_type_enum,
+            user_type=user_type,
             status=user_status_enum,
             dept_name=dept_name,
             dept_code=dept_code,
-            raw_data=raw_data
+            raw_data=combined_raw_data
         )
         
         self.db.add(new_user)
         await self.db.commit()
         await self.db.refresh(new_user)
         
-        logger.info(f"Created new user from Portal SSO: {nycu_id} ({name})")
+        logger.info(f"Created new user from Portal SSO: {nycu_id} ({name}) with role {user_role.value}")
         return new_user
     
     def _map_user_type_to_role(self, user_type: str) -> UserRole:
