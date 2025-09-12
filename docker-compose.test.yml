@@ -102,11 +102,11 @@ services:
       PORTAL_JWT_SERVER_URL: "https://portal.test.nycu.edu.tw/jwt/portal"
       PORTAL_TEST_MODE: "false"
       PORTAL_SSO_TIMEOUT: "10.0"
-      # Student API Configuration
+      # Student API Configuration (Real NYCU API)
       STUDENT_API_ENABLED: "true"
-      STUDENT_API_BASE_URL: "http://mock-student-api:8080"
+      STUDENT_API_BASE_URL: "https://mapi.it.nycu.edu.tw"
       STUDENT_API_ACCOUNT: "scholarship"
-      STUDENT_API_HMAC_KEY: "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
+      STUDENT_API_HMAC_KEY: "2a5e453eb3a673a8ab3d65eb5ffa0b290acbadb6ecdd160d41"
       STUDENT_API_TIMEOUT: "10.0"
       STUDENT_API_ENCODE_TYPE: "UTF-8"
     volumes:
@@ -118,35 +118,33 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      mock-student-api:
-        condition: service_started
     networks:
       - scholarship_test_network
     restart: unless-stopped
 
-  # Mock Student API (University System Mock)
-  mock-student-api:
-    build:
-      context: ./mock-student-api
-      dockerfile: Dockerfile
-    container_name: scholarship_mock_student_api_test
-    command: uvicorn main:app --host 0.0.0.0 --port 8080
-    ports:
-      - "8080:8080"
-    environment:
-      DATABASE_URL: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
-      MOCK_HMAC_KEY_HEX: 4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
-      STRICT_TIME_CHECK: "false"  # Relaxed for testing
-      STRICT_ENCODE_CHECK: "false"
-      TIME_TOLERANCE_MINUTES: "30"  # Extended tolerance for testing
-    volumes:
-      - ./mock-student-api:/app
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - scholarship_test_network
-    restart: unless-stopped
+  # Mock Student API - Disabled (using real NYCU Student API)
+  # mock-student-api:
+  #   build:
+  #     context: ./mock-student-api
+  #     dockerfile: Dockerfile
+  #   container_name: scholarship_mock_student_api_test
+  #   command: uvicorn main:app --host 0.0.0.0 --port 8080
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     DATABASE_URL: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+  #     MOCK_HMAC_KEY_HEX: 4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
+  #     STRICT_TIME_CHECK: "false"  # Relaxed for testing
+  #     STRICT_ENCODE_CHECK: "false"
+  #     TIME_TOLERANCE_MINUTES: "30"  # Extended tolerance for testing
+  #   volumes:
+  #     - ./mock-student-api:/app
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - scholarship_test_network
+  #   restart: unless-stopped
 
   # Nginx Load Balancer
   nginx:
@@ -185,15 +183,12 @@ services:
       NODE_ENV: production
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
-      # Mock Student API URL for development
-      MOCK_STUDENT_API_URL: http://mock-student-api:8080
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     depends_on:
       - backend
-      - mock-student-api
     networks:
       - scholarship_test_network
     restart: unless-stopped
