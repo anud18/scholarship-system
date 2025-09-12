@@ -2,7 +2,7 @@
 Authentication API endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.deps import get_db
@@ -155,7 +155,9 @@ async def mock_sso_login(
 
 @router.post("/portal-sso/verify")
 async def portal_sso_verify(
-    request_data: PortalSSORequest,
+    token: str = Form(None),
+    nycu_id: str = Form(None),
+    username: str = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -171,8 +173,7 @@ async def portal_sso_verify(
         )
     
     # Handle both real Portal tokens and mock/test data
-    token = request_data.token
-    nycu_id = request_data.nycu_id or request_data.username
+    nycu_id = nycu_id or username
     
     # If no token provided, fall back to mock SSO for testing
     if not token and nycu_id and settings.enable_mock_sso:
