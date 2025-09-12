@@ -49,11 +49,36 @@ class PortalSSOService:
             async with httpx.AsyncClient(timeout=settings.portal_sso_timeout) as client:
                 # Post token to Portal JWT server for verification
                 # Portal expects form data, not JSON
+                # Try multiple parameter combinations that Portal might expect
+                logger.info(f"Attempting Portal JWT verification with token: {token[:50]}...")
+                
+                # First attempt: just the token
                 response = await client.post(
                     settings.portal_jwt_server_url,
-                    data={"jwt": token},  # Use 'jwt' parameter name like the SSO endpoint
+                    data={"token": token},  # Try 'token' parameter name
                     headers={"Content-Type": "application/x-www-form-urlencoded"}
                 )
+                
+                # If that fails, try alternative parameter names
+                if response.status_code == 406:
+                    logger.info("First attempt failed, trying 'jwt' parameter name...")
+                    response = await client.post(
+                        settings.portal_jwt_server_url,
+                        data={"jwt": token},
+                        headers={"Content-Type": "application/x-www-form-urlencoded"}
+                    )
+                    
+                # If still fails, try with additional context
+                if response.status_code == 406:
+                    logger.info("Second attempt failed, trying with callback URL...")
+                    response = await client.post(
+                        settings.portal_jwt_server_url,
+                        data={
+                            "token": token,
+                            "callback_url": "https://140.113.7.148/api/v1/auth/portal-sso/verify"
+                        },
+                        headers={"Content-Type": "application/x-www-form-urlencoded"}
+                    )
                 
                 if response.status_code != 200:
                     logger.error(f"Portal JWT verification failed: {response.status_code} - {response.text}")
