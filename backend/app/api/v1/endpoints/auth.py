@@ -125,7 +125,7 @@ async def mock_sso_login(
             detail="Mock SSO is disabled"
         )
     
-    nycu_id = request_data.get("nycu_id") or request_data.get("username")  # 支持兩種參數名稱
+    nycu_id = request_data.nycu_id or request_data.username  # 支持兩種參數名稱
     if not nycu_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -171,8 +171,8 @@ async def portal_sso_verify(
         )
     
     # Handle both real Portal tokens and mock/test data
-    token = request_data.get("token")
-    nycu_id = request_data.get("nycu_id") or request_data.get("username")
+    token = request_data.token
+    nycu_id = request_data.nycu_id or request_data.username
     
     # If no token provided, fall back to mock SSO for testing
     if not token and nycu_id and settings.enable_mock_sso:
