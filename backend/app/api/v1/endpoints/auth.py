@@ -255,13 +255,13 @@ async def portal_sso_verify(
         portal_sso_service = PortalSSOService(db)
         
         # Try direct JWT processing first (bypass Portal verification for testing)
-        import jwt as jwt_lib
+        from jose import jwt as jwt_lib
         import json
         
         try:
             # Decode JWT without verification to extract user data
             # This is for testing - in production you'd verify the signature
-            decoded_token = jwt_lib.decode(final_token, options={"verify_signature": False})
+            decoded_token = jwt_lib.get_unverified_claims(final_token)
             logger.info(f"Decoded JWT payload: {decoded_token}")
             
             # Extract user information from JWT
@@ -297,7 +297,7 @@ async def portal_sso_verify(
                 }
             }
             
-        except jwt_lib.InvalidTokenError as jwt_error:
+        except Exception as jwt_error:
             logger.error(f"JWT decode error: {jwt_error}")
             # Fall back to Portal verification if JWT decode fails
             pass
