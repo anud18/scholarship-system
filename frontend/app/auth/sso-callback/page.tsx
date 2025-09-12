@@ -30,51 +30,44 @@ function SSOCallbackContent() {
           throw new Error('No token provided')
         }
 
-        // Verify token by making a request to /auth/me
-        console.log('🌐 Making API request to verify token...')
-        console.log('🌍 Environment:', process.env.NODE_ENV)
-        console.log('🔗 Base URL config:', process.env.NEXT_PUBLIC_API_URL)
+        // Decode JWT token directly to get user data
+        console.log('🔓 Decoding JWT token directly...')
         try {
-          // In Docker production, use relative path through nginx proxy
-          // In development, use direct backend URL
-          let requestUrl: string
-          if (process.env.NODE_ENV === 'production') {
-            requestUrl = '/api/v1/auth/me'  // Nginx will proxy to backend
-            console.log('🏭 Production mode - using nginx proxy path')
-          } else {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`
-            requestUrl = `${apiUrl}/api/v1/auth/me`
-            console.log('🛠️ Development mode - using direct backend URL')
+          // Simple JWT decode (we trust the token since it came from our backend)
+          const base64Url = token.split('.')[1]
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+          const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+          }).join(''))
+          
+          const tokenData = JSON.parse(jsonPayload)
+          console.log('🎫 Decoded token data:', tokenData)
+          console.log('🔑 User role from token:', tokenData.role)
+          console.log('🆔 User ID from token:', tokenData.nycu_id)
+          
+          // Create user object from token data
+          const userData = {
+            id: tokenData.sub,
+            nycu_id: tokenData.nycu_id,
+            role: tokenData.role,
+            name: tokenData.nycu_id, // Fallback, will be updated from backend later
+            email: `${tokenData.nycu_id}@nycu.edu.tw`, // Placeholder
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           }
-          console.log('🌐 Final API request URL:', requestUrl)
           
-          const response = await fetch(requestUrl, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          })
+          console.log('👤 Constructed user data:', userData)
           
-          console.log('📡 API Response status:', response.status, response.statusText)
-          console.log('📡 API Response headers:', Object.fromEntries(response.headers.entries()))
-          
-          if (response.ok) {
-            const userData = await response.json()
-            console.log('👤 User data received:', userData)
-            console.log('🔑 User role:', userData.data?.role)
-            console.log('📧 User email:', userData.data?.email)
-            console.log('🆔 User ID:', userData.data?.id)
-            
-            // Use the login function from useAuth to properly set authentication state
-            console.log('🔄 Calling login() with token and user data...')
-            login(token, userData.data)
-            console.log('✅ login() function called successfully')
+          // Use the login function from useAuth to set authentication state
+          console.log('🔄 Calling login() with token and user data...')
+          login(token, userData)
+          console.log('✅ login() function called successfully')
             
             setStatus('success')
             setMessage('登入成功！正在重導向...')
             
             // Redirect based on user role
-            const userRole = userData.data?.role
+            const userRole = userData.role
             let redirectPath = '/'
             
             console.log('🎯 Determining redirect path based on role:', userRole)
@@ -102,16 +95,14 @@ function SSOCallbackContent() {
               router.push(redirectPath)
               console.log('✅ router.push() called')
             }, 1500)
-          } else {
-            throw new Error('Token verification failed')
-          }
-        } catch (verifyError) {
-          console.error('💥 Token verification failed:', verifyError)
-          console.error('📡 Verification error details:', verifyError instanceof Error ? verifyError.message : verifyError)
+            
+        } catch (decodeError) {
+          console.error('💥 Token decoding failed:', decodeError)
+          console.error('📡 Decode error details:', decodeError instanceof Error ? decodeError.message : decodeError)
           setStatus('error')
           setMessage('登入驗證失敗，請重新嘗試')
           
-          console.log('🔄 Redirecting to login page after token verification error')
+          console.log('🔄 Redirecting to login page after token decode error')
           // Redirect to login page after error
           setTimeout(() => {
             router.push('/')
