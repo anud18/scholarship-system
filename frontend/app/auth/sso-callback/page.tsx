@@ -39,9 +39,23 @@ function SSOCallbackContent() {
             setStatus('success')
             setMessage('登入成功！正在重導向...')
             
-            // Redirect to dashboard after a brief delay
+            // Redirect based on user role
+            const userRole = userData.data?.role
+            let redirectPath = '/'
+            
+            // Role-based redirection
+            if (userRole === 'admin' || userRole === 'super_admin') {
+              redirectPath = '/#dashboard'  // Admin dashboard
+            } else if (userRole === 'professor') {
+              redirectPath = '/#main'  // Professor review page
+            } else if (userRole === 'college') {
+              redirectPath = '/#main'  // College dashboard
+            } else {
+              redirectPath = '/#main'  // Student portal
+            }
+            
             setTimeout(() => {
-              router.push('/')
+              router.push(redirectPath)
             }, 1500)
           } else {
             throw new Error('Token verification failed')
@@ -52,8 +66,9 @@ function SSOCallbackContent() {
           setStatus('success')
           setMessage('登入成功！正在重導向...')
           
+          // Default redirect to main page when verification fails
           setTimeout(() => {
-            router.push('/')
+            router.push('/#main')
           }, 1500)
         }
 

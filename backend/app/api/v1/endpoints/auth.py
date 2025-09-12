@@ -288,8 +288,8 @@ async def portal_sso_verify(
             # Map Portal user type to our system roles
             role_mapping = {
                 "student": UserRole.STUDENT,
-                "staff": UserRole.STAFF,
-                "teacher": UserRole.STAFF,
+                "staff": UserRole.PROFESSOR,  # Staff mapped to professor
+                "teacher": UserRole.PROFESSOR,  # Teacher mapped to professor
                 "admin": UserRole.ADMIN
             }
             user_role = role_mapping.get(user_type.lower(), UserRole.STUDENT)
@@ -297,9 +297,9 @@ async def portal_sso_verify(
             # Map Portal user type to our UserType enum
             user_type_mapping = {
                 "student": UserType.STUDENT,
-                "staff": UserType.STAFF,
-                "teacher": UserType.STAFF,
-                "admin": UserType.STAFF
+                "staff": UserType.EMPLOYEE,  # Staff mapped to employee
+                "teacher": UserType.EMPLOYEE,  # Teacher mapped to employee
+                "admin": UserType.EMPLOYEE  # Admin mapped to employee
             }
             mapped_user_type = user_type_mapping.get(user_type.lower(), UserType.STUDENT)
             
