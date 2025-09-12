@@ -7,11 +7,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useAuth } from "@/hooks/use-auth"
 
 function SSOCallbackContent() {
+  console.log('🚀 SSOCallbackContent component is rendering!')
+  
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login } = useAuth()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [message, setMessage] = useState('')
+  
+  console.log('🔍 SearchParams available:', !!searchParams)
+  console.log('🔍 Current search params:', searchParams ? Object.fromEntries(searchParams.entries()) : 'Not available')
 
   useEffect(() => {
     const handleSSOCallback = async () => {
@@ -174,9 +179,13 @@ function SSOCallbackContent() {
 }
 
 export default function SSOCallbackPage() {
+  console.log('🎯 SSO Callback Page component is rendering!')
+  console.log('📍 Current location:', typeof window !== 'undefined' ? window.location.href : 'SSR')
+  
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex items-center justify-center">
+        {console.log('⏸️ SSO Callback Suspense fallback is rendering!')}
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl text-nycu-navy-800">
