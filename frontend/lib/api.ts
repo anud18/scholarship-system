@@ -948,8 +948,10 @@ class ApiClient {
 
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`
+      console.log('🔐 API Request with auth token to:', endpoint, 'Token preview:', this.token.substring(0, 20) + '...')
     } else {
-      console.warn('No auth token available for request to:', endpoint)
+      console.warn('❌ No auth token available for request to:', endpoint)
+      console.warn('❌ localStorage auth_token:', typeof window !== 'undefined' ? localStorage.getItem('auth_token') : 'N/A')
     }
 
     // Remove params from options before passing to fetch
