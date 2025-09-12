@@ -2,8 +2,9 @@
 Authentication API endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
 from app.db.deps import get_db
 from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse, PortalSSORequest, DeveloperProfileRequest
@@ -153,11 +154,35 @@ async def mock_sso_login(
         )
 
 
+async def get_portal_sso_data(
+    request: Request,
+    # Form parameters (for application/x-www-form-urlencoded)
+    token: Optional[str] = Form(None),
+    nycu_id: Optional[str] = Form(None),
+    username: Optional[str] = Form(None),
+    # JSON body (for application/json) - optional fallback
+    request_data: Optional[PortalSSORequest] = None
+) -> tuple[Optional[str], Optional[str]]:
+    """Extract portal SSO data from either form or JSON body"""
+    content_type = request.headers.get("content-type", "")
+    
+    if "application/x-www-form-urlencoded" in content_type:
+        # Use form data
+        return token, nycu_id or username
+    elif "application/json" in content_type and request_data:
+        # Use JSON data
+        return request_data.token, request_data.nycu_id or request_data.username
+    else:
+        # Default to form data even if content-type is unclear
+        return token, nycu_id or username
+
+
 @router.post("/portal-sso/verify")
 async def portal_sso_verify(
-    token: str = Form(None),
-    nycu_id: str = Form(None),
-    username: str = Form(None),
+    request: Request,
+    token: Optional[str] = Form(None),
+    nycu_id: Optional[str] = Form(None),
+    username: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -172,14 +197,15 @@ async def portal_sso_verify(
             detail="Portal SSO is disabled"
         )
     
-    # Handle both real Portal tokens and mock/test data
-    nycu_id = nycu_id or username
+    # Extract data from form parameters (primary method for Portal SSO)
+    final_token = token
+    final_nycu_id = nycu_id or username
     
     # If no token provided, fall back to mock SSO for testing
-    if not token and nycu_id and settings.enable_mock_sso:
+    if not final_token and final_nycu_id and settings.enable_mock_sso:
         try:
             mock_sso_service = MockSSOService(db)
-            portal_data = await mock_sso_service.get_portal_sso_data(nycu_id)
+            portal_data = await mock_sso_service.get_portal_sso_data(final_nycu_id)
             
             # Return in exact portal format for testing
             return {
@@ -194,7 +220,7 @@ async def portal_sso_verify(
             )
     
     # Real Portal SSO flow
-    if not token:
+    if not final_token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Token is required for Portal SSO"
@@ -202,7 +228,7 @@ async def portal_sso_verify(
     
     try:
         portal_sso_service = PortalSSOService(db)
-        login_data = await portal_sso_service.process_portal_login(token)
+        login_data = await portal_sso_service.process_portal_login(final_token)
         
         return {
             "success": True,
