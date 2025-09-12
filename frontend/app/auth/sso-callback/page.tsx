@@ -20,11 +20,18 @@ function SSOCallbackContent() {
         const token = searchParams.get('token')
         const redirectPath = searchParams.get('redirect') || 'dashboard'
         
+        console.log('🔐 SSO Callback - Starting authentication process')
+        console.log('📄 URL Search Params:', Object.fromEntries(searchParams.entries()))
+        console.log('🎟️ Token received:', !!token, token ? `${token.substring(0, 20)}...` : 'none')
+        console.log('🔄 Redirect path:', redirectPath)
+        
         if (!token) {
+          console.error('❌ No token provided in URL parameters')
           throw new Error('No token provided')
         }
 
         // Verify token by making a request to /auth/me
+        console.log('🌐 Making API request to verify token...')
         try {
           const response = await fetch('/api/v1/auth/me', {
             headers: {
@@ -32,11 +39,20 @@ function SSOCallbackContent() {
             }
           })
           
+          console.log('📡 API Response status:', response.status, response.statusText)
+          console.log('📡 API Response headers:', Object.fromEntries(response.headers.entries()))
+          
           if (response.ok) {
             const userData = await response.json()
+            console.log('👤 User data received:', userData)
+            console.log('🔑 User role:', userData.data?.role)
+            console.log('📧 User email:', userData.data?.email)
+            console.log('🆔 User ID:', userData.data?.id)
             
             // Use the login function from useAuth to properly set authentication state
+            console.log('🔄 Calling login() with token and user data...')
             login(token, userData.data)
+            console.log('✅ login() function called successfully')
             
             setStatus('success')
             setMessage('登入成功！正在重導向...')
@@ -45,28 +61,41 @@ function SSOCallbackContent() {
             const userRole = userData.data?.role
             let redirectPath = '/'
             
+            console.log('🎯 Determining redirect path based on role:', userRole)
+            
             // Role-based redirection
             if (userRole === 'admin' || userRole === 'super_admin') {
               redirectPath = '/#dashboard'  // Admin dashboard
+              console.log('👑 Admin/Super Admin - redirecting to dashboard')
             } else if (userRole === 'professor') {
               redirectPath = '/#main'  // Professor review page
+              console.log('🎓 Professor - redirecting to main')
             } else if (userRole === 'college') {
               redirectPath = '/#main'  // College dashboard
+              console.log('🏫 College - redirecting to main')
             } else {
               redirectPath = '/#main'  // Student portal
+              console.log('🎒 Student - redirecting to main')
             }
             
+            console.log('🚀 Final redirect path:', redirectPath)
+            console.log('⏰ Setting 1.5 second delay before redirect...')
+            
             setTimeout(() => {
+              console.log('⏰ Timeout reached, executing router.push...')
               router.push(redirectPath)
+              console.log('✅ router.push() called')
             }, 1500)
           } else {
             throw new Error('Token verification failed')
           }
         } catch (verifyError) {
-          console.error('Token verification failed:', verifyError)
+          console.error('💥 Token verification failed:', verifyError)
+          console.error('📡 Verification error details:', verifyError instanceof Error ? verifyError.message : verifyError)
           setStatus('error')
           setMessage('登入驗證失敗，請重新嘗試')
           
+          console.log('🔄 Redirecting to login page after token verification error')
           // Redirect to login page after error
           setTimeout(() => {
             router.push('/')
@@ -74,10 +103,13 @@ function SSOCallbackContent() {
         }
 
       } catch (error) {
-        console.error('SSO callback error:', error)
+        console.error('💥 SSO callback error:', error)
+        console.error('💥 Error details:', error instanceof Error ? error.message : error)
+        console.error('💥 Error stack:', error instanceof Error ? error.stack : 'No stack trace')
         setStatus('error')
         setMessage('登入失敗，請重新嘗試')
         
+        console.log('🔄 Redirecting to login page after general error')
         // Redirect to login page after error
         setTimeout(() => {
           router.push('/')

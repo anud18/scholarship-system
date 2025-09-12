@@ -55,21 +55,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback((token: string, userData: User) => {
-    console.log('Setting authentication:', { token: !!token, userData })
-    apiClient.setToken(token)
-    localStorage.setItem("auth_token", token)
-    localStorage.setItem("user", JSON.stringify(userData))
+    console.log('🔐 useAuth.login() called with:', { 
+      token: !!token, 
+      tokenPreview: token ? `${token.substring(0, 20)}...` : 'none',
+      userData 
+    })
     
-    // Also store as dev_user for backwards compatibility
-    const devUser = {
-      ...userData,
-      name: userData.full_name || userData.name,
+    try {
+      console.log('🌐 Setting API client token...')
+      apiClient.setToken(token)
+      console.log('✅ API client token set')
+      
+      console.log('💾 Storing token in localStorage...')
+      localStorage.setItem("auth_token", token)
+      console.log('💾 Storing user data in localStorage...')
+      localStorage.setItem("user", JSON.stringify(userData))
+      
+      // Also store as dev_user for backwards compatibility
+      const devUser = {
+        ...userData,
+        name: userData.full_name || userData.name,
+      }
+      console.log('💾 Storing dev_user for backwards compatibility...')
+      localStorage.setItem('dev_user', JSON.stringify(devUser))
+      
+      const finalUser = { ...userData, name: userData.full_name || userData.name }
+      console.log('👤 Setting user state:', finalUser)
+      setUser(finalUser)
+      setError(null)
+      console.log('✅ useAuth.login() completed successfully')
+      console.log('🔍 Final authentication state:', {
+        userSet: !!finalUser,
+        userRole: finalUser.role,
+        errorCleared: true
+      })
+    } catch (error) {
+      console.error('💥 Error in useAuth.login():', error)
+      setError(error instanceof Error ? error.message : 'Login failed')
     }
-    localStorage.setItem('dev_user', JSON.stringify(devUser))
-    
-    setUser({ ...userData, name: userData.full_name || userData.name })
-    setError(null)
-    console.log('Authentication set successfully')
   }, [])
 
   const logout = useCallback(() => {

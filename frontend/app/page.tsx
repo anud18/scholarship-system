@@ -60,13 +60,13 @@ export default function ScholarshipManagementSystem() {
 
   // 調試信息
   useEffect(() => {
-    console.log('ScholarshipManagementSystem mounted')
-    console.log('User:', user)
-    console.log('Is Authenticated:', isAuthenticated)
-    console.log('Auth Loading:', authLoading)
-    console.log('Auth Error:', authError)
-    console.log('Recent Applications:', recentApplications)
-    console.log('Error:', error)
+    console.log('🏠 ScholarshipManagementSystem mounted')
+    console.log('👤 User:', user)
+    console.log('🔐 Is Authenticated:', isAuthenticated)
+    console.log('⏳ Auth Loading:', authLoading)
+    console.log('❌ Auth Error:', authError)
+    console.log('📄 Recent Applications:', recentApplications)
+    console.log('🚨 Error:', error)
     
     // 檢查 localStorage 中的認證信息
     if (typeof window !== 'undefined') {
@@ -98,19 +98,29 @@ export default function ScholarshipManagementSystem() {
 
   // Set initial active tab based on user role
   useEffect(() => {
+    console.log('🎯 Setting active tab based on user role...')
     if (user) {
+      console.log('👤 User role detected:', user.role)
       // Set each role to their first available tab (index 0)
       if (user.role === "student") {
+        console.log('🎒 Student role - setting tab to "main"')
         setActiveTab("main")
       } else if (user.role === "professor") {
+        console.log('🎓 Professor role - setting tab to "main"')
         setActiveTab("main")
       } else if (user.role === "college") {
+        console.log('🏫 College role - setting tab to "main"')
         setActiveTab("main")
       } else if (user.role === "admin") {
+        console.log('👑 Admin role - setting tab to "dashboard"')
         setActiveTab("dashboard")
       } else if (user.role === "super_admin") {
+        console.log('👑 Super Admin role - setting tab to "dashboard"')
         setActiveTab("dashboard")
       }
+      console.log('✅ Active tab set based on user role')
+    } else {
+      console.log('❌ No user found, cannot set active tab')
     }
   }, [user])
 
