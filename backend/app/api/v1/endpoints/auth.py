@@ -280,7 +280,6 @@ async def portal_sso_verify(
             
             # Create or get user account and generate access token
             from app.services.auth_service import AuthService
-            from app.models.user import UserRole, UserType, EmployeeStatus
             from app.schemas.user import UserCreate
             from fastapi.responses import RedirectResponse
             

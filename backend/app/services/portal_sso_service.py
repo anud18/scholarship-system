@@ -87,11 +87,16 @@ class PortalSSOService:
                 portal_data = response.json()
                 
                 # Validate portal response format
-                if not self._validate_portal_response(portal_data):
+                if portal_data.get("status") == "true" and "data" in portal_data:
+                    # Extract user data from nested structure
+                    user_data = portal_data["data"]
+                    if not self._validate_portal_response(user_data):
+                        logger.error(f"Invalid user data in portal response: {user_data}")
+                        raise AuthenticationError("Invalid user data format")
+                    return user_data
+                else:
                     logger.error(f"Invalid portal response format: {portal_data}")
                     raise AuthenticationError("Invalid portal response format")
-                
-                return portal_data
                 
         except httpx.TimeoutException:
             logger.error("Portal JWT verification timeout")
@@ -105,8 +110,9 @@ class PortalSSOService:
     
     def _validate_portal_response(self, data: Dict) -> bool:
         """Validate portal response contains required fields"""
-        required_fields = ["txtID", "nycuID", "txtName", "mail"]
-        return all(field in data for field in required_fields)
+        # Only require essential fields, mail can be None
+        required_fields = ["txtID", "nycuID", "txtName"]
+        return all(field in data and data[field] for field in required_fields)
     
     def _get_test_portal_data(self) -> Dict:
         """Return test portal data for development"""
@@ -146,8 +152,12 @@ class PortalSSOService:
         user_type = portal_data.get("userType", "student")
         status = portal_data.get("employeestatus", "在學")
         
-        if not nycu_id or not name or not email:
+        if not nycu_id or not name:
             raise AuthenticationError("Incomplete user data from Portal")
+        
+        # Generate email if not provided
+        if not email:
+            email = f"{nycu_id}@nycu.edu.tw"
         
         # Find or create user
         user = await self._find_or_create_user(
