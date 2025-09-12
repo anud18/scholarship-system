@@ -44,6 +44,82 @@ export default function ScholarshipManagementSystem() {
     console.log('🌐 Current URL after tab change:', typeof window !== 'undefined' ? window.location.href : 'SSR')
   }, [activeTab])
   
+  // Check if this is an SSO callback request
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname
+      const searchParams = new URLSearchParams(window.location.search)
+      
+      console.log('🔍 Checking current path:', path)
+      console.log('🔍 URL search params:', Object.fromEntries(searchParams.entries()))
+      
+      if (path === '/auth/sso-callback') {
+        console.log('🎯 Detected SSO callback request in main page!')
+        const token = searchParams.get('token')
+        
+        if (token) {
+          console.log('🔓 Processing SSO callback with token in main page...')
+          handleSSOCallbackInMainPage(token)
+        } else {
+          console.error('❌ No token found in SSO callback URL')
+        }
+      }
+    }
+  }, [])
+  
+  const handleSSOCallbackInMainPage = async (token: string) => {
+    try {
+      console.log('🔓 Decoding JWT token directly in main page...')
+      
+      // Simple JWT decode
+      const base64Url = token.split('.')[1]
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      }).join(''))
+      
+      const tokenData = JSON.parse(jsonPayload)
+      console.log('🎫 Decoded token data in main page:', tokenData)
+      
+      // Create user object from token data
+      const userData = {
+        id: tokenData.sub,
+        nycu_id: tokenData.nycu_id,
+        role: tokenData.role,
+        name: tokenData.nycu_id, 
+        email: `${tokenData.nycu_id}@nycu.edu.tw`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      
+      console.log('👤 Constructed user data in main page:', userData)
+      console.log('🔄 Calling login() from main page...')
+      
+      login(token, userData)
+      
+      console.log('✅ Login completed in main page, redirecting...')
+      
+      // Redirect based on user role
+      const userRole = userData.role
+      let redirectPath = '/'
+      
+      if (userRole === 'admin' || userRole === 'super_admin') {
+        redirectPath = '/#dashboard'
+      } else {
+        redirectPath = '/#main'
+      }
+      
+      console.log('🚀 Redirecting to:', redirectPath)
+      
+      setTimeout(() => {
+        window.location.href = redirectPath
+      }, 1000)
+      
+    } catch (error) {
+      console.error('💥 SSO callback processing failed in main page:', error)
+    }
+  }
+  
   // 使用認證 hook
   const { user, isAuthenticated, isLoading: authLoading, error: authError, login, logout } = useAuth()
   
