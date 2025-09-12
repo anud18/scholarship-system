@@ -38,6 +38,12 @@ import { User } from "@/types/user"
 export default function ScholarshipManagementSystem() {
   const [activeTab, setActiveTab] = useState("main")
   
+  // Debug activeTab changes
+  useEffect(() => {
+    console.log('📋 Active tab changed to:', activeTab)
+    console.log('🌐 Current URL after tab change:', typeof window !== 'undefined' ? window.location.href : 'SSR')
+  }, [activeTab])
+  
   // 使用認證 hook
   const { user, isAuthenticated, isLoading: authLoading, error: authError, login, logout } = useAuth()
   
@@ -88,11 +94,28 @@ export default function ScholarshipManagementSystem() {
 
   // Handle hash-based navigation
   useEffect(() => {
+    console.log('🔗 Hash-based navigation effect triggered')
     if (typeof window !== 'undefined') {
-      const hash = window.location.hash.replace('#', '')
-      if (hash && ['dashboard', 'main', 'admin'].includes(hash)) {
+      const fullHash = window.location.hash
+      const hash = fullHash.replace('#', '')
+      console.log('🌐 Current URL:', window.location.href)
+      console.log('🔗 Full hash:', fullHash)
+      console.log('🏷️ Processed hash:', hash)
+      
+      const validHashes = ['dashboard', 'main', 'admin']
+      console.log('✅ Valid hashes:', validHashes)
+      
+      if (hash && validHashes.includes(hash)) {
+        console.log('🎯 Hash is valid, setting active tab to:', hash)
         setActiveTab(hash)
+        console.log('✅ Active tab updated from hash navigation')
+      } else if (hash) {
+        console.log('❌ Hash is invalid:', hash)
+      } else {
+        console.log('📝 No hash found in URL')
       }
+    } else {
+      console.log('❌ Window is not defined (SSR)')
     }
   }, [])
 
@@ -128,6 +151,7 @@ export default function ScholarshipManagementSystem() {
 
   // Show loading screen while checking authentication
   if (authLoading) {
+    console.log('⏳ Showing loading screen - authLoading is true')
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex items-center justify-center">
         <div className="text-center">
@@ -140,12 +164,16 @@ export default function ScholarshipManagementSystem() {
 
   // Show login interface if not authenticated
   if (!isAuthenticated) {
+    console.log('🚫 User not authenticated, showing login page')
+    console.log('🌍 NODE_ENV:', process.env.NODE_ENV)
     // Development mode: use DevLoginPage
     if (process.env.NODE_ENV === 'development') {
+      console.log('🛠️ Development mode - showing DevLoginPage')
       return <DevLoginPage />
     }
     
     // Production mode: use SSO login
+    console.log('🏭 Production mode - showing SSOLoginPage')
     return <SSOLoginPage />
   }
 
@@ -255,8 +283,19 @@ export default function ScholarshipManagementSystem() {
   }
 
   if (!user) {
+    console.log('❌ User is null after authentication checks, showing loading...')
     return <div>Loading...</div>
   }
+
+  console.log('🎉 Rendering main scholarship system interface')
+  console.log('👤 Final user state:', { 
+    id: user.id, 
+    email: user.email, 
+    role: user.role, 
+    name: user.name 
+  })
+  console.log('📋 Current active tab:', activeTab)
+  console.log('🔐 Authentication state:', { isAuthenticated, authLoading })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex flex-col">
@@ -296,6 +335,7 @@ export default function ScholarshipManagementSystem() {
           {/* 儀表板 - 只有 admin 和 super_admin 可見 */}
           {(user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="dashboard" className="space-y-4">
+              {console.log('📊 Rendering AdminDashboard for role:', user.role)}
               <AdminDashboard
                 stats={stats}
                 recentApplications={recentApplications}
@@ -317,18 +357,40 @@ export default function ScholarshipManagementSystem() {
 
           {/* 主要功能頁面 */}
           <TabsContent value="main" className="space-y-4">
-            {user.role === "student" && <EnhancedStudentPortal user={{
-              ...user,
-              studentType: "undergraduate" // 默認值，實際應該從用戶數據中獲取
-            } as User & { studentType: "undergraduate" }} locale={locale} />}
-            {user.role === "professor" && <ProfessorReviewComponent user={user} />}
-            {user.role === "college" && <CollegeDashboard user={user} locale={locale} />}
-            {(user.role === "admin" || user.role === "super_admin") && <AdminScholarshipDashboard user={user} />}
+            {console.log('📄 Rendering main TabsContent for role:', user.role)}
+            {user.role === "student" && (
+              <>
+                {console.log('🎒 Rendering EnhancedStudentPortal')}
+                <EnhancedStudentPortal user={{
+                  ...user,
+                  studentType: "undergraduate" // 默認值，實際應該從用戶數據中獲取
+                } as User & { studentType: "undergraduate" }} locale={locale} />
+              </>
+            )}
+            {user.role === "professor" && (
+              <>
+                {console.log('🎓 Rendering ProfessorReviewComponent')}
+                <ProfessorReviewComponent user={user} />
+              </>
+            )}
+            {user.role === "college" && (
+              <>
+                {console.log('🏫 Rendering CollegeDashboard')}
+                <CollegeDashboard user={user} locale={locale} />
+              </>
+            )}
+            {(user.role === "admin" || user.role === "super_admin") && (
+              <>
+                {console.log('👑 Rendering AdminScholarshipDashboard for role:', user.role)}
+                <AdminScholarshipDashboard user={user} />
+              </>
+            )}
           </TabsContent>
 
           {/* 系統管理 - 只有 admin 和 super_admin 可見 */}
           {(user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="admin" className="space-y-4">
+              {console.log('⚙️ Rendering AdminManagementInterface for role:', user.role)}
               <AdminManagementInterface user={user} />
             </TabsContent>
           )}
