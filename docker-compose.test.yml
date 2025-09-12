@@ -78,7 +78,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: scholarship_backend_test
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     expose:
       - "8000"
     environment:
@@ -130,7 +130,7 @@ services:
       context: ./mock-student-api
       dockerfile: Dockerfile
     container_name: scholarship_mock_student_api_test
-    command: uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 8080
     ports:
       - "8080:8080"
     environment:
@@ -175,14 +175,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: builder
+      target: production
     container_name: scholarship_frontend_test
-    command: npm run dev
+    command: npm start
     expose:
       - "3000"
     environment:
       NEXT_PUBLIC_API_URL: http://140.113.7.148
-      NODE_ENV: development
+      NODE_ENV: production
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
       # Mock Student API URL for development
