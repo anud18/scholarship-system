@@ -355,6 +355,8 @@ async def portal_sso_verify(
                 frontend_url = "https://140.113.7.148"  # Your frontend URL
                 redirect_url = f"{frontend_url}/auth/sso-callback?token={token_response.access_token}&redirect=dashboard"
                 
+                logger.info(f"Redirecting user {nycu_id} to frontend: {redirect_url}")
+                
                 # Return redirect response
                 return RedirectResponse(
                     url=redirect_url,
@@ -387,11 +389,31 @@ async def portal_sso_verify(
         # Fallback: Try Portal verification
         login_data = await portal_sso_service.process_portal_login(final_token)
         
-        return {
-            "success": True,
-            "message": "Portal SSO login successful",
-            "data": login_data
-        }
+        # Get access token from login data
+        access_token = login_data.get("access_token")
+        user_data = login_data.get("user", {})
+        user_nycu_id = user_data.get("nycu_id", "unknown")
+        
+        if access_token:
+            # Create redirect URL with token
+            frontend_url = "https://140.113.7.148"  # Your frontend URL
+            redirect_url = f"{frontend_url}/auth/sso-callback?token={access_token}&redirect=dashboard"
+            
+            logger.info(f"Redirecting user {user_nycu_id} to frontend via Portal verification: {redirect_url}")
+            
+            # Return redirect response
+            return RedirectResponse(
+                url=redirect_url,
+                status_code=302,
+                headers={"Set-Cookie": f"access_token={access_token}; Path=/; HttpOnly; Secure"}
+            )
+        else:
+            # Fallback to JSON response
+            return {
+                "success": True,
+                "message": "Portal SSO login successful",
+                "data": login_data
+            }
     except Exception as e:
         logger.error(f"Portal SSO error: {str(e)}")
         raise HTTPException(
