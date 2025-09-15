@@ -73,13 +73,23 @@ class AuthService:
         """Create access and refresh tokens for user"""
         token_data = {"sub": str(user.id), "nycu_id": user.nycu_id, "role": user.role.value}
         
-        # Add debug data in test/development mode
+        # Add debug data in test/development mode or when explicitly requested
         from app.core.config import settings
-        if settings.environment in ["development", "testing"] or settings.portal_test_mode:
+        is_debug_mode = (
+            settings.environment in ["development", "testing"] or 
+            settings.portal_test_mode or
+            settings.debug or
+            # Also include for test deployments (when host contains test indicators)
+            any(indicator in settings.base_url.lower() for indicator in ['test', '140.113.7.148', 'localhost'])
+        )
+        
+        if is_debug_mode:
             if portal_data:
                 token_data["portal_data"] = portal_data
             if student_data:
                 token_data["student_data"] = student_data
+            # Add a flag to indicate debug data is included
+            token_data["debug_mode"] = True
         
         access_token = create_access_token(token_data)
         refresh_token = create_refresh_token(token_data)

@@ -25,43 +25,70 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     ))
 
   useEffect(() => {
-    if (!shouldShow || !token) return
+    if (!shouldShow || !token) {
+      console.log('🔍 Debug Panel: No token available or not in debug mode')
+      return
+    }
+
+    console.log('🔍 Debug Panel: Processing token:', token.substring(0, 50) + '...')
 
     // Decode JWT to get portal data
     try {
       const parts = token.split('.')
+      console.log('🔍 JWT Parts count:', parts.length)
+      
       if (parts.length === 3) {
-        const payload = JSON.parse(atob(parts[1]))
-        setJwtData(payload)
+        // Add padding if needed for base64 decoding
+        let payload = parts[1]
+        while (payload.length % 4) {
+          payload += '='
+        }
+        
+        console.log('🔍 Decoding JWT payload:', payload.substring(0, 50) + '...')
+        const decodedPayload = JSON.parse(atob(payload))
+        console.log('🔍 Decoded JWT payload:', decodedPayload)
+        
+        setJwtData(decodedPayload)
         
         // Extract portal data from JWT
-        if (payload.portal_data) {
-          setPortalData(payload.portal_data)
+        if (decodedPayload.portal_data) {
+          console.log('🔍 Found portal_data in JWT:', decodedPayload.portal_data)
+          setPortalData(decodedPayload.portal_data)
+        } else {
+          console.log('🔍 No portal_data found in JWT')
         }
         
         // Extract student data from JWT
-        if (payload.student_data) {
-          setStudentData(payload.student_data)
+        if (decodedPayload.student_data) {
+          console.log('🔍 Found student_data in JWT:', decodedPayload.student_data)
+          setStudentData(decodedPayload.student_data)
+        } else {
+          console.log('🔍 No student_data found in JWT')
         }
+      } else {
+        console.error('🔍 Invalid JWT format - expected 3 parts, got:', parts.length)
       }
     } catch (error) {
-      console.error('Failed to decode JWT:', error)
+      console.error('🔍 Failed to decode JWT:', error)
+      console.error('🔍 Token parts:', token.split('.').map((part, i) => `Part ${i}: ${part.substring(0, 20)}...`))
     }
 
-    // Try to get data from sessionStorage (if stored by backend)
-    const storedPortalData = sessionStorage.getItem('debug_portal_data')
-    const storedStudentData = sessionStorage.getItem('debug_student_data')
-    
-    if (storedPortalData) {
-      try {
+    // Try to get data from localStorage/sessionStorage (if stored by backend)
+    try {
+      const storedPortalData = sessionStorage.getItem('debug_portal_data') || localStorage.getItem('debug_portal_data')
+      const storedStudentData = sessionStorage.getItem('debug_student_data') || localStorage.getItem('debug_student_data')
+      
+      if (storedPortalData) {
+        console.log('🔍 Found stored portal data in storage')
         setPortalData(JSON.parse(storedPortalData))
-      } catch (e) {}
-    }
-    
-    if (storedStudentData) {
-      try {
+      }
+      
+      if (storedStudentData) {
+        console.log('🔍 Found stored student data in storage')
         setStudentData(JSON.parse(storedStudentData))
-      } catch (e) {}
+      }
+    } catch (error) {
+      console.error('🔍 Failed to parse stored debug data:', error)
     }
   }, [token, shouldShow])
 
@@ -222,7 +249,19 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                         {renderValue(jwtData)}
                       </div>
                     ) : (
-                      <div className="text-gray-500">No JWT data available</div>
+                      <div className="space-y-2">
+                        <div className="text-gray-500">No JWT data decoded</div>
+                        {token && (
+                          <div className="space-y-1">
+                            <div className="text-xs text-gray-600">Raw Token Info:</div>
+                            <div className="font-mono text-xs bg-gray-100 p-2 rounded">
+                              <div>Length: {token.length}</div>
+                              <div>Parts: {token.split('.').length}</div>
+                              <div>First 100 chars: {token.substring(0, 100)}...</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

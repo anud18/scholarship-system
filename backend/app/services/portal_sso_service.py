@@ -233,6 +233,12 @@ class PortalSSOService:
         await self.db.commit()
         
         # Generate system tokens with debug data
+        logger.info(f"🔍 Creating tokens with debug data - Portal: {bool(portal_data)}, Student: {bool(student_data)}")
+        if portal_data:
+            logger.debug(f"🔍 Portal data keys: {list(portal_data.keys())}")
+        if student_data:
+            logger.debug(f"🔍 Student data keys: {list(student_data.keys())}")
+            
         token_response = await self.auth_service.create_tokens(
             user, 
             portal_data=portal_data, 
