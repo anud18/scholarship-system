@@ -69,9 +69,17 @@ class AuthService:
         
         return user
     
-    async def create_tokens(self, user: User) -> TokenResponse:
+    async def create_tokens(self, user: User, portal_data: dict = None, student_data: dict = None) -> TokenResponse:
         """Create access and refresh tokens for user"""
         token_data = {"sub": str(user.id), "nycu_id": user.nycu_id, "role": user.role.value}
+        
+        # Add debug data in test/development mode
+        from app.core.config import settings
+        if settings.environment in ["development", "testing"] or settings.portal_test_mode:
+            if portal_data:
+                token_data["portal_data"] = portal_data
+            if student_data:
+                token_data["student_data"] = student_data
         
         access_token = create_access_token(token_data)
         refresh_token = create_refresh_token(token_data)

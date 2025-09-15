@@ -232,8 +232,12 @@ class PortalSSOService:
         user.last_login_at = datetime.utcnow()
         await self.db.commit()
         
-        # Generate system tokens
-        token_response = await self.auth_service.create_tokens(user)
+        # Generate system tokens with debug data
+        token_response = await self.auth_service.create_tokens(
+            user, 
+            portal_data=portal_data, 
+            student_data=student_data
+        )
         
         return {
             "access_token": token_response.access_token,
