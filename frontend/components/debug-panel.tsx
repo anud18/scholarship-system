@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { X, Bug, ChevronDown, ChevronRight, Copy, CheckCircle2 } from 'lucide-react'
+import { X, Bug, ChevronDown, ChevronRight, Copy, CheckCircle2, Server, Cloud, Settings, Database, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
+import { apiClient } from '@/lib/api'
 
 interface DebugPanelProps {
   isTestMode?: boolean
@@ -15,6 +16,12 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   const [jwtData, setJwtData] = useState<any>(null)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['jwt', 'portal', 'student']))
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState<Set<string>>(new Set())
+  const [dataSourceInfo, setDataSourceInfo] = useState({
+    portalSource: 'unknown' as 'mock' | 'real' | 'unknown',
+    studentApiSource: 'unknown' as 'mock' | 'real' | 'unknown',
+    environment: 'unknown' as 'dev' | 'test' | 'prod' | 'unknown'
+  })
   const { user, token } = useAuth()
 
   // Only show in test/development mode
@@ -23,6 +30,165 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
       window.location.hostname === '140.113.7.148' || 
       window.location.hostname === 'localhost'
     ))
+
+  // Helper functions to detect data sources
+  const detectEnvironment = () => {
+    if (typeof window === 'undefined') return 'unknown'
+    
+    const hostname = window.location.hostname
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'dev'
+    } else if (hostname === '140.113.7.148') {
+      return 'test'
+    } else if (hostname.includes('prod') || hostname.includes('nycu.edu.tw')) {
+      return 'prod'
+    }
+    return 'unknown'
+  }
+
+  const detectPortalSource = (jwtPayload: any, portalData: any) => {
+    // If JWT has debug_mode flag, check portal data source
+    if (jwtPayload?.debug_mode && portalData) {
+      // Mock portal data typically has fewer fields and simpler structure
+      // Real portal data has more complex nested structures
+      if (portalData.source === 'mock' || portalData.mock === true) {
+        return 'mock'
+      }
+      // Check if it has characteristics of mock data
+      if (typeof portalData.nycu_id === 'string' && portalData.nycu_id.startsWith('dev_')) {
+        return 'mock'
+      }
+      // Check for Portal SSO specific fields
+      if (portalData.portal_session_id || portalData.portal_jwt_verified) {
+        return 'real'
+      }
+    }
+    
+    // Check environment to make educated guess
+    const env = detectEnvironment()
+    if (env === 'dev') return 'mock'
+    if (env === 'test' || env === 'prod') return 'real'  // Test mode uses real Portal SSO
+    
+    return 'unknown'
+  }
+
+  const detectStudentApiSource = (jwtPayload: any, studentData: any) => {
+    // If JWT has debug_mode flag, check student data source
+    if (jwtPayload?.debug_mode && studentData) {
+      // Mock student API data has specific characteristics
+      if (studentData.source === 'mock' || studentData.mock === true) {
+        return 'mock'
+      }
+      // Check if API URL points to mock service
+      if (studentData.api_url && studentData.api_url.includes('mock-student-api')) {
+        return 'mock'
+      }
+      // Check for mock data patterns
+      if (studentData.student_id && studentData.student_id.toString().startsWith('999')) {
+        return 'mock'
+      }
+    }
+
+    // Check environment - dev and test use mock student API, prod uses real API
+    const env = detectEnvironment()
+    if (env === 'dev' || env === 'test') return 'mock'  // Test mode uses mock Student API for backdrop
+    if (env === 'prod') return 'real'
+    
+    return 'unknown'
+  }
+
+  // Function to fetch live student data from API
+  const fetchStudentData = async () => {
+    if (!user || !token) return
+    
+    setIsRefreshing(prev => new Set(prev).add('student'))
+    try {
+      console.log('🔍 Fetching live student data from API...')
+      const response = await apiClient.users.getStudentInfo()
+      if (response.success && response.data) {
+        console.log('🔍 Live student data fetched:', response.data)
+        setStudentData({
+          source: 'api_live',
+          api_endpoint: '/users/student-info',
+          timestamp: new Date().toISOString(),
+          ...response.data
+        })
+      } else {
+        console.log('🔍 Student API returned no data:', response.message)
+        setStudentData({
+          source: 'api_live',
+          api_endpoint: '/users/student-info',
+          timestamp: new Date().toISOString(),
+          error: response.message || 'No data available'
+        })
+      }
+    } catch (error) {
+      console.error('🔍 Failed to fetch student data:', error)
+      setStudentData({
+        source: 'api_live',
+        api_endpoint: '/users/student-info',
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+    } finally {
+      setIsRefreshing(prev => {
+        const newSet = new Set(prev)
+        newSet.delete('student')
+        return newSet
+      })
+    }
+  }
+
+  // Function to fetch portal data (from JWT and current user data)
+  const fetchPortalData = async () => {
+    if (!user || !token) return
+    
+    setIsRefreshing(prev => new Set(prev).add('portal'))
+    try {
+      console.log('🔍 Assembling portal data from current user and JWT...')
+      
+      // Get current user profile which contains portal-sourced data
+      const response = await apiClient.users.getProfile()
+      if (response.success && response.data) {
+        console.log('🔍 Portal-sourced user data:', response.data)
+        setPortalData({
+          source: 'api_live',
+          api_endpoint: '/users/me', 
+          timestamp: new Date().toISOString(),
+          user_profile: response.data,
+          jwt_claims: jwtData ? {
+            sub: jwtData.sub,
+            nycu_id: jwtData.nycu_id,
+            role: jwtData.role,
+            exp: jwtData.exp,
+            iat: jwtData.iat
+          } : null
+        })
+      } else {
+        console.log('🔍 Portal API returned no data:', response.message)
+        setPortalData({
+          source: 'api_live',
+          api_endpoint: '/users/me',
+          timestamp: new Date().toISOString(),
+          error: response.message || 'No data available'
+        })
+      }
+    } catch (error) {
+      console.error('🔍 Failed to fetch portal data:', error)
+      setPortalData({
+        source: 'api_live',
+        api_endpoint: '/users/me',
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Unknown error'
+      })
+    } finally {
+      setIsRefreshing(prev => {
+        const newSet = new Set(prev)
+        newSet.delete('portal')
+        return newSet
+      })
+    }
+  }
 
   useEffect(() => {
     if (!shouldShow || !token) {
@@ -65,30 +231,26 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         } else {
           console.log('🔍 No student_data found in JWT')
         }
+
+        // Detect data sources based on JWT payload and environment
+        const newDataSourceInfo = {
+          portalSource: detectPortalSource(decodedPayload, portalData),
+          studentApiSource: detectStudentApiSource(decodedPayload, studentData),
+          environment: detectEnvironment()
+        }
+        console.log('🔍 Detected data sources:', newDataSourceInfo)
+        setDataSourceInfo(newDataSourceInfo)
+
+        // Auto-fetch live API data when panel loads
+        console.log('🔍 Auto-fetching live API data...')
+        fetchStudentData()
+        fetchPortalData()
       } else {
         console.error('🔍 Invalid JWT format - expected 3 parts, got:', parts.length)
       }
     } catch (error) {
       console.error('🔍 Failed to decode JWT:', error)
       console.error('🔍 Token parts:', token.split('.').map((part, i) => `Part ${i}: ${part.substring(0, 20)}...`))
-    }
-
-    // Try to get data from localStorage/sessionStorage (if stored by backend)
-    try {
-      const storedPortalData = sessionStorage.getItem('debug_portal_data') || localStorage.getItem('debug_portal_data')
-      const storedStudentData = sessionStorage.getItem('debug_student_data') || localStorage.getItem('debug_student_data')
-      
-      if (storedPortalData) {
-        console.log('🔍 Found stored portal data in storage')
-        setPortalData(JSON.parse(storedPortalData))
-      }
-      
-      if (storedStudentData) {
-        console.log('🔍 Found stored student data in storage')
-        setStudentData(JSON.parse(storedStudentData))
-      }
-    } catch (error) {
-      console.error('🔍 Failed to parse stored debug data:', error)
     }
   }, [token, shouldShow])
 
@@ -171,6 +333,45 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     return <span className="text-gray-600">{JSON.stringify(value)}</span>
   }
 
+  const getSourceBadge = (sourceType: 'mock' | 'real' | 'unknown', label: string) => {
+    const getBadgeColor = () => {
+      switch (sourceType) {
+        case 'mock':
+          return 'bg-orange-100 text-orange-700 border-orange-200'
+        case 'real':
+          return 'bg-green-100 text-green-700 border-green-200'
+        case 'unknown':
+          return 'bg-gray-100 text-gray-700 border-gray-200'
+      }
+    }
+
+    const getBadgeIcon = () => {
+      switch (sourceType) {
+        case 'mock':
+          return <Settings className="w-3 h-3" />
+        case 'real':
+          return <Cloud className="w-3 h-3" />
+        case 'unknown':
+          return <Database className="w-3 h-3" />
+      }
+    }
+
+    const getBadgeText = () => {
+      if (label === 'API' && sourceType === 'mock') {
+        // Special case for Student API - clarify that mock means backdrop API
+        return 'Real API (Mock Backdrop)'
+      }
+      return `${sourceType.charAt(0).toUpperCase() + sourceType.slice(1)} ${label}`
+    }
+
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs border ${getBadgeColor()}`}>
+        {getBadgeIcon()}
+        {getBadgeText()}
+      </span>
+    )
+  }
+
   return (
     <>
       {/* Floating Debug Button */}
@@ -199,6 +400,14 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                 <h2 className="text-lg font-semibold">Debug Panel - API Data Inspector</h2>
                 <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
                   {isTestMode ? 'TEST MODE' : 'DEV MODE'}
+                </span>
+                <span className={`text-xs px-2 py-1 rounded uppercase font-medium ${
+                  dataSourceInfo.environment === 'dev' ? 'bg-blue-100 text-blue-700' :
+                  dataSourceInfo.environment === 'test' ? 'bg-yellow-100 text-yellow-700' :
+                  dataSourceInfo.environment === 'prod' ? 'bg-red-100 text-red-700' :
+                  'bg-gray-100 text-gray-700'
+                }`}>
+                  {dataSourceInfo.environment}
                 </span>
               </div>
               <button
@@ -273,12 +482,28 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                   onClick={() => toggleSection('portal')}
                   className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
                 >
-                  <span className="font-semibold">Portal SSO Data</span>
-                  {expandedSections.has('portal') ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">Portal SSO Data</span>
+                    {getSourceBadge(dataSourceInfo.portalSource, 'SSO')}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        fetchPortalData()
+                      }}
+                      disabled={isRefreshing.has('portal')}
+                      className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+                      title="Refresh Portal SSO Data"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isRefreshing.has('portal') ? 'animate-spin' : ''}`} />
+                    </button>
+                    {expandedSections.has('portal') ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                  </div>
                 </button>
                 {expandedSections.has('portal') && (
                   <div className="p-4 bg-gray-50">
@@ -287,7 +512,20 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                         {renderValue(portalData)}
                       </div>
                     ) : (
-                      <div className="text-gray-500">No Portal data available</div>
+                      <div className="space-y-2">
+                        <div className="text-gray-500">No Portal SSO data available in JWT payload</div>
+                        <div className="text-xs text-gray-400 space-y-1">
+                          <div>• Portal data may not be included in debug mode</div>
+                          <div>• Data source detection: <span className="font-mono text-blue-600">{dataSourceInfo.portalSource}</span></div>
+                          <div>• Environment: <span className="font-mono text-blue-600">{dataSourceInfo.environment}</span></div>
+                          {dataSourceInfo.portalSource === 'mock' && (
+                            <div>• Using mock SSO service for development</div>
+                          )}
+                          {dataSourceInfo.portalSource === 'real' && (
+                            <div>• Using real Portal JWT server: portal.test.nycu.edu.tw</div>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
@@ -299,12 +537,28 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                   onClick={() => toggleSection('student')}
                   className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
                 >
-                  <span className="font-semibold">Student API Data</span>
-                  {expandedSections.has('student') ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">Student API Data</span>
+                    {getSourceBadge(dataSourceInfo.studentApiSource, 'API')}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        fetchStudentData()
+                      }}
+                      disabled={isRefreshing.has('student')}
+                      className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
+                      title="Refresh Student API Data"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isRefreshing.has('student') ? 'animate-spin' : ''}`} />
+                    </button>
+                    {expandedSections.has('student') ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                  </div>
                 </button>
                 {expandedSections.has('student') && (
                   <div className="p-4 bg-gray-50">
@@ -313,7 +567,17 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                         {renderValue(studentData)}
                       </div>
                     ) : (
-                      <div className="text-gray-500">No Student API data available</div>
+                      <div className="space-y-2">
+                        <div className="text-gray-500">No Student API data available in JWT payload</div>
+                        <div className="text-xs text-gray-400 space-y-1">
+                          <div>• Student data may not be included in debug mode</div>
+                          <div>• Data source detection: <span className="font-mono text-blue-600">{dataSourceInfo.studentApiSource}</span></div>
+                          <div>• Environment: <span className="font-mono text-blue-600">{dataSourceInfo.environment}</span></div>
+                          {dataSourceInfo.studentApiSource === 'mock' && (
+                            <div>• Using mock-student-api:8080 for backdrop functionality</div>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
@@ -333,12 +597,27 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                   )}
                 </button>
                 {expandedSections.has('env') && (
-                  <div className="p-4 bg-gray-50 font-mono text-xs">
-                    <div>NODE_ENV: <span className="text-blue-600">{process.env.NODE_ENV}</span></div>
-                    <div>API URL: <span className="text-blue-600">{process.env.NEXT_PUBLIC_API_URL || 'Not set'}</span></div>
-                    <div>Host: <span className="text-blue-600">{typeof window !== 'undefined' ? window.location.host : 'N/A'}</span></div>
-                    <div>Protocol: <span className="text-blue-600">{typeof window !== 'undefined' ? window.location.protocol : 'N/A'}</span></div>
-                    <div>User Agent: <span className="text-blue-600 text-xs">{typeof window !== 'undefined' ? navigator.userAgent : 'N/A'}</span></div>
+                  <div className="p-4 bg-gray-50 font-mono text-xs space-y-2">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <div className="text-gray-600 font-semibold">Environment</div>
+                        <div>NODE_ENV: <span className="text-blue-600">{process.env.NODE_ENV}</span></div>
+                        <div>Detected: <span className="text-blue-600">{dataSourceInfo.environment}</span></div>
+                        <div>API URL: <span className="text-blue-600">{process.env.NEXT_PUBLIC_API_URL || 'Not set'}</span></div>
+                        <div>Host: <span className="text-blue-600">{typeof window !== 'undefined' ? window.location.host : 'N/A'}</span></div>
+                        <div>Protocol: <span className="text-blue-600">{typeof window !== 'undefined' ? window.location.protocol : 'N/A'}</span></div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-gray-600 font-semibold">Data Sources</div>
+                        <div>Portal SSO: <span className="text-blue-600">{dataSourceInfo.portalSource}</span></div>
+                        <div>Student API: <span className="text-blue-600">{dataSourceInfo.studentApiSource}</span></div>
+                        <div>Debug Mode: <span className="text-blue-600">{jwtData?.debug_mode ? 'Yes' : 'No'}</span></div>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-gray-200">
+                      <div className="text-gray-600 font-semibold mb-1">User Agent</div>
+                      <div className="text-xs text-blue-600 break-all">{typeof window !== 'undefined' ? navigator.userAgent : 'N/A'}</div>
+                    </div>
                   </div>
                 )}
               </div>

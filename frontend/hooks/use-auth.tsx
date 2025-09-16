@@ -12,6 +12,7 @@ interface AuthContextType {
   login: (token: string, userData: User) => void
   updateUser: (userData: Partial<User>) => Promise<void>
   error: string | null
+  token: string | null
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -148,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     updateUser,
     error,
+    token: typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
