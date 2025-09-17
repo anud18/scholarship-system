@@ -23,6 +23,7 @@ from app.models.notification import Notification, NotificationType, Notification
 from app.models.application_field import ApplicationField, ApplicationDocument
 from app.models.user_profile import UserProfile, UserProfileHistory
 from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem, QuotaDistribution
+from app.models.email_management import EmailHistory, ScheduledEmail, EmailStatus, EmailCategory, ScheduleStatus
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -1682,6 +1683,273 @@ async def createSystemAnnouncements(session: AsyncSession) -> None:
     print("   - Development mode reminder")
 
 
+async def createTestEmailHistory(session: AsyncSession) -> None:
+    """Create test email history records"""
+    
+    print("📧 Creating test email history records...")
+    
+    # Get test users for sending emails
+    result = await session.execute(select(User).where(User.nycu_id.in_(["admin", "super_admin", "professor"])))
+    users = {user.nycu_id: user for user in result.scalars().all()}
+    
+    # Get scholarship types for categorization
+    result = await session.execute(select(ScholarshipType))
+    scholarship_types = list(result.scalars().all())
+    
+    # Email history test data
+    email_history_data = [
+        {
+            "recipient_email": "cs_phd001@nycu.edu.tw",
+            "subject": "博士生獎學金申請開放通知",
+            "body": "親愛的同學您好，\n\n113學年度第一學期博士生獎學金申請已開放，請於期限內完成申請。\n\n獎學金管理系統",
+            "email_category": EmailCategory.APPLICATION_STUDENT,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,  # PhD scholarship
+            "sent_by_user_id": users.get("admin").id if users.get("admin") else None,
+            "sent_by_system": False,
+            "status": EmailStatus.SENT,
+            "sent_at": datetime.now(timezone.utc) - timedelta(days=30),
+            "email_size_bytes": 485
+        },
+        {
+            "recipient_email": "cs_professor@nycu.edu.tw",
+            "subject": "學生推薦信請求通知",
+            "body": "親愛的教授您好，\n\n您的指導學生 王博士研究生 申請博士生獎學金，需要您的推薦信。請登入系統查看詳情。\n\n獎學金管理系統",
+            "email_category": EmailCategory.RECOMMENDATION_PROFESSOR,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "sent_by_user_id": None,
+            "sent_by_system": True,
+            "status": EmailStatus.SENT,
+            "sent_at": datetime.now(timezone.utc) - timedelta(days=25),
+            "email_size_bytes": 392
+        },
+        {
+            "recipient_email": "cs_college@nycu.edu.tw",
+            "subject": "資訊學院獎學金審核通知",
+            "body": "親愛的審核員您好，\n\n有新的獎學金申請案件需要您的審核。請登入系統進行審核作業。\n\n申請件數：5件\n待審核期限：2天\n\n獎學金管理系統",
+            "email_category": EmailCategory.REVIEW_COLLEGE,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "sent_by_user_id": None,
+            "sent_by_system": True,
+            "status": EmailStatus.SENT,
+            "sent_at": datetime.now(timezone.utc) - timedelta(days=20),
+            "email_size_bytes": 456
+        },
+        {
+            "recipient_email": "cs_phd002@nycu.edu.tw",
+            "subject": "申請文件補件通知",
+            "body": "親愛的同學您好，\n\n您的獎學金申請文件需要補件：\n- 成績單正本\n- 推薦信\n\n請於3天內完成補件，逾期將影響審核結果。\n\n獎學金管理系統",
+            "email_category": EmailCategory.SUPPLEMENT_STUDENT,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "sent_by_user_id": users.get("professor").id if users.get("professor") else None,
+            "sent_by_system": False,
+            "status": EmailStatus.SENT,
+            "sent_at": datetime.now(timezone.utc) - timedelta(days=15),
+            "email_size_bytes": 398
+        },
+        {
+            "recipient_email": "cs_phd003@nycu.edu.tw",
+            "subject": "獎學金審核結果通知",
+            "body": "親愛的同學您好，\n\n恭喜您！您的博士生獎學金申請已通過審核。\n\n獎學金金額：NT$ 40,000\n發放日期：113年10月31日\n\n請注意相關權利義務事項。\n\n獎學金管理系統",
+            "email_category": EmailCategory.RESULT_STUDENT,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "sent_by_user_id": None,
+            "sent_by_system": True,
+            "status": EmailStatus.SENT,
+            "sent_at": datetime.now(timezone.utc) - timedelta(days=10),
+            "email_size_bytes": 512
+        },
+        {
+            "recipient_email": "ee_professor@nycu.edu.tw",
+            "subject": "學生獲獎通知（指導教授）",
+            "body": "親愛的教授您好，\n\n您的指導學生 劉通訊博士 已獲得博士生獎學金。\n\n獲獎學生資訊：\n- 姓名：劉通訊博士\n- 學號：ee_phd002\n- 獎學金：博士生獎學金\n- 金額：NT$ 40,000\n\n感謝您的指導。\n\n獎學金管理系統",
+            "email_category": EmailCategory.RESULT_PROFESSOR,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "sent_by_user_id": None,
+            "sent_by_system": True,
+            "status": EmailStatus.SENT,
+            "sent_at": datetime.now(timezone.utc) - timedelta(days=8),
+            "email_size_bytes": 634
+        },
+        {
+            "recipient_email": "ee_college@nycu.edu.tw",
+            "subject": "學院獎學金分配結果通知",
+            "body": "親愛的學院審核員您好，\n\n電機學院本期獎學金分配已完成：\n\n獲獎名單：\n- 劉通訊博士（博士生獎學金）\n- 蔡半導體博士（博士生獎學金）\n\n總計金額：NT$ 80,000\n剩餘名額：0名\n\n獎學金管理系統",
+            "email_category": EmailCategory.RESULT_COLLEGE,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "sent_by_user_id": None,
+            "sent_by_system": True,
+            "status": EmailStatus.SENT,
+            "sent_at": datetime.now(timezone.utc) - timedelta(days=5),
+            "email_size_bytes": 578
+        },
+        {
+            "recipient_email": "cs_phd_intl@nycu.edu.tw",
+            "subject": "獎學金造冊確認通知",
+            "body": "Dear International Student,\n\n您的獎學金已列入本期造冊名單。請確認以下資訊：\n\n- 獎學金：International PhD Scholarship\n- 金額：NT$ 40,000\n- 銀行帳戶：請確認您的銀行帳戶資訊正確\n\n如有疑問請聯繫國際事務處。\n\nScholarship Management System",
+            "email_category": EmailCategory.ROSTER_STUDENT,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "sent_by_user_id": users.get("super_admin").id if users.get("super_admin") else None,
+            "sent_by_system": False,
+            "status": EmailStatus.SENT,
+            "sent_at": datetime.now(timezone.utc) - timedelta(days=3),
+            "email_size_bytes": 632
+        },
+        {
+            "recipient_email": "admin@nycu.edu.tw",
+            "subject": "系統維護通知",
+            "body": "系統管理員您好，\n\n獎學金管理系統將於本週六晚上10點至12點進行例行性維護，期間系統將暫停服務。\n\n維護內容：\n- 資料庫優化\n- 安全性更新\n- 效能調整\n\n如有疑問請聯繫技術支援。\n\n系統通知",
+            "email_category": EmailCategory.SYSTEM,
+            "scholarship_type_id": None,
+            "sent_by_user_id": None,
+            "sent_by_system": True,
+            "status": EmailStatus.SENT,
+            "sent_at": datetime.now(timezone.utc) - timedelta(days=1),
+            "email_size_bytes": 445
+        },
+        {
+            "recipient_email": "student_fail@example.com",
+            "subject": "測試失敗郵件",
+            "body": "這是一封測試失敗的郵件，用於測試錯誤處理機制。",
+            "email_category": EmailCategory.OTHER,
+            "scholarship_type_id": None,
+            "sent_by_user_id": users.get("admin").id if users.get("admin") else None,
+            "sent_by_system": False,
+            "status": EmailStatus.FAILED,
+            "error_message": "SMTP Error: Invalid email address",
+            "sent_at": datetime.now(timezone.utc) - timedelta(hours=2),
+            "retry_count": 3,
+            "email_size_bytes": 185
+        }
+    ]
+    
+    # Create email history records
+    for email_data in email_history_data:
+        email_history = EmailHistory(**email_data)
+        session.add(email_history)
+    
+    await session.commit()
+    
+    print(f"📧 Created {len(email_history_data)} email history records")
+    print("📧 Email history includes:")
+    print("   - Application notifications")
+    print("   - Recommendation requests")
+    print("   - Review notifications")
+    print("   - Supplement requests")
+    print("   - Result notifications")
+    print("   - System maintenance notices")
+    print("   - Failed email examples")
+
+
+async def createTestScheduledEmails(session: AsyncSession) -> None:
+    """Create test scheduled email records"""
+    
+    print("📅 Creating test scheduled email records...")
+    
+    # Get test users for creating scheduled emails
+    result = await session.execute(select(User).where(User.nycu_id.in_(["admin", "super_admin", "professor"])))
+    users = {user.nycu_id: user for user in result.scalars().all()}
+    
+    # Get scholarship types for categorization
+    result = await session.execute(select(ScholarshipType))
+    scholarship_types = list(result.scalars().all())
+    
+    # Scheduled email test data
+    scheduled_email_data = [
+        {
+            "recipient_email": "cs_phd004@nycu.edu.tw",
+            "subject": "博士生獎學金申請提醒",
+            "body": "親愛的同學您好，\n\n提醒您博士生獎學金申請即將截止，請把握最後機會。\n\n截止日期：2025年9月25日 23:59\n注意事項：\n- 請確認所有必填欄位已完成\n- 上傳文件需為PDF格式\n- 推薦信需由指導教授提供\n\n如有問題請聯繫獎學金辦公室。\n\n獎學金管理系統",
+            "email_category": EmailCategory.APPLICATION_STUDENT,
+            "scheduled_for": datetime.now(timezone.utc) + timedelta(hours=2),
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "requires_approval": False,
+            "created_by_user_id": users.get("admin").id if users.get("admin") else 1,
+            "status": ScheduleStatus.PENDING,
+            "priority": 2
+        },
+        {
+            "recipient_email": "ee_professor@nycu.edu.tw",
+            "subject": "推薦信截止提醒",
+            "body": "親愛的教授您好，\n\n您有學生的推薦信即將截止，請盡快完成：\n\n學生姓名：張電機博士\n申請獎學金：博士生獎學金\n截止時間：2025年9月23日 18:00\n\n請登入系統完成推薦信撰寫。\n\n感謝您的配合。\n\n獎學金管理系統",
+            "email_category": EmailCategory.RECOMMENDATION_PROFESSOR,
+            "scheduled_for": datetime.now(timezone.utc) + timedelta(hours=6),
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "requires_approval": True,
+            "created_by_user_id": users.get("super_admin").id if users.get("super_admin") else 2,
+            "approved_by_user_id": users.get("super_admin").id if users.get("super_admin") else 2,
+            "approved_at": datetime.now(timezone.utc),
+            "approval_notes": "例行性推薦信提醒，可自動發送",
+            "status": ScheduleStatus.PENDING,
+            "priority": 3
+        },
+        {
+            "recipient_email": "cs_college@nycu.edu.tw",
+            "subject": "學院審核期限提醒",
+            "body": "親愛的審核員您好，\n\n您有獎學金申請案件即將到期，請盡快完成審核：\n\n待審核案件：3件\n申請人：\n- 王資訊博士（申請編號：CS2025001）\n- 李演算法碩士（申請編號：CS2025002）\n- 陳人工智慧博士（申請編號：CS2025003）\n\n審核截止：2025年9月24日 17:00\n\n請登入系統進行審核作業。\n\n獎學金管理系統",
+            "email_category": EmailCategory.REVIEW_COLLEGE,
+            "scheduled_for": datetime.now(timezone.utc) + timedelta(days=1),
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "requires_approval": False,
+            "created_by_user_id": users.get("admin").id if users.get("admin") else 1,
+            "status": ScheduleStatus.PENDING,
+            "priority": 1
+        },
+        {
+            "recipient_email": "me_phd001@nycu.edu.tw",
+            "subject": "補件提醒通知",
+            "body": "親愛的同學您好，\n\n您的獎學金申請需要補件，請在期限內完成：\n\n缺件項目：\n- 在學證明書（須為最新版本）\n- 指導教授同意書\n\n補件期限：2025年9月26日 23:59\n逾期將視為放棄申請。\n\n請儘早完成補件程序。\n\n獎學金管理系統",
+            "email_category": EmailCategory.SUPPLEMENT_STUDENT,
+            "scheduled_for": datetime.now(timezone.utc) + timedelta(days=2),
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "requires_approval": True,
+            "created_by_user_id": users.get("professor").id if users.get("professor") else 3,
+            "status": ScheduleStatus.PENDING,
+            "priority": 4
+        },
+        {
+            "recipient_email": "all_students@nycu.edu.tw",
+            "cc_emails": '["backup@nycu.edu.tw"]',
+            "subject": "獎學金系統維護通知",
+            "body": "親愛的同學們您好，\n\n獎學金管理系統將進行定期維護：\n\n維護時間：2025年9月25日 凌晨2:00 - 4:00\n影響範圍：系統將暫停服務2小時\n維護內容：\n- 資料庫效能優化\n- 安全性更新\n- 介面改善\n\n維護期間請勿進行申請或上傳文件。\n造成不便敬請見諒。\n\n如有緊急問題請聯繫技術支援。\n\n獎學金管理系統",
+            "email_category": EmailCategory.SYSTEM,
+            "scheduled_for": datetime.now(timezone.utc) + timedelta(days=3),
+            "scholarship_type_id": None,
+            "requires_approval": True,
+            "created_by_user_id": users.get("super_admin").id if users.get("super_admin") else 2,
+            "status": ScheduleStatus.PENDING,
+            "priority": 5
+        },
+        {
+            "recipient_email": "cs_phd005@nycu.edu.tw",
+            "subject": "獎學金核發通知",
+            "body": "親愛的同學您好，\n\n恭喜您獲得博士生獎學金！\n\n獎學金詳情：\n- 獎學金名稱：博士生獎學金\n- 金額：NT$ 40,000\n- 核發學期：113學年度第一學期\n- 預計發放日期：2025年10月31日\n\n權利義務：\n- 需維持良好學業成績\n- 協助系上教學或研究工作\n- 按時參與獎學金受獎生活動\n\n詳細條款請參閱獎學金規定。\n\n再次恭喜您的獲獎！\n\n獎學金管理系統",
+            "email_category": EmailCategory.RESULT_STUDENT,
+            "scheduled_for": datetime.now(timezone.utc) + timedelta(hours=12),
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "requires_approval": False,
+            "created_by_user_id": users.get("admin").id if users.get("admin") else 1,
+            "status": ScheduleStatus.PENDING,
+            "priority": 2
+        }
+    ]
+    
+    # Create scheduled email records
+    for email_data in scheduled_email_data:
+        scheduled_email = ScheduledEmail(**email_data)
+        session.add(scheduled_email)
+    
+    await session.commit()
+    
+    print(f"📅 Created {len(scheduled_email_data)} scheduled email records")
+    print("📅 Scheduled emails include:")
+    print("   - Application deadline reminders")
+    print("   - Recommendation letter reminders")
+    print("   - Review deadline notifications")
+    print("   - Supplement request reminders")
+    print("   - System maintenance notices")
+    print("   - Award notification emails")
+
+
 async def createApplicationFields(session: AsyncSession) -> None:
     """Create initial application field configurations"""
     
@@ -2069,6 +2337,12 @@ async def initDatabase() -> None:
         
         # Create system announcements
         await createSystemAnnouncements(session)
+        
+        # Create test email history
+        await createTestEmailHistory(session)
+        
+        # Create test scheduled emails
+        await createTestScheduledEmails(session)
     
     print("✅ Database initialization completed successfully!")
     print("\n📋 Test User Accounts:")
