@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'add_rule_enable_fields'
-down_revision = 'update_notification_enums_v2'
+down_revision = 'ea5d2bc75b8b'
 branch_labels = None
 depends_on = None
 

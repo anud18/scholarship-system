@@ -1516,29 +1516,21 @@ class ApiClient {
 
     // === 系統管理相關 API === //
     
-    // 工作流程管理
+    // 工作流程管理 (temporarily disabled - endpoints not implemented)
     getWorkflows: async (): Promise<ApiResponse<Workflow[]>> => {
-      return this.request('/admin/workflows')
+      return Promise.resolve({ success: true, data: [], message: 'Workflows feature coming soon' })
     },
 
     createWorkflow: async (workflow: Omit<Workflow, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<Workflow>> => {
-      return this.request('/admin/workflows', {
-        method: 'POST',
-        body: JSON.stringify(workflow),
-      })
+      return Promise.resolve({ success: false, message: 'Workflows feature not implemented yet' })
     },
 
     updateWorkflow: async (id: string, workflow: Partial<Workflow>): Promise<ApiResponse<Workflow>> => {
-      return this.request(`/admin/workflows/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(workflow),
-      })
+      return Promise.resolve({ success: false, message: 'Workflows feature not implemented yet' })
     },
 
     deleteWorkflow: async (id: string): Promise<ApiResponse<{ message: string }>> => {
-      return this.request(`/admin/workflows/${id}`, {
-        method: 'DELETE',
-      })
+      return Promise.resolve({ success: false, message: 'Workflows feature not implemented yet' })
     },
 
     // 獎學金規則管理
@@ -1660,7 +1652,7 @@ class ApiClient {
 
     // 系統統計
     getSystemStats: async (): Promise<ApiResponse<SystemStats>> => {
-      return this.request('/admin/system-stats')
+      return this.request('/admin/dashboard/stats')
     },
 
     // 獎學金權限管理
@@ -2083,7 +2075,106 @@ class ApiClient {
     }
   }
 
-  // College Review endpoints
+  // Email Management endpoints
+  emailManagement = {
+    // Get email history with filters
+    getEmailHistory: async (params?: {
+      skip?: number;
+      limit?: number;
+      email_category?: string;
+      status?: string;
+      scholarship_type_id?: number;
+      recipient_email?: string;
+      date_from?: string;
+      date_to?: string;
+    }): Promise<ApiResponse<{
+      items: any[];
+      total: number;
+      skip: number;
+      limit: number;
+    }>> => {
+      return this.request('/email-management/history', {
+        method: 'GET',
+        params
+      })
+    },
+
+    // Get scheduled emails with filters
+    getScheduledEmails: async (params?: {
+      skip?: number;
+      limit?: number;
+      status?: string;
+      scholarship_type_id?: number;
+      requires_approval?: boolean;
+      email_category?: string;
+      scheduled_from?: string;
+      scheduled_to?: string;
+    }): Promise<ApiResponse<{
+      items: any[];
+      total: number;
+      skip: number;
+      limit: number;
+    }>> => {
+      return this.request('/email-management/scheduled', {
+        method: 'GET',
+        params
+      })
+    },
+
+    // Get due scheduled emails (superadmin only)
+    getDueScheduledEmails: async (limit?: number): Promise<ApiResponse<any[]>> => {
+      const params = limit ? { limit } : {}
+      return this.request('/email-management/scheduled/due', {
+        method: 'GET',
+        params
+      })
+    },
+
+    // Approve scheduled email
+    approveScheduledEmail: async (emailId: number, approvalNotes?: string): Promise<ApiResponse<any>> => {
+      return this.request(`/email-management/scheduled/${emailId}/approve`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          approval_notes: approvalNotes
+        })
+      })
+    },
+
+    // Cancel scheduled email
+    cancelScheduledEmail: async (emailId: number): Promise<ApiResponse<any>> => {
+      return this.request(`/email-management/scheduled/${emailId}/cancel`, {
+        method: 'PATCH'
+      })
+    },
+
+    // Process due emails (superadmin only)
+    processDueEmails: async (batchSize?: number): Promise<ApiResponse<{
+      processed: number;
+      sent: number;
+      failed: number;
+      skipped: number;
+    }>> => {
+      const params = batchSize ? { batch_size: batchSize } : {}
+      return this.request('/email-management/scheduled/process', {
+        method: 'POST',
+        params
+      })
+    },
+
+    // Get email categories
+    getEmailCategories: async (): Promise<ApiResponse<string[]>> => {
+      return this.request('/email-management/categories')
+    },
+
+    // Get email and schedule statuses
+    getEmailStatuses: async (): Promise<ApiResponse<{
+      email_statuses: string[];
+      schedule_statuses: string[];
+    }>> => {
+      return this.request('/email-management/statuses')
+    }
+  }
+
   college = {
     // Get applications for review
     getApplicationsForReview: async (params?: string): Promise<ApiResponse<any[]>> => {

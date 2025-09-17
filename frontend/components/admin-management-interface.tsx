@@ -19,6 +19,8 @@ import { QuotaManagement } from "@/components/quota-management"
 import { ScholarshipRuleModal } from "@/components/scholarship-rule-modal"
 import { AdminRuleManagement } from "@/components/admin-rule-management"
 import { AdminConfigurationManagement } from "@/components/admin-configuration-management"
+import { EmailHistoryTable } from "@/components/email-history-table"
+import { ScheduledEmailsTable } from "@/components/scheduled-emails-table"
 
 
 
@@ -120,6 +122,39 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   const [emailTab, setEmailTab] = useState(EMAIL_TEMPLATE_KEYS[0].key);
   const [emailTemplate, setEmailTemplate] = useState<EmailTemplate | null>(null);
+  
+  // Email Management states
+  const [emailManagementTab, setEmailManagementTab] = useState("templates");
+  const [emailHistory, setEmailHistory] = useState<any[]>([]);
+  const [scheduledEmails, setScheduledEmails] = useState<any[]>([]);
+  const [loadingEmailHistory, setLoadingEmailHistory] = useState(false);
+  const [loadingScheduledEmails, setLoadingScheduledEmails] = useState(false);
+  const [emailHistoryPagination, setEmailHistoryPagination] = useState({
+    skip: 0,
+    limit: 50,
+    total: 0
+  });
+  const [scheduledEmailsPagination, setScheduledEmailsPagination] = useState({
+    skip: 0,
+    limit: 50,
+    total: 0
+  });
+  const [emailHistoryFilters, setEmailHistoryFilters] = useState({
+    email_category: '',
+    status: '',
+    scholarship_type_id: '',
+    recipient_email: '',
+    date_from: '',
+    date_to: ''
+  });
+  const [scheduledEmailsFilters, setScheduledEmailsFilters] = useState({
+    status: '',
+    scholarship_type_id: '',
+    requires_approval: '',
+    email_category: '',
+    scheduled_from: '',
+    scheduled_to: ''
+  });
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -309,6 +344,88 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       setSaving(false);
     }
   };
+
+  // Email Management functions
+  const loadEmailHistory = async () => {
+    setLoadingEmailHistory(true);
+    try {
+      const params = {
+        skip: emailHistoryPagination.skip,
+        limit: emailHistoryPagination.limit,
+        ...Object.fromEntries(Object.entries(emailHistoryFilters).filter(([_, v]) => v !== ''))
+      };
+      
+      const response = await apiClient.emailManagement.getEmailHistory(params);
+      if (response.success && response.data) {
+        setEmailHistory(response.data.items);
+        setEmailHistoryPagination(prev => ({
+          ...prev,
+          total: response.data.total
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to load email history:", error);
+    } finally {
+      setLoadingEmailHistory(false);
+    }
+  };
+
+  const loadScheduledEmails = async () => {
+    setLoadingScheduledEmails(true);
+    try {
+      const params = {
+        skip: scheduledEmailsPagination.skip,
+        limit: scheduledEmailsPagination.limit,
+        ...Object.fromEntries(Object.entries(scheduledEmailsFilters).filter(([_, v]) => v !== ''))
+      };
+      
+      const response = await apiClient.emailManagement.getScheduledEmails(params);
+      if (response.success && response.data) {
+        setScheduledEmails(response.data.items);
+        setScheduledEmailsPagination(prev => ({
+          ...prev,
+          total: response.data.total
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to load scheduled emails:", error);
+    } finally {
+      setLoadingScheduledEmails(false);
+    }
+  };
+
+  const handleApproveEmail = async (emailId: number, notes?: string) => {
+    try {
+      const response = await apiClient.emailManagement.approveScheduledEmail(emailId, notes);
+      if (response.success) {
+        // Reload the scheduled emails to show updated status
+        await loadScheduledEmails();
+      }
+    } catch (error) {
+      console.error("Failed to approve email:", error);
+    }
+  };
+
+  const handleCancelEmail = async (emailId: number) => {
+    try {
+      const response = await apiClient.emailManagement.cancelScheduledEmail(emailId);
+      if (response.success) {
+        // Reload the scheduled emails to show updated status
+        await loadScheduledEmails();
+      }
+    } catch (error) {
+      console.error("Failed to cancel email:", error);
+    }
+  };
+
+  // Load email data when the email management tab changes
+  useEffect(() => {
+    if (emailManagementTab === "history") {
+      loadEmailHistory();
+    } else if (emailManagementTab === "scheduled") {
+      loadScheduledEmails();
+    }
+  }, [emailManagementTab, emailHistoryPagination.skip, scheduledEmailsPagination.skip, emailHistoryFilters, scheduledEmailsFilters]);
 
   // 系統公告相關函數
   const fetchAnnouncements = async () => {
@@ -1158,7 +1275,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
           <TabsTrigger value="configurations">獎學金配置</TabsTrigger>
           <TabsTrigger value="rules">審核規則</TabsTrigger>
           <TabsTrigger value="announcements">系統公告</TabsTrigger>
-          <TabsTrigger value="email">郵件模板管理</TabsTrigger>
+          <TabsTrigger value="email">郵件管理</TabsTrigger>
           <TabsTrigger value="settings">系統設定</TabsTrigger>
           <TabsTrigger value="workflows">工作流程</TabsTrigger>
         </TabsList>
@@ -2098,11 +2215,20 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-nycu-navy-800">
                 <Mail className="h-5 w-5 text-nycu-blue-600" />
-                郵件模板管理
+                郵件管理
               </CardTitle>
-              <CardDescription>管理各類通知信件模板，支援拖曳變數，即時預覽效果</CardDescription>
+              <CardDescription>管理郵件模板、查看歷史記錄、管理排程郵件</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent>
+              <Tabs value={emailManagementTab} onValueChange={setEmailManagementTab}>
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="templates">郵件模板</TabsTrigger>
+                  <TabsTrigger value="history">歷史記錄</TabsTrigger>
+                  <TabsTrigger value="scheduled">排程郵件</TabsTrigger>
+                </TabsList>
+
+                {/* 郵件模板管理 */}
+                <TabsContent value="templates" className="space-y-6 mt-6">
               {/* 通知類型選擇 */}
               <Card className="border-nycu-blue-100 bg-nycu-blue-50">
                 <CardContent className="pt-4">
@@ -2325,6 +2451,18 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                   </CardContent>
                 </Card>
               )}
+                </TabsContent>
+
+                {/* 郵件歷史記錄 */}
+                <TabsContent value="history" className="mt-6">
+                  <EmailHistoryTable />
+                </TabsContent>
+
+                {/* 排程郵件管理 */}
+                <TabsContent value="scheduled" className="mt-6">
+                  <ScheduledEmailsTable currentUserRole={user.role} />
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </TabsContent>
