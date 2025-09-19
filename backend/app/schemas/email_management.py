@@ -104,6 +104,8 @@ class ScheduledEmailCreate(ScheduledEmailBase):
 class ScheduledEmailUpdate(BaseModel):
     """Schema for updating scheduled email"""
     approval_notes: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
 
 
 class ScheduledEmailRead(ScheduledEmailBase):

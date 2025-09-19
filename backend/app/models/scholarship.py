@@ -78,6 +78,7 @@ class ScholarshipType(Base):
     applications = relationship("Application", foreign_keys="[Application.scholarship_type_id]", overlaps="scholarship,scholarship_type_ref")
     sub_type_configs = relationship("ScholarshipSubTypeConfig", back_populates="scholarship_type", cascade="all, delete-orphan")
     admins = relationship("AdminScholarship", back_populates="scholarship")
+    email_templates = relationship("ScholarshipEmailTemplate", back_populates="scholarship_type", cascade="all, delete-orphan")
     creator = relationship("User", foreign_keys=[created_by])
     updater = relationship("User", foreign_keys=[updated_by])
 

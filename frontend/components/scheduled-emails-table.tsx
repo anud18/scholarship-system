@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { RefreshCw, Clock, CheckCircle, XCircle, Eye } from "lucide-react"
+import { RefreshCw, Clock, CheckCircle, XCircle, Eye, Edit3, Save, X } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
 import apiClient from "@/lib/api"
 
 interface ScheduledEmailsTableProps {
@@ -66,6 +67,9 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
     scheduled_from: '',
     scheduled_to: ''
   })
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editingSubject, setEditingSubject] = useState('')
+  const [editingBody, setEditingBody] = useState('')
 
   const loadScheduledEmails = async () => {
     setLoading(true)
@@ -184,6 +188,66 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
     if (category.includes('REVIEW')) return 'outline'
     if (category.includes('RESULT')) return 'destructive'
     return 'default'
+  }
+
+  const renderTemplateVariables = (content: string) => {
+    if (!content) return content
+    
+    // Match variables in {variable} format
+    return content.split(/(\{[^}]+\})/g).map((part, index) => {
+      if (part.match(/^\{[^}]+\}$/)) {
+        const variableName = part.slice(1, -1)
+        return (
+          <span
+            key={index}
+            className="inline-block px-2 py-1 mx-1 text-xs bg-blue-100 text-blue-800 rounded-md border border-blue-200"
+          >
+            {variableName}
+          </span>
+        )
+      }
+      return part
+    })
+  }
+
+  const handleEditClick = () => {
+    if (selectedEmail) {
+      setEditingSubject(selectedEmail.subject)
+      setEditingBody(selectedEmail.body)
+      setIsEditMode(true)
+    }
+  }
+
+  const handleSaveEdit = async () => {
+    if (!selectedEmail) return
+    
+    try {
+      await apiClient.updateScheduledEmail(selectedEmail.id, {
+        subject: editingSubject,
+        body: editingBody
+      })
+      
+      // Update the email in the list
+      setScheduledEmails(prev => 
+        prev.map(email => 
+          email.id === selectedEmail.id 
+            ? { ...email, subject: editingSubject, body: editingBody }
+            : email
+        )
+      )
+      
+      // Update selected email
+      setSelectedEmail(prev => prev ? { ...prev, subject: editingSubject, body: editingBody } : null)
+      setIsEditMode(false)
+    } catch (error) {
+      console.error('Failed to update scheduled email:', error)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false)
+    setEditingSubject('')
+    setEditingBody('')
   }
 
   return (
@@ -446,14 +510,70 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
                                   )}
                                 </div>
                                 <div className="space-y-3">
-                                  <Label className="text-sm font-medium text-gray-700">主旨</Label>
-                                  <p className="text-sm font-medium bg-gray-50 p-3 rounded-md border">{selectedEmail.subject}</p>
+                                  <div className="flex items-center justify-between">
+                                    <Label className="text-sm font-medium text-gray-700">主旨</Label>
+                                    {currentUserRole === 'super_admin' && selectedEmail.status === 'PENDING' && !isEditMode && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={handleEditClick}
+                                        className="h-6 px-2 text-xs"
+                                      >
+                                        <Edit3 className="h-3 w-3 mr-1" />
+                                        編輯
+                                      </Button>
+                                    )}
+                                  </div>
+                                  {isEditMode ? (
+                                    <div className="space-y-2">
+                                      <Input
+                                        value={editingSubject}
+                                        onChange={(e) => setEditingSubject(e.target.value)}
+                                        className="text-sm"
+                                        placeholder="請輸入主旨"
+                                      />
+                                      <div className="flex gap-2">
+                                        <Button
+                                          size="sm"
+                                          onClick={handleSaveEdit}
+                                          className="h-6 px-2 text-xs"
+                                        >
+                                          <Save className="h-3 w-3 mr-1" />
+                                          儲存
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={handleCancelEdit}
+                                          className="h-6 px-2 text-xs"
+                                        >
+                                          <X className="h-3 w-3 mr-1" />
+                                          取消
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-sm font-medium bg-gray-50 p-3 rounded-md border">
+                                      {renderTemplateVariables(selectedEmail.subject)}
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="space-y-3">
                                   <Label className="text-sm font-medium text-gray-700">郵件內容模板</Label>
-                                  <div className="bg-gray-50 p-4 rounded-md border max-h-96 overflow-y-auto">
-                                    <pre className="whitespace-pre-wrap text-sm leading-relaxed text-gray-900">{selectedEmail.body}</pre>
-                                  </div>
+                                  {isEditMode ? (
+                                    <Textarea
+                                      value={editingBody}
+                                      onChange={(e) => setEditingBody(e.target.value)}
+                                      className="min-h-64 text-sm"
+                                      placeholder="請輸入郵件內容"
+                                    />
+                                  ) : (
+                                    <div className="bg-gray-50 p-4 rounded-md border max-h-96 overflow-y-auto">
+                                      <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-900">
+                                        {renderTemplateVariables(selectedEmail.body)}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}

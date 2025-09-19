@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from app.models.application import Application, ApplicationStatus, ProfessorReview
 from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem, QuotaDistribution
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
+from app.services.email_automation_service import email_automation_service
 from app.models.user import User, UserRole
 from app.models.enums import Semester
 from app.core.exceptions import BusinessLogicError, NotFoundError
@@ -611,6 +612,44 @@ class CollegeReviewService:
         self.db.add(distribution)
         await self.db.flush()  # Flush within transaction context
         await self.db.refresh(distribution)
+        
+        # 發送自動化通知 - Final results decided
+        try:
+            # Send result notifications for all applications in this ranking
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            for item in sorted_items:
+                application = item.application
+                result_status = '獲得' if item.is_allocated else '未獲得'
+                approved_amount = getattr(application.scholarship, 'amount', '') if item.is_allocated and application.scholarship else ''
+                
+                # Prepare application and result data
+                application_data = {
+                    'id': application.id,
+                    'app_id': getattr(application, 'app_id', ''),
+                    'student_name': getattr(application, 'student_name', ''),
+                    'student_email': getattr(application, 'student_email', ''),
+                    'professor_name': getattr(application, 'professor_name', ''),
+                    'professor_email': getattr(application, 'professor_email', ''),
+                    'college_name': getattr(application, 'college_name', ''),
+                    'scholarship_type': getattr(application.scholarship, 'name', '') if application.scholarship else '',
+                    'scholarship_type_id': application.scholarship_type_id,
+                    'college_emails': ["mock_college@nycu.edu.tw"]  # TODO: Get actual college emails
+                }
+                
+                result_data = {
+                    'result_status': result_status,
+                    'approved_amount': str(approved_amount) if approved_amount else '',
+                    'result_message': f'您的申請已完成審核程序，結果為：{result_status}',
+                    'next_steps': '請查看系統通知了解後續步驟。' if item.is_allocated else '感謝您的申請。'
+                }
+                
+                # Trigger email automation for final result
+                await email_automation_service.trigger_final_result_decided(self.db, application.id, result_data)
+                
+        except Exception as e:
+            logger.error(f"Failed to trigger automated result emails: {e}")
         
         return distribution
     

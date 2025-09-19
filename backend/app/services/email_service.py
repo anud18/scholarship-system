@@ -263,59 +263,287 @@ class EmailService:
             **metadata
         )
 
-    async def send_to_college_reviewers(self, application, db: Optional[AsyncSession] = None):
-        key = "college_notify"
+    # New standardized email methods using the redesigned template system
+    
+    async def send_application_submitted_notification(self, db: AsyncSession, application_data: dict):
+        """Send notification to student when application is submitted"""
         context = {
-            "app_id": application.app_id,
-            "student_name": getattr(application, 'student_name', ''),
-            "scholarship_type": getattr(application, 'scholarship_type', ''),
-            "submit_date": application.submitted_at.strftime('%Y-%m-%d') if getattr(application, 'submitted_at', None) else '',
-            "review_deadline": getattr(application, 'review_deadline', ''),
-            "college_name": getattr(application, 'college_name', ''),
+            "app_id": application_data.get('app_id', ''),
+            "student_name": application_data.get('student_name', ''),
+            "scholarship_type": application_data.get('scholarship_type', ''),
+            "submit_date": application_data.get('submit_date', ''),
+            "professor_name": application_data.get('professor_name', ''),
+            "system_url": "https://scholarship.nycu.edu.tw"
         }
-        default_subject = f"新申請案待審核: {application.app_id}"
-        default_body = f"有一份新的申請案({application.app_id})已由教授推薦，請至系統審查。\n\n--\n獎學金申請與簽核作業管理系統"
-        # reviewers = ...
-        # to = [r.email for r in reviewers]
-        to = ["mock_college@nycu.edu.tw"]
         
-        # Email metadata for logging
+        default_subject = f"申請已成功送出 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        default_body = f"您的獎學金申請({application_data.get('app_id', '')})已成功送出，請等候後續通知。"
+        
         metadata = {
-            'email_category': EmailCategory.REVIEW_COLLEGE,
-            'application_id': getattr(application, 'id', None),
-            'scholarship_type_id': getattr(application, 'scholarship_type_id', None),
+            'email_category': EmailCategory.APPLICATION_STUDENT,
+            'application_id': application_data.get('id'),
+            'scholarship_type_id': application_data.get('scholarship_type_id'),
             'sent_by_system': True
         }
         
-        if db:
-            await self.send_with_template(db, key, to, context, default_subject, default_body, **metadata)
-        else:
-            await self.send_email(to, default_subject, default_body, **metadata)
-
-    async def send_to_professor(self, application, db: Optional[AsyncSession] = None):
-        key = "professor_notify"
-        professor = getattr(application, 'professor', None)
+        await self.send_with_template(
+            db, "application_submitted_student", 
+            application_data.get('student_email', ''), 
+            context, default_subject, default_body, **metadata
+        )
+    
+    async def send_professor_review_notification(self, db: AsyncSession, application_data: dict):
+        """Send notification to professor when new application needs review"""
         context = {
-            "app_id": application.app_id,
-            "professor_name": getattr(professor, 'name', '') if professor else '',
-            "student_name": getattr(application, 'student_name', ''),
-            "scholarship_type": getattr(application, 'scholarship_type', ''),
-            "submit_date": application.submitted_at.strftime('%Y-%m-%d') if getattr(application, 'submitted_at', None) else '',
-            "professor_email": getattr(professor, 'email', '') if professor else '',
+            "app_id": application_data.get('app_id', ''),
+            "professor_name": application_data.get('professor_name', ''),
+            "student_name": application_data.get('student_name', ''),
+            "scholarship_type": application_data.get('scholarship_type', ''),
+            "submit_date": application_data.get('submit_date', ''),
+            "system_url": "https://scholarship.nycu.edu.tw"
         }
-        default_subject = f"新學生申請待推薦: {application.app_id}"
-        default_body = f"有一份新的學生申請案({application.app_id})需要您推薦，請至系統審查。\n\n--\n獎學金申請與簽核作業管理系統"
-        to = professor.email if professor else None
         
-        # Email metadata for logging
+        default_subject = f"新學生申請待推薦 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        default_body = f"有一份新的學生申請案({application_data.get('app_id', '')})需要您推薦，請至系統審查。"
+        
         metadata = {
             'email_category': EmailCategory.RECOMMENDATION_PROFESSOR,
-            'application_id': getattr(application, 'id', None),
-            'scholarship_type_id': getattr(application, 'scholarship_type_id', None),
+            'application_id': application_data.get('id'),
+            'scholarship_type_id': application_data.get('scholarship_type_id'),
             'sent_by_system': True
         }
         
-        if db and to:
-            await self.send_with_template(db, key, to, context, default_subject, default_body, **metadata)
-        elif to:
-            await self.send_email(to, default_subject, default_body, **metadata) 
+        await self.send_with_template(
+            db, "application_notify_professor",
+            application_data.get('professor_email', ''),
+            context, default_subject, default_body, **metadata
+        )
+    
+    async def send_college_review_notification(self, db: AsyncSession, application_data: dict):
+        """Send notification to college when application needs review"""
+        context = {
+            "app_id": application_data.get('app_id', ''),
+            "student_name": application_data.get('student_name', ''),
+            "scholarship_type": application_data.get('scholarship_type', ''),
+            "professor_name": application_data.get('professor_name', ''),
+            "submit_date": application_data.get('submit_date', ''),
+            "professor_recommendation": application_data.get('professor_recommendation', ''),
+            "college_name": application_data.get('college_name', ''),
+            "review_deadline": application_data.get('review_deadline', ''),
+            "system_url": "https://scholarship.nycu.edu.tw"
+        }
+        
+        default_subject = f"新申請案待審核 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        default_body = f"有一份新的申請案({application_data.get('app_id', '')})已由教授推薦，請至系統審查。"
+        
+        metadata = {
+            'email_category': EmailCategory.REVIEW_COLLEGE,
+            'application_id': application_data.get('id'),
+            'scholarship_type_id': application_data.get('scholarship_type_id'),
+            'sent_by_system': True
+        }
+        
+        # Send to college reviewers (can be multiple recipients)
+        college_emails = application_data.get('college_emails', ["mock_college@nycu.edu.tw"])
+        for email in college_emails:
+            await self.send_with_template(
+                db, "college_review_notification", email,
+                context, default_subject, default_body, **metadata
+            )
+    
+    async def send_whitelist_notification(self, db: AsyncSession, scholarship_data: dict, student_emails: list):
+        """Send whitelist notification to eligible students"""
+        context = {
+            "scholarship_type": scholarship_data.get('scholarship_type', ''),
+            "academic_year": scholarship_data.get('academic_year', ''),
+            "semester": scholarship_data.get('semester', ''),
+            "application_period": scholarship_data.get('application_period', ''),
+            "deadline": scholarship_data.get('deadline', ''),
+            "eligibility_requirements": scholarship_data.get('eligibility_requirements', ''),
+            "system_url": "https://scholarship.nycu.edu.tw"
+        }
+        
+        default_subject = f"獎學金申請開放通知 - {scholarship_data.get('scholarship_type', '')} ({scholarship_data.get('academic_year', '')}學年度{scholarship_data.get('semester', '')}學期)"
+        default_body = f"{scholarship_data.get('scholarship_type', '')} 現已開放申請，請至系統進行線上申請。"
+        
+        metadata = {
+            'email_category': EmailCategory.APPLICATION_WHITELIST,
+            'scholarship_type_id': scholarship_data.get('scholarship_type_id'),
+            'sent_by_system': True
+        }
+        
+        # Send BCC to all students, CC to admin
+        await self.send_with_template(
+            db, "whitelist_notification", student_emails[0] if student_emails else "noreply@nycu.edu.tw",
+            context, default_subject, default_body, 
+            cc=["admin@nycu.edu.tw"], bcc=student_emails, **metadata
+        )
+    
+    async def send_deadline_reminder(self, db: AsyncSession, application_data: dict):
+        """Send deadline reminder to students with draft applications"""
+        context = {
+            "student_name": application_data.get('student_name', ''),
+            "scholarship_type": application_data.get('scholarship_type', ''),
+            "deadline": application_data.get('deadline', ''),
+            "system_url": "https://scholarship.nycu.edu.tw"
+        }
+        
+        default_subject = f"申請截止提醒 - {application_data.get('scholarship_type', '')} (剩餘 3 天)"
+        default_body = f"您的獎學金申請草稿尚未送出，申請即將截止！請儘快完成申請。"
+        
+        metadata = {
+            'email_category': EmailCategory.APPLICATION_STUDENT,
+            'application_id': application_data.get('id'),
+            'scholarship_type_id': application_data.get('scholarship_type_id'),
+            'sent_by_system': True
+        }
+        
+        await self.send_with_template(
+            db, "deadline_reminder_draft",
+            application_data.get('student_email', ''),
+            context, default_subject, default_body, **metadata
+        )
+    
+    async def send_supplement_request(self, db: AsyncSession, application_data: dict, supplement_data: dict):
+        """Send supplement request to student"""
+        context = {
+            "student_name": application_data.get('student_name', ''),
+            "app_id": application_data.get('app_id', ''),
+            "scholarship_type": application_data.get('scholarship_type', ''),
+            "supplement_items": supplement_data.get('supplement_items', ''),
+            "supplement_notes": supplement_data.get('supplement_notes', ''),
+            "supplement_deadline": supplement_data.get('supplement_deadline', ''),
+            "system_url": "https://scholarship.nycu.edu.tw"
+        }
+        
+        default_subject = f"補件通知 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        default_body = f"您的獎學金申請({application_data.get('app_id', '')})需要補充資料，請儘快補齊。"
+        
+        metadata = {
+            'email_category': EmailCategory.SUPPLEMENT_STUDENT,
+            'application_id': application_data.get('id'),
+            'scholarship_type_id': application_data.get('scholarship_type_id'),
+            'sent_by_system': False  # Manual supplement requests
+        }
+        
+        await self.send_with_template(
+            db, "supplement_request",
+            application_data.get('student_email', ''),
+            context, default_subject, default_body, **metadata
+        )
+    
+    async def send_result_notifications(self, db: AsyncSession, application_data: dict, result_data: dict):
+        """Send result notifications to student, professor, and college"""
+        base_context = {
+            "app_id": application_data.get('app_id', ''),
+            "student_name": application_data.get('student_name', ''),
+            "professor_name": application_data.get('professor_name', ''),
+            "college_name": application_data.get('college_name', ''),
+            "scholarship_type": application_data.get('scholarship_type', ''),
+            "result_status": result_data.get('result_status', ''),
+            "approved_amount": result_data.get('approved_amount', ''),
+            "result_message": result_data.get('result_message', ''),
+            "next_steps": result_data.get('next_steps', '')
+        }
+        
+        base_metadata = {
+            'application_id': application_data.get('id'),
+            'scholarship_type_id': application_data.get('scholarship_type_id'),
+            'sent_by_system': True
+        }
+        
+        # Send to student
+        await self.send_with_template(
+            db, "result_notification_student",
+            application_data.get('student_email', ''),
+            base_context, 
+            f"獎學金審核結果通知 - {base_context['scholarship_type']} ({base_context['app_id']})",
+            f"您的獎學金申請審核結果已出爐：{base_context['result_status']}",
+            email_category=EmailCategory.RESULT_STUDENT, **base_metadata
+        )
+        
+        # Send to professor
+        if application_data.get('professor_email'):
+            await self.send_with_template(
+                db, "result_notification_professor",
+                application_data.get('professor_email', ''),
+                base_context,
+                f"學生獎學金審核結果 - {base_context['scholarship_type']} ({base_context['app_id']})",
+                f"您推薦的學生({base_context['student_name']})獎學金申請結果：{base_context['result_status']}",
+                email_category=EmailCategory.RESULT_PROFESSOR, **base_metadata
+            )
+        
+        # Send to college
+        college_emails = application_data.get('college_emails', ["mock_college@nycu.edu.tw"])
+        for email in college_emails:
+            await self.send_with_template(
+                db, "result_notification_college", email,
+                base_context,
+                f"獎學金審核結果確認 - {base_context['scholarship_type']} ({base_context['app_id']})",
+                f"獎學金申請({base_context['app_id']})審核程序已完成，結果：{base_context['result_status']}",
+                email_category=EmailCategory.RESULT_COLLEGE, **base_metadata
+            )
+    
+    async def send_roster_notification(self, db: AsyncSession, application_data: dict, roster_data: dict):
+        """Send roster notification to awarded students"""
+        context = {
+            "student_name": application_data.get('student_name', ''),
+            "scholarship_type": application_data.get('scholarship_type', ''),
+            "academic_year": roster_data.get('academic_year', ''),
+            "semester": roster_data.get('semester', ''),
+            "approved_amount": roster_data.get('approved_amount', ''),
+            "roster_number": roster_data.get('roster_number', ''),
+            "follow_up_items": roster_data.get('follow_up_items', '')
+        }
+        
+        default_subject = f"獲獎名冊確認通知 - {application_data.get('scholarship_type', '')} ({roster_data.get('academic_year', '')}學年度{roster_data.get('semester', '')}學期)"
+        default_body = f"恭喜您獲得 {application_data.get('scholarship_type', '')}！"
+        
+        metadata = {
+            'email_category': EmailCategory.ROSTER_STUDENT,
+            'application_id': application_data.get('id'),
+            'scholarship_type_id': application_data.get('scholarship_type_id'),
+            'sent_by_system': False  # Manual roster notifications
+        }
+        
+        await self.send_with_template(
+            db, "roster_notification",
+            application_data.get('student_email', ''),
+            context, default_subject, default_body, **metadata
+        )
+
+    # Legacy methods - kept for backward compatibility but deprecated
+    async def send_to_college_reviewers(self, application, db: Optional[AsyncSession] = None):
+        """DEPRECATED: Use send_college_review_notification instead"""
+        if db:
+            application_data = {
+                'id': getattr(application, 'id', None),
+                'app_id': application.app_id,
+                'student_name': getattr(application, 'student_name', ''),
+                'scholarship_type': getattr(application, 'scholarship_type', ''),
+                'submit_date': application.submitted_at.strftime('%Y-%m-%d') if getattr(application, 'submitted_at', None) else '',
+                'professor_name': getattr(application, 'professor_name', ''),
+                'professor_recommendation': '',
+                'college_name': getattr(application, 'college_name', ''),
+                'review_deadline': getattr(application, 'review_deadline', ''),
+                'scholarship_type_id': getattr(application, 'scholarship_type_id', None),
+                'college_emails': ["mock_college@nycu.edu.tw"]
+            }
+            await self.send_college_review_notification(db, application_data)
+
+    async def send_to_professor(self, application, db: Optional[AsyncSession] = None):
+        """DEPRECATED: Use send_professor_review_notification instead"""
+        if db:
+            professor = getattr(application, 'professor', None)
+            application_data = {
+                'id': getattr(application, 'id', None),
+                'app_id': application.app_id,
+                'student_name': getattr(application, 'student_name', ''),
+                'scholarship_type': getattr(application, 'scholarship_type', ''),
+                'submit_date': application.submitted_at.strftime('%Y-%m-%d') if getattr(application, 'submitted_at', None) else '',
+                'professor_name': getattr(professor, 'name', '') if professor else '',
+                'professor_email': getattr(professor, 'email', '') if professor else '',
+                'scholarship_type_id': getattr(application, 'scholarship_type_id', None)
+            }
+            if application_data['professor_email']:
+                await self.send_professor_review_notification(db, application_data) 

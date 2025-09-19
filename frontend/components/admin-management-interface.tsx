@@ -49,16 +49,7 @@ interface AdminManagementInterfaceProps {
   user: User
 }
 
-const EMAIL_TEMPLATE_KEYS = [
-  {
-    key: "professor_notify",
-    label: "教授推薦通知"
-  },
-  {
-    key: "college_notify",
-    label: "學院審查通知"
-  }
-];
+// This will be loaded dynamically from the API based on sending type;
 
 const TEMPLATE_VARIABLES: Record<string, string[]> = {
   professor_notify: ["app_id", "professor_name"],
@@ -66,21 +57,93 @@ const TEMPLATE_VARIABLES: Record<string, string[]> = {
 };
 
 const DRAGGABLE_VARIABLES: Record<string, { label: string; desc: string }[]> = {
-  professor_notify: [
-    { label: "app_id", desc: "申請案編號" },
+  application_submitted_student: [
+    { label: "student_name", desc: "學生姓名" },
+    { label: "scholarship_name", desc: "獎學金名稱" },
+    { label: "submission_date", desc: "申請日期" },
+    { label: "application_id", desc: "申請編號" },
+    { label: "scholarship_amount", desc: "獎學金金額" },
+    { label: "semester", desc: "申請學期" }
+  ],
+  application_submitted_admin: [
+    { label: "student_name", desc: "學生姓名" },
+    { label: "student_id", desc: "學生學號" },
+    { label: "scholarship_name", desc: "獎學金名稱" },
+    { label: "submission_date", desc: "申請時間" },
+    { label: "application_id", desc: "申請編號" },
+    { label: "admin_portal_url", desc: "管理系統網址" }
+  ],
+  professor_review_notification: [
     { label: "professor_name", desc: "教授姓名" },
     { label: "student_name", desc: "學生姓名" },
-    { label: "scholarship_type", desc: "獎學金類型" },
-    { label: "submit_date", desc: "申請日期" },
-    { label: "professor_email", desc: "教授信箱" }
+    { label: "student_id", desc: "學生學號" },
+    { label: "scholarship_name", desc: "獎學金名稱" },
+    { label: "review_deadline", desc: "審查截止日期" },
+    { label: "review_url", desc: "審查連結" }
   ],
-  college_notify: [
-    { label: "app_id", desc: "申請案編號" },
+  professor_review_submitted_admin: [
+    { label: "professor_name", desc: "教授姓名" },
     { label: "student_name", desc: "學生姓名" },
-    { label: "scholarship_type", desc: "獎學金類型" },
-    { label: "submit_date", desc: "申請日期" },
-    { label: "review_deadline", desc: "審核截止日" },
-    { label: "college_name", desc: "學院名稱" }
+    { label: "student_id", desc: "學生學號" },
+    { label: "scholarship_name", desc: "獎學金名稱" },
+    { label: "review_result", desc: "審查結果" },
+    { label: "completion_date", desc: "完成時間" },
+    { label: "admin_portal_url", desc: "管理系統網址" }
+  ],
+  review_deadline_reminder: [
+    { label: "professor_name", desc: "教授姓名" },
+    { label: "student_name", desc: "學生姓名" },
+    { label: "student_id", desc: "學生學號" },
+    { label: "scholarship_name", desc: "獎學金名稱" },
+    { label: "review_deadline", desc: "審查截止日期" },
+    { label: "days_remaining", desc: "剩餘天數" },
+    { label: "review_url", desc: "審查連結" }
+  ],
+  supplement_request_student: [
+    { label: "student_name", desc: "學生姓名" },
+    { label: "scholarship_name", desc: "獎學金名稱" },
+    { label: "application_id", desc: "申請編號" },
+    { label: "supplement_items", desc: "補件項目" },
+    { label: "supplement_deadline", desc: "補件截止日期" },
+    { label: "submission_method", desc: "補件方式" },
+    { label: "supplement_url", desc: "補件上傳連結" }
+  ],
+  application_result_approved: [
+    { label: "student_name", desc: "學生姓名" },
+    { label: "scholarship_name", desc: "獎學金名稱" },
+    { label: "application_id", desc: "申請編號" },
+    { label: "approved_amount", desc: "核定金額" },
+    { label: "approved_semester", desc: "核定學期" },
+    { label: "effective_date", desc: "生效日期" },
+    { label: "next_steps", desc: "後續步驟" }
+  ],
+  application_result_rejected: [
+    { label: "student_name", desc: "學生姓名" },
+    { label: "scholarship_name", desc: "獎學金名稱" },
+    { label: "application_id", desc: "申請編號" },
+    { label: "rejection_reason", desc: "未通過原因" }
+  ],
+  application_deadline_reminder: [
+    { label: "scholarship_name", desc: "獎學金名稱" },
+    { label: "application_deadline", desc: "申請截止日期" },
+    { label: "days_remaining", desc: "剩餘天數" },
+    { label: "scholarship_amount", desc: "獎學金金額" },
+    { label: "eligibility_criteria", desc: "申請條件" },
+    { label: "application_url", desc: "申請連結" }
+  ],
+  system_maintenance_notice: [
+    { label: "maintenance_start", desc: "維護開始時間" },
+    { label: "maintenance_end", desc: "維護結束時間" },
+    { label: "maintenance_duration", desc: "維護時長" },
+    { label: "maintenance_details", desc: "維護內容" }
+  ],
+  award_notification: [
+    { label: "recipient_name", desc: "獲獎者姓名" },
+    { label: "award_name", desc: "獎項名稱" },
+    { label: "award_semester", desc: "獲獎學期" },
+    { label: "award_amount", desc: "獎金金額" },
+    { label: "ceremony_date", desc: "頒獎典禮日期" },
+    { label: "award_notes", desc: "注意事項" }
   ]
 };
 
@@ -156,6 +219,11 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     scheduled_to: ''
   });
   const [loadingTemplate, setLoadingTemplate] = useState(false);
+  
+  // Email Template states by sending type
+  const [emailTemplateTab, setEmailTemplateTab] = useState("single"); // "single" or "bulk"
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
+  const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // 系統公告相關狀態
@@ -343,6 +411,63 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     } finally {
       setSaving(false);
     }
+  };
+
+  // Scholarship Email Template functions
+  const loadScholarshipEmailTemplates = async (scholarshipTypeId: number) => {
+    setLoadingScholarshipTemplates(true);
+    try {
+      const response = await apiClient.admin.getScholarshipEmailTemplates(scholarshipTypeId);
+      if (response.success && response.data) {
+        setScholarshipEmailTemplates(response.data.items);
+      }
+    } catch (error: any) {
+      console.error("Failed to load scholarship email templates:", error);
+      // If it's a permission error, switch back to system mode
+      if (error?.response?.status === 400 || error?.message?.includes('permission')) {
+        setScholarshipEmailTab("system");
+        alert("您沒有權限存取此獎學金的郵件模板");
+      }
+      setScholarshipEmailTemplates([]);
+    } finally {
+      setLoadingScholarshipTemplates(false);
+    }
+  };
+
+  const loadScholarshipEmailTemplate = async (scholarshipTypeId: number, templateKey: string) => {
+    try {
+      const response = await apiClient.admin.getScholarshipEmailTemplate(scholarshipTypeId, templateKey);
+      if (response.success && response.data) {
+        setCurrentScholarshipTemplate(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load scholarship email template:", error);
+      setCurrentScholarshipTemplate(null);
+    }
+  };
+
+  // Load email templates by sending type
+  const loadEmailTemplatesBySendingType = async (sendingType: "single" | "bulk") => {
+    setLoadingEmailTemplates(true);
+    try {
+      const response = await apiClient.admin.getEmailTemplatesBySendingType(sendingType);
+      if (response.success && response.data) {
+        setEmailTemplates(response.data);
+      } else {
+        setEmailTemplates([]);
+      }
+    } catch (error) {
+      console.error('Error loading email templates:', error);
+      setEmailTemplates([]);
+    }
+    setLoadingEmailTemplates(false);
+  };
+
+  const getFilteredEmailTemplates = () => {
+    return emailTemplates.map(template => ({
+      key: template.key,
+      label: template.key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    }));
   };
 
   // Email Management functions
@@ -580,6 +705,27 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     }
   }, [user]);
 
+  // 載入獎學金相關模板當切換獎學金時
+  useEffect(() => {
+    const loadScholarshipData = async () => {
+      if (scholarshipEmailTab !== "system" && scholarshipEmailTab) {
+        const scholarshipTypeId = parseInt(scholarshipEmailTab);
+        await loadScholarshipEmailTemplates(scholarshipTypeId);
+      } else {
+        // Reset to system mode
+        setScholarshipEmailTemplates([]);
+      }
+      
+      // Reset email tab to first available template
+      const availableTemplates = getFilteredEmailTemplates();
+      if (availableTemplates.length > 0 && availableTemplates[0].key !== emailTab) {
+        setEmailTab(availableTemplates[0].key);
+      }
+    };
+    
+    loadScholarshipData();
+  }, [scholarshipEmailTab]);
+
   // 載入系統公告
   useEffect(() => {
     // 檢查用戶是否已認證且具有管理員權限
@@ -587,6 +733,40 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       fetchAnnouncements();
     }
   }, [announcementPagination.page, announcementPagination.size, user]);
+
+  // 載入用戶有權限的獎學金列表
+  useEffect(() => {
+    const fetchMyScholarships = async () => {
+      if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+        try {
+          const response = await apiClient.admin.getMyScholarships();
+          if (response.success && response.data) {
+            setMyScholarships(response.data);
+            
+            // If user has scholarships and current tab is not valid, reset to first scholarship or system
+            if (response.data.length > 0 && scholarshipEmailTab !== "system") {
+              const currentScholarshipId = parseInt(scholarshipEmailTab);
+              const hasPermission = response.data.some(s => s.id === currentScholarshipId);
+              if (!hasPermission) {
+                setScholarshipEmailTab("system"); // Reset to system if no permission for current scholarship
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch user scholarships:', error);
+          setMyScholarships([]);
+          setScholarshipEmailTab("system"); // Reset to system on error
+        }
+      }
+    };
+    
+    fetchMyScholarships();
+  }, [user]);
+
+  // Load email templates when sending type tab changes
+  useEffect(() => {
+    loadEmailTemplatesBySendingType(emailTemplateTab);
+  }, [emailTemplateTab]);
 
   // 使用者管理相關函數
   const fetchUsers = async () => {
@@ -2229,6 +2409,31 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
                 {/* 郵件模板管理 */}
                 <TabsContent value="templates" className="space-y-6 mt-6">
+                  {/* 獎學金選擇 tabs */}
+                  <Card className="border-nycu-purple-100 bg-nycu-purple-50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg text-nycu-navy-800">郵件模板類型</CardTitle>
+                      <CardDescription>選擇要管理的郵件模板類型</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Tabs value={emailTemplateTab} onValueChange={setEmailTemplateTab}>
+                        <TabsList className="grid grid-cols-2 h-auto">
+                          <TabsTrigger value="single" className="flex flex-col items-center p-3">
+                            <Mail className="h-4 w-4 mb-1" />
+                            <span className="text-xs">單一寄信</span>
+                            <span className="text-xs text-nycu-navy-500">個別通知</span>
+                          </TabsTrigger>
+                          <TabsTrigger value="bulk" className="flex flex-col items-center p-3">
+                            <Users className="h-4 w-4 mb-1" />
+                            <span className="text-xs">批量寄信</span>
+                            <span className="text-xs text-nycu-navy-500">群發通知</span>
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </CardContent>
+                  </Card>
+
+
               {/* 通知類型選擇 */}
               <Card className="border-nycu-blue-100 bg-nycu-blue-50">
                 <CardContent className="pt-4">
@@ -2239,7 +2444,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                       value={emailTab}
                       onChange={e => setEmailTab(e.target.value)}
                     >
-                      {EMAIL_TEMPLATE_KEYS.map(t => (
+                      {getFilteredEmailTemplates().map(t => (
                         <option key={t.key} value={t.key}>{t.label}</option>
                       ))}
                     </select>
@@ -2320,25 +2525,90 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                           />
                         </div>
 
-                        {/* CC/BCC 設定 */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label className="text-nycu-navy-700 font-medium">CC 副本</Label>
-                            <Input
-                              value={emailTemplate.cc || ""}
-                              onChange={e => handleTemplateChange("cc", e.target.value)}
-                              placeholder="多個以逗號分隔"
-                              className="border-nycu-blue-200 focus:ring-nycu-blue-500"
-                            />
+                        {/* 收件者選項 */}
+                        <div className="space-y-3">
+                          <Label className="text-nycu-navy-700 font-medium">📧 收件者選項</Label>
+                          <div className="p-4 bg-nycu-blue-50 rounded-lg border border-nycu-blue-200">
+                            <div className="grid grid-cols-1 gap-3">
+                              {emailTemplate.recipient_options && emailTemplate.recipient_options.length > 0 ? (
+                                emailTemplate.recipient_options.map((option, index) => (
+                                  <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-3">
+                                        <div className="flex items-center space-x-2">
+                                          <input
+                                            type="radio"
+                                            name="recipient_option"
+                                            value={option.value}
+                                            className="text-nycu-blue-600 focus:ring-nycu-blue-500"
+                                            readOnly
+                                          />
+                                          <span className="font-medium text-nycu-navy-800">{option.label}</span>
+                                        </div>
+                                        <Badge variant="outline" className="text-xs">
+                                          {option.value}
+                                        </Badge>
+                                      </div>
+                                      <p className="text-sm text-gray-600 mt-1 ml-5">{option.description}</p>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-center py-4 text-gray-500">
+                                  <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                                  <p>此模板尚未配置收件者選項</p>
+                                  <p className="text-sm">請聯繫超級管理員進行配置</p>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className="space-y-2">
-                            <Label className="text-nycu-navy-700 font-medium">BCC 密件副本</Label>
-                            <Input
-                              value={emailTemplate.bcc || ""}
-                              onChange={e => handleTemplateChange("bcc", e.target.value)}
-                              placeholder="多個以逗號分隔"
-                              className="border-nycu-blue-200 focus:ring-nycu-blue-500"
-                            />
+                        </div>
+
+                        {/* 郵件設定 */}
+                        <div className="space-y-3">
+                          <Label className="text-nycu-navy-700 font-medium">⚙️ 郵件設定</Label>
+                          <div className="grid grid-cols-1 gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            {/* 寄信類型 */}
+                            <div className="space-y-2">
+                              <Label className="text-sm text-gray-600">寄信類型</Label>
+                              <div className="flex items-center gap-4">
+                                <Badge variant={emailTemplate.sending_type === 'single' ? 'default' : 'outline'}>
+                                  {emailTemplate.sending_type === 'single' ? '單一寄信' : '批量寄信'}
+                                </Badge>
+                                {emailTemplate.max_recipients && (
+                                  <span className="text-sm text-gray-600">
+                                    最大收件者數: {emailTemplate.max_recipients}
+                                  </span>
+                                )}
+                                {emailTemplate.requires_approval && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    需要審核
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* CC/BCC 設定 */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label className="text-sm text-gray-600">CC 副本</Label>
+                                <Input
+                                  value={emailTemplate.cc || ""}
+                                  onChange={e => handleTemplateChange("cc", e.target.value)}
+                                  placeholder="多個以逗號分隔"
+                                  className="border-gray-300 focus:ring-nycu-blue-500 text-sm"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-sm text-gray-600">BCC 密件副本</Label>
+                                <Input
+                                  value={emailTemplate.bcc || ""}
+                                  onChange={e => handleTemplateChange("bcc", e.target.value)}
+                                  placeholder="多個以逗號分隔"
+                                  className="border-gray-300 focus:ring-nycu-blue-500 text-sm"
+                                />
+                              </div>
+                            </div>
                           </div>
                         </div>
 
@@ -2406,11 +2676,25 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                             {/* 標題預覽 */}
                             <div className="mb-4">
                               <Label className="text-sm font-medium text-gray-600 mb-1 block">郵件標題:</Label>
-                              <div className="text-lg font-bold text-nycu-navy-800 p-3 bg-nycu-blue-50 rounded-lg border border-nycu-blue-200">
-                                {emailTemplate.subject_template.replace(/\{(\w+)\}/g, (_, v) => {
-                                  const variable = DRAGGABLE_VARIABLES[emailTab]?.find(v2 => v2.label === v);
-                                  return variable ? `[${variable.desc}]` : `[${v}]`;
-                                })}
+                              <div className="text-lg font-bold text-nycu-navy-800 p-3 bg-nycu-blue-50 rounded-lg border border-nycu-blue-200 flex flex-wrap items-center gap-1">
+                                {(() => {
+                                  const parts = emailTemplate.subject_template.split(/(\{\w+\})/);
+                                  return parts.map((part, index) => {
+                                    const match = part.match(/^\{(\w+)\}$/);
+                                    if (match) {
+                                      const variable = DRAGGABLE_VARIABLES[emailTab]?.find(v => v.label === match[1]);
+                                      return (
+                                        <span
+                                          key={index}
+                                          className="inline-flex items-center px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded-full text-xs font-medium border border-gray-300"
+                                        >
+                                          {variable ? variable.desc : match[1]}
+                                        </span>
+                                      );
+                                    }
+                                    return <span key={index}>{part}</span>;
+                                  });
+                                })()}
                               </div>
                             </div>
 
@@ -2419,10 +2703,24 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                               <Label className="text-sm font-medium text-gray-600 mb-1 block">郵件內容:</Label>
                               <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 min-h-[200px]">
                                 <div className="whitespace-pre-line text-nycu-navy-700 leading-relaxed">
-                                  {emailTemplate.body_template.replace(/\{(\w+)\}/g, (_, v) => {
-                                    const variable = DRAGGABLE_VARIABLES[emailTab]?.find(v2 => v2.label === v);
-                                    return variable ? `[${variable.desc}]` : `[${v}]`;
-                                  })}
+                                  {(() => {
+                                    const parts = emailTemplate.body_template.split(/(\{\w+\})/);
+                                    return parts.map((part, index) => {
+                                      const match = part.match(/^\{(\w+)\}$/);
+                                      if (match) {
+                                        const variable = DRAGGABLE_VARIABLES[emailTab]?.find(v => v.label === match[1]);
+                                        return (
+                                          <span
+                                            key={index}
+                                            className="inline-flex items-center px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded-full text-xs font-medium border border-gray-300"
+                                          >
+                                            {variable ? variable.desc : match[1]}
+                                          </span>
+                                        );
+                                      }
+                                      return <span key={index} className="whitespace-pre-line">{part}</span>;
+                                    });
+                                  })()}
                                 </div>
                               </div>
                             </div>

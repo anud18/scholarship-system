@@ -157,12 +157,22 @@ export interface DashboardStats {
   avg_processing_time: string
 }
 
+export interface RecipientOption {
+  value: string
+  label: string
+  description: string
+}
+
 export interface EmailTemplate {
   key: string
   subject_template: string
   body_template: string
   cc?: string | null
   bcc?: string | null
+  sending_type: 'single' | 'bulk'
+  recipient_options?: RecipientOption[] | null
+  requires_approval: boolean
+  max_recipients?: number | null
   updated_at?: string | null
 }
 
@@ -1435,6 +1445,74 @@ class ApiClient {
       })
     },
 
+    getEmailTemplatesBySendingType: async (sendingType?: string): Promise<ApiResponse<EmailTemplate[]>> => {
+      const params = sendingType ? `?sending_type=${encodeURIComponent(sendingType)}` : ''
+      return this.request(`/admin/email-templates${params}`)
+    },
+
+    // Scholarship Email Template endpoints
+    getScholarshipEmailTemplates: async (scholarshipTypeId: number): Promise<ApiResponse<{
+      items: any[];
+      total: number;
+    }>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}`)
+    },
+
+    getScholarshipEmailTemplate: async (scholarshipTypeId: number, templateKey: string): Promise<ApiResponse<any>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/${encodeURIComponent(templateKey)}`)
+    },
+
+    createScholarshipEmailTemplate: async (templateData: {
+      scholarship_type_id: number;
+      email_template_key: string;
+      is_enabled?: boolean;
+      priority?: number;
+      custom_subject?: string;
+      custom_body?: string;
+      notes?: string;
+    }): Promise<ApiResponse<any>> => {
+      return this.request('/admin/scholarship-email-templates', {
+        method: 'POST',
+        body: JSON.stringify(templateData),
+      })
+    },
+
+    updateScholarshipEmailTemplate: async (
+      scholarshipTypeId: number, 
+      templateKey: string, 
+      templateData: {
+        is_enabled?: boolean;
+        priority?: number;
+        custom_subject?: string;
+        custom_body?: string;
+        notes?: string;
+      }
+    ): Promise<ApiResponse<any>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/${encodeURIComponent(templateKey)}`, {
+        method: 'PUT',
+        body: JSON.stringify(templateData),
+      })
+    },
+
+    deleteScholarshipEmailTemplate: async (scholarshipTypeId: number, templateKey: string): Promise<ApiResponse<boolean>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/${encodeURIComponent(templateKey)}`, {
+        method: 'DELETE',
+      })
+    },
+
+    bulkCreateScholarshipEmailTemplates: async (scholarshipTypeId: number): Promise<ApiResponse<{
+      items: any[];
+      total: number;
+    }>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/bulk-create`, {
+        method: 'POST',
+      })
+    },
+
+    getAvailableScholarshipEmailTemplates: async (scholarshipTypeId: number): Promise<ApiResponse<EmailTemplate[]>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/available`)
+    },
+
     getSystemSetting: async (key: string): Promise<ApiResponse<SystemSetting>> => {
       return this.request(`/admin/system-setting?key=${encodeURIComponent(key)}`)
     },
@@ -2144,6 +2222,14 @@ class ApiClient {
     cancelScheduledEmail: async (emailId: number): Promise<ApiResponse<any>> => {
       return this.request(`/email-management/scheduled/${emailId}/cancel`, {
         method: 'PATCH'
+      })
+    },
+
+    // Update scheduled email
+    updateScheduledEmail: async (emailId: number, data: { subject: string; body: string }): Promise<ApiResponse<any>> => {
+      return this.request(`/email-management/scheduled/${emailId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data)
       })
     },
 

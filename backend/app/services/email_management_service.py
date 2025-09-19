@@ -365,6 +365,50 @@ class EmailManagementService:
         logger.info(f"Scheduled email {email_id} cancelled")
         return scheduled_email
 
+    async def update_scheduled_email(
+        self,
+        db: AsyncSession,
+        email_id: int,
+        subject: Optional[str] = None,
+        body: Optional[str] = None
+    ) -> ScheduledEmail:
+        """
+        Update a scheduled email's subject and body
+        
+        Args:
+            db: Database session
+            email_id: ID of scheduled email to update
+            subject: New subject (optional)
+            body: New body (optional)
+            
+        Returns:
+            Updated scheduled email
+            
+        Raises:
+            ValueError: If email not found or already processed
+        """
+        query = select(ScheduledEmail).where(ScheduledEmail.id == email_id)
+        result = await db.execute(query)
+        scheduled_email = result.scalar_one_or_none()
+        
+        if not scheduled_email:
+            raise ValueError(f"Scheduled email with ID {email_id} not found")
+        
+        if scheduled_email.status != ScheduleStatus.PENDING:
+            raise ValueError(f"Cannot update email with status {scheduled_email.status}")
+        
+        # Update fields if provided
+        if subject is not None:
+            scheduled_email.subject = subject
+        if body is not None:
+            scheduled_email.body = body
+        
+        await db.commit()
+        await db.refresh(scheduled_email)
+        
+        logger.info(f"Scheduled email {email_id} updated")
+        return scheduled_email
+
     async def process_due_emails(
         self,
         db: AsyncSession,

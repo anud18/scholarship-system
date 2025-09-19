@@ -26,6 +26,7 @@ from app.schemas.application import (
     StudentDataSchema, StudentFinancialInfo, SupervisorInfo
 )
 from app.services.email_service import EmailService
+from app.services.email_automation_service import email_automation_service
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
 
@@ -875,11 +876,25 @@ class ApplicationService:
         await self.db.commit()
         await self.db.refresh(application, ['files', 'reviews', 'professor_reviews', 'scholarship'])
         
-        # 發送通知
+        # 發送自動化通知
         try:
-            await self.emailService.send_submission_notification(application, db=self.db)
+            # Prepare application data for email automation
+            application_data = {
+                'id': application.id,
+                'app_id': application.app_id,
+                'student_name': getattr(application, 'student_name', ''),
+                'student_email': getattr(application, 'student_email', ''),
+                'professor_name': getattr(application, 'professor_name', ''),
+                'professor_email': getattr(application, 'professor_email', ''),
+                'scholarship_type': getattr(application.scholarship, 'name', '') if application.scholarship else '',
+                'scholarship_type_id': application.scholarship_type_id,
+                'submit_date': application.submitted_at.strftime('%Y-%m-%d') if application.submitted_at else '',
+            }
+            
+            # Trigger email automation for application submission
+            await email_automation_service.trigger_application_submitted(self.db, application.id, application_data)
         except Exception as e:
-            logger.error(f"Failed to send submission notification email: {e}")
+            logger.error(f"Failed to trigger automated submission emails: {e}")
         
         # 整合文件資訊到 submitted_form_data.documents
         integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
@@ -1216,6 +1231,29 @@ class ApplicationService:
             self.db.add(review_item)
         
         await self.db.commit()
+        
+        # 發送自動化通知 - Professor review submitted
+        try:
+            # Prepare review data for email automation
+            email_data = {
+                'id': application.id,
+                'app_id': application.app_id,
+                'student_name': getattr(application, 'student_name', ''),
+                'professor_name': getattr(user, 'name', ''),
+                'professor_email': getattr(user, 'email', ''),
+                'scholarship_type': getattr(application.scholarship, 'name', '') if application.scholarship else '',
+                'scholarship_type_id': application.scholarship_type_id,
+                'review_result': review_data.recommendation,
+                'review_date': datetime.utcnow().strftime('%Y-%m-%d'),
+                'professor_recommendation': review_data.recommendation,
+                'college_name': getattr(application, 'college_name', ''),
+                'review_deadline': getattr(application, 'review_deadline', ''),
+            }
+            
+            # Trigger email automation for professor review submission
+            await email_automation_service.trigger_professor_review_submitted(self.db, application.id, email_data)
+        except Exception as e:
+            logger.error(f"Failed to trigger automated professor review emails: {e}")
         
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id)

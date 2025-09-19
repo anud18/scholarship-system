@@ -14,7 +14,10 @@ from sqlalchemy.sql import Select
 logger = logging.getLogger(__name__)
 
 from app.db.deps import get_db
-from app.schemas.common import MessageResponse, PaginatedResponse, SystemSettingSchema, EmailTemplateSchema, ApiResponse
+from app.schemas.common import (
+    MessageResponse, PaginatedResponse, SystemSettingSchema, EmailTemplateSchema, 
+    EmailTemplateUpdateSchema, ApiResponse
+)
 from app.schemas.application import ApplicationListResponse, ApplicationResponse, ProfessorAssignmentRequest
 from app.schemas.scholarship import (
     ScholarshipSubTypeConfigCreate, ScholarshipSubTypeConfigUpdate, ScholarshipSubTypeConfigResponse,
@@ -28,12 +31,23 @@ from app.models.application import Application, ApplicationStatus
 # Student model removed - student data now fetched from external API
 from app.models.notification import Notification
 from app.services.system_setting_service import SystemSettingService, EmailTemplateService
+from app.models.system_setting import EmailTemplate
 from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipSubType, ScholarshipRule
 from app.models.enums import Semester
 from app.models.user import AdminScholarship
 from app.services.application_service import ApplicationService
 
 router = APIRouter()
+
+
+def require_super_admin(current_user: User = Depends(require_admin)) -> User:
+    """Require super admin role"""
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super admin access required"
+        )
+    return current_user
 
 
 @router.get("/applications", response_model=PaginatedResponse[ApplicationListResponse])
@@ -335,25 +349,72 @@ async def get_email_template(
 
 @router.put("/email-template")
 async def update_email_template(
-    template: EmailTemplateSchema,
-    current_user: User = Depends(require_admin),
+    template: EmailTemplateUpdateSchema,
+    current_user: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update email template (admin only)"""
-    updated_template = await EmailTemplateService.set_template(
-        db,
-        template.key,
-        template.subject_template,
-        template.body_template,
-        template.cc,
-        template.bcc
+    """Update email template (super admin only)"""
+    from app.models.system_setting import SendingType
+    
+    # Validate sending_type
+    if template.sending_type not in ["single", "bulk"]:
+        raise HTTPException(status_code=400, detail="Invalid sending_type. Must be 'single' or 'bulk'")
+    
+    # Get existing template
+    existing_template = await EmailTemplateService.get_template(db, template.key)
+    if not existing_template:
+        raise HTTPException(status_code=404, detail="Email template not found")
+    
+    # Update the template using raw SQLAlchemy update
+    from sqlalchemy import update as sql_update
+    
+    stmt = sql_update(EmailTemplate).where(EmailTemplate.key == template.key).values(
+        subject_template=template.subject_template,
+        body_template=template.body_template,
+        cc=template.cc,
+        bcc=template.bcc,
+        sending_type=SendingType.SINGLE if template.sending_type == "single" else SendingType.BULK,
+        recipient_options=template.recipient_options,
+        requires_approval=template.requires_approval,
+        max_recipients=template.max_recipients,
+        updated_at=func.now()
     )
+    
+    await db.execute(stmt)
+    await db.commit()
+    
+    # Fetch updated template
+    updated_template = await EmailTemplateService.get_template(db, template.key)
     
     return {
         "success": True,
         "message": "Email template updated successfully",
         "data": EmailTemplateSchema.model_validate(updated_template)
     }
+
+
+@router.get("/email-templates", response_model=List[EmailTemplateSchema])
+async def get_email_templates(
+    sending_type: Optional[str] = Query(None, description="Filter by sending type (single/bulk)"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all email templates with optional sending type filtering"""
+    from app.models.system_setting import SendingType
+    
+    stmt = select(EmailTemplate)
+    
+    if sending_type:
+        if sending_type.lower() == "single":
+            stmt = stmt.where(EmailTemplate.sending_type == SendingType.SINGLE)
+        elif sending_type.lower() == "bulk":
+            stmt = stmt.where(EmailTemplate.sending_type == SendingType.BULK)
+    
+    stmt = stmt.order_by(EmailTemplate.sending_type, EmailTemplate.key)
+    result = await db.execute(stmt)
+    templates = result.scalars().all()
+    
+    return [EmailTemplateSchema.model_validate(template) for template in templates]
 
 
 @router.get("/recent-applications", response_model=ApiResponse[List[ApplicationListResponse]])

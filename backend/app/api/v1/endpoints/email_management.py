@@ -195,6 +195,37 @@ async def cancel_scheduled_email(
         raise HTTPException(status_code=500, detail="Failed to cancel email")
 
 
+@router.patch("/scheduled/{email_id}", response_model=ScheduledEmailRead)
+async def update_scheduled_email(
+    *,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+    email_id: int,
+    update_data: ScheduledEmailUpdate,
+):
+    """
+    Update a scheduled email's subject and body.
+    Only super_admin can update scheduled emails.
+    """
+    # Check if user is super admin
+    from app.models.user import UserRole
+    if current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Super admin access required")
+    
+    try:
+        scheduled_email = await email_service.update_scheduled_email(
+            db=db,
+            email_id=email_id,
+            subject=update_data.subject,
+            body=update_data.body
+        )
+        return scheduled_email
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to update scheduled email")
+
+
 @router.post("/scheduled/process", response_model=EmailProcessingStats)
 async def process_due_emails(
     *,

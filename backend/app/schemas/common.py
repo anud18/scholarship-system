@@ -2,7 +2,7 @@
 Common schemas for API responses and pagination
 """
 
-from typing import Any, Generic, List, Optional, TypeVar
+from typing import Any, Generic, List, Optional, TypeVar, Dict
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
@@ -74,6 +74,13 @@ class SystemSettingSchema(BaseModel):
     value: str
 
 
+class RecipientOptionSchema(BaseModel):
+    """Schema for recipient option"""
+    value: str
+    label: str
+    description: str
+
+
 class EmailTemplateSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
@@ -82,4 +89,21 @@ class EmailTemplateSchema(BaseModel):
     body_template: str
     cc: str | None = None
     bcc: str | None = None
-    updated_at: datetime | None = None 
+    sending_type: str
+    recipient_options: Optional[List[Dict[str, str]]] = None
+    requires_approval: bool = False
+    max_recipients: Optional[int] = None
+    updated_at: datetime | None = None
+
+
+class EmailTemplateUpdateSchema(BaseModel):
+    """Schema for updating email templates"""
+    key: str
+    subject_template: str
+    body_template: str
+    cc: Optional[str] = None
+    bcc: Optional[str] = None
+    sending_type: str = "single"
+    recipient_options: Optional[List[Dict[str, str]]] = None
+    requires_approval: bool = False
+    max_recipients: Optional[int] = None 
