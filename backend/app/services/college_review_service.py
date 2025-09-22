@@ -164,7 +164,7 @@ class CollegeReviewService:
             selectinload(Application.professor_reviews).selectinload(ProfessorReview.professor),
             selectinload(Application.files),
             selectinload(Application.reviews),  # Load all application reviews
-            # Note: student is loaded via foreign key, not relationship
+            selectinload(Application.student),  # Load student information
         ).where(
             or_(
                 Application.status == ApplicationStatus.RECOMMENDED.value,
@@ -237,8 +237,8 @@ class CollegeReviewService:
             app_data = {
                 'id': app.id,
                 'app_id': app.app_id,
-                'student_id': app.student_data.get('std_stdcode') if app.student_data else 'N/A',
-                'student_name': app.student_data.get('std_cname') if app.student_data else 'N/A',
+                'student_id': app.student.nycu_id if app.student else 'N/A',
+                'student_name': app.student.name if app.student else 'N/A',
                 'scholarship_type': app.main_scholarship_type,
                 'sub_type': app.sub_scholarship_type,
                 'academic_year': app.academic_year,

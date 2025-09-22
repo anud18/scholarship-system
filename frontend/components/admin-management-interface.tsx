@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Settings, Users, FileText, Database, Upload, Download, Play, Pause, Edit, Plus, Mail, Save, Eye, MessageSquare, AlertCircle, Trash2, RefreshCw, Clock, Timer, X, Copy, FileCode, CheckSquare, Square, Trash, TestTube, MoreVertical } from "lucide-react"
-import apiClient, { EmailTemplate, NotificationResponse, AnnouncementCreate, AnnouncementUpdate, UserListResponse, UserStats, UserCreate, Workflow, ScholarshipRule, SystemStats, ScholarshipPermission } from "@/lib/api"
+import apiClient, { EmailTemplate, NotificationResponse, AnnouncementCreate, AnnouncementUpdate, UserListResponse, UserStats, UserCreate, Workflow, ScholarshipRule, SystemStats, ScholarshipPermission, ScholarshipConfiguration, HistoricalApplication, HistoricalApplicationFilters } from "@/lib/api"
 import { UserEditModal } from "@/components/user-edit-modal"
 import { Modal } from "@/components/ui/modal"
 import { QuotaManagement } from "@/components/quota-management"
@@ -21,6 +21,7 @@ import { AdminRuleManagement } from "@/components/admin-rule-management"
 import { AdminConfigurationManagement } from "@/components/admin-configuration-management"
 import { EmailHistoryTable } from "@/components/email-history-table"
 import { ScheduledEmailsTable } from "@/components/scheduled-emails-table"
+import { ScholarshipWorkflowMermaid } from "@/components/ScholarshipWorkflowMermaid"
 
 
 
@@ -169,6 +170,11 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const [scholarshipTypes, setScholarshipTypes] = useState<any[]>([])
   const [loadingScholarshipTypes, setLoadingScholarshipTypes] = useState(false)
 
+  // Scholarship Configurations for Workflow
+  const [scholarshipConfigurations, setScholarshipConfigurations] = useState<ScholarshipConfiguration[]>([])
+  const [loadingConfigurations, setLoadingConfigurations] = useState(false)
+  const [selectedConfigurationId, setSelectedConfigurationId] = useState<number | undefined>()
+
   // 系統統計狀態
   const [systemStats, setSystemStats] = useState<SystemStats>({
     totalUsers: 0,
@@ -183,7 +189,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const [loadingStats, setLoadingStats] = useState(false)
   const [statsError, setStatsError] = useState<string | null>(null)
 
-  const [emailTab, setEmailTab] = useState(EMAIL_TEMPLATE_KEYS[0].key);
+  const [emailTab, setEmailTab] = useState("");
   const [emailTemplate, setEmailTemplate] = useState<EmailTemplate | null>(null);
   
   // Email Management states
@@ -225,6 +231,35 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
   const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Scholarship Email Template states
+  const [scholarshipEmailTab, setScholarshipEmailTab] = useState("system");
+  const [scholarshipEmailTemplates, setScholarshipEmailTemplates] = useState<any[]>([]);
+  const [loadingScholarshipTemplates, setLoadingScholarshipTemplates] = useState(false);
+  const [currentScholarshipTemplate, setCurrentScholarshipTemplate] = useState<any>(null);
+  const [myScholarships, setMyScholarships] = useState<any[]>([]);
+
+  // 歷史申請相關狀態
+  const [historicalApplications, setHistoricalApplications] = useState<HistoricalApplication[]>([]);
+  const [historicalApplicationsGroups, setHistoricalApplicationsGroups] = useState<Record<string, HistoricalApplication[]>>({});
+  const [activeHistoricalTab, setActiveHistoricalTab] = useState<string>('all');
+  const [loadingHistoricalApplications, setLoadingHistoricalApplications] = useState(false);
+  const [historicalApplicationsError, setHistoricalApplicationsError] = useState<string | null>(null);
+  const [historicalApplicationsPagination, setHistoricalApplicationsPagination] = useState({
+    page: 1,
+    size: 20,
+    total: 0,
+    pages: 0
+  });
+  const [historicalApplicationsFilters, setHistoricalApplicationsFilters] = useState<HistoricalApplicationFilters>({
+    page: 1,
+    size: 20,
+    status: '',
+    scholarship_type: '',
+    academic_year: undefined,
+    semester: '',
+    search: ''
+  });
 
   // 系統公告相關狀態
   const [announcements, setAnnouncements] = useState<NotificationResponse[]>([]);
@@ -338,6 +373,12 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   useEffect(() => {
     const loadTemplate = async () => {
+      // Don't load if emailTab is empty
+      if (!emailTab) {
+        setEmailTemplate(null);
+        return;
+      }
+
       setLoadingTemplate(true);
       try {
         const response = await apiClient.admin.getEmailTemplate(emailTab);
@@ -453,20 +494,36 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       const response = await apiClient.admin.getEmailTemplatesBySendingType(sendingType);
       if (response.success && response.data) {
         setEmailTemplates(response.data);
+        // Set the first template as selected if no template is currently selected
+        if (response.data.length > 0 && (!emailTab || !response.data.find(t => t.key === emailTab))) {
+          setEmailTab(response.data[0].key);
+        }
       } else {
         setEmailTemplates([]);
+        setEmailTab(''); // Reset email tab if no templates found
       }
     } catch (error) {
       console.error('Error loading email templates:', error);
       setEmailTemplates([]);
+      setEmailTab(''); // Reset email tab on error
     }
     setLoadingEmailTemplates(false);
   };
 
   const getFilteredEmailTemplates = () => {
+    // 中文標籤映射
+    const labelMap: Record<string, string> = {
+      'application_submitted_student': '學生申請確認通知',
+      'application_submitted_admin': '管理員新申請通知',
+      'professor_review_notification': '教授審查通知',
+      'professor_review_submitted_admin': '教授審查結果通知',
+      'scholarship_announcement': '獎學金公告',
+      'application_deadline_reminder': '申請截止提醒'
+    };
+
     return emailTemplates.map(template => ({
       key: template.key,
-      label: template.key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      label: labelMap[template.key] || template.key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
     }));
   };
 
@@ -553,6 +610,61 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   }, [emailManagementTab, emailHistoryPagination.skip, scheduledEmailsPagination.skip, emailHistoryFilters, scheduledEmailsFilters]);
 
   // 系統公告相關函數
+  // 獲取歷史申請資料
+  const fetchHistoricalApplications = async () => {
+    // 檢查用戶認證狀態
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      setHistoricalApplicationsError('用戶未認證或不具有管理員權限');
+      setLoadingHistoricalApplications(false);
+      return;
+    }
+
+    setLoadingHistoricalApplications(true);
+    setHistoricalApplicationsError(null);
+
+    try {
+      // 構建篩選條件，如果選中的是特定獎學金類型，則添加該篩選
+      const filters = {
+        ...historicalApplicationsFilters,
+        scholarship_type: activeHistoricalTab === 'all' ? '' : activeHistoricalTab
+      };
+
+      const response = await apiClient.admin.getHistoricalApplications(filters);
+
+      if (response.success && response.data) {
+        const applications = response.data.items || [];
+        setHistoricalApplications(applications);
+
+        // 按獎學金類型分組
+        const groups: Record<string, HistoricalApplication[]> = {};
+        applications.forEach(app => {
+          const scholarshipType = app.scholarship_name || app.scholarship_type_code || '未知類型';
+          if (!groups[scholarshipType]) {
+            groups[scholarshipType] = [];
+          }
+          groups[scholarshipType].push(app);
+        });
+        setHistoricalApplicationsGroups(groups);
+
+        setHistoricalApplicationsPagination({
+          page: response.data.page,
+          size: response.data.size,
+          total: response.data.total,
+          pages: response.data.pages
+        });
+        setHistoricalApplicationsError(null);
+      } else {
+        const errorMsg = response.message || '獲取歷史申請失敗';
+        setHistoricalApplicationsError(errorMsg);
+      }
+    } catch (error) {
+      console.error('獲取歷史申請資料失敗:', error);
+      setHistoricalApplicationsError('網路錯誤或伺服器未回應');
+    } finally {
+      setLoadingHistoricalApplications(false);
+    }
+  };
+
   const fetchAnnouncements = async () => {
     // 檢查用戶認證狀態
     if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
@@ -725,6 +837,77 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     
     loadScholarshipData();
   }, [scholarshipEmailTab]);
+
+  // 獲取所有歷史申請以建立 tab 列表
+  const fetchAllHistoricalApplicationsForTabs = async () => {
+    if (!user || (user.role !== 'admin' && user.role !== 'super_admin')) {
+      return;
+    }
+
+    try {
+      // 分頁獲取所有申請來建立 tab 列表，遵守 API 的 size <= 100 限制
+      let allApplications: HistoricalApplication[] = [];
+      let currentPage = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const response = await apiClient.admin.getHistoricalApplications({
+          page: currentPage,
+          size: 100, // 使用 API 允許的最大值
+          status: '',
+          scholarship_type: '',
+          academic_year: undefined,
+          semester: '',
+          search: ''
+        });
+
+        if (response.success && response.data) {
+          const pageApplications = response.data.items || [];
+          allApplications = [...allApplications, ...pageApplications];
+
+          // 檢查是否還有更多數據
+          hasMore = pageApplications.length === 100 && currentPage < response.data.pages;
+          currentPage++;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      // 按獎學金類型分組以建立 tab
+      const groups: Record<string, HistoricalApplication[]> = {};
+      allApplications.forEach(app => {
+        const scholarshipType = app.scholarship_name || app.scholarship_type_code || '未知類型';
+        if (!groups[scholarshipType]) {
+          groups[scholarshipType] = [];
+        }
+        groups[scholarshipType].push(app);
+      });
+      setHistoricalApplicationsGroups(groups);
+
+      // 設置第一個 tab 為默認
+      const tabKeys = Object.keys(groups);
+      if (tabKeys.length > 0 && activeHistoricalTab === 'all') {
+        setActiveHistoricalTab('all'); // 保持全部為默認
+      }
+    } catch (error) {
+      console.error('獲取歷史申請 tab 資料失敗:', error);
+    }
+  };
+
+  // 歷史申請資料載入
+  useEffect(() => {
+    // 只在用戶已認證且具有管理員權限時載入歷史申請
+    if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+      fetchHistoricalApplications();
+    }
+  }, [historicalApplicationsFilters, user, activeHistoricalTab]);
+
+  // 初始載入時獲取所有歷史申請以建立 tab
+  useEffect(() => {
+    if (user && (user.role === 'admin' || user.role === 'super_admin')) {
+      fetchAllHistoricalApplicationsForTabs();
+    }
+  }, [user]);
 
   // 載入系統公告
   useEffect(() => {
@@ -1107,13 +1290,34 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     fetchSystemStats();
     fetchScholarshipPermissions();
     fetchAvailableScholarships();
+    fetchScholarshipConfigurations();
   }, []);
 
-  // 獲取工作流程列表
+  // 獲取獎學金配置列表
+  const fetchScholarshipConfigurations = async () => {
+    setLoadingConfigurations(true);
+
+    try {
+      const response = await apiClient.admin.getScholarshipConfigurations();
+      if (response.success && response.data) {
+        setScholarshipConfigurations(response.data);
+        // 預設選擇第一個配置
+        if (response.data.length > 0 && !selectedConfigurationId) {
+          setSelectedConfigurationId(response.data[0].id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load scholarship configurations:', error);
+    } finally {
+      setLoadingConfigurations(false);
+    }
+  };
+
+  // 獲取工作流程列表 (保留原有功能)
   const fetchWorkflows = async () => {
     setLoadingWorkflows(true);
     setWorkflowsError(null);
-    
+
     try {
       const response = await apiClient.admin.getWorkflows();
       if (response.success && response.data) {
@@ -1446,7 +1650,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       </div>
 
       <Tabs defaultValue="dashboard" className="space-y-4">
-        <TabsList className={`grid w-full ${hasQuotaPermission ? 'grid-cols-9' : 'grid-cols-8'}`}>
+        <TabsList className={`grid w-full ${hasQuotaPermission ? 'grid-cols-10' : 'grid-cols-9'}`}>
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
           <TabsTrigger value="users">使用者權限</TabsTrigger>
           {hasQuotaPermission && (
@@ -1454,10 +1658,11 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
           )}
           <TabsTrigger value="configurations">獎學金配置</TabsTrigger>
           <TabsTrigger value="rules">審核規則</TabsTrigger>
-          <TabsTrigger value="announcements">系統公告</TabsTrigger>
-          <TabsTrigger value="email">郵件管理</TabsTrigger>
-          <TabsTrigger value="settings">系統設定</TabsTrigger>
           <TabsTrigger value="workflows">工作流程</TabsTrigger>
+          <TabsTrigger value="email">郵件管理</TabsTrigger>
+          <TabsTrigger value="history">歷史申請</TabsTrigger>
+          <TabsTrigger value="announcements">系統公告</TabsTrigger>
+          <TabsTrigger value="settings">系統設定</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-4">
@@ -1575,102 +1780,19 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         </TabsContent>
 
         <TabsContent value="workflows" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">工作流程管理</h3>
-            <div className="flex gap-2">
-              <Button>
-                <Plus className="h-4 w-4 mr-1" />
-                新增流程
-              </Button>
-              <Button variant="outline">
-                <Upload className="h-4 w-4 mr-1" />
-                匯入
-              </Button>
-            </div>
-          </div>
-
-          {loadingWorkflows ? (
+          {loadingConfigurations ? (
             <div className="flex items-center justify-center py-8">
               <div className="flex items-center gap-3">
                 <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
-                <span className="text-nycu-navy-600">載入工作流程中...</span>
+                <span className="text-nycu-navy-600">載入獎學金配置中...</span>
               </div>
             </div>
-          ) : workflowsError ? (
-            <div className="text-center py-12">
-              <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
-              <p className="text-lg font-medium text-red-600 mb-2">載入工作流程失敗</p>
-              <p className="text-sm text-gray-600 mb-4">{workflowsError}</p>
-              <Button 
-                onClick={fetchWorkflows}
-                variant="outline"
-                className="border-red-300 text-red-600 hover:bg-red-50"
-              >
-                重試
-              </Button>
-            </div>
-          ) : workflows.length > 0 ? (
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>流程名稱</TableHead>
-                      <TableHead>版本</TableHead>
-                      <TableHead>狀態</TableHead>
-                      <TableHead>步驟數</TableHead>
-                      <TableHead>最後修改</TableHead>
-                      <TableHead>操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {workflows.map((workflow) => (
-                      <TableRow key={workflow.id}>
-                        <TableCell className="font-medium">{workflow.name}</TableCell>
-                        <TableCell>{workflow.version}</TableCell>
-                        <TableCell>
-                          <Badge variant={workflow.status === "active" ? "default" : "secondary"}>
-                            {workflow.status === "active" ? "啟用" : "草稿"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{workflow.steps} 步驟</TableCell>
-                        <TableCell>{workflow.lastModified}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button variant="outline" size="sm">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="outline" size="sm">
-                              {workflow.status === "active" ? (
-                                <Pause className="h-4 w-4" />
-                              ) : (
-                                <Play className="h-4 w-4" />
-                              )}
-                            </Button>
-                            <Button variant="outline" size="sm">
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
           ) : (
-            <div className="text-center py-12 text-gray-500">
-              <FileText className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg font-medium">尚無工作流程</p>
-              <p className="text-sm mt-2 mb-4">點擊「新增流程」開始建立工作流程</p>
-              <Button 
-                onClick={fetchWorkflows}
-                variant="outline"
-                size="sm"
-              >
-                重新載入
-              </Button>
-            </div>
+            <ScholarshipWorkflowMermaid
+              configurations={scholarshipConfigurations}
+              selectedConfigId={selectedConfigurationId}
+              onConfigChange={setSelectedConfigurationId}
+            />
           )}
         </TabsContent>
 
@@ -2016,6 +2138,482 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
             <QuotaManagement />
           </TabsContent>
         )}
+
+        <TabsContent value="history" className="space-y-4">
+          <Card className="academic-card border-nycu-blue-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-nycu-navy-800">
+                <FileText className="h-5 w-5 text-nycu-blue-600" />
+                歷史申請
+              </CardTitle>
+              <CardDescription>查看所有歷史申請記錄及其狀態，按獎學金類型分類</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* 獎學金類型 Tab 區域 */}
+              <Tabs value={activeHistoricalTab} onValueChange={setActiveHistoricalTab} className="w-full">
+                <TabsList className="flex w-full mb-6">
+                  <TabsTrigger key="all" value="all" className="flex-1 flex items-center justify-center gap-2">
+                    <span>全部申請</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {historicalApplications.length}
+                    </Badge>
+                  </TabsTrigger>
+                  {Object.keys(historicalApplicationsGroups).map((scholarshipType) => (
+                    <TabsTrigger key={scholarshipType} value={scholarshipType} className="flex-1 flex items-center justify-center gap-2">
+                      <span>{scholarshipType}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {historicalApplicationsGroups[scholarshipType].length}
+                      </Badge>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {/* 全部申請 Tab */}
+                <TabsContent key="all" value="all" className="space-y-4 mt-6">
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">全部歷史申請</h3>
+                    <p className="text-sm text-blue-700">
+                      顯示所有類型的歷史申請記錄，共 {historicalApplications.length} 筆
+                    </p>
+                  </div>
+              <div className="space-y-4">
+                {/* 篩選控制區 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label htmlFor="status-filter">狀態篩選</Label>
+                    <Select
+                      value={historicalApplicationsFilters.status || 'all'}
+                      onValueChange={(value) =>
+                        setHistoricalApplicationsFilters(prev => ({ ...prev, status: value === 'all' ? '' : value, page: 1 }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="選擇狀態" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全部狀態</SelectItem>
+                        <SelectItem value="submitted">已提交</SelectItem>
+                        <SelectItem value="under_review">審核中</SelectItem>
+                        <SelectItem value="approved">已通過</SelectItem>
+                        <SelectItem value="rejected">已拒絕</SelectItem>
+                        <SelectItem value="cancelled">已取消</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="year-filter">學年度</Label>
+                    <Select
+                      value={historicalApplicationsFilters.academic_year?.toString() || 'all'}
+                      onValueChange={(value) =>
+                        setHistoricalApplicationsFilters(prev => ({
+                          ...prev,
+                          academic_year: (value && value !== 'all') ? parseInt(value) : undefined,
+                          page: 1
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="選擇學年度" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全部學年度</SelectItem>
+                        <SelectItem value="114">114學年度</SelectItem>
+                        <SelectItem value="113">113學年度</SelectItem>
+                        <SelectItem value="112">112學年度</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="semester-filter">學期</Label>
+                    <Select
+                      value={historicalApplicationsFilters.semester || 'all'}
+                      onValueChange={(value) =>
+                        setHistoricalApplicationsFilters(prev => ({ ...prev, semester: value === 'all' ? '' : value, page: 1 }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="選擇學期" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全部學期</SelectItem>
+                        <SelectItem value="first">第一學期</SelectItem>
+                        <SelectItem value="second">第二學期</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="search-input">搜尋</Label>
+                    <Input
+                      id="search-input"
+                      placeholder="搜尋學生姓名、學號或申請編號"
+                      value={historicalApplicationsFilters.search}
+                      onChange={(e) =>
+                        setHistoricalApplicationsFilters(prev => ({
+                          ...prev,
+                          search: e.target.value,
+                          page: 1
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                {/* 操作按鈕 */}
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-gray-600">
+                    共 {historicalApplicationsPagination.total} 筆申請記錄
+                  </div>
+                  <Button
+                    onClick={fetchHistoricalApplications}
+                    disabled={loadingHistoricalApplications}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loadingHistoricalApplications ? 'animate-spin' : ''}`} />
+                    刷新
+                  </Button>
+                </div>
+
+                {/* 錯誤顯示 */}
+                {historicalApplicationsError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-red-700">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="font-medium">載入失敗</span>
+                    </div>
+                    <p className="text-red-600 text-sm mt-1">{historicalApplicationsError}</p>
+                  </div>
+                )}
+
+                {/* 載入狀態 */}
+                {loadingHistoricalApplications && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center gap-3">
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
+                      <span className="text-nycu-navy-600">載入歷史申請中...</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 申請列表 */}
+                {!loadingHistoricalApplications && !historicalApplicationsError && (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>申請編號</TableHead>
+                          <TableHead>學生資訊</TableHead>
+                          <TableHead>獎學金類型</TableHead>
+                          <TableHead>學年度/學期</TableHead>
+                          <TableHead>狀態</TableHead>
+                          <TableHead>申請時間</TableHead>
+                          <TableHead>金額</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {historicalApplications.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                              沒有找到符合條件的申請記錄
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          historicalApplications.map((application) => (
+                            <TableRow key={application.id}>
+                              <TableCell className="font-medium">
+                                {application.app_id}
+                              </TableCell>
+                              <TableCell>
+                                <div>
+                                  <div className="font-medium">{application.student_name}</div>
+                                  <div className="text-sm text-gray-500">{application.student_id}</div>
+                                  {application.student_department && (
+                                    <div className="text-xs text-gray-400">{application.student_department}</div>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div>
+                                  <div className="font-medium">{application.scholarship_name}</div>
+                                  {application.sub_scholarship_type && application.sub_scholarship_type !== 'GENERAL' && (
+                                    <div className="text-sm text-gray-500">{application.sub_scholarship_type}</div>
+                                  )}
+                                  {application.is_renewal && (
+                                    <Badge variant="outline" className="text-xs mt-1">續領</Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm">
+                                  {application.academic_year}學年度
+                                  {application.semester && (
+                                    <div className="text-xs text-gray-500">
+                                      {application.semester === 'first' ? '第一學期' : '第二學期'}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant="secondary"
+                                  className={
+                                    application.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                    application.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                    application.status === 'under_review' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }
+                                >
+                                  {application.status_name || application.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm">
+                                  {new Date(application.created_at).toLocaleDateString('zh-TW')}
+                                </div>
+                                {application.submitted_at && (
+                                  <div className="text-xs text-gray-500">
+                                    提交：{new Date(application.submitted_at).toLocaleDateString('zh-TW')}
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {application.amount ? (
+                                  <div className="font-medium">
+                                    NT$ {Number(application.amount).toLocaleString()}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {/* 分頁控制 */}
+                {historicalApplicationsPagination.total > 0 && (
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-600">
+                      第 {((historicalApplicationsPagination.page - 1) * historicalApplicationsPagination.size) + 1} - {Math.min(historicalApplicationsPagination.page * historicalApplicationsPagination.size, historicalApplicationsPagination.total)} 筆，共 {historicalApplicationsPagination.total} 筆
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setHistoricalApplicationsFilters(prev => ({ ...prev, page: prev.page - 1 }));
+                        }}
+                        disabled={historicalApplicationsPagination.page <= 1}
+                      >
+                        上一頁
+                      </Button>
+                      <span className="text-sm">
+                        第 {historicalApplicationsPagination.page} / {historicalApplicationsPagination.pages} 頁
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setHistoricalApplicationsFilters(prev => ({ ...prev, page: prev.page + 1 }));
+                        }}
+                        disabled={historicalApplicationsPagination.page >= historicalApplicationsPagination.pages}
+                      >
+                        下一頁
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+                </TabsContent>
+
+                {/* 各獎學金類型的 Tab */}
+                {Object.keys(historicalApplicationsGroups).map((scholarshipType) => (
+                  <TabsContent key={scholarshipType} value={scholarshipType} className="space-y-4 mt-6">
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                      <h3 className="text-lg font-semibold text-blue-900 mb-2">{scholarshipType}</h3>
+                      <p className="text-sm text-blue-700">
+                        此類型共有 {historicalApplicationsGroups[scholarshipType].length} 筆申請記錄
+                      </p>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* 篩選控制區 */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+                        <div>
+                          <Label htmlFor="status-filter">狀態篩選</Label>
+                          <Select
+                            value={historicalApplicationsFilters.status || 'all'}
+                            onValueChange={(value) =>
+                              setHistoricalApplicationsFilters(prev => ({ ...prev, status: value === 'all' ? '' : value, page: 1 }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="選擇狀態" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">全部狀態</SelectItem>
+                              <SelectItem value="submitted">已提交</SelectItem>
+                              <SelectItem value="under_review">審核中</SelectItem>
+                              <SelectItem value="approved">已通過</SelectItem>
+                              <SelectItem value="rejected">已拒絕</SelectItem>
+                              <SelectItem value="cancelled">已取消</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="year-filter">學年度</Label>
+                          <Select
+                            value={historicalApplicationsFilters.academic_year?.toString() || 'all'}
+                            onValueChange={(value) =>
+                              setHistoricalApplicationsFilters(prev => ({
+                                ...prev,
+                                academic_year: (value && value !== 'all') ? parseInt(value) : undefined,
+                                page: 1
+                              }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="選擇學年度" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">全部學年度</SelectItem>
+                              <SelectItem value="114">114學年度</SelectItem>
+                              <SelectItem value="113">113學年度</SelectItem>
+                              <SelectItem value="112">112學年度</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="search-input">搜尋</Label>
+                          <Input
+                            id="search-input"
+                            placeholder="搜尋學生姓名、學號或申請編號"
+                            value={historicalApplicationsFilters.search}
+                            onChange={(e) =>
+                              setHistoricalApplicationsFilters(prev => ({
+                                ...prev,
+                                search: e.target.value,
+                                page: 1
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      {/* 操作按鈕 */}
+                      <div className="flex justify-between items-center">
+                        <div className="text-sm text-gray-600">
+                          {scholarshipType} 共 {historicalApplicationsGroups[scholarshipType].length} 筆申請記錄
+                        </div>
+                        <Button
+                          onClick={fetchHistoricalApplications}
+                          disabled={loadingHistoricalApplications}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-2 ${loadingHistoricalApplications ? 'animate-spin' : ''}`} />
+                          刷新
+                        </Button>
+                      </div>
+
+                      {/* 申請列表 - 只顯示當前類型的申請 */}
+                      <div className="border rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>申請編號</TableHead>
+                              <TableHead>學生資訊</TableHead>
+                              <TableHead>學年度/學期</TableHead>
+                              <TableHead>狀態</TableHead>
+                              <TableHead>申請時間</TableHead>
+                              <TableHead>金額</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {historicalApplicationsGroups[scholarshipType].length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                                  沒有找到 {scholarshipType} 的申請記錄
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              historicalApplicationsGroups[scholarshipType].map((application) => (
+                                <TableRow key={application.id}>
+                                  <TableCell className="font-medium">
+                                    {application.app_id}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div>
+                                      <div className="font-medium">{application.student_name}</div>
+                                      <div className="text-sm text-gray-500">{application.student_id}</div>
+                                      {application.student_department && (
+                                        <div className="text-xs text-gray-400">{application.student_department}</div>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      {application.academic_year}學年度
+                                      {application.semester && (
+                                        <div className="text-xs text-gray-500">
+                                          {application.semester === 'first' ? '第一學期' : '第二學期'}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant="secondary"
+                                      className={
+                                        application.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                        application.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                        application.status === 'under_review' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-gray-100 text-gray-700'
+                                      }
+                                    >
+                                      {application.status_name || application.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      {new Date(application.created_at).toLocaleDateString('zh-TW')}
+                                    </div>
+                                    {application.submitted_at && (
+                                      <div className="text-xs text-gray-500">
+                                        提交：{new Date(application.submitted_at).toLocaleDateString('zh-TW')}
+                                      </div>
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {application.amount ? (
+                                      <div className="font-medium">
+                                        NT$ {Number(application.amount).toLocaleString()}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="announcements" className="space-y-4">
 
@@ -2439,14 +3037,22 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                 <CardContent className="pt-4">
                   <div className="flex items-center gap-4">
                     <Label className="text-nycu-navy-700 font-medium">選擇通知類型</Label>
+                    {loadingEmailTemplates && <span className="text-sm text-gray-500">載入中...</span>}
                     <select
                       className="px-3 py-2 border border-nycu-blue-200 rounded-lg bg-white text-nycu-navy-700 focus:ring-2 focus:ring-nycu-blue-500 focus:border-transparent"
                       value={emailTab}
                       onChange={e => setEmailTab(e.target.value)}
                     >
-                      {getFilteredEmailTemplates().map(t => (
-                        <option key={t.key} value={t.key}>{t.label}</option>
-                      ))}
+                      {getFilteredEmailTemplates().length === 0 ? (
+                        <option value="">載入中...</option>
+                      ) : (
+                        <>
+                          <option value="">請選擇通知類型</option>
+                          {getFilteredEmailTemplates().map(t => (
+                            <option key={t.key} value={t.key}>{t.label}</option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
                 </CardContent>

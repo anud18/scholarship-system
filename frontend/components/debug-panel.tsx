@@ -100,7 +100,18 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   // Function to fetch live student data from API
   const fetchStudentData = async () => {
     if (!user || !token) return
-    
+
+    // Only students can access student information
+    if (user.role !== 'student') {
+      setStudentData({
+        source: 'api_live',
+        api_endpoint: '/users/student-info',
+        timestamp: new Date().toISOString(),
+        error: 'Student information only available for student accounts'
+      })
+      return
+    }
+
     setIsRefreshing(prev => new Set(prev).add('student'))
     try {
       console.log('🔍 Fetching live student data from API...')

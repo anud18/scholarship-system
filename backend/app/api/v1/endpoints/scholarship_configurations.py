@@ -1152,6 +1152,7 @@ async def list_scholarship_configurations(
                 "id": config.id,
                 "scholarship_type_id": config.scholarship_type_id,
                 "scholarship_type_name": config.scholarship_type.name if config.scholarship_type else None,
+                "scholarship_type_code": config.scholarship_type.code if config.scholarship_type else None,
                 "academic_year": config.academic_year,
                 "semester": config.semester.value if config.semester else None,
                 "config_name": config.config_name,

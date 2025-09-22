@@ -5,6 +5,7 @@ Common schemas for API responses and pagination
 from typing import Any, Generic, List, Optional, TypeVar, Dict
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
+from app.models.system_setting import SendingType
 
 T = TypeVar("T")
 
@@ -82,14 +83,14 @@ class RecipientOptionSchema(BaseModel):
 
 
 class EmailTemplateSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
     key: str
     subject_template: str
     body_template: str
     cc: str | None = None
     bcc: str | None = None
-    sending_type: str
+    sending_type: SendingType
     recipient_options: Optional[List[Dict[str, str]]] = None
     requires_approval: bool = False
     max_recipients: Optional[int] = None

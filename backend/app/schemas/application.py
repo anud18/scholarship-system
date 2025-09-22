@@ -457,5 +457,90 @@ class ProfessorAssignmentRequest(BaseModel):
     professor_nycu_id: str = Field(..., description="Professor NYCU ID to assign")
 
 
+class HistoricalApplicationResponse(BaseModel):
+    """Historical application response schema for admin view"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    app_id: str
+    status: str
+    status_name: Optional[str] = None
+
+    # Student information
+    student_name: Optional[str] = None
+    student_id: Optional[str] = None
+    student_email: Optional[str] = None
+    student_department: Optional[str] = None
+
+    # Scholarship information
+    scholarship_name: Optional[str] = None
+    scholarship_type_code: Optional[str] = None
+    amount: Optional[Decimal] = None
+    main_scholarship_type: Optional[str] = None
+    sub_scholarship_type: Optional[str] = None
+    is_renewal: Optional[bool] = False
+
+    # Academic information
+    academic_year: int
+    semester: Optional[str] = None
+
+    # Important dates
+    submitted_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    # Review information
+    professor_name: Optional[str] = None
+    reviewer_name: Optional[str] = None
+    review_score: Optional[Decimal] = None
+    review_comments: Optional[str] = None
+    rejection_reason: Optional[str] = None
+
+    # Status helpers
+    @classmethod
+    def get_status_label(cls, status: str) -> str:
+        """Get Chinese status label"""
+        status_labels = {
+            'draft': '草稿',
+            'submitted': '已提交',
+            'under_review': '審核中',
+            'pending_recommendation': '等待推薦',
+            'recommended': '已推薦',
+            'approved': '已通過',
+            'rejected': '已拒絕',
+            'returned': '已退回',
+            'cancelled': '已取消',
+            'renewal_pending': '續領審核中',
+            'renewal_reviewed': '續領已審核',
+            'manual_excluded': '手動排除',
+            'professor_review': '教授審核中',
+            'withdrawn': '已撤回'
+        }
+        return status_labels.get(status, status)
+
+    @classmethod
+    def get_status_color(cls, status: str) -> str:
+        """Get status color class"""
+        status_colors = {
+            'draft': 'bg-gray-100 text-gray-700',
+            'submitted': 'bg-blue-100 text-blue-700',
+            'under_review': 'bg-yellow-100 text-yellow-700',
+            'pending_recommendation': 'bg-orange-100 text-orange-700',
+            'recommended': 'bg-indigo-100 text-indigo-700',
+            'approved': 'bg-green-100 text-green-700',
+            'rejected': 'bg-red-100 text-red-700',
+            'returned': 'bg-purple-100 text-purple-700',
+            'cancelled': 'bg-gray-100 text-gray-700',
+            'renewal_pending': 'bg-cyan-100 text-cyan-700',
+            'renewal_reviewed': 'bg-teal-100 text-teal-700',
+            'manual_excluded': 'bg-red-100 text-red-700',
+            'professor_review': 'bg-amber-100 text-amber-700',
+            'withdrawn': 'bg-gray-100 text-gray-700'
+        }
+        return status_colors.get(status, 'bg-gray-100 text-gray-700')
+
+
 
     

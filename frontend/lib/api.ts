@@ -548,6 +548,55 @@ export interface ApplicationDocument {
   existing_file_url?: string
 }
 
+export interface HistoricalApplication {
+  id: number
+  app_id: string
+  status: string
+  status_name?: string
+
+  // Student information
+  student_name?: string
+  student_id?: string
+  student_email?: string
+  student_department?: string
+
+  // Scholarship information
+  scholarship_name?: string
+  scholarship_type_code?: string
+  amount?: number
+  main_scholarship_type?: string
+  sub_scholarship_type?: string
+  is_renewal?: boolean
+
+  // Academic information
+  academic_year: number
+  semester?: string
+
+  // Important dates
+  submitted_at?: string
+  reviewed_at?: string
+  approved_at?: string
+  created_at: string
+  updated_at?: string
+
+  // Review information
+  professor_name?: string
+  reviewer_name?: string
+  review_score?: number
+  review_comments?: string
+  rejection_reason?: string
+}
+
+export interface HistoricalApplicationFilters {
+  page?: number
+  size?: number
+  status?: string
+  scholarship_type?: string
+  academic_year?: number
+  semester?: string
+  search?: string
+}
+
 export interface ApplicationDocumentCreate {
   scholarship_type: string
   document_name: string
@@ -689,6 +738,7 @@ export interface ScholarshipConfiguration {
   id: number
   scholarship_type_id: number
   scholarship_type_name: string
+  scholarship_type_code: string
   academic_year: number
   semester: string | null
   config_name: string
@@ -997,7 +1047,11 @@ class ApiClient {
           console.error('Authentication failed - clearing token')
           this.clearToken()
         } else if (response.status === 403) {
-          console.error('Authorization denied - user may not have proper permissions')
+          console.error('Authorization denied - user may not have proper permissions', {
+            url: response.url,
+            message: data.message || data.detail,
+            hasToken: !!this.getToken()
+          })
         } else if (response.status === 429) {
           console.warn('Rate limit exceeded - request throttled')
           // Add user-friendly rate limit message
@@ -1014,6 +1068,14 @@ class ApiClient {
         // If response already has success/message structure, return as-is
         if ('success' in data && 'message' in data) {
           return data as ApiResponse<T>
+        }
+        // If it's a PaginatedResponse (has items, total, page, size, pages), wrap it
+        else if ('items' in data && 'total' in data && 'page' in data && 'size' in data && 'pages' in data) {
+          return {
+            success: true,
+            message: 'Request completed successfully',
+            data: data as T
+          } as ApiResponse<T>
         }
         // If it's a direct object (like Application), wrap it
         else if ('id' in data) {
@@ -1418,9 +1480,26 @@ class ApiClient {
       if (page) params.append('page', page.toString())
       if (size) params.append('size', size.toString())
       if (status) params.append('status', status)
-      
+
       const queryString = params.toString()
       return this.request(`/admin/applications${queryString ? `?${queryString}` : ''}`)
+    },
+
+    getHistoricalApplications: async (
+      filters?: HistoricalApplicationFilters
+    ): Promise<ApiResponse<{ items: HistoricalApplication[]; total: number; page: number; size: number; pages: number }>> => {
+      const params = new URLSearchParams()
+
+      if (filters?.page) params.append('page', filters.page.toString())
+      if (filters?.size) params.append('size', filters.size.toString())
+      if (filters?.status) params.append('status', filters.status)
+      if (filters?.scholarship_type) params.append('scholarship_type', filters.scholarship_type)
+      if (filters?.academic_year) params.append('academic_year', filters.academic_year.toString())
+      if (filters?.semester) params.append('semester', filters.semester)
+      if (filters?.search) params.append('search', filters.search)
+
+      const queryString = params.toString()
+      return this.request(`/admin/applications/history${queryString ? `?${queryString}` : ''}`)
     },
 
     updateApplicationStatus: async (
@@ -1864,6 +1943,11 @@ class ApiClient {
         method: 'PUT',
         body: JSON.stringify({ professor_nycu_id: professorNycuId })
       })
+    },
+
+    getAvailableProfessors: async (search?: string): Promise<ApiResponse<any[]>> => {
+      const params = search ? `?search=${encodeURIComponent(search)}` : '';
+      return this.request(`/admin/professors${params}`)
     },
   }
 

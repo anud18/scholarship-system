@@ -18,7 +18,7 @@ from app.schemas.common import (
     MessageResponse, PaginatedResponse, SystemSettingSchema, EmailTemplateSchema, 
     EmailTemplateUpdateSchema, ApiResponse
 )
-from app.schemas.application import ApplicationListResponse, ApplicationResponse, ProfessorAssignmentRequest
+from app.schemas.application import ApplicationListResponse, ApplicationResponse, ProfessorAssignmentRequest, HistoricalApplicationResponse
 from app.schemas.scholarship import (
     ScholarshipSubTypeConfigCreate, ScholarshipSubTypeConfigUpdate, ScholarshipSubTypeConfigResponse,
     ScholarshipRuleCreate, ScholarshipRuleUpdate, ScholarshipRuleResponse, ScholarshipRuleFilter,
@@ -115,7 +115,7 @@ async def get_all_applications(
             "status": app.status,
             "status_name": app.status_name,
             "academic_year": app.academic_year or str(datetime.now().year),
-            "semester": app.semester or "1",
+            "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
             "submitted_form_data": app.submitted_form_data or {},
             "agree_terms": app.agree_terms or False,
@@ -159,6 +159,149 @@ async def get_all_applications(
     
     return PaginatedResponse(
         items=application_list,
+        total=total,
+        page=page,
+        size=size,
+        pages=(total + size - 1) // size
+    )
+
+
+@router.get("/applications/history", response_model=PaginatedResponse[HistoricalApplicationResponse])
+async def get_historical_applications(
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(20, ge=1, le=100, description="Page size"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
+    academic_year: Optional[int] = Query(None, description="Filter by academic year"),
+    semester: Optional[str] = Query(None, description="Filter by semester"),
+    search: Optional[str] = Query(None, description="Search by student name or ID"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get historical applications with advanced filtering (admin only)"""
+
+    # Build base query with joins
+    stmt = select(
+        Application,
+        User.name.label('student_name'),
+        User.nycu_id.label('student_nycu_id'),
+        User.email.label('student_email'),
+        ScholarshipType.name.label('scholarship_name'),
+        ScholarshipType.code.label('scholarship_type_code')
+    ).join(
+        User, Application.user_id == User.id
+    ).outerjoin(
+        ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
+    )
+
+    # Create aliases for joined tables
+    from sqlalchemy import alias
+    professor_user = alias(User, 'professor_user')
+    reviewer_user = alias(User, 'reviewer_user')
+
+    # Add professor and reviewer information
+    stmt = stmt.outerjoin(
+        professor_user, Application.professor_id == professor_user.c.id
+    ).outerjoin(
+        reviewer_user, Application.reviewer_id == reviewer_user.c.id
+    ).add_columns(
+        professor_user.c.name.label('professor_name'),
+        reviewer_user.c.name.label('reviewer_name')
+    )
+
+    # Apply filters
+    if status:
+        stmt = stmt.where(Application.status == status)
+
+    if scholarship_type:
+        stmt = stmt.where(ScholarshipType.code == scholarship_type)
+
+    if academic_year:
+        stmt = stmt.where(Application.academic_year == academic_year)
+
+    if semester and semester != 'all':
+        if semester == 'first':
+            stmt = stmt.where(Application.semester == Semester.FIRST)
+        elif semester == 'second':
+            stmt = stmt.where(Application.semester == Semester.SECOND)
+
+    if search:
+        search_term = f"%{search}%"
+        stmt = stmt.where(
+            or_(
+                User.name.ilike(search_term),
+                User.nycu_id.ilike(search_term),
+                User.email.ilike(search_term),
+                Application.app_id.ilike(search_term),
+                ScholarshipType.name.ilike(search_term)
+            )
+        )
+
+    # Get total count
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar()
+
+    # Apply pagination and ordering
+    offset = (page - 1) * size
+    stmt = stmt.offset(offset).limit(size).order_by(Application.created_at.desc())
+
+    # Execute query
+    result = await db.execute(stmt)
+    rows = result.fetchall()
+
+    # Convert to response format
+    historical_applications = []
+    for row in rows:
+        app = row.Application
+
+        # Extract student data from JSON if available
+        student_data = app.student_data or {}
+        student_department = student_data.get('department') or student_data.get('dept_name')
+
+        historical_app = HistoricalApplicationResponse(
+            id=app.id,
+            app_id=app.app_id,
+            status=app.status,
+            status_name=HistoricalApplicationResponse.get_status_label(app.status),
+
+            # Student information
+            student_name=row.student_name,
+            student_id=row.student_nycu_id,
+            student_email=row.student_email,
+            student_department=student_department,
+
+            # Scholarship information
+            scholarship_name=row.scholarship_name,
+            scholarship_type_code=row.scholarship_type_code,
+            amount=app.amount,
+            main_scholarship_type=app.main_scholarship_type,
+            sub_scholarship_type=app.sub_scholarship_type,
+            is_renewal=app.is_renewal,
+
+            # Academic information
+            academic_year=app.academic_year,
+            semester=app.semester.value if app.semester else None,
+
+            # Important dates
+            submitted_at=app.submitted_at,
+            reviewed_at=app.reviewed_at,
+            approved_at=app.approved_at,
+            created_at=app.created_at,
+            updated_at=app.updated_at,
+
+            # Review information
+            professor_name=getattr(row, 'professor_name', None),
+            reviewer_name=getattr(row, 'reviewer_name', None),
+            review_score=app.review_score,
+            review_comments=app.review_comments,
+            rejection_reason=app.rejection_reason
+        )
+
+        historical_applications.append(historical_app)
+
+    return PaginatedResponse(
+        items=historical_applications,
         total=total,
         page=page,
         size=size,
@@ -494,7 +637,7 @@ async def get_recent_applications(
             "status": app.status,
             "status_name": app.status_name,
             "academic_year": app.academic_year or str(datetime.now().year),
-            "semester": app.semester or "1",
+            "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
             "submitted_form_data": app.submitted_form_data or {},
             "agree_terms": app.agree_terms or False,
@@ -1061,7 +1204,7 @@ async def get_applications_by_scholarship(
             "status": app.status,
             "status_name": app.status_name,
             "academic_year": app.academic_year or str(datetime.now().year),
-            "semester": app.semester or "1",
+            "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
             "submitted_form_data": processed_form_data,
             "agree_terms": app.agree_terms or False,
@@ -2858,7 +3001,7 @@ async def assign_professor_to_application(
             "status_name": getattr(application, 'status_name', application.status),
             "is_renewal": application.is_renewal or False,
             "academic_year": application.academic_year,
-            "semester": application.semester,
+            "semester": application.semester.value if application.semester else "1",
             "student_data": application.student_data or {},
             "submitted_form_data": application.submitted_form_data or {},
             "agree_terms": application.agree_terms or False,

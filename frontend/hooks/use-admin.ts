@@ -226,7 +226,14 @@ export function useCollegeApplications() {
       const response = await apiClient.college.getApplicationsForReview(queryString)
       
       if (response.success && response.data) {
-        setApplications(response.data)
+        // Transform data to ensure consistent field mapping
+        const transformedApplications = response.data.map((app: any) => ({
+          ...app,
+          // Ensure student fields are correctly mapped
+          student_name: app.student_name || app.student_info?.display_name || '未提供姓名',
+          student_id: app.student_id || app.student_info?.student_id_masked || 'N/A'
+        }))
+        setApplications(transformedApplications)
       } else {
         throw new Error(response.message || 'Failed to fetch college applications')
       }
