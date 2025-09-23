@@ -956,10 +956,10 @@ class ApiClient {
       this.baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       console.log('🖥️ API Client Server-side mode - using:', this.baseURL)
     }
-    
-    // Try to get token from localStorage on client side
+
+    // Try to get token from localStorage on client side with safe access
     if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('auth_token')
+      this.token = window.localStorage?.getItem?.('auth_token') ?? null
     }
   }
 
@@ -975,6 +975,14 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token')
     }
+  }
+
+  hasToken(): boolean {
+    return !!this.token
+  }
+
+  getToken(): string | null {
+    return this.token
   }
 
   private async request<T>(
@@ -996,18 +1004,18 @@ class ApiClient {
       }
     }
     
-    const headers: Record<string, string> = {
-      ...(options.headers as Record<string, string>),
-    }
+    // Normalize headers so .get/.set always exist
+    const headers = new Headers(options.headers ?? {})
 
-    // Only set Content-Type if it's not FormData (detected by empty headers object)
+    // Only set Content-Type if it's not FormData
     const isFormData = options.body instanceof FormData
-    if (!isFormData && !headers['Content-Type']) {
-      headers['Content-Type'] = 'application/json'
+    if (!isFormData && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json')
     }
+    headers.set('Accept', 'application/json')
 
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`
+      headers.set('Authorization', `Bearer ${this.token}`)
       console.log('🔐 API Request with auth token to:', endpoint, 'Token preview:', this.token.substring(0, 20) + '...')
     } else {
       console.warn('❌ No auth token available for request to:', endpoint)
@@ -1023,10 +1031,10 @@ class ApiClient {
 
     try {
       const response = await fetch(url, config)
-      
-      
+
+
       let data: any
-      const contentType = response.headers.get('content-type')
+      const contentType = response.headers?.get?.('content-type') ?? ''
       
       if (contentType && contentType.includes('application/json')) {
         data = await response.json()

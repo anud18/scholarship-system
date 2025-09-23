@@ -10,6 +10,8 @@ const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>
 // Mock the API client
 jest.mock('@/lib/api', () => ({
   apiClient: {
+    hasToken: jest.fn(() => true),
+    getToken: jest.fn(() => 'mock-token'),
     applications: {
       getMyApplications: jest.fn(),
       createApplication: jest.fn(),
