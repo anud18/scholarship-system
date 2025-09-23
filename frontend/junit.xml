@@ -1,59 +1,227 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="27" failures="0" errors="0" time="1.061">
-  <testsuite name="Application Helpers" errors="0" failures="0" skipped="0" timestamp="2025-09-23T12:24:01" time="0.441" tests="27">
-    <testcase classname="Application Helpers › formatDate" name="should format date for Chinese locale" time="0.019">
+<testsuites name="jest tests" tests="16" failures="12" errors="0" time="9.362">
+  <testsuite name="useApplications Hook" errors="0" failures="12" skipped="0" timestamp="2025-09-23T12:28:54" time="8.655" tests="16">
+    <testcase classname="useApplications Hook › fetchApplications" name="should fetch applications successfully" time="1.026">
+      <failure>Error: expect(jest.fn()).toHaveBeenCalled()
+
+Expected number of calls: &gt;= 1
+Received number of calls:    0
+
+Ignored nodes: comments, script, style
+&lt;html&gt;
+  &lt;head /&gt;
+  &lt;body&gt;
+    &lt;div&gt;
+      &lt;div /&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+    at toHaveBeenCalled (/home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:85:62)
+    at runWithExpensiveErrorDiagnosticsDisabled (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:47:12)
+    at checkCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:124:77)
+    at checkRealTimersCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:118:16)
+    at Timeout.task [as _onTimeout] (/home/jotp/scholarship-system/frontend/node_modules/jsdom/lib/jsdom/browser/Window.js:520:19)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7)</failure>
     </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should format date for English locale" time="0.001">
+    <testcase classname="useApplications Hook › fetchApplications" name="should handle array response format" time="1.005">
+      <failure>Error: expect(received).toEqual(expected) // deep equality
+
+- Expected  - 6
++ Received  + 1
+
+- Array [
+-   Object {
+-     &quot;id&quot;: 1,
+-     &quot;status&quot;: &quot;draft&quot;,
+-   },
+- ]
++ Array []
+
+Ignored nodes: comments, script, style
+&lt;html&gt;
+  &lt;head /&gt;
+  &lt;body&gt;
+    &lt;div&gt;
+      &lt;div /&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+    at toEqual (/home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:105:45)
+    at runWithExpensiveErrorDiagnosticsDisabled (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:47:12)
+    at checkCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:124:77)
+    at checkRealTimersCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:118:16)
+    at Timeout.task [as _onTimeout] (/home/jotp/scholarship-system/frontend/node_modules/jsdom/lib/jsdom/browser/Window.js:520:19)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7)</failure>
     </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should return empty string for null date" time="0">
+    <testcase classname="useApplications Hook › fetchApplications" name="should not fetch when user is not authenticated" time="0.003">
     </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should return empty string for undefined date" time="0.001">
+    <testcase classname="useApplications Hook › fetchApplications" name="should handle fetch error" time="1.002">
+      <failure>Error: expect(received).toBeTruthy()
+
+Received: null
+
+Ignored nodes: comments, script, style
+&lt;html&gt;
+  &lt;head /&gt;
+  &lt;body&gt;
+    &lt;div&gt;
+      &lt;div /&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+    at toBeTruthy (/home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:134:38)
+    at runWithExpensiveErrorDiagnosticsDisabled (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:47:12)
+    at checkCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:124:77)
+    at checkRealTimersCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:118:16)
+    at Timeout.task [as _onTimeout] (/home/jotp/scholarship-system/frontend/node_modules/jsdom/lib/jsdom/browser/Window.js:520:19)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7)</failure>
     </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should return empty string for empty date" time="0">
+    <testcase classname="useApplications Hook › fetchApplications" name="should handle API response without success flag" time="1.005">
+      <failure>Error: expect(received).toBeTruthy()
+
+Received: null
+
+Ignored nodes: comments, script, style
+&lt;html&gt;
+  &lt;head /&gt;
+  &lt;body&gt;
+    &lt;div&gt;
+      &lt;div /&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+    at toBeTruthy (/home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:149:38)
+    at runWithExpensiveErrorDiagnosticsDisabled (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:47:12)
+    at checkCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:124:77)
+    at checkRealTimersCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:118:16)
+    at Timeout.task [as _onTimeout] (/home/jotp/scholarship-system/frontend/node_modules/jsdom/lib/jsdom/browser/Window.js:520:19)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7)</failure>
     </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for draft status in Chinese" time="0.001">
+    <testcase classname="useApplications Hook › createApplication" name="should create application successfully" time="0.004">
+      <failure>Error: Failed to create application
+    at Object.createApplication (/home/jotp/scholarship-system/frontend/hooks/use-applications.ts:48:15)
+    at /home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:169:22</failure>
     </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for submitted status in English" time="0.001">
+    <testcase classname="useApplications Hook › createApplication" name="should handle create application error" time="0.004">
     </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for approved status" time="0.001">
+    <testcase classname="useApplications Hook › submitApplication" name="should submit application successfully" time="1.002">
+      <failure>Error: expect(received).toHaveLength(expected)
+
+Expected length: 1
+Received length: 0
+Received array:  []
+
+Ignored nodes: comments, script, style
+&lt;html&gt;
+  &lt;head /&gt;
+  &lt;body&gt;
+    &lt;div&gt;
+      &lt;div /&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+    at toHaveLength (/home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:217:45)
+    at runWithExpensiveErrorDiagnosticsDisabled (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:47:12)
+    at checkCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:124:77)
+    at checkRealTimersCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:118:16)
+    at Timeout.task [as _onTimeout] (/home/jotp/scholarship-system/frontend/node_modules/jsdom/lib/jsdom/browser/Window.js:520:19)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7)</failure>
     </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for rejected status" time="0.001">
+    <testcase classname="useApplications Hook › submitApplication" name="should handle submit application error" time="0.003">
     </testcase>
-    <testcase classname="Application Helpers › getStatusColor" name="should return correct colors for different statuses" time="0.001">
+    <testcase classname="useApplications Hook › withdrawApplication" name="should withdraw application successfully" time="1.002">
+      <failure>Error: expect(received).toHaveLength(expected)
+
+Expected length: 1
+Received length: 0
+Received array:  []
+
+Ignored nodes: comments, script, style
+&lt;html&gt;
+  &lt;head /&gt;
+  &lt;body&gt;
+    &lt;div&gt;
+      &lt;div /&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+    at toHaveLength (/home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:264:45)
+    at runWithExpensiveErrorDiagnosticsDisabled (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:47:12)
+    at checkCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:124:77)
+    at checkRealTimersCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:118:16)
+    at Timeout.task [as _onTimeout] (/home/jotp/scholarship-system/frontend/node_modules/jsdom/lib/jsdom/browser/Window.js:520:19)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7)</failure>
     </testcase>
-    <testcase classname="Application Helpers › getStatusName" name="should return Chinese status names" time="0">
+    <testcase classname="useApplications Hook › updateApplication" name="should update application successfully" time="1.002">
+      <failure>Error: expect(received).toHaveLength(expected)
+
+Expected length: 1
+Received length: 0
+Received array:  []
+
+Ignored nodes: comments, script, style
+&lt;html&gt;
+  &lt;head /&gt;
+  &lt;body&gt;
+    &lt;div&gt;
+      &lt;div /&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+    at toHaveLength (/home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:292:45)
+    at runWithExpensiveErrorDiagnosticsDisabled (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:47:12)
+    at checkCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:124:77)
+    at checkRealTimersCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:118:16)
+    at Timeout.task [as _onTimeout] (/home/jotp/scholarship-system/frontend/node_modules/jsdom/lib/jsdom/browser/Window.js:520:19)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7)</failure>
     </testcase>
-    <testcase classname="Application Helpers › getStatusName" name="should return English status names" time="0.001">
+    <testcase classname="useApplications Hook › uploadDocument" name="should upload document successfully" time="0.002">
+      <failure>Error: Failed to upload document
+    at Object.uploadDocument (/home/jotp/scholarship-system/frontend/hooks/use-applications.ts:130:15)
+    at /home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:320:30</failure>
     </testcase>
-    <testcase classname="Application Helpers › formatFieldName" name="should return Chinese field names" time="0.001">
+    <testcase classname="useApplications Hook › saveApplicationDraft" name="should save draft successfully" time="0.001">
+      <failure>Error: Failed to save draft
+    at Object.saveApplicationDraft (/home/jotp/scholarship-system/frontend/hooks/use-applications.ts:155:15)
+    at /home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:342:28</failure>
     </testcase>
-    <testcase classname="Application Helpers › formatFieldName" name="should return English field names" time="0">
+    <testcase classname="useApplications Hook › deleteApplication" name="should delete application successfully" time="1.002">
+      <failure>Error: expect(received).toHaveLength(expected)
+
+Expected length: 2
+Received length: 0
+Received array:  []
+
+Ignored nodes: comments, script, style
+&lt;html&gt;
+  &lt;head /&gt;
+  &lt;body&gt;
+    &lt;div&gt;
+      &lt;div /&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+    at toHaveLength (/home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:368:45)
+    at runWithExpensiveErrorDiagnosticsDisabled (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/config.js:47:12)
+    at checkCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:124:77)
+    at checkRealTimersCallback (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/node_modules/@testing-library/dom/dist/wait-for.js:118:16)
+    at Timeout.task [as _onTimeout] (/home/jotp/scholarship-system/frontend/node_modules/jsdom/lib/jsdom/browser/Window.js:520:19)
+    at listOnTimeout (node:internal/timers:594:17)
+    at processTimers (node:internal/timers:529:7)</failure>
     </testcase>
-    <testcase classname="Application Helpers › formatFieldName" name="should return original field name if not mapped" time="0.001">
+    <testcase classname="useApplications Hook › error handling" name="should set error state when API calls fail" time="0.001">
     </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should format scholarship type from API response" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should return code if scholarship not found in API" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should return code if API fails" time="0.011">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should return value as-is for non-scholarship fields" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › getDocumentLabel" name="should use dynamic label when provided" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › getDocumentLabel" name="should fallback to Chinese label when English not available" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › getDocumentLabel" name="should use static labels when no dynamic label provided" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › getDocumentLabel" name="should return original docType if not mapped" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › fetchApplicationFiles" name="should fetch files from application details" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › fetchApplicationFiles" name="should fallback to files API if no documents in application details" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if both APIs fail" time="0.004">
-    </testcase>
-    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if no files found" time="0.001">
+    <testcase classname="useApplications Hook › error handling" name="should clear error on successful operation" time="0.001">
+      <failure>Error: Failed to create application
+    at Object.createApplication (/home/jotp/scholarship-system/frontend/hooks/use-applications.ts:48:15)
+    at /home/jotp/scholarship-system/frontend/hooks/__tests__/use-applications.test.tsx:426:9</failure>
     </testcase>
   </testsuite>
 </testsuites>
