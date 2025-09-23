@@ -20,10 +20,21 @@ jest.mock('@/hooks/use-auth', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-// Mock API module
-jest.mock('@/lib/api');
+// Create mutable mock functions with default responses
+const mockGetMockUsers = jest.fn().mockResolvedValue({ success: true, data: [] })
+const mockMockSSOLogin = jest.fn().mockResolvedValue({ success: true, data: { access_token: 'mock-token' } })
 
-import { apiClient, mockGetMockUsers, mockMockSSOLogin } from '@/lib/api';
+// Mock API module
+jest.mock('@/lib/api', () => ({
+  apiClient: {
+    auth: {
+      getMockUsers: (...args: any[]) => mockGetMockUsers(...args),
+      mockSSOLogin: (...args: any[]) => mockMockSSOLogin(...args),
+    }
+  }
+}))
+
+import { apiClient } from '@/lib/api'
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -55,7 +66,7 @@ afterAll(() => {
   });
 });
 
-// TODO: Fix API mocking - mockGetMockUsers and mockMockSSOLogin need proper setup
+// TODO: Fix component useEffect not triggering API calls in test environment
 describe.skip('DevLoginPage Component', () => {
   const mockPush = jest.fn();
 
