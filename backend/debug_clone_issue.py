@@ -22,9 +22,8 @@ async def debug_clone_issue():
     from app.core.init_db import initDatabase
     from app.db.session import AsyncSessionLocal
     from app.models.application import Application, ApplicationFile
-    from app.models.user import User, UserType
+    from app.models.user import User
     from app.models.user_profile import UserProfile
-    from app.services.application_service import ApplicationService
     from sqlalchemy import select
     
     print("🔍 調試固定文件複製問題")
@@ -177,7 +176,7 @@ async def debug_clone_issue():
             }
             
             form_data['documents'].append(doc_info)
-            print(f"✅ 文件資訊已加入 form_data")
+            print("✅ 文件資訊已加入 form_data")
             
             # 更新申請記錄
             application.submitted_form_data = form_data
@@ -185,7 +184,7 @@ async def debug_clone_issue():
             
             # 提交到資料庫
             await db.commit()
-            print(f"✅ 資料庫提交完成")
+            print("✅ 資料庫提交完成")
             
             # 重新載入申請檢查
             stmt = select(Application).where(Application.id == application.id)

@@ -3,16 +3,13 @@ Application analytics service for scholarship management
 Provides comprehensive analytics, reporting, and insights
 """
 
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, and_, or_, case, text, desc, select
-import json
+from sqlalchemy import select
 
 from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
-from app.models.scholarship import ScholarshipType
 # Student model removed - student data now fetched from external API
-from app.models.user import User
 
 import logging
 

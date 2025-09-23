@@ -3,9 +3,6 @@
 測試獎學金資格邏輯的獨立腳本
 """
 
-import os
-import sys
-import asyncio
 from datetime import datetime, timezone, timedelta
 
 # 模擬設定
@@ -88,10 +85,10 @@ class MockScholarshipService:
         
         # 檢查申請期間
         if not self._should_bypass_application_period() and not scholarship.is_application_period:
-            print(f"❌ 不符合: 申請期間已過")
+            print("❌ 不符合: 申請期間已過")
             return False
         elif self._should_bypass_application_period():
-            print(f"🔧 DEV MODE: 跳過申請期間檢查")
+            print("🔧 DEV MODE: 跳過申請期間檢查")
         else:
             print(f"✅ 申請期間: {scholarship.application_start_date} 到 {scholarship.application_end_date}")
         
@@ -114,9 +111,9 @@ class MockScholarshipService:
             print(f"❌ 不符合: 學生 {student.stdNo} 不在白名單中")
             return False
         elif self._should_bypass_whitelist() and scholarship.whitelist_enabled:
-            print(f"🔧 DEV MODE: 跳過白名單檢查")
+            print("🔧 DEV MODE: 跳過白名單檢查")
         else:
-            print(f"✅ 白名單檢查通過")
+            print("✅ 白名單檢查通過")
         
         print(f"🎉 獎學金 {scholarship.name} 符合申請資格！")
         return True
@@ -138,7 +135,7 @@ def test_stu_under_eligibility():
     # 檢查資格
     is_eligible = service.check_scholarship_eligibility(student, term_record, scholarship)
     
-    print(f"\n📋 最終結果:")
+    print("\n📋 最終結果:")
     print(f"學生 {student.stdNo} {'符合' if is_eligible else '不符合'} {scholarship.name} 申請資格")
     
     return is_eligible

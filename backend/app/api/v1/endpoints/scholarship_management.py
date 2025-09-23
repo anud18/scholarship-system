@@ -3,9 +3,8 @@ Enhanced scholarship management API endpoints for Issue #10
 Provides comprehensive scholarship application management with priority processing and quota management
 """
 
-from typing import List, Optional, Dict, Any
+from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, Body
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.deps import get_db

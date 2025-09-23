@@ -5,14 +5,13 @@ Notification endpoints for managing user notifications and system announcements
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func, and_, or_, delete
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, func, and_, or_, delete
 from datetime import datetime
 
 from app.core.deps import get_current_user, get_db
 from app.models.user import User
 from app.models.notification import Notification, NotificationType, NotificationPriority
-from app.schemas.notification import NotificationResponse, NotificationCreate, NotificationUpdate
+from app.schemas.notification import NotificationResponse, NotificationCreate
 from app.schemas.response import ApiResponse
 from app.services.notification_service import NotificationService
 

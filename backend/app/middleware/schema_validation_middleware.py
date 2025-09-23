@@ -10,7 +10,6 @@ import json
 import logging
 from typing import Callable, Any, Dict
 from fastapi import Request, Response
-from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import ValidationError
 from app.core.config import settings

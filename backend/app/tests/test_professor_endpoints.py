@@ -5,8 +5,6 @@ Unit tests for professor review endpoints
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
-import asyncio
 from datetime import datetime, timezone
 
 # Import test dependencies
@@ -14,14 +12,12 @@ from app.api.v1.endpoints.professor import (
     get_professor_applications, 
     get_professor_review, 
     submit_professor_review, 
-    update_professor_review,
     get_application_sub_types,
     get_professor_review_stats
 )
 from app.schemas.application import ProfessorReviewCreate, ProfessorReviewItemCreate, ApplicationListResponse
 from app.schemas.common import PaginatedResponse
 from app.models.user import User, UserRole
-from app.core.exceptions import NotFoundError, AuthorizationError
 
 
 class TestProfessorApplicationsEndpoint:

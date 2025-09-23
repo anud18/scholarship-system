@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.testclient import TestClient
 
-from app.models.user import User, UserRole
+from app.models.user import UserRole
 from app.services.developer_profile_service import (
     DeveloperProfileService, 
     DeveloperProfile,

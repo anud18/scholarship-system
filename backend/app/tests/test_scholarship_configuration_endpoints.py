@@ -3,13 +3,11 @@ API endpoint tests for ScholarshipConfiguration CRUD operations
 """
 
 import pytest
-import json
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, UserRole, AdminScholarship
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
-from app.models.enums import Semester
 
 
 class TestScholarshipConfigurationEndpoints:

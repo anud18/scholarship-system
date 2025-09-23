@@ -3,7 +3,7 @@ User Profile Management API endpoints
 """
 
 import logging
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request, File, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,10 +15,9 @@ import io
 from app.db.deps import get_db
 from app.schemas.user_profile import (
     UserProfileCreate, UserProfileUpdate, UserProfileResponse,
-    CompleteUserProfileResponse, BankDocumentPhotoUpload, ProfileHistoryResponse,
+    BankDocumentPhotoUpload, ProfileHistoryResponse,
     BankInfoUpdate, AdvisorInfoUpdate
 )
-from app.schemas.common import MessageResponse
 from app.core.security import get_current_user, require_admin
 from app.models.user import User
 from app.services.user_profile_service import UserProfileService
@@ -418,7 +417,7 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
                     }
                 )
                 
-            except Exception as e:
+            except Exception:
                 # If MinIO fails, try fallback to local storage
                 pass
         
@@ -446,7 +445,7 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
         
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="檔案服務發生錯誤"

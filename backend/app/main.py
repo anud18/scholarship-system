@@ -14,7 +14,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
-from app.middleware.schema_validation_middleware import SchemaValidationMiddleware
 
 # Import routers
 from app.api.v1.api import api_router

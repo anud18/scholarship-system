@@ -4,7 +4,7 @@ Pytest configuration and fixtures for all tests
 import asyncio
 import os
 from typing import AsyncGenerator, Generator
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -25,7 +25,6 @@ from app.models.scholarship import ScholarshipType
 from app.models.application import Application, ApplicationStatus
 
 # Override settings for testing
-import os
 os.environ["TESTING"] = "true"
 os.environ["PYTEST_CURRENT_TEST"] = "true"
 

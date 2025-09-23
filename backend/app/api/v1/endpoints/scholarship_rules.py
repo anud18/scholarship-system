@@ -11,7 +11,7 @@ from typing import List, Optional, Dict, Any
 import logging
 
 from app.core.deps import get_db
-from app.core.security import require_admin, get_current_user
+from app.core.security import require_admin
 from app.models.user import User
 from app.models.scholarship import ScholarshipRule, ScholarshipType
 from app.models.enums import Semester
@@ -19,10 +19,7 @@ from app.schemas.scholarship import (
     ScholarshipRuleCreate, 
     ScholarshipRuleUpdate, 
     ScholarshipRuleResponse,
-    ScholarshipRuleFilter,
     RuleCopyRequest,
-    RuleTemplateRequest,
-    ApplyTemplateRequest,
     BulkRuleOperation
 )
 from app.schemas.response import ApiResponse

@@ -5,7 +5,7 @@ Test renewal flow sequence - ensuring renewal process completes before general p
 import pytest
 from datetime import datetime, timezone, timedelta
 from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipCategory
-from app.models.enums import Semester, SubTypeSelectionMode, ApplicationCycle
+from app.models.enums import Semester
 
 
 class TestRenewalFlowSequence:
@@ -99,7 +99,6 @@ class TestRenewalFlowSequence:
     
     def test_application_eligibility_sequence(self, scholarship_with_sequential_flow):
         """Test application eligibility based on current period"""
-        from app.models.application import Application
         
         # 模擬現有申請列表
         existing_applications = []

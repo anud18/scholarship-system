@@ -2,8 +2,8 @@
 Student schemas for API requests and responses with normalized database design
 """
 
-from datetime import datetime, date
-from typing import Optional, List
+from datetime import date
+from typing import Optional
 from pydantic import BaseModel, Field
 
 

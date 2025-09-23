@@ -4,12 +4,11 @@ Unit tests for NotificationService
 
 import pytest
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.notification_service import NotificationService
-from app.models.notification import Notification, NotificationRead, NotificationType, NotificationPriority
-from app.models.user import User
+from app.models.notification import Notification, NotificationType, NotificationPriority
 
 
 class TestNotificationService:

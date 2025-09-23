@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.deps import get_db
 from app.core.security import require_admin
 from app.models.user import User
-from app.models.email_management import EmailHistory, ScheduledEmail, EmailStatus, ScheduleStatus, EmailCategory
+from app.models.email_management import EmailStatus, ScheduleStatus, EmailCategory
 from app.services.email_management_service import EmailManagementService
 from app.schemas.email_management import (
     EmailHistoryRead,
@@ -166,7 +166,7 @@ async def approve_scheduled_email(
         return scheduled_email
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to approve email")
 
 
@@ -191,7 +191,7 @@ async def cancel_scheduled_email(
         return scheduled_email
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to cancel email")
 
 
@@ -222,7 +222,7 @@ async def update_scheduled_email(
         return scheduled_email
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to update scheduled email")
 
 

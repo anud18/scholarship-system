@@ -2,7 +2,6 @@
 SQLAlchemy base class for all models
 """
 
-from typing import Any
 from sqlalchemy.orm import DeclarativeBase, declared_attr
 
 

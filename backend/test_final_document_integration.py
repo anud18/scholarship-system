@@ -6,7 +6,6 @@
 import asyncio
 import os
 import sys
-from datetime import datetime, timezone
 
 # Add backend directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -21,8 +20,8 @@ async def test_final_document_integration():
     
     from app.core.init_db import initDatabase
     from app.db.session import AsyncSessionLocal
-    from app.models.application import Application, ApplicationFile
-    from app.models.user import User, UserType
+    from app.models.application import ApplicationFile
+    from app.models.user import User
     from app.models.user_profile import UserProfile
     from app.services.application_service import ApplicationService
     from sqlalchemy import select
@@ -60,7 +59,7 @@ async def test_final_document_integration():
             print("✅ 用戶個人資料設定完成（包含銀行文件）")
             
             # 使用 ApplicationService 創建申請（模擬前端行為）
-            from app.schemas.application import ApplicationCreate, ApplicationFormData, DynamicFormField
+            from app.schemas.application import ApplicationCreate, ApplicationFormData
             
             form_data = ApplicationFormData(
                 fields={},  # 使用空的欄位避免驗證問題
@@ -131,7 +130,7 @@ async def test_final_document_integration():
                 print(f"  - 類型: {file.file_type}, 檔名: {file.filename}, 已驗證: {file.is_verified}")
             
             # 最終驗證
-            print(f"\n🎯 最終驗證:")
+            print("\n🎯 最終驗證:")
             success_points = []
             
             if form_documents:
@@ -159,7 +158,7 @@ async def test_final_document_integration():
                 print(f"  {point}")
             
             # 前端映射測試
-            print(f"\n📱 前端映射測試:")
+            print("\n📱 前端映射測試:")
             if bank_doc:
                 print("  ✅ 前端 application-detail-dialog.tsx:172 loadApplicationFiles()")
                 print("  ✅ 從 application.submitted_form_data.documents 載入文件")
@@ -181,7 +180,7 @@ async def test_final_document_integration():
                     'uploaded_at': bank_doc.get('upload_time')
                 }
                 
-                print(f"\n🔄 模擬前端處理後的文件物件:")
+                print("\n🔄 模擬前端處理後的文件物件:")
                 print(f"  - id: {frontend_file['id']}")
                 print(f"  - file_type: {frontend_file['file_type']}")
                 print(f"  - filename: {frontend_file['filename']}")
@@ -207,10 +206,10 @@ async def test_final_document_integration():
 if __name__ == "__main__":
     success = asyncio.run(test_final_document_integration())
     if success:
-        print(f"\n🎉 所有測試通過！")
+        print("\n🎉 所有測試通過！")
         print("✅ 固定文件複製功能正常")
         print("✅ 前端可以正確讀取和顯示文件")
         print("✅ 申請詳情應該顯示：存摺封面*固定文件")
     else:
-        print(f"\n❌ 測試失敗")
+        print("\n❌ 測試失敗")
     sys.exit(0 if success else 1)

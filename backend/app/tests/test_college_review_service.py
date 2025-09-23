@@ -9,10 +9,7 @@ Tests critical functionality including:
 """
 
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch, MagicMock
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from unittest.mock import AsyncMock, MagicMock
 
 from app.services.college_review_service import (
     CollegeReviewService,
@@ -23,8 +20,7 @@ from app.services.college_review_service import (
     ReviewPermissionError
 )
 from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem
-from app.models.application import Application, ApplicationStatus
-from app.models.user import User, UserRole
+from app.models.application import Application
 from app.core.exceptions import BusinessLogicError, NotFoundError
 
 

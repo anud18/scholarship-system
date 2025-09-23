@@ -2,12 +2,9 @@
 Tests for Mock SSO functionality
 """
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
-from app.services.mock_sso_service import MockSSOService
 from app.models.user import UserRole
 
 

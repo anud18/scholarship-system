@@ -2,17 +2,13 @@
 Email automation service for handling automated email triggers
 """
 
-import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import text
 
-from app.db.session import AsyncSessionLocal
-from app.models.email_management import EmailHistory, ScheduledEmail, EmailCategory
-from app.models.system_setting import EmailTemplate
+from app.models.email_management import EmailCategory
 from app.services.email_service import EmailService
 from app.services.system_setting_service import EmailTemplateService
 
@@ -145,7 +141,7 @@ class EmailAutomationService:
         try:
             # Prepare default subject and body (fallbacks)
             default_subject = f"Automated notification - {template_key}"
-            default_body = f"This is an automated notification from the scholarship system."
+            default_body = "This is an automated notification from the scholarship system."
             
             # Email metadata for logging
             metadata = {

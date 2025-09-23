@@ -9,7 +9,6 @@ import asyncio
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
 
 from app.db.session import async_engine, AsyncSessionLocal
 

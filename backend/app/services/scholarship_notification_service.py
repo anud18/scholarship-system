@@ -3,17 +3,16 @@ Email notification service for scholarship management system
 Handles automated notifications for application status changes, reminders, and deadlines
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, select
 
 from app.models.application import Application, ApplicationStatus
 from app.models.user import User
 # Student model removed - student data now fetched from external API
 from app.services.email_service import EmailService
 from app.services.student_service import StudentService
-from app.core.config import settings
 
 import logging
 
@@ -185,7 +184,7 @@ class ScholarshipNotificationService:
                     </ul>
                 </div>
                 
-                {f"<div style='background-color: #f0fff4; padding: 15px; border-radius: 5px; margin: 15px 0; border: 1px solid #9ae6b4;'><p style='margin: 0; color: #22543d;'><strong>Next Steps:</strong> Please log in to your student portal to view full details and any required actions.</p></div>" if new_status in [ApplicationStatus.APPROVED.value, ApplicationStatus.RETURNED.value] else ""}
+                {"<div style='background-color: #f0fff4; padding: 15px; border-radius: 5px; margin: 15px 0; border: 1px solid #9ae6b4;'><p style='margin: 0; color: #22543d;'><strong>Next Steps:</strong> Please log in to your student portal to view full details and any required actions.</p></div>" if new_status in [ApplicationStatus.APPROVED.value, ApplicationStatus.RETURNED.value] else ""}
                 
                 {f"<div style='background-color: #fef5e7; padding: 15px; border-radius: 5px; margin: 15px 0;'><p style='margin: 0;'><strong>Rejection Reason:</strong> {application.rejection_reason}</p></div>" if new_status == ApplicationStatus.REJECTED.value and application.rejection_reason else ""}
                 

@@ -65,7 +65,6 @@ async def handle_cached_statement_error(session: AsyncSession, operation_func, *
     This function addresses the PostgreSQL asyncpg cached statement plan invalidation
     issue that occurs after schema or configuration changes.
     """
-    import asyncpg
     from sqlalchemy.dialects.postgresql.asyncpg import InvalidCachedStatementError
     
     try:
@@ -104,7 +103,7 @@ async def get_db_session():
     session = AsyncSessionLocal()
     try:
         yield session
-    except Exception as e:
+    except Exception:
         await session.rollback()
         raise
     finally:

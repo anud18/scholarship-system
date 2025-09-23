@@ -2,8 +2,6 @@
 Test application creation with dynamic fields
 """
 
-import pytest
-from decimal import Decimal
 from app.schemas.application import ApplicationCreate
 
 

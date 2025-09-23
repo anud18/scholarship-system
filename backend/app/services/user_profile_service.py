@@ -7,8 +7,7 @@ import base64
 import uuid
 from typing import Optional, Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, delete
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, delete
 from datetime import datetime, timezone
 from PIL import Image
 import io
@@ -342,7 +341,7 @@ class UserProfileService:
             if image.format in format_to_mime:
                 expected_mime = format_to_mime[image.format]
                 if mime != expected_mime and not (mime == 'image/jpeg' and expected_mime == 'image/jpeg'):
-                    raise ValueError(f"File content does not match declared type")
+                    raise ValueError("File content does not match declared type")
             
             # Resize image if needed (using configurable size)
             if image.size[0] > self.MAX_IMAGE_SIZE[0] or image.size[1] > self.MAX_IMAGE_SIZE[1]:
@@ -452,7 +451,6 @@ class UserProfileService:
             # Example integration point for virus scanning service
             # This would be replaced with actual API call to virus scanner
             import aiohttp
-            import asyncio
             
             async with aiohttp.ClientSession() as session:
                 headers = {

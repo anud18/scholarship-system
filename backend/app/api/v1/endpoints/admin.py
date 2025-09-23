@@ -4,25 +4,22 @@ Administration API endpoints
 
 import logging
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, update, delete, or_, and_
+from sqlalchemy import select, func, desc, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
-logger = logging.getLogger(__name__)
-
 from app.db.deps import get_db
 from app.schemas.common import (
-    MessageResponse, PaginatedResponse, SystemSettingSchema, EmailTemplateSchema, 
+    MessageResponse, PaginatedResponse, SystemSettingSchema, EmailTemplateSchema,
     EmailTemplateUpdateSchema, ApiResponse
 )
 from app.schemas.application import ApplicationListResponse, ApplicationResponse, ProfessorAssignmentRequest, HistoricalApplicationResponse
 from app.schemas.scholarship import (
     ScholarshipSubTypeConfigCreate, ScholarshipSubTypeConfigUpdate, ScholarshipSubTypeConfigResponse,
-    ScholarshipRuleCreate, ScholarshipRuleUpdate, ScholarshipRuleResponse, ScholarshipRuleFilter,
-    RuleCopyRequest, RuleTemplateRequest, ApplyTemplateRequest, BulkRuleOperation
+    ScholarshipRuleCreate, ScholarshipRuleUpdate, ScholarshipRuleResponse, RuleCopyRequest, RuleTemplateRequest, ApplyTemplateRequest, BulkRuleOperation
 )
 from app.schemas.notification import NotificationResponse, NotificationCreate, NotificationUpdate
 from app.core.security import require_admin, get_current_user, check_scholarship_permission
@@ -36,6 +33,8 @@ from app.models.scholarship import ScholarshipType, ScholarshipStatus, Scholarsh
 from app.models.enums import Semester
 from app.models.user import AdminScholarship
 from app.services.application_service import ApplicationService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -114,7 +113,7 @@ async def get_all_applications(
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
-            "academic_year": app.academic_year or str(datetime.now().year),
+            "academic_year": app.academic_year or str(datetime.now().year - 1911),  # Convert to ROC year
             "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
             "submitted_form_data": app.submitted_form_data or {},
@@ -145,7 +144,6 @@ async def get_all_applications(
         
         # Calculate days waiting
         if app.submitted_at:
-            from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             submitted_time = app.submitted_at
             
@@ -332,7 +330,7 @@ async def get_dashboard_stats(
     # Total users
     stmt = select(func.count(User.id))
     result = await db.execute(stmt)
-    total_users = result.scalar()
+    _ = result.scalar()  # Unused for now
     
     # Total applications (filtered by permissions)
     stmt = select(func.count(Application.id))
@@ -356,7 +354,6 @@ async def get_dashboard_stats(
                     status_counts.get(ApplicationStatus.UNDER_REVIEW.value, 0)
     
     # Approved this month (filtered by permissions)
-    from datetime import datetime, timedelta
     this_month = datetime.now().replace(day=1)
     stmt = select(func.count(Application.id)).where(
         Application.status == ApplicationStatus.APPROVED.value,
@@ -636,7 +633,7 @@ async def get_recent_applications(
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
-            "academic_year": app.academic_year or str(datetime.now().year),
+            "academic_year": app.academic_year or str(datetime.now().year - 1911),  # Convert to ROC year
             "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
             "submitted_form_data": app.submitted_form_data or {},
@@ -667,7 +664,6 @@ async def get_recent_applications(
         
         # Calculate days waiting
         if app.submitted_at:
-            from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             submitted_time = app.submitted_at
             
@@ -700,7 +696,7 @@ async def get_system_announcements(
         (Notification.user_id.is_(None)) |
         (Notification.user_id == current_user.id)
     ).where(
-        Notification.is_dismissed == False,
+        ~Notification.is_dismissed,
         Notification.related_resource_type == 'system'
     ).order_by(desc(Notification.created_at)).limit(limit)
     
@@ -1203,7 +1199,7 @@ async def get_applications_by_scholarship(
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
-            "academic_year": app.academic_year or str(datetime.now().year),
+            "academic_year": app.academic_year or str(datetime.now().year - 1911),  # Convert to ROC year
             "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
             "submitted_form_data": processed_form_data,
@@ -1246,7 +1242,6 @@ async def get_applications_by_scholarship(
         
         # Calculate days waiting
         if app.submitted_at:
-            from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             submitted_time = app.submitted_at
             
@@ -1409,7 +1404,6 @@ async def get_scholarship_sub_type_configs(
         general_config = scholarship.get_sub_type_config(ScholarshipSubType.GENERAL.value)
         if not general_config:
             # 創建預設的 general 配置
-            from datetime import datetime, timezone
             now = datetime.now(timezone.utc)
             
             config_dict = {

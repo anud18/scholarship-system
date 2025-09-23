@@ -5,9 +5,8 @@ These utilities help developers catch schema validation issues early
 during development before they reach production.
 """
 
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type
 from pydantic import BaseModel, ValidationError
-from sqlalchemy.ext.declarative import DeclarativeMeta
 from datetime import datetime
 from decimal import Decimal
 import enum

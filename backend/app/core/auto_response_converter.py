@@ -6,10 +6,9 @@ reducing boilerplate and preventing common schema validation errors.
 """
 
 import inspect
-from typing import Type, List, Dict, Any, Optional, get_origin, get_args
+from typing import Type, List, Dict, Any, get_origin, get_args
 from functools import wraps
 from pydantic import BaseModel
-from sqlalchemy.ext.declarative import DeclarativeMeta
 from datetime import datetime
 from decimal import Decimal
 import enum

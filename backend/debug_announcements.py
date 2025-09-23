@@ -6,7 +6,7 @@
 import asyncio
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # 添加項目根目錄到Python路徑
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -131,7 +131,7 @@ async def create_test_announcement():
                 metadata={"source": "debug_script", "timestamp": datetime.utcnow().isoformat()}
             )
             
-            print(f"✅ 測試公告創建成功!")
+            print("✅ 測試公告創建成功!")
             print(f"   ID: {announcement.id}")
             print(f"   標題: {announcement.title}")
             print(f"   創建時間: {announcement.created_at}")
@@ -210,7 +210,7 @@ async def test_api_simulation():
                 }
             }
             
-            print(f"✅ API模擬成功!")
+            print("✅ API模擬成功!")
             print(f"   total: {api_response['data']['total']}")
             print(f"   items count: {len(api_response['data']['items'])}")
             print(f"   response: {api_response['success']}")
@@ -243,11 +243,11 @@ async def check_notification_model():
             print(f"   - {attr}")
         
         # 檢查枚舉值
-        print(f"\n📋 NotificationType 枚舉值:")
+        print("\n📋 NotificationType 枚舉值:")
         for enum_val in NotificationType:
             print(f"   - {enum_val.name}: {enum_val.value}")
         
-        print(f"\n📋 NotificationPriority 枚舉值:")
+        print("\n📋 NotificationPriority 枚舉值:")
         for enum_val in NotificationPriority:
             print(f"   - {enum_val.name}: {enum_val.value}")
         

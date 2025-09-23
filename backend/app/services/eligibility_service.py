@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import Semester
 from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
 
 

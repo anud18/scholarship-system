@@ -11,12 +11,11 @@ import logging
 from app.db.deps import get_db
 from app.schemas.application import (
     ApplicationCreate, ApplicationUpdate, ApplicationResponse,
-    ApplicationListResponse, ApplicationStatusUpdate, DashboardStats, ApplicationReviewCreate, ProfessorReviewCreate,
-    StudentDataSchema, StudentFinancialInfo, SupervisorInfo
+    ApplicationListResponse, ApplicationStatusUpdate, DashboardStats, ProfessorReviewCreate,
+    StudentDataSchema
 )
 from app.schemas.common import MessageResponse
 from app.services.application_service import ApplicationService
-from app.services.minio_service import minio_service
 from app.core.security import get_current_user, require_student, require_staff
 from app.models.user import User
 from app.core.exceptions import NotFoundError, ValidationError, AuthorizationError
@@ -227,9 +226,6 @@ async def get_application_files(
     db: AsyncSession = Depends(get_db)
 ):
     """Get all files for an application - 現在從 submitted_form_data.documents 中獲取"""
-    from app.models.application import ApplicationFile
-    from app.schemas.application import ApplicationFileResponse
-    from sqlalchemy import select, and_
     
     # Verify application exists and user has access
     service = ApplicationService(db)

@@ -3,20 +3,19 @@ Unit tests for ApplicationService
 """
 
 import pytest
-import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.application_service import ApplicationService
 from app.models.user import User, UserRole
-from app.models.application import Application, ApplicationStatus, Semester
+from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipType
 from app.schemas.application import ApplicationCreate, ApplicationUpdate, ApplicationFormData
 from app.core.exceptions import (
     NotFoundError, ConflictError, ValidationError, 
-    BusinessLogicError, AuthorizationError
+    AuthorizationError
 )
 
 

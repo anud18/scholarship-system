@@ -2,11 +2,11 @@ from app.core.config import settings
 import aiosmtplib
 from email.message import EmailMessage
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime
 import json
 import logging
 from app.services.system_setting_service import EmailTemplateService
-from app.models.email_management import EmailHistory, ScheduledEmail, EmailStatus, ScheduleStatus, EmailCategory
+from app.models.email_management import EmailHistory, ScheduledEmail, EmailStatus, EmailCategory
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -389,7 +389,7 @@ class EmailService:
         }
         
         default_subject = f"申請截止提醒 - {application_data.get('scholarship_type', '')} (剩餘 3 天)"
-        default_body = f"您的獎學金申請草稿尚未送出，申請即將截止！請儘快完成申請。"
+        default_body = "您的獎學金申請草稿尚未送出，申請即將截止！請儘快完成申請。"
         
         metadata = {
             'email_category': EmailCategory.APPLICATION_STUDENT,

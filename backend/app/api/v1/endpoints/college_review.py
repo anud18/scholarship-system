@@ -16,15 +16,14 @@ from sqlalchemy.exc import IntegrityError, DatabaseError
 from pydantic import BaseModel, Field, validator
 
 from app.db.deps import get_db
-from app.core.security import require_college, require_admin, get_current_user
+from app.core.security import require_college, require_admin
 from app.core.rate_limiting import professor_rate_limit  # Reuse existing rate limiter
 from app.models.user import User, UserRole
-from app.models.college_review import CollegeReview, CollegeRanking, QuotaDistribution
+from app.models.college_review import CollegeReview, CollegeRanking
 from app.models.application import Application
 from app.schemas.response import ApiResponse
 from app.services.college_review_service import (
-    CollegeReviewService, QuotaDistributionService,
-    CollegeReviewError, RankingNotFoundError, RankingModificationError, 
+    CollegeReviewService, CollegeReviewError, RankingNotFoundError, RankingModificationError, 
     InvalidRankingDataError, ReviewPermissionError
 )
 from sqlalchemy import select, and_

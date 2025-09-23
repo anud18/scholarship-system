@@ -5,7 +5,6 @@ Scholarship Configuration schemas for API requests and responses
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field, validator
-from enum import Enum
 
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester
 

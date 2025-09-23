@@ -79,7 +79,7 @@ async def initialize_scholarship_email_templates():
                 print(f"   ❌ Failed to create templates for {scholarship.name}: {e}")
                 continue
         
-        print(f"\n🎉 Initialization complete!")
+        print("\n🎉 Initialization complete!")
         print(f"   📈 Total templates created: {total_created}")
         print(f"   🏆 Processed {len(scholarships)} scholarships")
 

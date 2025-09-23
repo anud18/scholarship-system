@@ -11,18 +11,17 @@ Tests all major application management functionality:
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, timezone, timedelta
+from unittest.mock import Mock, AsyncMock, patch
+from datetime import datetime, timezone
 from decimal import Decimal
-from typing import List, Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.application_service import ApplicationService, get_student_data_from_user
-from app.models.application import Application, ApplicationStatus, ApplicationReview, ProfessorReview, Semester
+from app.models.application import Application, ApplicationStatus, Semester
 from app.models.user import User, UserRole
-from app.models.scholarship import ScholarshipType, ScholarshipConfiguration, SubTypeSelectionMode
-from app.schemas.application import ApplicationCreate, ApplicationUpdate, ApplicationFormData
+from app.models.scholarship import ScholarshipType
+from app.schemas.application import ApplicationCreate, ApplicationUpdate
 from app.core.exceptions import (
     NotFoundError, ConflictError, ValidationError,
     BusinessLogicError, AuthorizationError

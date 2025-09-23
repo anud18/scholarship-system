@@ -3,17 +3,15 @@ Quota Management Dashboard API endpoints
 Provides real-time quota tracking, analytics, and management interface
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
-from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, and_, or_, desc
+from sqlalchemy import func, and_
 
 from app.db.deps import get_db
-from app.core.security import require_admin, require_staff, get_current_user
+from app.core.security import require_admin, require_staff
 from app.models.user import User
 from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
-from app.models.scholarship import ScholarshipType
 from app.schemas.response import ApiResponse
 from app.services.scholarship_service import ScholarshipQuotaService
 
@@ -499,7 +497,6 @@ async def export_quota_data(
 ):
     """Export quota data for reporting"""
     from sqlalchemy.orm import sessionmaker
-    import json
     import csv
     import io
     from fastapi.responses import StreamingResponse

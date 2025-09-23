@@ -23,7 +23,6 @@ async def test_get_applications_with_cloned_files():
     from app.db.session import AsyncSessionLocal
     from app.models.application import Application, ApplicationFile
     from app.models.user import User
-    from app.models.user_profile import UserProfile
     from app.models.scholarship import SubTypeSelectionMode
     from app.services.application_service import ApplicationService
     from sqlalchemy import select
@@ -126,7 +125,7 @@ async def test_get_applications_with_cloned_files():
                             print(f"       ❌ 缺少必要欄位: {missing_fields}")
                             return False
                         else:
-                            print(f"       ✅ 前端所需欄位完整")
+                            print("       ✅ 前端所需欄位完整")
                     
                     print("\n🎯 前端顯示模擬:")
                     print("   application-detail-dialog.tsx:178 會讀取 application.submitted_form_data.documents")
@@ -160,10 +159,10 @@ async def test_get_applications_with_cloned_files():
 if __name__ == "__main__":
     success = asyncio.run(test_get_applications_with_cloned_files())
     if success:
-        print(f"\n🎉 修復成功！")
+        print("\n🎉 修復成功！")
         print("✅ get_user_applications 現在會正確處理 ApplicationFile 記錄")
         print("✅ submitted_form_data.documents 會包含複製的固定文件")
         print("✅ 前端申請詳情對話框會顯示文件而不是 '尚未上傳任何文件'")
     else:
-        print(f"\n❌ 修復失敗，需要進一步調試")
+        print("\n❌ 修復失敗，需要進一步調試")
     sys.exit(0 if success else 1)

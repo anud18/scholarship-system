@@ -3,14 +3,12 @@ Bulk approval service for scholarship applications
 Handles batch processing, bulk operations, and automated decision workflows
 """
 
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, or_, func, select
+from sqlalchemy import select
 
-from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
-from app.models.scholarship import ScholarshipType
-from app.models.user import User
+from app.models.application import Application, ApplicationStatus
 # Student model removed - student data now fetched from external API
 from app.services.scholarship_notification_service import ScholarshipNotificationService
 from app.services.eligibility_verification_service import EligibilityVerificationService

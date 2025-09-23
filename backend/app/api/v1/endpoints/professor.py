@@ -9,11 +9,11 @@ import logging
 
 from app.db.deps import get_db
 from app.schemas.application import (
-    ApplicationResponse, ApplicationListResponse, ProfessorReviewCreate, ProfessorReviewResponse
+    ApplicationListResponse, ProfessorReviewCreate, ProfessorReviewResponse
 )
-from app.schemas.common import MessageResponse, PaginatedResponse
+from app.schemas.common import PaginatedResponse
 from app.services.application_service import ApplicationService
-from app.core.security import get_current_user, require_professor
+from app.core.security import require_professor
 from app.models.user import User
 from app.core.exceptions import NotFoundError, AuthorizationError
 from app.core.rate_limiting import professor_rate_limit

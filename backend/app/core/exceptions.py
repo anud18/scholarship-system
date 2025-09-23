@@ -2,7 +2,7 @@
 Custom exceptions for scholarship management system
 """
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any, List
 

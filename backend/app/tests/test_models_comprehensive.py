@@ -16,12 +16,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.models.user import User, UserRole, UserType
-from app.models.application import Application, ApplicationStatus, ProfessorReview, Semester
-from app.models.scholarship import ScholarshipType, ScholarshipConfiguration, ScholarshipCategory
-from app.models.email_management import EmailHistory, ScheduledEmail, EmailStatus, ScheduleStatus, EmailCategory
-from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem
+from app.models.application import Application, ApplicationStatus, Semester
+from app.models.scholarship import ScholarshipType
+from app.models.email_management import EmailHistory, EmailStatus, EmailCategory
 from app.models.notification import Notification, NotificationType, NotificationPriority
-from app.models.enums import Semester, ApplicationCycle
+from app.models.enums import Semester
 
 
 @pytest.mark.unit

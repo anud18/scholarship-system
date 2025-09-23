@@ -10,8 +10,6 @@ Usage:
     python test_endpoint_schemas.py --endpoint /api/v1/scholarships/eligible
 """
 
-import asyncio
-import sys
 import argparse
 from typing import List, Dict, Any
 import requests

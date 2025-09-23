@@ -3,7 +3,6 @@ Test configuration loading and validation
 """
 
 import os
-import pytest
 from app.core.config import Settings
 
 

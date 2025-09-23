@@ -14,7 +14,7 @@ from app.models.scholarship import SubTypeSelectionMode
 from app.models.enums import Semester
 
 if TYPE_CHECKING:
-    from app.models.user import User
+    pass
 
 
 class ApplicationStatus(enum.Enum):

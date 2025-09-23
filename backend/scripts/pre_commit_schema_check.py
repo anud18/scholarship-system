@@ -8,8 +8,7 @@ early in the development process.
 
 import ast
 import sys
-import re
-from typing import List, Dict, Set, Optional, Tuple
+from typing import List, Dict, Set, Optional
 from pathlib import Path
 
 

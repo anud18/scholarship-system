@@ -12,14 +12,12 @@ Tests comprehensive email management functionality including:
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.email_management_service import EmailManagementService
 from app.models.email_management import EmailHistory, ScheduledEmail, EmailStatus, ScheduleStatus, EmailCategory
 from app.models.user import User, UserRole
-from app.models.scholarship import ScholarshipType
 from app.core.exceptions import NotFoundError, BusinessLogicError
 
 

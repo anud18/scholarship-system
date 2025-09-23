@@ -2,16 +2,14 @@
 User management API endpoints
 """
 
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, update, delete
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, func, desc
 
 from app.db.deps import get_db
-from app.schemas.user import UserResponse, UserUpdate, UserCreate, UserListResponse
-from app.schemas.common import MessageResponse, PaginatedResponse
-from app.core.security import get_current_user, require_admin, require_super_admin
+from app.schemas.user import UserUpdate, UserCreate
+from app.core.security import get_current_user, require_admin
 from app.models.user import User, UserRole, UserType, EmployeeStatus
 from app.services.auth_service import AuthService
 

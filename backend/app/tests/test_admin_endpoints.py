@@ -14,12 +14,10 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
-from httpx import AsyncClient
 
-from app.models.user import User, UserRole
+from app.models.user import UserRole
 from app.models.application import Application, ApplicationStatus
-from app.models.scholarship import ScholarshipType
-from app.core.exceptions import NotFoundError, AuthorizationError
+from app.core.exceptions import AuthorizationError
 
 
 @pytest.mark.api

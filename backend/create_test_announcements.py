@@ -94,9 +94,9 @@ async def create_test_announcements():
                 created_count += 1
                 print(f"   ✅ 成功創建，ID: {announcement.id}")
             
-            print(f"\n🎉 測試公告創建完成！")
+            print("\n🎉 測試公告創建完成！")
             print(f"   📊 總共創建了 {created_count} 條系統公告")
-            print(f"   🔗 您現在可以在管理介面的「系統公告」頁面查看這些公告")
+            print("   🔗 您現在可以在管理介面的「系統公告」頁面查看這些公告")
             
         except Exception as e:
             print(f"❌ 創建公告時發生錯誤: {str(e)}")
@@ -134,7 +134,7 @@ async def verify_announcements():
             result = await session.execute(stmt)
             recent_announcements = result.scalars().all()
             
-            print(f"   📋 最近創建的公告:")
+            print("   📋 最近創建的公告:")
             for i, announcement in enumerate(recent_announcements, 1):
                 print(f"      {i}. {announcement.title} (ID: {announcement.id})")
                 print(f"         類型: {announcement.notification_type}, 優先級: {announcement.priority}")

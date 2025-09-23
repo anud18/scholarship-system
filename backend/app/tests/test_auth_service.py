@@ -4,13 +4,13 @@ Unit tests for AuthService
 
 import pytest
 from datetime import datetime
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.auth_service import AuthService
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse
-from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
+from app.core.exceptions import AuthenticationError, ConflictError
 
 
 class TestAuthService:

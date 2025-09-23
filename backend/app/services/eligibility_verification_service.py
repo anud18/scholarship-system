@@ -11,8 +11,7 @@ from sqlalchemy import and_, select
 from app.models.scholarship import ScholarshipType, ScholarshipRule
 # Student model removed - student data now fetched from external API
 # StudentType enum removed - use database lookup instead
-from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
-from app.models.user import User
+from app.models.application import Application, ApplicationStatus
 from app.services.student_service import StudentService
 
 import logging
@@ -93,7 +92,7 @@ class EligibilityVerificationService:
                 verification_results["checks_performed"].append({
                     "check": "application_period",
                     "passed": True,
-                    "details": f"Within application period"
+                    "details": "Within application period"
                 })
             
             # 3. Whitelist check

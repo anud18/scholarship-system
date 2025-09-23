@@ -10,12 +10,10 @@ Tests critical API functionality including:
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from fastapi import status
-from datetime import datetime
 
-from app.api.v1.endpoints.college_review import router
 from app.models.user import User, UserRole
 from app.models.application import Application
 from app.models.college_review import CollegeReview

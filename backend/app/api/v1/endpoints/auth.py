@@ -5,10 +5,9 @@ Authentication API endpoints
 from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
-from datetime import datetime
 
 from app.db.deps import get_db
-from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse, PortalSSORequest, DeveloperProfileRequest
+from app.schemas.user import UserCreate, UserLogin, UserResponse, PortalSSORequest, DeveloperProfileRequest
 from app.schemas.common import MessageResponse
 from app.services.auth_service import AuthService
 from app.services.mock_sso_service import MockSSOService
@@ -16,7 +15,7 @@ from app.services.portal_sso_service import PortalSSOService
 from app.services.developer_profile_service import DeveloperProfileService, DeveloperProfile, DeveloperProfileManager
 from app.core.security import get_current_user
 from app.core.config import settings
-from app.models.user import User, UserRole, UserType, EmployeeStatus
+from app.models.user import User, UserRole
 
 router = APIRouter()
 

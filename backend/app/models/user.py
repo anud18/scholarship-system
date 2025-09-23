@@ -2,9 +2,8 @@
 User model for authentication and role management
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, JSON, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship, Mapped
-from sqlalchemy.sql import func
+from sqlalchemy import Column, Integer, String, DateTime, Enum, JSON, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
 import enum
 from datetime import datetime, timezone
 

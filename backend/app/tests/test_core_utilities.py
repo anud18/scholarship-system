@@ -11,13 +11,9 @@ Tests utility modules including:
 """
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
-from decimal import Decimal
-from typing import Optional, Dict, Any
 
-from jose import jwt, JWTError
-from passlib.context import CryptContext
+from jose import jwt
 
 from app.core.security import create_access_token
 from app.core.exceptions import (

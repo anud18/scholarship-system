@@ -5,7 +5,7 @@ Security utilities for authentication and authorization
 from jose import jwt
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select

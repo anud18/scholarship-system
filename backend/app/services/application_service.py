@@ -3,27 +3,26 @@ Application service for scholarship application management
 """
 
 import uuid
-import json
 import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Tuple
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, func
-from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import (
     NotFoundError, ConflictError, ValidationError, 
     BusinessLogicError, AuthorizationError
 )
 from app.models.user import User, UserRole
-from app.models.application import Application, ApplicationStatus, ApplicationReview, ProfessorReview, ProfessorReviewItem, Semester
+from app.models.application import Application, ApplicationStatus, ProfessorReview, ProfessorReviewItem
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration, SubTypeSelectionMode
 from app.schemas.application import (
     ApplicationCreate, ApplicationUpdate, ApplicationResponse,
     ApplicationListResponse, ApplicationStatusUpdate,
-    ApplicationReviewCreate, ApplicationReviewResponse, ApplicationFormData,
-    StudentDataSchema, StudentFinancialInfo, SupervisorInfo
+    ApplicationFormData,
+    StudentDataSchema
 )
 from app.services.email_service import EmailService
 from app.services.email_automation_service import email_automation_service
@@ -2212,7 +2211,7 @@ class ApplicationService:
                 return []  # No sub-types to review for general applications
             
             # Get scholarship type with sub_type_configs relationship loaded properly
-            from app.models.scholarship import ScholarshipType, ScholarshipSubTypeConfig
+            from app.models.scholarship import ScholarshipType
             stmt = select(ScholarshipType).options(
                 selectinload(ScholarshipType.sub_type_configs)
             ).where(
@@ -2426,7 +2425,7 @@ class ApplicationService:
                     user_id=professor.id,
                     notification_type=NotificationType.PROFESSOR_ASSIGNMENT,
                     data={
-                        "title": f"新的獎學金申請需要您的審查",
+                        "title": "新的獎學金申請需要您的審查",
                         "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
                         "application_id": application.id,
                         "app_id": application.app_id,

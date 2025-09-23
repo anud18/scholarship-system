@@ -170,9 +170,9 @@ async def test_unified_document_handling():
                 
                 # 檢查路徑是否統一
                 if "applications/" in file.object_name and "/documents/" in file.object_name:
-                    print(f"    ✅ 文件存放在統一路徑")
+                    print("    ✅ 文件存放在統一路徑")
                 else:
-                    print(f"    ❌ 文件路徑不正確")
+                    print("    ❌ 文件路徑不正確")
             
             # 5. 檢查 form_data 中的文件資訊
             print("\n📋 檢查 form_data 中的文件資訊...")
@@ -236,7 +236,7 @@ async def test_unified_document_handling():
                 if "/documents/" in file.object_name:
                     unified_path_count += 1
             
-            print(f"\n統計:")
+            print("\n統計:")
             print(f"  固定文件（從個人資料複製）: {fixed_count}")
             print(f"  動態文件（用戶上傳）: {dynamic_count}")
             print(f"  統一路徑儲存: {unified_path_count}/{len(all_files)}")

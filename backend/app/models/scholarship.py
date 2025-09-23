@@ -218,7 +218,6 @@ class ScholarshipType(Base):
             return False, "您不在此獎學金的申請名單中"
         
         # Check if student already has an application for this semester
-        from sqlalchemy.orm import Session
         # This would need to be implemented with proper session management
         # existing_app = session.query(Application).filter(
         #     Application.student_id == student_id,

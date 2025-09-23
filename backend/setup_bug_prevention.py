@@ -9,7 +9,6 @@ to catch issues before they reach production.
 import os
 import sys
 import subprocess
-import shutil
 from pathlib import Path
 
 

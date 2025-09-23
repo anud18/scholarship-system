@@ -10,7 +10,6 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
 
 # Import models to ensure they're registered
-from app.models.notification import NotificationRead
 from app.models.user import User, UserType, EmployeeStatus
 from app.db.base import Base
 from app.core.config import settings
@@ -71,8 +70,7 @@ async def test_notification_service():
     """Test the new notification service functionality"""
     from app.db.session import AsyncSessionLocal
     from app.services.notification_service import NotificationService
-    from app.models.user import User, UserRole
-    from app.models.notification import Notification
+    from app.models.user import UserRole
     from sqlalchemy import select
     
     print("\n🧪 Testing notification service...")

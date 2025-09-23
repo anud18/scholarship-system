@@ -3,8 +3,8 @@ Unit tests for StudentService
 """
 
 import pytest
-from datetime import datetime, date
-from unittest.mock import Mock, patch, AsyncMock
+from datetime import date
+from unittest.mock import Mock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.student_service import StudentService

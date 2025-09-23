@@ -4,7 +4,7 @@ User Profile schemas for API requests and responses
 
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator, ValidationError
+from pydantic import BaseModel, Field, field_validator
 import re
 
 

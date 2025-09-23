@@ -3,10 +3,8 @@ Unit tests for rate limiting functionality
 """
 
 import pytest
-import time
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi import HTTPException
-import redis.asyncio as redis
 
 from app.core.rate_limiting import RateLimiter, professor_rate_limit, rate_limit
 

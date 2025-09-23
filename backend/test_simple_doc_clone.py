@@ -6,7 +6,7 @@
 import asyncio
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 
 # Add backend directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -22,7 +22,7 @@ async def test_document_cloning():
     from app.core.init_db import initDatabase
     from app.db.session import AsyncSessionLocal
     from app.models.application import Application, ApplicationFile
-    from app.models.user import User, UserType
+    from app.models.user import User
     from app.models.user_profile import UserProfile
     from app.services.application_service import ApplicationService
     from sqlalchemy import select
@@ -127,9 +127,9 @@ async def test_document_cloning():
                 
                 # 檢查是否在統一路徑
                 if "/documents/" in file.object_name:
-                    print(f"     ✅ 文件在統一路徑")
+                    print("     ✅ 文件在統一路徑")
                 else:
-                    print(f"     ❌ 文件路徑不正確")
+                    print("     ❌ 文件路徑不正確")
             
             # 6. 檢查 form_data 更新
             print("\n📊 檢查 form_data 更新...")

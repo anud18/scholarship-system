@@ -2,14 +2,14 @@
 Authentication service for user login and registration
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.security import create_access_token, create_refresh_token
-from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
-from app.models.user import User, UserRole
+from app.core.exceptions import AuthenticationError, ConflictError
+from app.models.user import User
 from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse
 
 

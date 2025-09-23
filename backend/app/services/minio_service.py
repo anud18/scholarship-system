@@ -7,7 +7,6 @@ import uuid
 import hashlib
 import time
 import logging
-from datetime import timedelta
 from typing import Optional, Tuple
 from minio import Minio
 from minio.error import S3Error

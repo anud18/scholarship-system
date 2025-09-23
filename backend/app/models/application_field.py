@@ -2,8 +2,6 @@
 Application field configuration models
 """
 
-from datetime import datetime
-from typing import Optional
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, JSON, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func

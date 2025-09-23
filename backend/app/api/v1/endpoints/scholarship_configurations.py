@@ -6,17 +6,16 @@ Clean, database-driven approach for dynamic scholarship configuration management
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, select, func, distinct
+from sqlalchemy import and_, select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.db.deps import get_db
-from app.core.security import require_admin, require_staff, get_current_user
+from app.core.security import require_admin, require_staff
 from app.models.user import User, AdminScholarship, UserRole
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
-from app.models.application import Application, ApplicationStatus
 # Student model removed - student data now fetched from external API
-from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester
+from app.models.enums import Semester
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -297,7 +296,7 @@ async def get_matrix_quota_status(
             data=response_data
         )
         
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid period format: {period}"
@@ -647,7 +646,7 @@ async def get_quota_overview(
             data=overview_data
         )
         
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid period format: {period}"

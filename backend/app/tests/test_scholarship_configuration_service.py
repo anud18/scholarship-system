@@ -3,15 +3,11 @@ Unit tests for ScholarshipConfigurationService CRUD operations
 """
 
 import pytest
-from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import Mock
+from datetime import datetime
 
 from app.services.scholarship_configuration_service import ScholarshipConfigurationService
 from app.models.user import User, UserRole
-from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
-from app.models.application import Application, ApplicationStatus
-from app.models.enums import Semester
+from app.models.scholarship import ScholarshipType
 
 
 class TestScholarshipConfigurationServiceCRUD:

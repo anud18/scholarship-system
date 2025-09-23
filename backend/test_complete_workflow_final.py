@@ -85,7 +85,7 @@ async def test_complete_professor_workflow_with_time_fix():
         mock_professor.name = professor.name
         
         # Step 1: Get professor applications list
-        print(f'\n📋 Step 1: 取得教授申請列表')
+        print('\n📋 Step 1: 取得教授申請列表')
         try:
             applications = await get_professor_applications(
                 status_filter=None,
@@ -105,7 +105,7 @@ async def test_complete_professor_workflow_with_time_fix():
             return
         
         # Step 2: Get application sub-types
-        print(f'\n🏷️ Step 2: 取得申請子類型')
+        print('\n🏷️ Step 2: 取得申請子類型')
         try:
             sub_types = await get_application_sub_types(
                 application_id=test_app.id,
@@ -121,7 +121,7 @@ async def test_complete_professor_workflow_with_time_fix():
             return
         
         # Step 3: Check existing review
-        print(f'\n🔍 Step 3: 檢查現有審查')
+        print('\n🔍 Step 3: 檢查現有審查')
         try:
             existing_review = await get_professor_review(
                 application_id=test_app.id,
@@ -134,7 +134,7 @@ async def test_complete_professor_workflow_with_time_fix():
             return
         
         # Step 4: Submit professor review - This tests our time authorization fix
-        print(f'\n✍️ Step 4: 提交教授審查 (測試時間授權修復)')
+        print('\n✍️ Step 4: 提交教授審查 (測試時間授權修復)')
         try:
             # Create review data
             review_items = []
@@ -157,13 +157,13 @@ async def test_complete_professor_workflow_with_time_fix():
                 db=db
             )
             
-            print(f'✅ 審查提交成功!')
+            print('✅ 審查提交成功!')
             print(f'   審查ID: {submitted_review.id}')
             print(f'   整體推薦: {submitted_review.recommendation[:60]}...')
             print(f'   審查狀態: {submitted_review.review_status}')
             print(f'   子類型審查數量: {len(submitted_review.items)}')
             
-            print(f'\n📊 子類型審查結果:')
+            print('\n📊 子類型審查結果:')
             for item in submitted_review.items:
                 status = "✅ 推薦" if item.is_recommended else "❌ 不推薦"
                 print(f'   - {item.sub_type_code}: {status}')
@@ -171,13 +171,13 @@ async def test_complete_professor_workflow_with_time_fix():
                 
         except Exception as e:
             print(f'❌ Step 4 失敗: {e}')
-            print(f'   這表示時間授權修復可能還有問題')
+            print('   這表示時間授權修復可能還有問題')
             import traceback
             traceback.print_exc()
             return
         
         # Step 5: Verify review was saved correctly
-        print(f'\n✅ Step 5: 驗證審查已正確保存')
+        print('\n✅ Step 5: 驗證審查已正確保存')
         try:
             final_review = await get_professor_review(
                 application_id=test_app.id,
@@ -185,7 +185,7 @@ async def test_complete_professor_workflow_with_time_fix():
                 db=db
             )
             
-            print(f'✅ 審查驗證成功')
+            print('✅ 審查驗證成功')
             print(f'   審查ID: {final_review.id}')
             print(f'   審查時間: {final_review.reviewed_at}')
             print(f'   子類型項目: {len(final_review.items)}')
@@ -200,7 +200,7 @@ async def test_complete_professor_workflow_with_time_fix():
             print(f'❌ Step 5 失敗: {e}')
             return
         
-        print(f'\n🎉 完整工作流程測試成功!')
+        print('\n🎉 完整工作流程測試成功!')
         print('=' * 70)
         print('✅ 所有功能均正常運作:')
         print('   1. ✅ 教授申請列表顯示')

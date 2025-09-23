@@ -3,16 +3,15 @@ Tests for quota management functionality
 """
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from httpx import AsyncClient
 
-from app.models.user import User, UserRole, AdminScholarship
+from app.models.user import User, AdminScholarship
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
 from app.models.application import Application, ApplicationStatus
 # Student model removed - student data from external API
 from app.models.enums import QuotaManagementMode, Semester
-from app.core.college_mappings import COLLEGE_MAPPINGS, get_all_colleges, is_valid_college_code
+from app.core.college_mappings import get_all_colleges, is_valid_college_code
 
 
 class TestQuotaManagementPermissions:

@@ -4,8 +4,8 @@ Test application renewal functionality
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.application import Application, ApplicationStatus
-from app.models.user import User, UserRole
+from app.models.application import ApplicationStatus
+from app.models.user import User
 from app.models.scholarship import ScholarshipType
 from app.schemas.application import ApplicationCreate, ApplicationFormData
 from app.services.application_service import ApplicationService

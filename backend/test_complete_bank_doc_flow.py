@@ -7,8 +7,6 @@ Test complete bank document flow from profile to application to frontend
 import asyncio
 import sys
 import os
-import json
-from datetime import datetime, timezone
 
 # Add the backend directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -17,9 +15,6 @@ from app.core.init_db import initDatabase
 from app.db.session import AsyncSessionLocal
 from app.services.application_service import ApplicationService
 from app.services.user_profile_service import UserProfileService
-from app.services.minio_service import MinIOService
-from app.models.application import Application
-from app.models.user_profile import UserProfile
 from app.models.user import User
 from app.models.scholarship import ScholarshipConfiguration
 from app.schemas.application import ApplicationCreate, ApplicationFormData, DynamicFormField
@@ -146,7 +141,7 @@ async def test_complete_bank_doc_flow():
         
         if updated_application.submitted_form_data:
             form_data = updated_application.submitted_form_data
-            print(f"✅ Application has submitted_form_data")
+            print("✅ Application has submitted_form_data")
             
             if 'documents' in form_data:
                 documents = form_data['documents']
@@ -236,7 +231,7 @@ async def test_complete_bank_doc_flow():
                     print("\n🏦 Bank Document Frontend Display:")
                     print(f"  📄 Filename: {file['filename']}")
                     print(f"  🏷️ Document Type: {file['file_type']} → '存摺封面'")
-                    print(f"  🏷️ Fixed Document Badge: YES (固定文件)")
+                    print("  🏷️ Fixed Document Badge: YES (固定文件)")
                     print(f"  📊 File Size: {file['file_size']} bytes")
                     print(f"  🔒 Is Verified: {file['is_verified']}")
                     print("  ✅ Will display as: 存摺封面*固定文件")

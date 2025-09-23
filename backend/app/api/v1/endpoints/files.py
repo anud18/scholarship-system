@@ -13,8 +13,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import select, and_
 
 from app.db.deps import get_db
-from app.core.security import get_current_user, verify_token
-from app.models.user import User, UserRole
+from app.core.security import verify_token
+from app.models.user import UserRole
 from app.models.application import ApplicationFile, Application
 from app.services.minio_service import minio_service
 from app.services.auth_service import AuthService

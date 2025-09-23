@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict, validator
-from app.models.application import ApplicationStatus, ReviewStatus, FileType
+from app.models.application import ApplicationStatus
 
 
 class StudentFinancialInfo(BaseModel):

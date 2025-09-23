@@ -5,8 +5,6 @@ This service handles integration with GitHub for creating issues and reports
 related to scholarship distribution and college review processes.
 """
 
-import os
-import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.models.college_review import CollegeRanking, QuotaDistribution, CollegeRankingItem
-from app.models.application import Application
-from app.models.scholarship import ScholarshipType
 from app.core.config import settings
 
 
@@ -97,12 +93,12 @@ class GitHubIntegrationService:
         body_parts = []
         
         # Header
-        body_parts.append(f"# Scholarship Distribution Report")
+        body_parts.append("# Scholarship Distribution Report")
         body_parts.append(f"**Academic Year:** {distribution.academic_year}")
         if distribution.semester:
             body_parts.append(f"**Semester:** {distribution.semester}")
         body_parts.append(f"**Execution Date:** {distribution.executed_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-        body_parts.append(f"**Executed By:** System Admin")
+        body_parts.append("**Executed By:** System Admin")
         body_parts.append("")
         
         # Summary
@@ -257,7 +253,7 @@ class GitHubIntegrationService:
         body_parts = []
         
         # Header
-        body_parts.append(f"# College Ranking Summary")
+        body_parts.append("# College Ranking Summary")
         body_parts.append(f"**Ranking:** {ranking.ranking_name}")
         body_parts.append(f"**Sub-Type:** {ranking.sub_type_code}")
         body_parts.append(f"**Academic Year:** {ranking.academic_year}")

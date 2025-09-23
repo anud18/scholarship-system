@@ -6,7 +6,6 @@ Student data is now fetched from external API instead of storing locally.
 from sqlalchemy import Column, Integer, String, SmallInteger, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.asyncio import AsyncSession
-import enum
 
 from app.db.base_class import Base
 

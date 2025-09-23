@@ -6,7 +6,6 @@ Tests the interaction between all components across different worktrees
 
 import sys
 import os
-from datetime import datetime, timezone
 
 # Add the app directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
@@ -43,7 +42,7 @@ def test_model_integration():
     print("\nTesting model integration...")
     
     try:
-        from app.models.scholarship import ScholarshipType, ScholarshipStatus
+        from app.models.scholarship import ScholarshipType
         
         # Test that enhanced methods exist
         scholarship_type = ScholarshipType()

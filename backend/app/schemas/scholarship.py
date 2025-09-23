@@ -2,7 +2,7 @@
 Scholarship type and rule schemas for API requests and responses
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, model_validator

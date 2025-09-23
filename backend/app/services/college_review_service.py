@@ -8,18 +8,16 @@ This service handles college-level review operations including:
 - Integration with GitHub issue creation
 """
 
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
-from sqlalchemy import select, func, and_, or_, desc, asc, case
-from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy import select, func, and_, or_, asc, case
+from sqlalchemy.orm import selectinload
 
 from app.models.application import Application, ApplicationStatus, ProfessorReview
 from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem, QuotaDistribution
-from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
+from app.models.scholarship import ScholarshipConfiguration
 from app.services.email_automation_service import email_automation_service
-from app.models.user import User, UserRole
 from app.models.enums import Semester
 from app.core.exceptions import BusinessLogicError, NotFoundError
 

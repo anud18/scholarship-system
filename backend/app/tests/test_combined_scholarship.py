@@ -5,7 +5,7 @@ NOTE: CombinedScholarshipCreate schema not yet implemented - skipping all tests
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.scholarship import ScholarshipType, ScholarshipCategory, ScholarshipSubType
+from app.models.scholarship import ScholarshipCategory
 from app.services.scholarship_service import ScholarshipService
 # from app.schemas.scholarship import CombinedScholarshipCreate  # Not implemented yet
 from decimal import Decimal

@@ -5,7 +5,7 @@ Test scholarship renewal application period functionality
 import pytest
 from datetime import datetime, timezone, timedelta
 from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipCategory
-from app.models.enums import Semester, SubTypeSelectionMode, ApplicationCycle
+from app.models.enums import Semester
 
 
 class TestScholarshipRenewalPeriod:

@@ -2,14 +2,11 @@
 Rate limiting implementation for API endpoints
 """
 
-import asyncio
-import json
 import time
 from functools import wraps
-from typing import Optional, Callable, Any
+from typing import Optional, Callable
 import redis.asyncio as redis
-from fastapi import HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import HTTPException, status
 import logging
 
 logger = logging.getLogger(__name__)

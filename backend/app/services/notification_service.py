@@ -8,15 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, func, update
 import json
 import uuid
-import asyncio
 from collections import defaultdict
 
 from app.models.notification import (
     Notification, NotificationRead, NotificationType, NotificationPriority, 
-    NotificationChannel, NotificationFrequency, NotificationPreference, 
+    NotificationChannel, NotificationPreference, 
     NotificationTemplate, NotificationQueue
 )
-from app.models.user import User
 
 
 class NotificationService:
@@ -759,8 +757,7 @@ class NotificationService:
         Returns:
             List[Dict]: 包含通知資料和已讀狀態的字典列表
         """
-        from sqlalchemy import and_, or_, desc, func, case
-        from sqlalchemy.orm import joinedload, selectinload
+        from sqlalchemy import and_, desc
         
         # 構建基礎查詢 - 獲取個人通知和系統公告
         base_query = select(Notification).where(
@@ -869,7 +866,7 @@ class NotificationService:
         Returns:
             int: 未讀通知數量
         """
-        from sqlalchemy import and_, or_, func
+        from sqlalchemy import and_
         
         # 個人通知未讀數量
         personal_query = select(func.count(Notification.id)).where(
@@ -962,7 +959,7 @@ class NotificationService:
         Returns:
             int: 標記為已讀的通知數量
         """
-        from sqlalchemy import and_, or_, update
+        from sqlalchemy import and_
         
         # 標記個人通知為已讀
         personal_update = update(Notification).where(

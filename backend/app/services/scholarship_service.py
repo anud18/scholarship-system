@@ -8,15 +8,13 @@ from sqlalchemy import select, and_, desc, asc
 from datetime import datetime, timezone, timedelta
 import logging
 from decimal import Decimal
-from app.models.scholarship import ScholarshipType, ScholarshipStatus
 # Student model removed - student data now fetched from external API
-from app.core.exceptions import ValidationError
 from app.core.config import settings, DEV_SCHOLARSHIP_SETTINGS
 from typing import List, Union, Optional, Dict, Any, Tuple
 
 # Import comprehensive scholarship system models
 from app.models.application import (
-    Application, ApplicationFile, ApplicationReview, ProfessorReview,
+    Application, ApplicationReview, ProfessorReview,
     ApplicationStatus, ReviewStatus, ScholarshipMainType, ScholarshipSubType
 )
 

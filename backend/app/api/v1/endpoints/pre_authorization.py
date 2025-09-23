@@ -4,7 +4,6 @@ Pre-authorization API endpoints for managing user permissions before first login
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
 
 from app.db.deps import get_db
 from app.core.security import get_current_user

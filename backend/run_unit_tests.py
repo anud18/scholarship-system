@@ -7,7 +7,7 @@ import sys
 import traceback
 from app.core.exceptions import (
     ScholarshipException, ValidationError, AuthenticationError,
-    AuthorizationError, NotFoundError, ConflictError
+    NotFoundError
 )
 
 

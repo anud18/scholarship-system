@@ -3,7 +3,7 @@ Reference data API endpoints for lookup tables
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
@@ -16,7 +16,7 @@ from app.models.student import (
 from app.models.application import Application
 from app.models.enums import Semester, ApplicationCycle
 from app.models.scholarship import ScholarshipType
-from sqlalchemy import func, distinct
+from sqlalchemy import func
 
 router = APIRouter()
 

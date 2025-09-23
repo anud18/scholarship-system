@@ -7,14 +7,11 @@ their declared response models, preventing schema validation errors.
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.main import app
-from app.core.deps import get_db
 from app.models.user import User, UserRole
 from app.models.scholarship import ScholarshipType, ScholarshipStatus
 from app.core.security import create_access_token
-import json
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from decimal import Decimal
 
 

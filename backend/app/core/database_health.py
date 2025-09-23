@@ -6,7 +6,6 @@ import asyncio
 import logging
 from typing import Dict, Any
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
 from app.db.session import AsyncSessionLocal, async_engine, invalidate_connection_pools
 
 logger = logging.getLogger(__name__)
@@ -126,7 +125,7 @@ async def handle_database_operation_with_retry(operation_func, max_retries: int 
                     # Attempt recovery
                     recovery_success = await recover_from_cached_statement_error()
                     if recovery_success:
-                        logger.info(f"Recovery successful, retrying operation...")
+                        logger.info("Recovery successful, retrying operation...")
                         continue
                     else:
                         logger.error(f"Recovery failed on attempt {attempt + 1}")
@@ -178,7 +177,7 @@ class DatabaseHealthMiddleware:
         
         # If we have cached statement errors, try to recover
         if health_info["cached_statement_error"]:
-            logger.warning(f"Attempting automatic recovery from cached statement error...")
+            logger.warning("Attempting automatic recovery from cached statement error...")
             recovery_success = await recover_from_cached_statement_error()
             
             if recovery_success:

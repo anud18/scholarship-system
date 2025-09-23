@@ -5,8 +5,7 @@ This module defines the database models for college-level review processes,
 including ranking, quota distribution, and final allocation decisions.
 """
 
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
-from datetime import datetime, timezone
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Numeric, ForeignKey, JSON, Index, CheckConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -16,10 +15,7 @@ from app.db.base_class import Base
 
 # Import types only for type checking to avoid circular imports
 if TYPE_CHECKING:
-    from app.models.application import Application
-    from app.models.user import User
-    from app.models.scholarship import ScholarshipType
-from app.models.application import ApplicationStatus
+    pass
 
 
 def get_json_type():

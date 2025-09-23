@@ -5,10 +5,9 @@ Handles business logic for scholarship eligibility rules management
 
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func, desc
+from sqlalchemy import select, and_, or_, desc
 from sqlalchemy.orm import selectinload
 import logging
-from datetime import datetime
 
 from app.models.scholarship import ScholarshipRule, ScholarshipType
 from app.models.enums import Semester

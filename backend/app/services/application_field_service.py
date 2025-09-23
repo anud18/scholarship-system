@@ -5,7 +5,6 @@ Application field configuration service
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
-from sqlalchemy.orm import selectinload
 import logging
 
 from app.models.application_field import ApplicationField, ApplicationDocument

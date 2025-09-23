@@ -6,14 +6,13 @@ import asyncio
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, date, timezone, timedelta
-from typing import List
+from datetime import datetime, timezone, timedelta
 
 from app.db.session import async_engine, AsyncSessionLocal
 from app.models.user import User, UserRole, UserType, EmployeeStatus
 from app.models.student import (
     # 查詢表 (Reference data only)
-    Degree, Identity, StudyingStatus, SchoolIdentity, Academy, Department, EnrollType,
+    Degree,
 )
 
 from app.db.base_class import Base
@@ -22,8 +21,6 @@ from app.models.enums import Semester, ApplicationCycle, SubTypeSelectionMode, Q
 from app.models.application import ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.models.notification import Notification, NotificationType, NotificationPriority
 from app.models.application_field import ApplicationField, ApplicationDocument
-from app.models.user_profile import UserProfile, UserProfileHistory
-from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem, QuotaDistribution
 from app.models.email_management import EmailHistory, ScheduledEmail, EmailStatus, EmailCategory, ScheduleStatus
 from app.models.system_setting import EmailTemplate, SendingType
 from app.core.config import settings
@@ -1549,7 +1546,7 @@ async def createTestApplicationsAndQuotaUsage(session: AsyncSession) -> None:
         if config.has_quota_limit and config.total_quota:
             print(f"     配額管理: 總名額 {config.total_quota}")
         elif not config.has_quota_limit:
-            print(f"     配額管理: 無配額限制")
+            print("     配額管理: 無配額限制")
         if config.has_college_quota and config.quotas:
             print(f"     矩陣配額: {len(config.quotas)} 個子類型")
     
@@ -1768,7 +1765,7 @@ async def createSampleHistoricalApplications(session: AsyncSession) -> None:
                 'submitted_form_data': {
                     'academic_excellence': f'逕博生{i+1}的學術卓越表現',
                     'direct_phd_qualification': True,
-                    'research_potential': f'具備優秀的研究潛力'
+                    'research_potential': '具備優秀的研究潛力'
                 },
                 'agree_terms': True,
                 'professor_id': professor.id,
@@ -1792,9 +1789,9 @@ async def createSampleHistoricalApplications(session: AsyncSession) -> None:
     await session.commit()
 
     print(f"✅ Created {len(applications_data)} sample historical applications:")
-    print(f"   - 學士班新生獎學金: 8 筆")
-    print(f"   - 博士生獎學金: 12 筆")
-    print(f"   - 逕讀博士獎學金: 6 筆")
+    print("   - 學士班新生獎學金: 8 筆")
+    print("   - 博士生獎學金: 12 筆")
+    print("   - 逕讀博士獎學金: 6 筆")
     print(f"   總計: {len(applications_data)} 筆歷史申請")
 
 
@@ -1890,7 +1887,7 @@ async def createSystemAnnouncements(session: AsyncSession) -> None:
             session.add(announcement)
     
     await session.commit()
-    print(f"✅ System announcements created successfully!")
+    print("✅ System announcements created successfully!")
     print("📋 System announcements include:")
     print("   - System initialization notice")
     print("   - Test accounts information")

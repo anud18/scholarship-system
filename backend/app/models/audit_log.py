@@ -2,8 +2,6 @@
 Audit log model for tracking system activities
 """
 
-from datetime import datetime
-from typing import Optional
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func

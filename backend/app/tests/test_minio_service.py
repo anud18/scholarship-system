@@ -10,10 +10,9 @@ Tests file storage operations including:
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import Optional
 
 from minio import Minio
 from minio.error import S3Error

@@ -4,7 +4,6 @@ Pydantic schemas for pre-authorization functionality
 
 from pydantic import BaseModel, Field
 from typing import Optional, List
-from datetime import datetime
 
 
 class PreAuthorizeUserRequest(BaseModel):

@@ -3,7 +3,7 @@ Email management service for handling email history and scheduled emails
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select, and_, or_, desc, asc
@@ -11,8 +11,6 @@ from sqlalchemy import select, and_, or_, desc, asc
 from app.models.email_management import EmailHistory, ScheduledEmail, EmailStatus, ScheduleStatus, EmailCategory
 from app.models.user import AdminScholarship
 from app.models.user import User
-from app.models.application import Application
-from app.models.scholarship import ScholarshipType
 from app.services.email_service import EmailService
 import logging
 
