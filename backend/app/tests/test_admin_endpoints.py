@@ -1,0 +1,552 @@
+"""
+Unit tests for Admin API endpoints
+
+Tests admin-only endpoints including:
+- Application management
+- User management
+- System settings
+- Dashboard statistics
+- Bulk operations
+- Permission validation
+"""
+
+import pytest
+from unittest.mock import Mock, AsyncMock, patch
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal
+from httpx import AsyncClient
+
+from app.models.user import User, UserRole
+from app.models.application import Application, ApplicationStatus
+from app.models.scholarship import ScholarshipType
+from app.core.exceptions import NotFoundError, AuthorizationError
+
+
+@pytest.mark.api
+class TestAdminEndpoints:
+    """Test suite for admin API endpoints"""
+
+    @pytest.fixture
+    async def admin_client(self, client, admin_user):
+        """Create authenticated admin client"""
+        # Mock the authentication dependency
+        with patch('app.api.v1.endpoints.admin.require_admin', return_value=admin_user):
+            yield client
+
+    @pytest.fixture
+    async def non_admin_client(self, client, regular_user):
+        """Create authenticated non-admin client"""
+        with patch('app.api.v1.endpoints.admin.require_admin',
+                  side_effect=AuthorizationError("Admin access required")):
+            yield client
+
+    @pytest.fixture
+    def sample_applications(self, student_user, scholarship_type):
+        """Create sample applications for testing"""
+        return [
+            Application(
+                id=1,
+                app_id="APP-2024-000001",
+                user_id=student_user.id,
+                scholarship_type_id=scholarship_type.id,
+                status=ApplicationStatus.SUBMITTED.value,
+                amount=Decimal("50000"),
+                academic_year=113,
+                created_at=datetime.now(timezone.utc)
+            ),
+            Application(
+                id=2,
+                app_id="APP-2024-000002",
+                user_id=student_user.id,
+                scholarship_type_id=scholarship_type.id,
+                status=ApplicationStatus.UNDER_REVIEW.value,
+                amount=Decimal("30000"),
+                academic_year=113,
+                created_at=datetime.now(timezone.utc) - timedelta(days=1)
+            )
+        ]
+
+    @pytest.mark.asyncio
+    async def test_get_all_applications_success(self, admin_client, sample_applications):
+        """Test successful retrieval of all applications"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            # Mock the query result
+            mock_result = Mock()
+            mock_result.fetchall.return_value = [
+                Mock(Application=sample_applications[0], student_name="Test Student",
+                     scholarship_name="Test Scholarship", professor_name=None, reviewer_name=None),
+                Mock(Application=sample_applications[1], student_name="Test Student",
+                     scholarship_name="Test Scholarship", professor_name=None, reviewer_name=None)
+            ]
+            mock_db.execute.return_value = mock_result
+
+            # Mock count query
+            mock_count_result = Mock()
+            mock_count_result.scalar.return_value = 2
+            mock_db.execute.side_effect = [mock_result, mock_count_result]
+
+            # Act
+            response = await admin_client.get("/api/v1/admin/applications")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert len(data["data"]["items"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_all_applications_permission_denied(self, non_admin_client):
+        """Test applications endpoint with non-admin user"""
+        # Act
+        response = await non_admin_client.get("/api/v1/admin/applications")
+
+        # Assert
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_all_applications_with_filters(self, admin_client, sample_applications):
+        """Test applications endpoint with query filters"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            mock_result = Mock()
+            mock_result.fetchall.return_value = [
+                Mock(Application=sample_applications[0], student_name="Test Student",
+                     scholarship_name="Test Scholarship", professor_name=None, reviewer_name=None)
+            ]
+            mock_db.execute.return_value = mock_result
+
+            mock_count_result = Mock()
+            mock_count_result.scalar.return_value = 1
+            mock_db.execute.side_effect = [mock_result, mock_count_result]
+
+            # Act
+            response = await admin_client.get(
+                "/api/v1/admin/applications",
+                params={
+                    "status": "submitted",
+                    "academic_year": 113,
+                    "page": 1,
+                    "size": 10
+                }
+            )
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert len(data["data"]["items"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_get_historical_applications(self, admin_client):
+        """Test historical applications endpoint"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            # Mock query results
+            mock_result = Mock()
+            mock_result.fetchall.return_value = []
+            mock_count_result = Mock()
+            mock_count_result.scalar.return_value = 0
+
+            mock_db.execute.side_effect = [mock_result, mock_count_result]
+
+            # Act
+            response = await admin_client.get("/api/v1/admin/applications/history")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert "items" in data
+            assert "total" in data
+            assert "page" in data
+
+    @pytest.mark.asyncio
+    async def test_get_dashboard_stats_success(self, admin_client):
+        """Test dashboard statistics endpoint"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            # Mock various statistical queries
+            mock_db.execute.return_value.scalar.side_effect = [
+                100,  # total_applications
+                25,   # pending_applications
+                50,   # approved_applications
+                15,   # rejected_applications
+                10,   # active_scholarships
+                5     # recent_applications
+            ]
+
+            # Act
+            response = await admin_client.get("/api/v1/admin/dashboard/stats")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "total_applications" in data["data"]
+            assert "pending_applications" in data["data"]
+
+    @pytest.mark.asyncio
+    async def test_assign_professor_to_application_success(self, admin_client):
+        """Test successful professor assignment"""
+        # Arrange
+        application_id = 1
+        professor_data = {"professor_nycu_id": "P001"}
+
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            # Mock application query
+            mock_app = Mock()
+            mock_app.id = application_id
+            mock_app.status = ApplicationStatus.SUBMITTED.value
+            mock_app.professor_id = None
+
+            mock_app_result = Mock()
+            mock_app_result.scalar_one_or_none.return_value = mock_app
+
+            # Mock professor query
+            mock_professor = Mock()
+            mock_professor.id = 123
+            mock_professor.role = UserRole.PROFESSOR
+
+            mock_prof_result = Mock()
+            mock_prof_result.scalar_one_or_none.return_value = mock_professor
+
+            mock_db.execute.side_effect = [mock_app_result, mock_prof_result]
+            mock_db.commit = AsyncMock()
+
+            # Act
+            response = await admin_client.post(
+                f"/api/v1/admin/applications/{application_id}/assign-professor",
+                json=professor_data
+            )
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_assign_professor_application_not_found(self, admin_client):
+        """Test professor assignment with non-existent application"""
+        # Arrange
+        application_id = 999
+        professor_data = {"professor_nycu_id": "P001"}
+
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            mock_result = Mock()
+            mock_result.scalar_one_or_none.return_value = None
+            mock_db.execute.return_value = mock_result
+
+            # Act
+            response = await admin_client.post(
+                f"/api/v1/admin/applications/{application_id}/assign-professor",
+                json=professor_data
+            )
+
+            # Assert
+            assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_get_recent_applications(self, admin_client, sample_applications):
+        """Test recent applications endpoint"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            mock_result = Mock()
+            mock_result.fetchall.return_value = [
+                Mock(Application=sample_applications[0], student_name="Test Student",
+                     scholarship_name="Test Scholarship", professor_name=None, reviewer_name=None)
+            ]
+            mock_db.execute.return_value = mock_result
+
+            # Act
+            response = await admin_client.get("/api/v1/admin/dashboard/recent-applications")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert len(data["data"]) >= 0
+
+    @pytest.mark.asyncio
+    async def test_get_applications_by_scholarship(self, admin_client, scholarship_type):
+        """Test applications by scholarship type endpoint"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            # Mock scholarship existence check
+            mock_scholarship_result = Mock()
+            mock_scholarship_result.scalar_one_or_none.return_value = scholarship_type
+
+            # Mock applications query
+            mock_apps_result = Mock()
+            mock_apps_result.fetchall.return_value = []
+
+            mock_count_result = Mock()
+            mock_count_result.scalar.return_value = 0
+
+            mock_db.execute.side_effect = [mock_scholarship_result, mock_apps_result, mock_count_result]
+
+            # Act
+            response = await admin_client.get(f"/api/v1/admin/scholarships/{scholarship_type.id}/applications")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_get_available_professors(self, admin_client):
+        """Test available professors endpoint"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            mock_professors = [
+                Mock(id=1, name="Prof. Smith", email="smith@university.edu", nycu_id="P001"),
+                Mock(id=2, name="Prof. Johnson", email="johnson@university.edu", nycu_id="P002")
+            ]
+
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.return_value = mock_professors
+            mock_db.execute.return_value = mock_result
+
+            # Act
+            response = await admin_client.get("/api/v1/admin/professors")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert len(data["data"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_available_professors_with_search(self, admin_client):
+        """Test professors endpoint with search parameter"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            mock_professors = [
+                Mock(id=1, name="Prof. Smith", email="smith@university.edu", nycu_id="P001")
+            ]
+
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.return_value = mock_professors
+            mock_db.execute.return_value = mock_result
+
+            # Act
+            response = await admin_client.get("/api/v1/admin/professors?search=smith")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert len(data["data"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_bulk_approve_applications_success(self, admin_client):
+        """Test bulk application approval"""
+        # Arrange
+        application_ids = [1, 2, 3]
+        bulk_data = {
+            "application_ids": application_ids,
+            "comments": "Bulk approval for qualified candidates"
+        }
+
+        with patch('app.services.bulk_approval_service.BulkApprovalService') as mock_service_class:
+            mock_service = mock_service_class.return_value
+            mock_service.bulk_approve_applications = AsyncMock(return_value={
+                "approved": 3,
+                "failed": 0,
+                "details": []
+            })
+
+            # Act
+            response = await admin_client.post(
+                "/api/v1/admin/applications/bulk-approve",
+                json=bulk_data
+            )
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert data["data"]["approved"] == 3
+
+    @pytest.mark.asyncio
+    async def test_bulk_approve_applications_validation_error(self, admin_client):
+        """Test bulk approval with validation error"""
+        # Arrange
+        bulk_data = {
+            "application_ids": [],  # Empty list should cause validation error
+            "comments": "Invalid bulk operation"
+        }
+
+        # Act
+        response = await admin_client.post(
+            "/api/v1/admin/applications/bulk-approve",
+            json=bulk_data
+        )
+
+        # Assert
+        assert response.status_code == 422  # Validation error
+
+    @pytest.mark.asyncio
+    async def test_export_applications_csv(self, admin_client):
+        """Test applications export in CSV format"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            # Mock export service
+            with patch('app.services.export_service.ExportService') as mock_export_class:
+                mock_export = mock_export_class.return_value
+                mock_export.export_applications_csv = AsyncMock(return_value="csv_content")
+
+                # Act
+                response = await admin_client.get("/api/v1/admin/applications/export?format=csv")
+
+                # Assert
+                assert response.status_code == 200
+                assert response.headers["content-type"] == "text/csv; charset=utf-8"
+
+    @pytest.mark.asyncio
+    async def test_system_health_check(self, admin_client):
+        """Test system health check endpoint"""
+        # Arrange
+        with patch('app.core.database_health.check_database_health') as mock_db_health:
+            mock_db_health.return_value = {"status": "healthy", "connections": 5}
+
+            # Act
+            response = await admin_client.get("/api/v1/admin/system/health")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "database" in data["data"]
+
+    @pytest.mark.asyncio
+    async def test_get_system_logs(self, admin_client):
+        """Test system logs endpoint"""
+        # Arrange
+        with patch('builtins.open', create=True) as mock_open:
+            mock_open.return_value.__enter__.return_value.readlines.return_value = [
+                "2024-01-01 00:00:01 INFO Application started\n",
+                "2024-01-01 00:00:02 INFO Database connected\n"
+            ]
+
+            # Act
+            response = await admin_client.get("/api/v1/admin/system/logs?lines=100")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "logs" in data["data"]
+
+    @pytest.mark.asyncio
+    async def test_update_system_settings(self, admin_client):
+        """Test system settings update"""
+        # Arrange
+        settings_data = {
+            "max_file_size": 10485760,  # 10MB
+            "allowed_file_types": ["pdf", "jpg", "png"],
+            "email_notifications_enabled": True
+        }
+
+        with patch('app.services.system_setting_service.SystemSettingService') as mock_service_class:
+            mock_service = mock_service_class.return_value
+            mock_service.update_settings = AsyncMock(return_value=settings_data)
+
+            # Act
+            response = await admin_client.put(
+                "/api/v1/admin/system/settings",
+                json=settings_data
+            )
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_get_audit_logs(self, admin_client):
+        """Test audit logs retrieval"""
+        # Arrange
+        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+            mock_db = AsyncMock()
+            mock_get_db.return_value.__aenter__.return_value = mock_db
+
+            mock_logs = [
+                Mock(id=1, action="CREATE_APPLICATION", user_id=1, timestamp=datetime.now(timezone.utc)),
+                Mock(id=2, action="APPROVE_APPLICATION", user_id=2, timestamp=datetime.now(timezone.utc))
+            ]
+
+            mock_result = Mock()
+            mock_result.scalars.return_value.all.return_value = mock_logs
+
+            mock_count_result = Mock()
+            mock_count_result.scalar.return_value = 2
+
+            mock_db.execute.side_effect = [mock_result, mock_count_result]
+
+            # Act
+            response = await admin_client.get("/api/v1/admin/audit-logs")
+
+            # Assert
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_invalid_endpoint_returns_404(self, admin_client):
+        """Test that invalid admin endpoints return 404"""
+        # Act
+        response = await admin_client.get("/api/v1/admin/nonexistent-endpoint")
+
+        # Assert
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_malformed_request_returns_422(self, admin_client):
+        """Test that malformed requests return validation error"""
+        # Act
+        response = await admin_client.post(
+            "/api/v1/admin/applications/1/assign-professor",
+            json={"invalid_field": "invalid_value"}
+        )
+
+        # Assert
+        assert response.status_code == 422
+
+    # TODO: Add tests for rate limiting on admin endpoints
+    # TODO: Add tests for admin action logging and audit trail
+    # TODO: Add tests for admin permission inheritance and delegation
+    # TODO: Add performance tests for bulk operations
+    # TODO: Add tests for data export in different formats (Excel, JSON)
