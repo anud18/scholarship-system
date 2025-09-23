@@ -61,15 +61,29 @@ const customJestConfig = {
   clearMocks: true,
   // Enable automatic mocking from __mocks__ directories
   automock: false,
-  // Disable coverage thresholds for now
-  // coverageThreshold: {
-  //   global: {
-  //     branches: 5,
-  //     functions: 5,
-  //     lines: 5,
-  //     statements: 5,
-  //   },
-  // },
+  // Enable coverage thresholds as requested (80% minimum)
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+  },
+  // Configure jest-junit reporter for CI
+  reporters: [
+    'default',
+    ['jest-junit', {
+      outputDirectory: '.',
+      outputName: 'junit.xml',
+      uniqueOutputName: false,
+      suiteNameTemplate: '{title}',
+      classNameTemplate: '{classname}',
+      titleTemplate: '{title}',
+      ancestorSeparator: ' › ',
+      usePathForSuiteName: true
+    }]
+  ],
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

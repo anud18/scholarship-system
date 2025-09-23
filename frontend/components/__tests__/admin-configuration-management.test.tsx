@@ -8,12 +8,33 @@ jest.mock('@/lib/api', () => ({
   __esModule: true,
   default: {
     admin: {
-      getScholarshipConfigTypes: jest.fn(),
-      getScholarshipConfigurations: jest.fn(),
-      createScholarshipConfiguration: jest.fn(),
-      updateScholarshipConfiguration: jest.fn(),
-      deleteScholarshipConfiguration: jest.fn(),
-      duplicateScholarshipConfiguration: jest.fn(),
+      getScholarshipConfigTypes: jest.fn().mockResolvedValue({
+        success: true,
+        data: [
+          { id: 1, code: 'academic_excellence', name: 'Academic Excellence', name_en: 'Academic Excellence' },
+          { id: 2, code: 'research_grant', name: 'Research Grant', name_en: 'Research Grant' }
+        ]
+      }),
+      getScholarshipConfigurations: jest.fn().mockResolvedValue({
+        success: true,
+        data: []
+      }),
+      createScholarshipConfiguration: jest.fn().mockResolvedValue({
+        success: true,
+        data: { id: 1, config_code: 'test_config' }
+      }),
+      updateScholarshipConfiguration: jest.fn().mockResolvedValue({
+        success: true,
+        data: { id: 1, config_code: 'test_config' }
+      }),
+      deleteScholarshipConfiguration: jest.fn().mockResolvedValue({
+        success: true,
+        data: { message: 'Configuration deleted successfully' }
+      }),
+      duplicateScholarshipConfiguration: jest.fn().mockResolvedValue({
+        success: true,
+        data: { id: 2, config_code: 'test_config_copy' }
+      }),
     }
   },
   ScholarshipType: {},

@@ -11,15 +11,46 @@ import {
   BadgeVariant
 } from '../application-helpers'
 
-// Mock the API
+// Mock the API completely
 jest.mock('@/lib/api', () => ({
   api: {
     scholarships: {
-      getAll: jest.fn()
+      getAll: jest.fn().mockResolvedValue({
+        success: true,
+        data: [
+          { id: 1, code: 'academic_excellence', name: '學業優秀獎學金', name_en: 'Academic Excellence Scholarship' },
+          { id: 2, code: 'research_grant', name: '研究補助', name_en: 'Research Grant' }
+        ]
+      })
     },
     applications: {
-      getApplicationById: jest.fn(),
-      getApplicationFiles: jest.fn()
+      getApplicationById: jest.fn().mockResolvedValue({
+        success: true,
+        data: {
+          id: 1,
+          scholarship_type_code: 'academic_excellence',
+          status: 'submitted',
+          created_at: '2024-01-01',
+          updated_at: '2024-01-02',
+          documents: [
+            {
+              id: 'file1',
+              filename: 'transcript.pdf',
+              file_type: 'transcript'
+            }
+          ]
+        }
+      }),
+      getApplicationFiles: jest.fn().mockResolvedValue({
+        success: true,
+        data: [
+          {
+            id: 'file1',
+            filename: 'test.pdf',
+            file_type: 'transcript'
+          }
+        ]
+      })
     }
   }
 }))
