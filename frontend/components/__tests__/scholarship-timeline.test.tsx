@@ -1,14 +1,20 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { ScholarshipTimeline } from '../scholarship-timeline'
 import { useScholarshipPermissions } from '@/hooks/use-scholarship-permissions'
-import { apiClient } from '@/lib/api'
 
 // Mock the hooks and API
 jest.mock('@/hooks/use-scholarship-permissions')
-jest.mock('@/lib/api')
+jest.mock('@/lib/api', () => ({
+  apiClient: {
+    scholarships: {
+      getAll: jest.fn(),
+    },
+  },
+}))
+
+import { apiClient as mockApiClient } from '@/lib/api'
 
 const mockUseScholarshipPermissions = useScholarshipPermissions as jest.MockedFunction<typeof useScholarshipPermissions>
-const mockApiClient = apiClient as jest.Mocked<typeof apiClient>
 
 describe('ScholarshipTimeline Component', () => {
   const mockUser = {
@@ -47,9 +53,9 @@ describe('ScholarshipTimeline Component', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    
+
     // Default mock for API
-    mockApiClient.scholarships.getAll.mockResolvedValue({
+    (mockApiClient.scholarships.getAll as jest.Mock).mockResolvedValue({
       success: true,
       data: mockScholarships,
       message: 'Success'
@@ -159,7 +165,7 @@ describe('ScholarshipTimeline Component', () => {
   })
 
   it('should handle API errors gracefully', async () => {
-    mockApiClient.scholarships.getAll.mockRejectedValue(new Error('API Error'))
+    (mockApiClient.scholarships.getAll as jest.Mock).mockRejectedValue(new Error('API Error'))
     
     mockUseScholarshipPermissions.mockReturnValue({
       permissions: [],
