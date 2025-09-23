@@ -11,7 +11,8 @@ const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testEnvironment: 'jsdom',
   testTimeout: 10000,
-  maxWorkers: 1,
+  maxWorkers: 2,
+  workerIdleMemoryLimit: '512MB',
   // More explicit module name mapping to ensure CI compatibility
   moduleNameMapper: {
     // CSS and static assets

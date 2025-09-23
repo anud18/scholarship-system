@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest --coverage --watchAll=false",
-    "test:ci": "jest --coverage --watchAll=false --ci --passWithNoTests --runInBand --reporters=default --reporters=jest-junit",
+    "test:ci": "NODE_OPTIONS=--max-old-space-size=4096 jest --coverage --watchAll=false --ci --passWithNoTests --maxWorkers=2 --reporters=default --reporters=jest-junit",
     "test:coverage": "jest --coverage --watchAll=false --ci --reporters=default",
     "test:watch": "jest --watch",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
