@@ -20,7 +20,7 @@ jest.mock('../file-preview-dialog', () => ({
 global.URL.createObjectURL = jest.fn(() => 'mock-object-url')
 global.URL.revokeObjectURL = jest.fn()
 
-// TODO: Fix timeout issue
+// TODO: Fix timeout issue - useEffect bug
 describe.skip('FileUpload Component', () => {
   let mockOnFilesChange: jest.Mock
 

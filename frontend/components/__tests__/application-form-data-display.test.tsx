@@ -214,7 +214,7 @@ describe('ApplicationFormDataDisplay', () => {
     })
   })
 
-  // TODO: Fix object rendering
+  // TODO: Fix object rendering - component doesn't render nested objects
   it.skip('should handle nested object values', async () => {
     const formData = {
       submitted_form_data: {

@@ -69,7 +69,7 @@ describe('ScholarshipTimeline Component', () => {
     })
   })
 
-  // TODO: Fix API mocking - apiClient.request and apiClient.admin.getMyScholarships need proper mocking
+  // TODO: Fix API mocking - fetch returns empty array, mockRequest not being used
   it.skip('should show all scholarships for super admin', async () => {
     const superAdminUser = { ...mockUser, role: 'super_admin' as const }
 

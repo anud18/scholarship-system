@@ -52,7 +52,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => {
   return <div>{children}</div>
 }
 
-// TODO: Fix mock function configuration - useEffect not triggering API calls
+// TODO: Fix useEffect not triggering - hook's useEffect doesn't run in test environment
 describe.skip('useApplications Hook', () => {
   beforeEach(() => {
     jest.clearAllMocks()

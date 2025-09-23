@@ -31,10 +31,27 @@ jest.mock('@/lib/api', () => ({
       getMockUsers: (...args: any[]) => mockGetMockUsers(...args),
       mockSSOLogin: (...args: any[]) => mockMockSSOLogin(...args),
     }
+  },
+  api: {
+    auth: {
+      getMockUsers: (...args: any[]) => mockGetMockUsers(...args),
+      mockSSOLogin: (...args: any[]) => mockMockSSOLogin(...args),
+    }
   }
 }))
 
-import { apiClient } from '@/lib/api'
+import { apiClient, api } from '@/lib/api'
+
+// Override with mutable mocks
+apiClient.auth.getMockUsers = mockGetMockUsers
+apiClient.auth.mockSSOLogin = mockMockSSOLogin
+if (api) {
+  api.auth = {
+    ...api.auth,
+    getMockUsers: mockGetMockUsers,
+    mockSSOLogin: mockMockSSOLogin,
+  } as any
+}
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -66,7 +83,7 @@ afterAll(() => {
   });
 });
 
-// TODO: Fix component useEffect not triggering API calls in test environment
+// TODO: Fix API mocking - component uses apiClient which calls real implementation despite mocks
 describe.skip('DevLoginPage Component', () => {
   const mockPush = jest.fn();
 

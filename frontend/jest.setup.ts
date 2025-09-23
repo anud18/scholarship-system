@@ -159,7 +159,7 @@ Object.defineProperty(window, 'localStorage', {
 
 // Minimal default fetch mock; tests can override per-case
 global.fetch = jest.fn(async () => {
-  const body = JSON.stringify({ ok: true, data: [] })
+  const body = JSON.stringify([])
   const headers = new Map([['content-type', 'application/json']])
   return Promise.resolve({
     ok: true,
