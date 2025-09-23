@@ -54,6 +54,7 @@ describe('ScholarshipTimeline Component', () => {
 
   beforeEach(() => {
     // Configure mocked API
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { mockRequest } = require('@/lib/api')
     mockRequest.mockResolvedValue({
       success: true,
@@ -172,6 +173,7 @@ describe('ScholarshipTimeline Component', () => {
   })
 
   it.skip('should handle API errors gracefully', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { mockRequest } = require('@/lib/api')
     mockRequest.mockRejectedValue(new Error('API Error'))
 
