@@ -1,23 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="9" failures="0" errors="0" time="1.056">
-  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-09-23T12:23:15" time="0.436" tests="9">
-    <testcase classname="API Client › Authentication" name="should login successfully with valid credentials" time="0.006">
+<testsuites name="jest tests" tests="27" failures="0" errors="0" time="1.061">
+  <testsuite name="Application Helpers" errors="0" failures="0" skipped="0" timestamp="2025-09-23T12:24:01" time="0.441" tests="27">
+    <testcase classname="Application Helpers › formatDate" name="should format date for Chinese locale" time="0.019">
     </testcase>
-    <testcase classname="API Client › Authentication" name="should handle login failure" time="0.029">
+    <testcase classname="Application Helpers › formatDate" name="should format date for English locale" time="0.001">
     </testcase>
-    <testcase classname="API Client › Authentication" name="should get current user with valid token" time="0.001">
+    <testcase classname="Application Helpers › formatDate" name="should return empty string for null date" time="0">
     </testcase>
-    <testcase classname="API Client › Applications" name="should fetch user applications" time="0.001">
+    <testcase classname="Application Helpers › formatDate" name="should return empty string for undefined date" time="0.001">
     </testcase>
-    <testcase classname="API Client › Applications" name="should create new application" time="0.001">
+    <testcase classname="Application Helpers › formatDate" name="should return empty string for empty date" time="0">
     </testcase>
-    <testcase classname="API Client › Applications" name="should submit application" time="0.001">
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for draft status in Chinese" time="0.001">
     </testcase>
-    <testcase classname="API Client › Token Management" name="should set and clear tokens correctly" time="0.001">
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for submitted status in English" time="0.001">
     </testcase>
-    <testcase classname="API Client › Error Handling" name="should handle network errors" time="0.001">
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for approved status" time="0.001">
     </testcase>
-    <testcase classname="API Client › Error Handling" name="should handle HTTP errors" time="0.001">
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for rejected status" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getStatusColor" name="should return correct colors for different statuses" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getStatusName" name="should return Chinese status names" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › getStatusName" name="should return English status names" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldName" name="should return Chinese field names" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldName" name="should return English field names" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldName" name="should return original field name if not mapped" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldValue" name="should format scholarship type from API response" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldValue" name="should return code if scholarship not found in API" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldValue" name="should return code if API fails" time="0.011">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldValue" name="should return value as-is for non-scholarship fields" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › getDocumentLabel" name="should use dynamic label when provided" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getDocumentLabel" name="should fallback to Chinese label when English not available" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › getDocumentLabel" name="should use static labels when no dynamic label provided" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › getDocumentLabel" name="should return original docType if not mapped" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › fetchApplicationFiles" name="should fetch files from application details" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › fetchApplicationFiles" name="should fallback to files API if no documents in application details" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if both APIs fail" time="0.004">
+    </testcase>
+    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if no files found" time="0.001">
     </testcase>
   </testsuite>
 </testsuites>
