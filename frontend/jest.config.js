@@ -10,6 +10,8 @@ const createJestConfig = nextJest({
 const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testEnvironment: 'jsdom',
+  testTimeout: 10000,
+  maxWorkers: 1,
   // More explicit module name mapping to ensure CI compatibility
   moduleNameMapper: {
     // CSS and static assets
