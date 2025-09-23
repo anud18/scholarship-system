@@ -219,9 +219,7 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
         
         // 設定第一個獎學金類型為預設 tab
         if (response.data.scholarship_types && response.data.scholarship_types.length > 0 && !activeScholarshipTab) {
-          console.log('Available scholarship types:', response.data.scholarship_types)
           const firstType = response.data.scholarship_types[0].code
-          console.log('Setting active scholarship tab to:', firstType)
           setActiveScholarshipTab(firstType)
           
           // 使用已設定的學期載入申請資料
@@ -860,8 +858,8 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                     ) : (
                       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {rankings.map((ranking) => (
-                          <Card 
-                            key={ranking.id} 
+                          <Card
+                            key={ranking.id}
                             className={`cursor-pointer transition-colors ${selectedRanking === ranking.id ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'}`}
                             onClick={() => {
                               setSelectedRanking(ranking.id)

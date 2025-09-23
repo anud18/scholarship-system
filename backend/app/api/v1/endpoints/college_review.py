@@ -226,9 +226,9 @@ async def get_applications_for_review(
                 "semester": app.get("semester"),
                 "created_at": app.get("created_at"),
                 "submitted_at": app.get("submitted_at"),
-                # Use student info already extracted by service layer
-                "student_id": app.get("student_id", "未提供學號"),
-                "student_name": app.get("student_name", "未提供姓名"),
+                # Student info in flat format for frontend compatibility
+                "student_id": student_data.get("std_stdcode", "未提供學號") if student_data else "N/A",
+                "student_name": student_data.get("std_cname", "未提供姓名") if student_data else "未提供學生資料",
                 "department_code": student_data.get("std_depno", "N/A") if student_data else "N/A",
                 # Add review status for UI purposes
                 "review_status": {
