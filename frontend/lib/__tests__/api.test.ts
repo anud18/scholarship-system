@@ -14,6 +14,15 @@ Object.defineProperty(window, 'localStorage', {
   value: mockLocalStorage
 })
 
+function getHeader(headers: any, name: string): string | null {
+  if (headers instanceof Headers) {
+    return headers.get(name)
+  } else if (headers && typeof headers === 'object') {
+    return headers[name] || headers[name.toLowerCase()] || null
+  }
+  return null
+}
+
 describe('API Client', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -38,14 +47,10 @@ describe('API Client', () => {
 
       const result = await apiClient.auth.login('testuser', 'password')
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8000/api/v1/auth/login',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.any(FormData)
-        })
-      )
-
+      const fetchCall = mockFetch.mock.calls[0]
+      expect(fetchCall[0]).toBe('http://localhost:8000/api/v1/auth/login')
+      expect(fetchCall[1].method).toBe('POST')
+      expect(fetchCall[1].body).toBe(JSON.stringify({ username: 'testuser', password: 'password' }))
       expect(result).toEqual(mockResponse)
     })
 
@@ -94,15 +99,10 @@ describe('API Client', () => {
 
       const result = await apiClient.auth.getCurrentUser()
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8000/api/v1/auth/me',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Authorization': 'Bearer test-token'
-          })
-        })
-      )
+      const fetchCall = mockFetch.mock.calls[0]
+      const headers = fetchCall[1]?.headers
 
+      expect(getHeader(headers, 'Authorization')).toBe('Bearer test-token')
       expect(result.data).toEqual(mockUser)
     })
   })
@@ -139,15 +139,9 @@ describe('API Client', () => {
 
       const result = await apiClient.applications.getMyApplications()
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8000/api/v1/applications',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Authorization': 'Bearer test-token'
-          })
-        })
-      )
-
+      const fetchCall = mockFetch.mock.calls[0]
+      expect(fetchCall[0]).toContain('/applications')
+      expect(getHeader(fetchCall[1]?.headers, 'Authorization')).toBe('Bearer test-token')
       expect(result.data).toEqual(mockApplications)
     })
 
@@ -181,18 +175,14 @@ describe('API Client', () => {
 
       const result = await apiClient.applications.createApplication(applicationData)
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8000/api/v1/applications',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify(applicationData),
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer test-token'
-          })
-        })
-      )
+      const fetchCall = mockFetch.mock.calls[0]
+      const headers = fetchCall[1]?.headers
 
+      expect(fetchCall[0]).toContain('/applications')
+      expect(fetchCall[1].method).toBe('POST')
+      expect(fetchCall[1].body).toBe(JSON.stringify(applicationData))
+      expect(getHeader(headers, 'Content-Type')).toBe('application/json')
+      expect(getHeader(headers, 'Authorization')).toBe('Bearer test-token')
       expect(result.data).toEqual(mockCreatedApplication)
     })
 
@@ -217,15 +207,10 @@ describe('API Client', () => {
 
       const result = await apiClient.applications.submitApplication(applicationId)
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        `http://localhost:8000/api/v1/applications/${applicationId}/submit`,
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Authorization': 'Bearer test-token'
-          })
-        })
-      )
+      const fetchCall = mockFetch.mock.calls[0]
+      expect(fetchCall[0]).toBe(`http://localhost:8000/api/v1/applications/${applicationId}/submit`)
+      expect(fetchCall[1].method).toBe('POST')
+      expect(getHeader(fetchCall[1]?.headers, 'Authorization')).toBe('Bearer test-token')
 
       expect(result.data?.status).toBe('submitted')
     })

@@ -1,53 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="24" failures="0" errors="0" time="1.012">
-  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-09-23T12:21:52" time="0.401" tests="24">
-    <testcase classname="API Client › Authentication" name="should include auth token in requests" time="0.009">
+<testsuites name="jest tests" tests="9" failures="0" errors="0" time="1.056">
+  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-09-23T12:23:15" time="0.436" tests="9">
+    <testcase classname="API Client › Authentication" name="should login successfully with valid credentials" time="0.006">
     </testcase>
-    <testcase classname="API Client › Authentication" name="should handle requests without auth token" time="0">
+    <testcase classname="API Client › Authentication" name="should handle login failure" time="0.029">
     </testcase>
-    <testcase classname="API Client › Authentication" name="should clear token on 401 response" time="0.005">
+    <testcase classname="API Client › Authentication" name="should get current user with valid token" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Applications" name="should fetch user applications" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Applications" name="should create new application" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Applications" name="should submit application" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Token Management" name="should set and clear tokens correctly" time="0.001">
     </testcase>
     <testcase classname="API Client › Error Handling" name="should handle network errors" time="0.001">
     </testcase>
-    <testcase classname="API Client › Error Handling" name="should handle HTTP error responses" time="0">
-    </testcase>
-    <testcase classname="API Client › Error Handling" name="should handle malformed JSON responses" time="0">
-    </testcase>
-    <testcase classname="API Client › Scholarship APIs" name="should get all scholarships" time="0.002">
-    </testcase>
-    <testcase classname="API Client › Scholarship APIs" name="should get eligible scholarships" time="0">
-    </testcase>
-    <testcase classname="API Client › Scholarship APIs" name="should get scholarship by ID" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Application APIs" name="should create application" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Application APIs" name="should get user applications" time="0">
-    </testcase>
-    <testcase classname="API Client › Application APIs" name="should update application" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Application APIs" name="should delete application" time="0">
-    </testcase>
-    <testcase classname="API Client › Admin APIs" name="should get dashboard stats" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Admin APIs" name="should get all applications with filters" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Admin APIs" name="should update application status" time="0">
-    </testcase>
-    <testcase classname="API Client › File APIs" name="should upload document" time="0.001">
-    </testcase>
-    <testcase classname="API Client › File APIs" name="should get files by application ID" time="0">
-    </testcase>
-    <testcase classname="API Client › Request Configuration" name="should set correct Content-Type for JSON requests" time="0">
-    </testcase>
-    <testcase classname="API Client › Request Configuration" name="should handle FormData without explicit Content-Type header" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Request Configuration" name="should include Accept header" time="0">
-    </testcase>
-    <testcase classname="API Client › Response Processing" name="should parse successful JSON responses" time="0">
-    </testcase>
-    <testcase classname="API Client › Response Processing" name="should handle empty responses" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Response Processing" name="should handle text responses" time="0">
+    <testcase classname="API Client › Error Handling" name="should handle HTTP errors" time="0.001">
     </testcase>
   </testsuite>
 </testsuites>
