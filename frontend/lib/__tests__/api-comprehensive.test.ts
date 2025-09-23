@@ -83,7 +83,7 @@ describe('API Client', () => {
       const result = await apiClient.scholarships.getAll()
 
       expect(result.success).toBe(false)
-      expect(result.error).toContain('Network error')
+      expect(result.errors).toContain('Network error')
     })
 
     it('should handle HTTP error responses', async () => {
@@ -97,7 +97,7 @@ describe('API Client', () => {
       const result = await apiClient.scholarships.getAll()
 
       expect(result.success).toBe(false)
-      expect(result.error).toContain('500')
+      expect(result.errors).toContain('500')
     })
 
     it('should handle malformed JSON responses', async () => {
@@ -163,7 +163,7 @@ describe('API Client', () => {
         files: []
       }
 
-      await apiClient.applications.create(applicationData)
+      await apiClient.applications.createApplication(applicationData)
 
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining('/applications'),
@@ -178,7 +178,7 @@ describe('API Client', () => {
     })
 
     it('should get user applications', async () => {
-      await apiClient.applications.getUserApplications()
+      await apiClient.applications.getMyApplications()
 
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining('/applications/user'),
@@ -189,7 +189,7 @@ describe('API Client', () => {
     it('should update application', async () => {
       const updateData = { form_data: { name: 'Updated Name' } }
 
-      await apiClient.applications.update(1, updateData)
+      await apiClient.applications.updateApplication(1, updateData)
 
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining('/applications/1'),
@@ -201,7 +201,7 @@ describe('API Client', () => {
     })
 
     it('should delete application', async () => {
-      await apiClient.applications.delete(1)
+      await apiClient.applications.updateStatus(1, { status: 'withdrawn' })
 
       expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining('/applications/1'),
@@ -252,10 +252,10 @@ describe('API Client', () => {
       const formData = new FormData()
       formData.append('file', new File(['test'], 'test.pdf'))
 
-      await apiClient.files.upload(formData)
+      await apiClient.applications.uploadFile(1, formData, 'document')
 
       expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/files/upload'),
+        expect.stringContaining('/applications/1/files/upload'),
         expect.objectContaining({
           method: 'POST',
           body: formData
@@ -264,21 +264,21 @@ describe('API Client', () => {
     })
 
     it('should delete file', async () => {
-      await apiClient.files.delete('file-123')
+      await apiClient.applications.deleteFile(1, 'file-123')
 
       expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/files/file-123'),
+        expect.stringContaining('/applications/1/files/file-123'),
         expect.objectContaining({
           method: 'DELETE'
         })
       )
     })
 
-    it('should get file by ID', async () => {
-      await apiClient.files.getById('file-123')
+    it('should get files by application ID', async () => {
+      await apiClient.applications.getApplicationFiles(1)
 
       expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/files/file-123'),
+        expect.stringContaining('/applications/1/files'),
         expect.any(Object)
       )
     })
@@ -286,7 +286,7 @@ describe('API Client', () => {
 
   describe('Request Configuration', () => {
     it('should set correct Content-Type for JSON requests', async () => {
-      await apiClient.applications.create({ scholarship_type_id: 1 })
+      await apiClient.applications.createApplication({ configuration_id: 1, form_data: {} })
 
       expect(fetch).toHaveBeenCalledWith(
         expect.any(String),
@@ -300,7 +300,7 @@ describe('API Client', () => {
 
     it('should handle FormData without Content-Type header', async () => {
       const formData = new FormData()
-      await apiClient.files.upload(formData)
+      await apiClient.applications.uploadFile(1, formData, 'document')
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0][1]
       expect(fetchCall.headers['Content-Type']).toBeUndefined()
@@ -342,7 +342,7 @@ describe('API Client', () => {
         json: () => Promise.resolve()
       })
 
-      const result = await apiClient.applications.delete(1)
+      const result = await apiClient.applications.updateStatus(1, { status: 'withdrawn' })
 
       expect(result.success).toBe(true)
     })

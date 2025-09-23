@@ -5,6 +5,7 @@ import React from 'react'
 global.React = React
 
 // Set up environment variables
+// @ts-ignore - Allow NODE_ENV assignment in test environment
 process.env.NODE_ENV = 'test'
 process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8000'
 process.env.NEXTAUTH_SECRET = 'test-secret'

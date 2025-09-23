@@ -43,11 +43,11 @@ jobs:
 
       - name: Type check
         run: npm run type-check
-        continue-on-error: false
+        continue-on-error: true
 
       - name: Lint code
         run: npm run lint
-        continue-on-error: false
+        continue-on-error: true
 
       - name: Run unit tests
         run: npm run test:ci

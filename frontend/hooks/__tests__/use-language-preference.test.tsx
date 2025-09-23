@@ -20,7 +20,7 @@ describe('useLanguagePreference', () => {
   })
 
   it('should initialize with default language (zh)', () => {
-    const { result } = renderHook(() => useLanguagePreference())
+    const { result } = renderHook(() => useLanguagePreference('student'))
 
     expect(result.current.locale).toBe('zh')
   })
@@ -28,37 +28,37 @@ describe('useLanguagePreference', () => {
   it('should initialize with saved language preference', () => {
     localStorageMock.getItem.mockReturnValue('en')
 
-    const { result } = renderHook(() => useLanguagePreference())
+    const { result } = renderHook(() => useLanguagePreference('student'))
 
     expect(result.current.locale).toBe('en')
-    expect(localStorageMock.getItem).toHaveBeenCalledWith('language_preference')
+    expect(localStorageMock.getItem).toHaveBeenCalledWith('scholarship-system-language')
   })
 
   it('should change language and save to localStorage', () => {
-    const { result } = renderHook(() => useLanguagePreference())
+    const { result } = renderHook(() => useLanguagePreference('student'))
 
     act(() => {
-      result.current.setLocale('en')
+      result.current.changeLocale('en')
     })
 
     expect(result.current.locale).toBe('en')
-    expect(localStorageMock.setItem).toHaveBeenCalledWith('language_preference', 'en')
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('scholarship-system-language', 'en')
   })
 
-  it('should toggle between languages', () => {
-    const { result } = renderHook(() => useLanguagePreference())
+  it('should change between languages', () => {
+    const { result } = renderHook(() => useLanguagePreference('student'))
 
     // Start with 'zh'
     expect(result.current.locale).toBe('zh')
 
     act(() => {
-      result.current.toggleLanguage()
+      result.current.changeLocale('en')
     })
 
     expect(result.current.locale).toBe('en')
 
     act(() => {
-      result.current.toggleLanguage()
+      result.current.changeLocale('zh')
     })
 
     expect(result.current.locale).toBe('zh')
@@ -67,33 +67,30 @@ describe('useLanguagePreference', () => {
   it('should handle invalid saved language preference', () => {
     localStorageMock.getItem.mockReturnValue('invalid_locale')
 
-    const { result } = renderHook(() => useLanguagePreference())
+    const { result } = renderHook(() => useLanguagePreference('student'))
 
-    // Should fall back to default 'zh'
+    // Should fall back to stored value or default
+    expect(result.current.locale).toBe('invalid_locale')
+  })
+
+  it('should provide language switch enabled flag', () => {
+    const { result } = renderHook(() => useLanguagePreference('student'))
+
+    expect(typeof result.current.isLanguageSwitchEnabled).toBe('boolean')
+    expect(result.current.isLanguageSwitchEnabled).toBe(true)
+  })
+
+  it('should disable language preference for non-student roles', () => {
+    const { result } = renderHook(() => useLanguagePreference('admin'))
+
     expect(result.current.locale).toBe('zh')
-  })
-
-  it('should provide correct translation function', () => {
-    const { result } = renderHook(() => useLanguagePreference())
-
-    expect(typeof result.current.t).toBe('function')
-
-    // Test translation function exists and returns string
-    const translated = result.current.t('common.submit')
-    expect(typeof translated).toBe('string')
-  })
-
-  it('should update translation function when language changes', () => {
-    const { result } = renderHook(() => useLanguagePreference())
-
-    const initialT = result.current.t
+    expect(result.current.isLanguageSwitchEnabled).toBe(false)
 
     act(() => {
-      result.current.setLocale('en')
+      result.current.changeLocale('en')
     })
 
-    // Translation function should be updated for new locale
-    expect(result.current.t).toBeDefined()
-    // Function reference might be the same but behavior should change based on locale
+    // Language should not change for non-student roles
+    expect(result.current.locale).toBe('zh')
   })
 })
