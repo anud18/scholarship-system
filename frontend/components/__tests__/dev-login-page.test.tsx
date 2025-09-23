@@ -30,6 +30,8 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
+import { apiClient } from '@/lib/api';
+
 // Mock localStorage
 const mockLocalStorage = {
   getItem: jest.fn(),
@@ -113,7 +115,7 @@ describe('DevLoginPage Component', () => {
     
     // Mock the API call
     const mockMockSSOLogin = jest.fn().mockResolvedValue(mockApiResponse);
-    require('@/lib/api').apiClient.auth.mockSSOLogin = mockMockSSOLogin;
+    apiClient.auth.mockSSOLogin = mockMockSSOLogin;
     
     render(<DevLoginPage />);
     

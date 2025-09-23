@@ -195,7 +195,7 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
       }
 
       // Get existing review if any
-      let initialItems = initializeItems(availableSubTypes)
+      const initialItems = initializeItems(availableSubTypes)
       console.log('Initial items created:', initialItems)
 
       try {

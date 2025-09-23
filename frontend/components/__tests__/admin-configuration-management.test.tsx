@@ -42,7 +42,8 @@ jest.mock('@/lib/api', () => ({
   ScholarshipConfigurationFormData: {}
 }))
 
-const mockApi = require('@/lib/api').default
+import mockApiDefault from '@/lib/api'
+const mockApi = mockApiDefault
 
 // Mock UI components to avoid complex rendering issues
 jest.mock('@/components/ui/card', () => ({

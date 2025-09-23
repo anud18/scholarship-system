@@ -23,7 +23,7 @@ jest.mock('../notification-panel', () => ({
   )
 }))
 
-const mockApiClient = require('@/lib/api').apiClient
+import { apiClient as mockApiClient } from '@/lib/api'
 
 // Mock console.error to avoid test noise
 const originalConsoleError = console.error

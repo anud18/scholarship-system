@@ -31,7 +31,7 @@ jest.mock('lucide-react', () => ({
   Image: () => <div data-testid="image-icon">Image</div>
 }))
 
-const mockApi = require('@/lib/api').api
+import { api as mockApi } from '@/lib/api'
 
 describe('FileUpload Component', () => {
   const defaultProps = {

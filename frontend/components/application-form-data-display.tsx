@@ -38,7 +38,7 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
       // 處理表單資料，支援後端返回的結構：
       // { submitted_form_data: { fields: { field_id: { value: "..." } } } }
       
-      let dataToProcess: Record<string, any> = {}
+      const dataToProcess: Record<string, any> = {}
       
       // 處理後端的 submitted_form_data.fields 結構
       if (formData.submitted_form_data && formData.submitted_form_data.fields) {
@@ -100,7 +100,7 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
 
   if (isLoading) {
     // 處理載入狀態的顯示
-    let dataToShow: Record<string, any> = {}
+    const dataToShow: Record<string, any> = {}
     
     if (formData.submitted_form_data && formData.submitted_form_data.fields) {
       // 後端嵌套結構 - 只處理欄位

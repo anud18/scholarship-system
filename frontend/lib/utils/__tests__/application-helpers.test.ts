@@ -55,7 +55,7 @@ jest.mock('@/lib/api', () => ({
   }
 }))
 
-const mockApi = require('@/lib/api').api
+import { api as mockApi } from '@/lib/api'
 
 describe('Application Helpers', () => {
   describe('formatDate', () => {

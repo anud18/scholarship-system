@@ -502,7 +502,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       
     } catch (error) {
       console.error('Failed to submit application:', error)
-      let errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       alert(locale === "zh" ? `提交失敗: ${errorMessage}` : `Failed to submit application: ${errorMessage}`)
     } finally {
       setIsSubmitting(false)
@@ -620,7 +620,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       }
     } catch (error) {
       console.error('Failed to save draft:', error)
-      let errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       alert(locale === "zh" ? `保存失敗: ${errorMessage}` : `Failed to save draft: ${errorMessage}`)
     } finally {
       setIsSubmitting(false)
