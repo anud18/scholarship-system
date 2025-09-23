@@ -3,22 +3,27 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FileUpload } from '../file-upload'
 
+// Create mutable mock functions
+const mockUpload = jest.fn().mockResolvedValue({
+  success: true,
+  data: {
+    file_id: 'test-file-123',
+    filename: 'test.pdf',
+    file_url: '/uploads/test.pdf'
+  }
+})
+
+const mockDelete = jest.fn().mockResolvedValue({
+  success: true,
+  data: { message: 'File deleted successfully' }
+})
+
 // Mock the API
 jest.mock('@/lib/api', () => ({
   api: {
     files: {
-      upload: jest.fn().mockResolvedValue({
-        success: true,
-        data: {
-          file_id: 'test-file-123',
-          filename: 'test.pdf',
-          file_url: '/uploads/test.pdf'
-        }
-      }),
-      delete: jest.fn().mockResolvedValue({
-        success: true,
-        data: { message: 'File deleted successfully' }
-      })
+      upload: (...args: any[]) => mockUpload(...args),
+      delete: (...args: any[]) => mockDelete(...args)
     }
   }
 }))
@@ -33,7 +38,13 @@ jest.mock('lucide-react', () => ({
 
 import { api as mockApi } from '@/lib/api'
 
-// TODO: Fix API mocking issues
+// Override with mutable mocks
+if (mockApi && mockApi.files) {
+  mockApi.files.upload = mockUpload
+  mockApi.files.delete = mockDelete
+}
+
+// TODO: Test file is outdated - component doesn't use API directly
 describe.skip('FileUpload Component', () => {
   const defaultProps = {
     onFilesChange: jest.fn(),

@@ -1,41 +1,371 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="18" failures="0" errors="0" time="1.646">
-  <testsuite name="NotificationButton Component" errors="0" failures="0" skipped="0" timestamp="2025-09-23T12:40:56" time="1.031" tests="18">
-    <testcase classname="NotificationButton Component" name="should render notification button" time="0.079">
+<testsuites name="jest tests" tests="12" failures="12" errors="0" time="1.57">
+  <testsuite name="FileUpload Component" errors="0" failures="12" skipped="0" timestamp="2025-09-23T12:42:13" time="0.904" tests="12">
+    <testcase classname="FileUpload Component" name="should render upload area correctly" time="0.063">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:60:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should show unread count indicator when there are unread notifications" time="0.014">
+    <testcase classname="FileUpload Component" name="should handle file selection via input" time="0.019">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:69:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should show badge when unread count is greater than 3" time="0.011">
+    <testcase classname="FileUpload Component" name="should reject files that exceed size limit" time="0.02">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:90:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should show 99+ when unread count exceeds 99" time="0.008">
+    <testcase classname="FileUpload Component" name="should reject files with invalid types" time="0.014">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:109:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should not show badge when unread count is 3 or less" time="0.007">
+    <testcase classname="FileUpload Component" name="should enforce maximum file count limit" time="0.013">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:125:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should open notification panel when clicked" time="0.058">
+    <testcase classname="FileUpload Component" name="should handle drag and drop events" time="0.017">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:149:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should pass correct locale to notification panel" time="0.038">
+    <testcase classname="FileUpload Component" name="should show file upload progress" time="0.001">
+      <failure>TypeError: Cannot read properties of undefined (reading &apos;upload&apos;)
+    at Object.upload (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:181:19)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should handle mark as read action" time="0.037">
+    <testcase classname="FileUpload Component" name="should allow file removal" time="0.013">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:210:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should handle mark all as read action" time="0.042">
+    <testcase classname="FileUpload Component" name="should handle upload errors gracefully" time="0">
+      <failure>TypeError: Cannot read properties of undefined (reading &apos;upload&apos;)
+    at Object.upload (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:235:19)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should handle API error gracefully" time="0.009">
+    <testcase classname="FileUpload Component" name="should call onFilesChange when files are added" time="0.011">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:254:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should handle API response without success flag" time="0.003">
+    <testcase classname="FileUpload Component" name="should show file preview for images" time="0.016">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:277:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
-    <testcase classname="NotificationButton Component" name="should set up interval for periodic updates" time="0.004">
-    </testcase>
-    <testcase classname="NotificationButton Component" name="should cleanup interval on unmount" time="0.003">
-    </testcase>
-    <testcase classname="NotificationButton Component" name="should apply custom className" time="0.005">
-    </testcase>
-    <testcase classname="NotificationButton Component" name="should handle notification click callback" time="0.03">
-    </testcase>
-    <testcase classname="NotificationButton Component › unread count display logic" name="should not show anything when count is 0" time="0.009">
-    </testcase>
-    <testcase classname="NotificationButton Component › unread count display logic" name="should show only indicator dot for count 1-3" time="0.015">
-    </testcase>
-    <testcase classname="NotificationButton Component › unread count display logic" name="should show both indicator and badge for count &gt; 3" time="0.007">
+    <testcase classname="FileUpload Component" name="should display file icon for documents" time="0.011">
+      <failure>TypeError: acceptedTypes.join is not a function
+    at join (/home/jotp/scholarship-system/frontend/components/file-upload.tsx:233:36)
+    at renderWithHooks (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:15486:18)
+    at mountIndeterminateComponent (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:20103:13)
+    at beginWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:21626:16)
+    at beginWork$1 (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:27465:14)
+    at performUnitOfWork (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26599:12)
+    at workLoopSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26505:5)
+    at renderRootSync (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:26473:7)
+    at recoverFromConcurrentError (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25889:20)
+    at performConcurrentWorkOnRoot (/home/jotp/scholarship-system/frontend/node_modules/react-dom/cjs/react-dom.development.js:25789:22)
+    at flushActQueue (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2667:24)
+    at act (/home/jotp/scholarship-system/frontend/node_modules/react/cjs/react.development.js:2582:11)
+    at /home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/act-compat.js:47:25
+    at renderRoot (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:180:26)
+    at render (/home/jotp/scholarship-system/frontend/node_modules/@testing-library/react/dist/pure.js:271:10)
+    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/components/__tests__/file-upload-comprehensive.test.tsx:293:11)
+    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
+    at new Promise (&lt;anonymous&gt;)
+    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
+    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
+    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
+    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
+    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
+    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
+    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
+    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
+    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
     </testcase>
   </testsuite>
 </testsuites>
