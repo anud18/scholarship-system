@@ -45,11 +45,19 @@ Object.defineProperty(window, 'localStorage', {
 const originalEnv = process.env.NODE_ENV;
 
 beforeAll(() => {
-  process.env.NODE_ENV = 'development';
+  Object.defineProperty(process.env, 'NODE_ENV', {
+    value: 'development',
+    writable: true,
+    configurable: true
+  });
 });
 
 afterAll(() => {
-  process.env.NODE_ENV = originalEnv;
+  Object.defineProperty(process.env, 'NODE_ENV', {
+    value: originalEnv,
+    writable: true,
+    configurable: true
+  });
 });
 
 describe('DevLoginPage Component', () => {
@@ -199,9 +207,13 @@ describe('DevLoginPage Production Mode', () => {
     (useRouter as jest.Mock).mockReturnValue({
       push: mockPush,
     });
-    
+
     // Mock production environment
-    process.env.NODE_ENV = 'production';
+    Object.defineProperty(process.env, 'NODE_ENV', {
+      value: 'production',
+      writable: true,
+      configurable: true
+    });
   });
 
   it('should not render in production mode', () => {
@@ -211,7 +223,11 @@ describe('DevLoginPage Production Mode', () => {
 
   afterEach(() => {
     // Reset to development mode after each test
-    process.env.NODE_ENV = 'development';
+    Object.defineProperty(process.env, 'NODE_ENV', {
+      value: 'development',
+      writable: true,
+      configurable: true
+    });
   });
 
   it('should redirect to home page in production', () => {

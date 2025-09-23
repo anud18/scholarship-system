@@ -168,7 +168,7 @@ global.fetch = jest.fn(async () => {
     headers: {
       get: (key: string) => headers.get(key.toLowerCase()) ?? null,
       has: (key: string) => headers.has(key.toLowerCase()),
-      forEach: (callback: Function) => headers.forEach(callback),
+      forEach: (callback: (value: string, key: string) => void) => headers.forEach(callback),
     },
     json: async () => JSON.parse(body),
     text: async () => body,
