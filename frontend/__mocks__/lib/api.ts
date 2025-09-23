@@ -1,8 +1,12 @@
+// Create mock functions that can be accessed and manipulated
+export const mockRequest = jest.fn().mockResolvedValue({ success: true, data: [], message: 'Mock request' })
+export const mockGetCurrentUser = jest.fn().mockResolvedValue({ success: true, data: { id: '1', name: 'Test User', email: 'test@example.com' }, message: 'Mock user' })
+
 // Mock API client for Jest tests
 export const apiClient = {
   auth: {
     login: jest.fn().mockResolvedValue({ success: true, data: { access_token: 'mock-token', token_type: 'Bearer' }, message: 'Mock login' }),
-    getCurrentUser: jest.fn().mockResolvedValue({ success: true, data: { id: '1', name: 'Test User', email: 'test@example.com' }, message: 'Mock user' }),
+    getCurrentUser: mockGetCurrentUser,
     register: jest.fn().mockResolvedValue({ success: true, data: null, message: 'Mock register' }),
     refreshToken: jest.fn().mockResolvedValue({ success: true, data: { access_token: 'new-token' }, message: 'Mock refresh' }),
   },
@@ -26,6 +30,7 @@ export const apiClient = {
     getAllApplications: jest.fn().mockResolvedValue({ success: true, data: [], message: 'Mock admin applications' }),
     updateApplicationStatus: jest.fn().mockResolvedValue({ success: true, data: null, message: 'Mock status update' }),
   },
+  request: mockRequest,
   setToken: jest.fn(),
   clearToken: jest.fn(),
 }
