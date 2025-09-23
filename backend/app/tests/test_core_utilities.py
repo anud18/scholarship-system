@@ -22,7 +22,8 @@ from passlib.context import CryptContext
 from app.core.security import create_access_token
 from app.core.exceptions import (
     ValidationError, NotFoundError, AuthorizationError,
-    BusinessLogicError, FileStorageError
+    BusinessLogicError
+    # FileStorageError  # Not implemented yet
 )
 from app.core.config import settings
 # Note: These utilities are defined in the tests for demonstration

@@ -10,7 +10,7 @@ from httpx import AsyncClient
 from app.models.user import User, UserRole, AdminScholarship
 from app.models.scholarship import ScholarshipType, ScholarshipConfiguration
 from app.models.application import Application, ApplicationStatus
-from app.models.student import Student
+# Student model removed - student data from external API
 from app.models.enums import QuotaManagementMode, Semester
 from app.core.college_mappings import COLLEGE_MAPPINGS, get_all_colleges, is_valid_college_code
 

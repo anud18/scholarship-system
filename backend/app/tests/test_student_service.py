@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.student_service import StudentService
-from app.models.student import Student
+# Student model removed - student data from external API
 from app.core.exceptions import NotFoundError
 
 

@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.application_service import ApplicationService
 from app.models.user import User, UserRole
-from app.models.student import Student
 from app.models.application import Application, ApplicationStatus, Semester
 from app.models.scholarship import ScholarshipType
 from app.schemas.application import ApplicationCreate, ApplicationUpdate, ApplicationFormData
@@ -51,18 +50,15 @@ class TestApplicationService:
             id=1,
             code="undergraduate_freshman",
             name="Undergraduate Freshman Scholarship",
-            is_active=True,
-            is_application_period=True,
-            eligible_student_types=["undergraduate"],
-            max_ranking_percent=10.0,
-            max_completed_terms=8,
+            category="undergraduate",
+            status="active",  # is_active is a computed property from status
             whitelist_enabled=False
         )
 
     @pytest.fixture
     def mock_student(self):
         """Mock student for testing"""
-        student = Mock(spec=Student)
+        student = Mock()
         student.id = 1
         student.std_stdcode = "112550001"
         student.get_student_type.return_value = "undergraduate"
@@ -230,7 +226,7 @@ class TestApplicationService:
         mock_user = Mock(spec=User)
         mock_user.id = user_id
         
-        mock_student = Mock(spec=Student)
+        mock_student = Mock()
         mock_student.id = student_id
         
         mock_scholarship = Mock(spec=ScholarshipType)
@@ -287,7 +283,7 @@ class TestApplicationService:
         mock_user = Mock(spec=User)
         mock_user.id = user_id
         
-        mock_student = Mock(spec=Student)
+        mock_student = Mock()
         mock_student.id = student_id
         
         mock_scholarship = Mock(spec=ScholarshipType)

@@ -19,7 +19,7 @@ from minio import Minio
 from minio.error import S3Error
 
 from app.services.minio_service import MinIOService
-from app.core.exceptions import FileStorageError, ValidationError
+from app.core.exceptions import ValidationError
 
 
 @pytest.mark.unit

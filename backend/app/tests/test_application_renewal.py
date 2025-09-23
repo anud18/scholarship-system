@@ -6,7 +6,6 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.application import Application, ApplicationStatus
 from app.models.user import User, UserRole
-from app.models.student import Student
 from app.models.scholarship import ScholarshipType
 from app.schemas.application import ApplicationCreate, ApplicationFormData
 from app.services.application_service import ApplicationService
@@ -14,12 +13,12 @@ from app.services.application_service import ApplicationService
 
 class TestApplicationRenewal:
     """Test application renewal functionality"""
-    
+
     @pytest.mark.asyncio
-    async def test_create_renewal_application(self, db_session: AsyncSession, test_user: User, test_student: Student, test_scholarship: ScholarshipType):
+    async def test_create_renewal_application(self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType):
         """Test creating a renewal application"""
         # Arrange
-        service = ApplicationService(db_session)
+        service = ApplicationService(db)
         
         # Create form data
         form_data = ApplicationFormData(
@@ -45,7 +44,7 @@ class TestApplicationRenewal:
         # Act
         application = await service.create_application(
             user_id=test_user.id,
-            student_id=test_student.id,
+            student_id="STU001",  # Use mock student ID
             application_data=application_data,
             is_draft=False
         )
@@ -55,10 +54,10 @@ class TestApplicationRenewal:
         assert application.status == ApplicationStatus.SUBMITTED.value
     
     @pytest.mark.asyncio
-    async def test_create_new_application(self, db_session: AsyncSession, test_user: User, test_student: Student, test_scholarship: ScholarshipType):
+    async def test_create_new_application(self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType):
         """Test creating a new (non-renewal) application"""
         # Arrange
-        service = ApplicationService(db_session)
+        service = ApplicationService(db)
         
         # Create form data
         form_data = ApplicationFormData(
@@ -84,7 +83,7 @@ class TestApplicationRenewal:
         # Act
         application = await service.create_application(
             user_id=test_user.id,
-            student_id=test_student.id,
+            student_id="STU001",  # Use mock student ID
             application_data=application_data,
             is_draft=False
         )
@@ -94,10 +93,10 @@ class TestApplicationRenewal:
         assert application.status == ApplicationStatus.SUBMITTED.value
     
     @pytest.mark.asyncio
-    async def test_update_application_renewal_status(self, db_session: AsyncSession, test_user: User, test_student: Student, test_scholarship: ScholarshipType):
+    async def test_update_application_renewal_status(self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType):
         """Test updating application renewal status"""
         # Arrange
-        service = ApplicationService(db_session)
+        service = ApplicationService(db)
         
         # Create initial application
         form_data = ApplicationFormData(
@@ -122,7 +121,7 @@ class TestApplicationRenewal:
         
         application = await service.create_application(
             user_id=test_user.id,
-            student_id=test_student.id,
+            student_id="STU001",  # Use mock student ID
             application_data=application_data,
             is_draft=True
         )
@@ -141,10 +140,10 @@ class TestApplicationRenewal:
         assert updated_application.is_renewal is True
     
     @pytest.mark.asyncio
-    async def test_get_user_applications_includes_renewal_flag(self, db_session: AsyncSession, test_user: User, test_student: Student, test_scholarship: ScholarshipType):
+    async def test_get_user_applications_includes_renewal_flag(self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType):
         """Test that user applications include renewal flag"""
         # Arrange
-        service = ApplicationService(db_session)
+        service = ApplicationService(db)
         
         # Create renewal application
         form_data = ApplicationFormData(
@@ -169,7 +168,7 @@ class TestApplicationRenewal:
         
         await service.create_application(
             user_id=test_user.id,
-            student_id=test_student.id,
+            student_id="STU001",  # Use mock student ID
             application_data=application_data,
             is_draft=False
         )

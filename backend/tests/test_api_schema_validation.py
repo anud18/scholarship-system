@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.main import app
 from app.core.deps import get_db
 from app.models.user import User, UserRole
-from app.models.student import Student
 from app.models.scholarship import ScholarshipType, ScholarshipStatus
 from app.core.security import create_access_token
 import json
@@ -40,13 +39,8 @@ class TestAPISchemaValidation:
     
     @pytest.fixture
     async def test_student(self):
-        """Create test student"""
-        return Student(
-            id=1,
-            user_id=1,
-            std_stdcode="test_student",
-            std_termcount=2
-        )
+        """Create test student - Student model removed, using mock ID"""
+        return "STU001"
     
     @pytest.fixture
     async def auth_headers(self, test_user):

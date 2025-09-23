@@ -20,7 +20,7 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.deps import get_db
 from app.main import app
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserType
 from app.models.scholarship import ScholarshipType
 from app.models.application import Application, ApplicationStatus
 
@@ -122,12 +122,11 @@ async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 async def test_user(db: AsyncSession) -> User:
     """Create a test user."""
     user = User(
+        nycu_id="testuser",
+        name="Test User",
         email="test@university.edu",
-        username="testuser",
-        full_name="Test User",
+        user_type=UserType.STUDENT,
         role=UserRole.STUDENT,
-        # No password needed for SSO authentication
-        is_active=True,
     )
     db.add(user)
     await db.commit()
@@ -139,12 +138,11 @@ async def test_user(db: AsyncSession) -> User:
 async def test_admin(db: AsyncSession) -> User:
     """Create a test admin user."""
     admin = User(
+        nycu_id="adminuser",
+        name="Admin User",
         email="admin@university.edu",
-        username="adminuser",
-        full_name="Admin User",
+        user_type=UserType.EMPLOYEE,
         role=UserRole.ADMIN,
-        # No password needed for SSO authentication
-        is_active=True,
     )
     db.add(admin)
     await db.commit()
@@ -156,12 +154,11 @@ async def test_admin(db: AsyncSession) -> User:
 async def test_professor(db: AsyncSession) -> User:
     """Create a test professor user."""
     professor = User(
+        nycu_id="profuser",
+        name="Professor User",
         email="professor@university.edu",
-        username="profuser",
-        full_name="Professor User",
+        user_type=UserType.EMPLOYEE,
         role=UserRole.PROFESSOR,
-        # No password needed for SSO authentication
-        is_active=True,
     )
     db.add(professor)
     await db.commit()
