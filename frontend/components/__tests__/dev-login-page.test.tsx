@@ -7,6 +7,19 @@ jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }));
 
+// Mock useAuth hook
+jest.mock('@/hooks/use-auth', () => ({
+  useAuth: jest.fn(() => ({
+    login: jest.fn(),
+    logout: jest.fn(),
+    isAuthenticated: false,
+    user: null,
+    isLoading: false,
+    error: null,
+  })),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 // Mock API module
 jest.mock('@/lib/api', () => ({
   apiClient: {
@@ -47,6 +60,8 @@ describe('DevLoginPage Component', () => {
     (useRouter as jest.Mock).mockReturnValue({
       push: mockPush,
     });
+    // Set auth token for authenticated flows
+    window.localStorage.setItem('auth_token', 'unit-test-token');
   });
 
   it('should render development login interface correctly', () => {

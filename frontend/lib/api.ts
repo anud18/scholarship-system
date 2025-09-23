@@ -985,6 +985,27 @@ class ApiClient {
     return this.token
   }
 
+  private getContentType(res: any): string {
+    const h: any = res?.headers
+    if (h?.get) return h.get('content-type') || ''
+    if (h && typeof h === 'object') {
+      return h['content-type'] || h['Content-Type'] || h['Content-type'] || ''
+    }
+    return ''
+  }
+
+  private async readTextSafe(res: any): Promise<string> {
+    try {
+      if (typeof res?.text === 'function') return await res.text()
+    } catch {}
+    if (typeof res?.json === 'function') {
+      try { return JSON.stringify(await res.json()) } catch {}
+    }
+    if (typeof res?.body === 'string') return res.body
+    if (typeof (res as any)?._bodyInit === 'string') return (res as any)._bodyInit
+    return ''
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit & { params?: Record<string, any> } = {}
@@ -1016,10 +1037,12 @@ class ApiClient {
 
     if (this.token) {
       headers.set('Authorization', `Bearer ${this.token}`)
-      console.log('🔐 API Request with auth token to:', endpoint, 'Token preview:', this.token.substring(0, 20) + '...')
+      // console.log('🔐 API Request with auth token to:', endpoint)
     } else {
-      console.warn('❌ No auth token available for request to:', endpoint)
-      console.warn('❌ localStorage auth_token:', typeof window !== 'undefined' ? localStorage.getItem('auth_token') : 'N/A')
+      // Optional: keep these for local debugging; comment to reduce CI noise
+      // console.warn('❌ No auth token available for request to:', endpoint)
+      // console.warn('❌ localStorage auth_token:', typeof window !== 'undefined'
+      //   ? window.localStorage?.getItem?.('auth_token') : 'N/A')
     }
 
     // Remove params from options before passing to fetch
@@ -1030,47 +1053,43 @@ class ApiClient {
     }
 
     try {
-      const response = await fetch(url, config)
+      const response: any = await fetch(url, config)
 
+      const contentType = this.getContentType(response)
+      const canJson = contentType.includes('application/json') || typeof response?.json === 'function'
 
       let data: any
-      const contentType = response.headers?.get?.('content-type') ?? ''
-      
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json()
+      if (canJson) {
+        try {
+          data = await response.json()
+        } catch {
+          const t = await this.readTextSafe(response)
+          try { data = JSON.parse(t) } catch { data = t }
+        }
       } else {
-        const text = await response.text()
-        throw new Error(`Expected JSON response but got ${contentType}: ${text}`)
+        const t = await this.readTextSafe(response)
+        try { data = JSON.parse(t) } catch { data = t }
       }
 
       if (!response.ok) {
-        console.error(`API request failed: ${response.status} ${response.statusText}`, {
-          url,
-          status: response.status,
-          data
-        })
-        
         // Handle specific error codes
         if (response.status === 401) {
           console.error('Authentication failed - clearing token')
           this.clearToken()
         } else if (response.status === 403) {
-          console.error('Authorization denied - user may not have proper permissions', {
-            url: response.url,
-            message: data.message || data.detail,
-            hasToken: !!this.getToken()
-          })
+          console.error('Authorization denied - user may not have proper permissions')
         } else if (response.status === 429) {
           console.warn('Rate limit exceeded - request throttled')
-          // Add user-friendly rate limit message
-          const rateLimitMessage = data.detail || data.message || 'Too many requests. Please wait a moment and try again.'
-          throw new Error(`請稍候再試：${rateLimitMessage}`)
         }
-        
-        throw new Error(data.message || data.detail || `HTTP error! status: ${response.status}`)
+
+        const msg =
+          (data && (data.detail || data.error || data.message || data.title)) ||
+          (typeof data === 'string' ? data : '') ||
+          response.statusText ||
+          `HTTP ${response.status}`
+        throw new Error(msg)
       }
 
-      
       // Handle different response formats from backend
       if (data && typeof data === 'object') {
         // If response already has success/message structure, return as-is
@@ -1102,7 +1121,7 @@ class ApiClient {
           } as ApiResponse<T>
         }
       }
-      
+
       return data
     } catch (error) {
       console.error('API request failed:', error)
