@@ -3,18 +3,11 @@ name: Deployment Pipeline
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['v*.*.*']
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Environment to deploy to'
-        required: true
-        type: choice
-        options:
-          - staging
-          - production
-      force_deploy:
-        description: 'Force deployment even if tests fail'
+      skip_tests:
+        description: 'Skip pre-deployment tests'
         required: false
         type: boolean
         default: false
@@ -26,15 +19,15 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Pre-deployment checks
-  pre-deployment-checks:
+  # Determine deployment targets
+  pre-deployment:
     name: Pre-deployment Checks
     runs-on: ubuntu-latest
     outputs:
-      deploy-staging: ${{ steps.determine-deployment.outputs.deploy-staging }}
-      deploy-production: ${{ steps.determine-deployment.outputs.deploy-production }}
+      deploy-staging: ${{ steps.determine.outputs.deploy-staging }}
       version: ${{ steps.version.outputs.version }}
-    
+      skip-tests: ${{ steps.determine.outputs.skip-tests }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,25 +35,18 @@ jobs:
           fetch-depth: 0
 
       - name: Determine deployment target
-        id: determine-deployment
+        id: determine
         run: |
+          # Determine if staging deployment should run
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
-              echo "deploy-staging=true" >> $GITHUB_OUTPUT
-              echo "deploy-production=false" >> $GITHUB_OUTPUT
-            elif [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
-              echo "deploy-staging=false" >> $GITHUB_OUTPUT
-              echo "deploy-production=true" >> $GITHUB_OUTPUT
-            fi
+            echo "deploy-staging=true" >> $GITHUB_OUTPUT
+            echo "skip-tests=${{ github.event.inputs.skip_tests }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "deploy-staging=true" >> $GITHUB_OUTPUT
-            echo "deploy-production=false" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "deploy-staging=false" >> $GITHUB_OUTPUT
-            echo "deploy-production=true" >> $GITHUB_OUTPUT
+            echo "skip-tests=false" >> $GITHUB_OUTPUT
           else
             echo "deploy-staging=false" >> $GITHUB_OUTPUT
-            echo "deploy-production=false" >> $GITHUB_OUTPUT
+            echo "skip-tests=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Generate version
@@ -74,7 +60,7 @@ jobs:
           echo "version=$version" >> $GITHUB_OUTPUT
           echo "Generated version: $version"
 
-      - name: Check deployment requirements
+      - name: Display deployment plan
         run: |
           echo "## 🚀 Deployment Plan" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -83,119 +69,121 @@ jobs:
           echo "**Branch/Tag**: ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Deployment Targets" >> $GITHUB_STEP_SUMMARY
-          echo "- Staging: ${{ steps.determine-deployment.outputs.deploy-staging }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Production: ${{ steps.determine-deployment.outputs.deploy-production }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Staging**: ${{ steps.determine.outputs.deploy-staging }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Skip Tests**: ${{ steps.determine.outputs.skip-tests }}" >> $GITHUB_STEP_SUMMARY
 
   # Build and push Docker images
   build-images:
     name: Build & Push Images
     permissions:
       contents: read
+      packages: write
     runs-on: ubuntu-latest
-    needs: pre-deployment-checks
-    if: needs.pre-deployment-checks.outputs.deploy-staging == 'true' || needs.pre-deployment-checks.outputs.deploy-production == 'true'
-    
+    needs: pre-deployment
+    if: needs.pre-deployment.outputs.deploy-staging == 'true'
+
     strategy:
       matrix:
         component: [backend, frontend]
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
+      - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Container Registry
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GH_PAT }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.component }}
+          images: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-${{ matrix.component }}
           tags: |
             type=ref,event=branch
-            type=ref,event=tag
+            type=ref,event=pr
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=${{ needs.pre-deployment-checks.outputs.version }}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=${{ needs.pre-deployment.outputs.version }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and push Docker image
+      - name: Build and push ${{ matrix.component }} image
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.component }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-${{ matrix.component }}:${{ needs.pre-deployment.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-${{ matrix.component }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
           build-args: |
-            BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
-            VCS_REF=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }}
-            VERSION=${{ needs.pre-deployment-checks.outputs.version }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
 
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.component }}:${{ needs.pre-deployment-checks.outputs.version }}
-          output-file: sbom-${{ matrix.component }}.spdx.json
-          format: spdx-json
+      - name: Image digest
+        run: echo "Image digest: ${{ steps.meta.outputs.digest }}"
 
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-${{ matrix.component }}
-          path: sbom-${{ matrix.component }}.spdx.json
-          retention-days: 90
-
-  # Deploy to staging
+  # Deploy to staging environment
   deploy-staging:
     name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: [pre-deployment-checks, build-images]
-    if: needs.pre-deployment-checks.outputs.deploy-staging == 'true'
+    runs-on: [self-hosted, scholarship-test]
+    needs: [pre-deployment, build-images]
+    if: needs.pre-deployment.outputs.deploy-staging == 'true'
     environment:
       name: staging
-      url: ${{ steps.deploy.outputs.url }}
-    
+      url: https://staging.scholarship.nycu.edu.tw
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup deployment tools
-        run: |
-          # Install kubectl if deploying to Kubernetes
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          
-          # Install docker-compose for local deployments
-          sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_PAT }}
 
-      - name: Prepare deployment configuration
-        id: config
+      - name: Pull latest images
         run: |
-          # Create staging environment configuration
-          cat > staging-compose.yml << 'EOF'
+          echo "Pulling Docker images..."
+          docker pull ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }}
+          docker pull ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-frontend:${{ needs.pre-deployment.outputs.version }}
+
+      - name: Create deployment directory
+        run: |
+          mkdir -p ~/scholarship-staging
+          cd ~/scholarship-staging
+
+      - name: Create docker-compose.staging.yml
+        run: |
+          cat > ~/scholarship-staging/docker-compose.yml << 'EOF'
           version: '3.8'
-          
+
           services:
             backend:
-              image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ needs.pre-deployment-checks.outputs.version }}
+              image: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }}
+              container_name: scholarship_staging_backend
               environment:
-                - DATABASE_URL=${STAGING_DATABASE_URL}
-                - REDIS_URL=${STAGING_REDIS_URL}
-                - SECRET_KEY=${STAGING_SECRET_KEY}
-                - ENVIRONMENT=staging
-                - SENTRY_DSN=${STAGING_SENTRY_DSN}
+                - DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }}
+                - DATABASE_URL_SYNC=${{ secrets.STAGING_DATABASE_URL_SYNC }}
+                - REDIS_URL=${{ secrets.STAGING_REDIS_URL }}
+                - SECRET_KEY=${{ secrets.STAGING_SECRET_KEY }}
+                - APP_ENV=staging
+                - DEBUG=false
+                - CORS_ORIGINS=${{ secrets.STAGING_CORS_ORIGINS }}
+                - MINIO_ENDPOINT=${{ secrets.STAGING_MINIO_ENDPOINT }}
+                - MINIO_ACCESS_KEY=${{ secrets.STAGING_MINIO_ACCESS_KEY }}
+                - MINIO_SECRET_KEY=${{ secrets.STAGING_MINIO_SECRET_KEY }}
+                - MINIO_BUCKET_NAME=scholarship-staging
+                - MINIO_SECURE=true
               ports:
                 - "8000:8000"
               restart: unless-stopped
@@ -205,391 +193,194 @@ jobs:
                 timeout: 10s
                 retries: 3
                 start_period: 40s
-            
+              networks:
+                - staging_network
+
             frontend:
-              image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ needs.pre-deployment-checks.outputs.version }}
+              image: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-frontend:${{ needs.pre-deployment.outputs.version }}
+              container_name: scholarship_staging_frontend
               environment:
-                - NEXT_PUBLIC_API_URL=${STAGING_API_URL}
+                - NEXT_PUBLIC_API_URL=${{ secrets.STAGING_API_URL }}
                 - NEXT_PUBLIC_ENVIRONMENT=staging
+                - NODE_ENV=production
               ports:
                 - "3000:3000"
               restart: unless-stopped
               depends_on:
                 - backend
               healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:3000"]
+                test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
                 interval: 30s
                 timeout: 10s
                 retries: 3
                 start_period: 40s
-            
-            postgres:
-              image: postgres:15
-              environment:
-                - POSTGRES_DB=scholarship_staging
-                - POSTGRES_USER=scholarship
-                - POSTGRES_PASSWORD=${STAGING_DB_PASSWORD}
-              volumes:
-                - staging_postgres_data:/var/lib/postgresql/data
-              restart: unless-stopped
-            
-            redis:
-              image: redis:7
-              command: redis-server --appendonly yes
-              volumes:
-                - staging_redis_data:/data
-              restart: unless-stopped
-          
-          volumes:
-            staging_postgres_data:
-            staging_redis_data:
+              networks:
+                - staging_network
+
+          networks:
+            staging_network:
+              driver: bridge
           EOF
 
-      - name: Deploy to staging
-        id: deploy
-        env:
-          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-          STAGING_REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
-          STAGING_SECRET_KEY: ${{ secrets.STAGING_SECRET_KEY }}
-          STAGING_API_URL: ${{ secrets.STAGING_API_URL || 'https://api-staging.scholarship.example.com' }}
-          STAGING_SENTRY_DSN: ${{ secrets.STAGING_SENTRY_DSN }}
-          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+      - name: Stop old containers
         run: |
-          echo "Deploying to staging environment..."
-          
-          # Method 1: Docker Compose deployment (for simple setups)
-          if [[ -n "${{ secrets.STAGING_HOST }}" ]]; then
-            # Deploy via SSH to staging server
-            echo "Deploying via SSH to staging server..."
-            # Add SSH deployment logic here
-            echo "url=https://staging.scholarship.example.com" >> $GITHUB_OUTPUT
-          else
-            # Local docker-compose deployment for testing
-            echo "Running staging deployment locally for testing..."
-            docker-compose -f staging-compose.yml pull
-            docker-compose -f staging-compose.yml up -d
-            
-            # Wait for services
-            sleep 30
-            
-            echo "url=http://localhost:3000" >> $GITHUB_OUTPUT
-          fi
-          
-          # Method 2: Kubernetes deployment
-          if [[ -n "${{ secrets.KUBECONFIG }}" ]]; then
-            echo "Deploying to Kubernetes staging cluster..."
-            # Add Kubernetes deployment logic here
-            # kubectl apply -f k8s/staging/
-            # kubectl set image deployment/backend backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ needs.pre-deployment-checks.outputs.version }}
-            # kubectl set image deployment/frontend frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ needs.pre-deployment-checks.outputs.version }}
-          fi
+          cd ~/scholarship-staging
+          docker-compose down || true
 
       - name: Run database migrations
         env:
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_URL_SYNC: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
+          APP_ENV: staging
         run: |
-          echo "Running database migrations..."
-          # Pull backend image and run migrations
+          echo "Running Alembic migrations..."
           docker run --rm \
-            -e DATABASE_URL="${DATABASE_URL}" \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ needs.pre-deployment-checks.outputs.version }} \
+            -e DATABASE_URL_SYNC="${DATABASE_URL_SYNC}" \
+            -e APP_ENV="${APP_ENV}" \
+            ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }} \
             alembic upgrade head
 
-      - name: Run staging smoke tests
-        run: |
-          # Wait for deployment to be ready
-          timeout 300 bash -c 'until curl -f ${{ steps.deploy.outputs.url }}/api/v1/health; do echo "Waiting for backend..."; sleep 10; done'
-          timeout 300 bash -c 'until curl -f ${{ steps.deploy.outputs.url }}; do echo "Waiting for frontend..."; sleep 10; done'
-          
-          echo "## 🧪 Staging Smoke Tests" >> staging-test-results.md
-          echo "" >> staging-test-results.md
-          
-          # Test API health
-          if curl -f ${{ steps.deploy.outputs.url }}/api/v1/health; then
-            echo "✅ API health check passed" >> staging-test-results.md
-          else
-            echo "❌ API health check failed" >> staging-test-results.md
-            exit 1
-          fi
-          
-          # Test frontend
-          if curl -f ${{ steps.deploy.outputs.url }}; then
-            echo "✅ Frontend accessibility check passed" >> staging-test-results.md
-          else
-            echo "❌ Frontend accessibility check failed" >> staging-test-results.md
-            exit 1
-          fi
-          
-          # Test API documentation
-          if curl -f ${{ steps.deploy.outputs.url }}/api/v1/docs; then
-            echo "✅ API documentation accessible" >> staging-test-results.md
-          else
-            echo "❌ API documentation not accessible" >> staging-test-results.md
-          fi
-          
-          echo "" >> staging-test-results.md
-          echo "🎉 **Staging deployment successful!**" >> staging-test-results.md
-          echo "" >> staging-test-results.md
-          echo "**Environment URL**: ${{ steps.deploy.outputs.url }}" >> staging-test-results.md
-          echo "**Version**: ${{ needs.pre-deployment-checks.outputs.version }}" >> staging-test-results.md
-          echo "**Commit**: ${{ github.sha }}" >> staging-test-results.md
-
-      - name: Upload staging test results
-        uses: actions/upload-artifact@v4
-        with:
-          name: staging-deployment-results
-          path: staging-test-results.md
-          retention-days: 30
-
-      - name: Notify staging deployment
-        run: |
-          echo "✅ Staging deployment successful!"
-          echo "URL: ${{ steps.deploy.outputs.url }}"
-          echo "Version: ${{ needs.pre-deployment-checks.outputs.version }}"
-          # Add Slack notification here
-
-  # Production deployment approval
-  production-approval:
-    name: Production Deployment Approval
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    needs: [pre-deployment-checks, deploy-staging]
-    if: needs.pre-deployment-checks.outputs.deploy-production == 'true'
-    environment:
-      name: production-approval
-    
-    steps:
-      - name: Request production deployment approval
-        run: |
-          echo "## 🔒 Production Deployment Approval Required" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version**: ${{ needs.pre-deployment-checks.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Staging Tests**: ✅ Passed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Please review the staging deployment and approve for production." >> $GITHUB_STEP_SUMMARY
-
-  # Deploy to production
-  deploy-production:
-    name: Deploy to Production
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    needs: [pre-deployment-checks, build-images, production-approval]
-    if: needs.pre-deployment-checks.outputs.deploy-production == 'true'
-    environment:
-      name: production
-      url: ${{ steps.deploy.outputs.url }}
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup deployment tools
-        run: |
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-
-      - name: Create production deployment backup
-        run: |
-          echo "Creating deployment backup..."
-          # Backup current production state
-          # kubectl get all -o yaml > pre-deployment-backup.yaml
-
-      - name: Deploy to production (Blue-Green)
-        id: deploy
+      - name: Seed database (if needed)
         env:
-          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-          PRODUCTION_REDIS_URL: ${{ secrets.PRODUCTION_REDIS_URL }}
-          PRODUCTION_SECRET_KEY: ${{ secrets.PRODUCTION_SECRET_KEY }}
-          PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_URL_SYNC: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
+          APP_ENV: staging
+          ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
         run: |
-          echo "Deploying to production environment using blue-green strategy..."
-          
-          # Blue-Green Deployment Strategy
-          current_slot="blue"
-          new_slot="green"
-          
-          # Deploy to green slot first
-          echo "Deploying to $new_slot slot..."
-          
-          # Method 1: Kubernetes Blue-Green Deployment
-          if [[ -n "${{ secrets.KUBECONFIG }}" ]]; then
-            # Deploy new version to green environment
-            # kubectl apply -f k8s/production/green/
-            # kubectl set image deployment/backend-green backend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ needs.pre-deployment-checks.outputs.version }}
-            # kubectl set image deployment/frontend-green frontend=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ needs.pre-deployment-checks.outputs.version }}
-            
-            # Wait for deployment to be ready
-            # kubectl wait --for=condition=available --timeout=600s deployment/backend-green deployment/frontend-green
-            
-            # Run health checks on green environment
-            echo "Running health checks on green environment..."
-            # Add health check logic here
-            
-            # Switch traffic to green (atomic operation)
-            echo "Switching traffic to green environment..."
-            # kubectl patch service backend -p '{"spec":{"selector":{"slot":"green"}}}'
-            # kubectl patch service frontend -p '{"spec":{"selector":{"slot":"green"}}}'
-            
-            echo "url=https://scholarship.example.com" >> $GITHUB_OUTPUT
-          fi
-          
-          # Method 2: Docker Swarm Blue-Green (alternative)
-          # docker service update --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ needs.pre-deployment-checks.outputs.version }} backend
-          
-          echo "Production deployment completed successfully!"
+          echo "Seeding staging data..."
+          docker run --rm \
+            -e DATABASE_URL="${DATABASE_URL}" \
+            -e DATABASE_URL_SYNC="${DATABASE_URL_SYNC}" \
+            -e APP_ENV="${APP_ENV}" \
+            -e ADMIN_EMAIL="${ADMIN_EMAIL}" \
+            ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }} \
+            python -m app.seed || echo "Seed completed with warnings"
 
-      - name: Run production health checks
+      - name: Start new containers
         run: |
-          echo "Running production health checks..."
-          
-          # Comprehensive health checks
-          health_checks=(
-            "${{ steps.deploy.outputs.url }}/api/v1/health"
-            "${{ steps.deploy.outputs.url }}"
-          )
-          
-          for check in "${health_checks[@]}"; do
-            if ! curl -f --retry 5 --retry-delay 10 "$check"; then
-              echo "❌ Health check failed: $check"
-              # Rollback on failure
-              echo "Initiating rollback..."
-              exit 1
-            else
-              echo "✅ Health check passed: $check"
-            fi
+          cd ~/scholarship-staging
+          docker-compose up -d
+
+          # Wait for services to be healthy
+          echo "Waiting for services to be ready..."
+          sleep 30
+
+      - name: Health check
+        run: |
+          echo "Running health checks..."
+
+          # Backend health check
+          max_retries=10
+          retry_count=0
+          until curl -f http://localhost:8000/health || [ $retry_count -eq $max_retries ]; do
+            echo "Backend not ready yet... ($retry_count/$max_retries)"
+            sleep 5
+            retry_count=$((retry_count + 1))
           done
 
-      - name: Run production smoke tests
+          if [ $retry_count -eq $max_retries ]; then
+            echo "❌ Backend health check failed"
+            docker-compose -f ~/scholarship-staging/docker-compose.yml logs backend
+            exit 1
+          fi
+
+          echo "✅ Backend health check passed"
+
+          # Frontend health check
+          retry_count=0
+          until curl -f http://localhost:3000 || [ $retry_count -eq $max_retries ]; do
+            echo "Frontend not ready yet... ($retry_count/$max_retries)"
+            sleep 5
+            retry_count=$((retry_count + 1))
+          done
+
+          if [ $retry_count -eq $max_retries ]; then
+            echo "❌ Frontend health check failed"
+            docker-compose -f ~/scholarship-staging/docker-compose.yml logs frontend
+            exit 1
+          fi
+
+          echo "✅ Frontend health check passed"
+
+      - name: Run smoke tests
         run: |
-          echo "## 🚀 Production Deployment Results" > production-deployment-results.md
-          echo "" >> production-deployment-results.md
-          echo "**Version**: ${{ needs.pre-deployment-checks.outputs.version }}" >> production-deployment-results.md
-          echo "**Deployment Time**: $(date -u)" >> production-deployment-results.md
-          echo "**Environment**: Production" >> production-deployment-results.md
-          echo "" >> production-deployment-results.md
-          
-          # Run critical business logic tests
-          echo "### Critical Function Tests" >> production-deployment-results.md
-          
+          echo "Running smoke tests..."
+
           # Test API endpoints
-          if curl -f ${{ steps.deploy.outputs.url }}/api/v1/health; then
-            echo "✅ API health endpoint" >> production-deployment-results.md
-          else
-            echo "❌ API health endpoint" >> production-deployment-results.md
-          fi
-          
-          # Test database connectivity
-          # Add database connectivity test here
-          echo "✅ Database connectivity" >> production-deployment-results.md
-          
-          # Test external integrations
-          # Add integration tests here
-          echo "✅ External integrations" >> production-deployment-results.md
-          
-          echo "" >> production-deployment-results.md
-          echo "🎉 **Production deployment successful!**" >> production-deployment-results.md
+          curl -f http://localhost:8000/api/v1/health || exit 1
+          curl -f http://localhost:8000/docs || exit 1
 
-      - name: Update production monitoring
+          echo "✅ Smoke tests passed"
+
+      - name: Cleanup old images
         run: |
-          echo "Updating monitoring and alerting..."
-          # Update monitoring dashboards with new version
-          # Update alerting rules if needed
-          # Tag deployment in monitoring systems
+          echo "Cleaning up old Docker images..."
+          docker image prune -af --filter "until=24h" || true
 
-      - name: Create release notes
+      - name: Deployment summary
         run: |
-          echo "## 🚀 Release ${{ needs.pre-deployment-checks.outputs.version }}" > release-notes.md
-          echo "" >> release-notes.md
-          echo "**Deployed**: $(date -u)" >> release-notes.md
-          echo "**Commit**: ${{ github.sha }}" >> release-notes.md
-          echo "" >> release-notes.md
-          
-          # Generate changelog from commits
-          git log --oneline --no-merges HEAD~10..HEAD >> release-notes.md
+          echo "## ✅ Staging Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ needs.pre-deployment.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: Staging" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: https://staging.scholarship.nycu.edu.tw" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Services Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: ✅ Running" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ✅ Running" >> $GITHUB_STEP_SUMMARY
+          echo "- Database: ✅ Migrated" >> $GITHUB_STEP_SUMMARY
 
-      - name: Upload production deployment artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: production-deployment-results
-          path: |
-            production-deployment-results.md
-            release-notes.md
-          retention-days: 90
+  # Staging validation tests
+  staging-tests:
+    name: Staging Validation
+    runs-on: [self-hosted, scholarship-test]
+    needs: [pre-deployment, deploy-staging]
+    if: needs.pre-deployment.outputs.deploy-staging == 'true' && needs.pre-deployment.outputs.skip-tests == 'false'
 
-      - name: Notify production deployment
-        run: |
-          echo "🎉 Production deployment successful!"
-          echo "URL: ${{ steps.deploy.outputs.url }}"
-          echo "Version: ${{ needs.pre-deployment-checks.outputs.version }}"
-          # Add Slack/email notification here
-
-  # Post-deployment monitoring
-  post-deployment-monitoring:
-    name: Post-deployment Monitoring
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    needs: [deploy-staging, deploy-production]
-    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
-    
     steps:
-      - name: Monitor deployment health
+      - name: Run integration tests
         run: |
-          echo "Starting post-deployment monitoring..."
-          
-          # Monitor for 5 minutes after deployment
-          end_time=$((SECONDS + 300))
-          
-          while [ $SECONDS -lt $end_time ]; do
-            echo "Health check at $(date)"
-            
-            # Check staging if deployed
-            if [[ "${{ needs.deploy-staging.result }}" == "success" ]]; then
-              curl -f https://staging.scholarship.example.com/api/v1/health || echo "Staging health check failed"
-            fi
-            
-            # Check production if deployed
-            if [[ "${{ needs.deploy-production.result }}" == "success" ]]; then
-              curl -f https://scholarship.example.com/api/v1/health || echo "Production health check failed"
-            fi
-            
-            sleep 60
-          done
-          
-          echo "Post-deployment monitoring completed"
+          echo "Running integration tests against staging..."
 
-  # Deployment summary
-  deployment-summary:
-    name: Deployment Summary
-    permissions:
-      contents: read
+          # Test authentication
+          curl -f http://localhost:8000/api/v1/auth/health || exit 1
+
+          # Test main endpoints
+          curl -f http://localhost:8000/api/v1/scholarships || exit 1
+
+          echo "✅ Integration tests passed"
+
+      - name: Performance check
+        run: |
+          echo "Checking staging performance..."
+
+          # Basic response time check
+          response_time=$(curl -o /dev/null -s -w '%{time_total}' http://localhost:8000/health)
+          echo "Response time: ${response_time}s"
+
+          # Fail if response time > 5 seconds
+          if (( $(echo "$response_time > 5" | bc -l) )); then
+            echo "❌ Performance check failed: Response time too high"
+            exit 1
+          fi
+
+          echo "✅ Performance check passed"
+
+  # Notification
+  notify:
+    name: Notify
     runs-on: ubuntu-latest
-    needs: [pre-deployment-checks, deploy-staging, deploy-production, post-deployment-monitoring]
+    needs: [pre-deployment, deploy-staging, staging-tests]
     if: always()
-    
+
     steps:
-      - name: Create deployment summary
+      - name: Deployment status
         run: |
-          echo "## 🚀 Deployment Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Deployment Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Environment | Status | Version |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------------|--------|---------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Staging | ${{ needs.deploy-staging.result || 'skipped' }} | ${{ needs.pre-deployment-checks.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Production | ${{ needs.deploy-production.result || 'skipped' }} | ${{ needs.pre-deployment-checks.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ needs.pre-deployment.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Deployment Information" >> $GITHUB_STEP_SUMMARY
-          echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch/Tag**: ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: ${{ needs.pre-deployment-checks.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [[ "${{ needs.deploy-staging.result }}" == "success" || "${{ needs.deploy-production.result }}" == "success" ]]; then
-            echo "✅ **Deployment completed successfully!**" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Deployment failed or was skipped**" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-deployment | ${{ needs.pre-deployment.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deploy Staging | ${{ needs.deploy-staging.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Staging Tests | ${{ needs.staging-tests.result }} |" >> $GITHUB_STEP_SUMMARY
