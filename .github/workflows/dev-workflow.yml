@@ -2,7 +2,7 @@ name: Development Workflow
 
 on:
   pull_request:
-    branches: [main, develop, application-gogo]
+    branches: [main, develop]
     types: [opened, synchronize, reopened, labeled, unlabeled]
   pull_request_review:
     types: [submitted]
