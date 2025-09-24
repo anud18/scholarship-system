@@ -65,25 +65,40 @@ export function EnhancedAdminDashboard({
   const [filteredApplications, setFilteredApplications] = useState<any[]>([]);
 
   // 處理學期選擇變更
-  const handleSemesterChange = async (combination: string, academicYear: number, semester: string) => {
+  const handleSemesterChange = async (combination: string, academicYear: number, semester: string | null) => {
     setSelectedCombination(combination);
     setCurrentAcademicYear(academicYear);
-    setCurrentSemester(semester);
+    setCurrentSemester(semester ?? undefined);
     
     // 重新載入該學期的統計資料
     await fetchFilteredData(academicYear, semester);
   };
 
   // 載入篩選後的資料
-  const fetchFilteredData = async (academicYear: number, semester: string) => {
+  const fetchFilteredData = async (academicYear: number, semester: string | null) => {
     try {
-      // 載入特定學期的統計資料
-      const statsResponse = await api.get(`/admin/dashboard/stats?academic_year=${academicYear}&semester=${semester}`);
-      setFilteredStats(statsResponse.data);
+      const statsResponse = await api.request<any>('/admin/dashboard/stats', {
+        method: 'GET',
+        params: {
+          academic_year: academicYear,
+          semester: semester ?? undefined
+        }
+      });
+      if (statsResponse.success) {
+        setFilteredStats(statsResponse.data);
+      }
 
-      // 載入特定學期的申請資料
-      const applicationsResponse = await api.get(`/admin/recent-applications?academic_year=${academicYear}&semester=${semester}&limit=10`);
-      setFilteredApplications(applicationsResponse.data);
+      const applicationsResponse = await api.request<any>('/admin/recent-applications', {
+        method: 'GET',
+        params: {
+          academic_year: academicYear,
+          semester: semester ?? undefined,
+          limit: 10
+        }
+      });
+      if (applicationsResponse.success && Array.isArray(applicationsResponse.data)) {
+        setFilteredApplications(applicationsResponse.data);
+      }
     } catch (error) {
       console.error('Error fetching filtered data:', error);
       // 如果API不支援篩選，使用原始資料

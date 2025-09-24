@@ -128,7 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (response.success && response.data) {
         // Map full_name to name for component compatibility
-        const updatedUser = { ...response.data, name: response.data.full_name }
+        const updatedUser = {
+          ...response.data,
+          name: response.data.full_name ?? response.data.name
+        }
         setUser(updatedUser)
       } else {
         throw new Error(response.message || 'Update failed')

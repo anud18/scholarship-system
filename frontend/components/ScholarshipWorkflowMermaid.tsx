@@ -231,7 +231,10 @@ export function ScholarshipWorkflowMermaid({
   }
 
   // 輔助函數
-  const getStageStatus = (startDate: string | null, endDate: string | null): 'completed' | 'active' | 'pending' | 'expired' => {
+  const getStageStatus = (
+    startDate?: string | null,
+    endDate?: string | null
+  ): 'completed' | 'active' | 'pending' | 'expired' => {
     if (!startDate || !endDate) return 'pending'
     const start = new Date(startDate)
     const end = new Date(endDate)
@@ -243,14 +246,21 @@ export function ScholarshipWorkflowMermaid({
     return 'completed'
   }
 
-  const formatDate = (date: string | null) => {
+  const formatDate = (date?: string | null) => {
     if (!date) return "未設定"
     return format(new Date(date), "MM/dd")
   }
 
   // 準備工作流程階段數據
   const getWorkflowStages = (config: ScholarshipConfiguration) => {
-    const stages = [
+    interface WorkflowStage {
+      name: string
+      type: string
+      status: 'completed' | 'active' | 'pending' | 'expired'
+      period?: string
+    }
+
+    const stages: WorkflowStage[] = [
       {
         name: '開始',
         type: 'start',

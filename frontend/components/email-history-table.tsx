@@ -80,10 +80,11 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
       
       const response = await apiClient.emailManagement.getEmailHistory(params)
       if (response.success && response.data) {
-        setEmailHistory(response.data.items)
+        const { items, total } = response.data
+        setEmailHistory(items)
         setPagination(prev => ({
           ...prev,
-          total: response.data.total
+          total
         }))
       }
     } catch (error) {

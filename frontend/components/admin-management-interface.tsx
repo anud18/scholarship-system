@@ -227,7 +227,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   
   // Email Template states by sending type
-  const [emailTemplateTab, setEmailTemplateTab] = useState("single"); // "single" or "bulk"
+  const [emailTemplateTab, setEmailTemplateTab] = useState<'single' | 'bulk'>("single");
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
   const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -539,10 +539,11 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       
       const response = await apiClient.emailManagement.getEmailHistory(params);
       if (response.success && response.data) {
-        setEmailHistory(response.data.items);
+        const { items, total } = response.data
+        setEmailHistory(items);
         setEmailHistoryPagination(prev => ({
           ...prev,
-          total: response.data.total
+          total
         }));
       }
     } catch (error) {
@@ -563,10 +564,11 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       
       const response = await apiClient.emailManagement.getScheduledEmails(params);
       if (response.success && response.data) {
-        setScheduledEmails(response.data.items);
+        const { items, total } = response.data
+        setScheduledEmails(items);
         setScheduledEmailsPagination(prev => ({
           ...prev,
-          total: response.data.total
+          total
         }));
       }
     } catch (error) {
@@ -1374,6 +1376,9 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     setRuleFormLoading(true);
     try {
       if (editingRule) {
+        if (editingRule.id == null) {
+          throw new Error('規則缺少 ID，無法更新')
+        }
         // 更新規則
         const response = await apiClient.admin.updateScholarshipRule(editingRule.id, ruleData);
         if (response.success) {
@@ -1403,6 +1408,11 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   // 處理刪除規則
   const handleDeleteRule = async (rule: ScholarshipRule) => {
+    if (rule.id == null) {
+      alert('規則缺少 ID，無法刪除')
+      return;
+    }
+
     if (!confirm(`確定要刪除規則「${rule.rule_name}」嗎？此操作無法復原。`)) {
       return;
     }
@@ -1438,6 +1448,9 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   // 處理切換初領狀態
   const handleToggleInitialEnabled = async (rule: ScholarshipRule, enabled: boolean) => {
     try {
+      if (rule.id == null) {
+        throw new Error('規則缺少 ID，無法更新')
+      }
       const response = await apiClient.admin.updateScholarshipRule(rule.id, {
         is_initial_enabled: enabled
       });
@@ -1452,6 +1465,9 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   // 處理切換續領狀態
   const handleToggleRenewalEnabled = async (rule: ScholarshipRule, enabled: boolean) => {
     try {
+      if (rule.id == null) {
+        throw new Error('規則缺少 ID，無法更新')
+      }
       const response = await apiClient.admin.updateScholarshipRule(rule.id, {
         is_renewal_enabled: enabled
       });
@@ -1466,6 +1482,9 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   // 處理切換整體狀態
   const handleToggleActive = async (rule: ScholarshipRule, active: boolean) => {
     try {
+      if (rule.id == null) {
+        throw new Error('規則缺少 ID，無法更新')
+      }
       const response = await apiClient.admin.updateScholarshipRule(rule.id, {
         is_active: active
       });
@@ -2407,7 +2426,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setHistoricalApplicationsFilters(prev => ({ ...prev, page: prev.page - 1 }));
+                          setHistoricalApplicationsFilters(prev => ({
+                            ...prev,
+                            page: (prev.page ?? 2) - 1
+                          }));
                         }}
                         disabled={historicalApplicationsPagination.page <= 1}
                       >
@@ -2420,7 +2442,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setHistoricalApplicationsFilters(prev => ({ ...prev, page: prev.page + 1 }));
+                          setHistoricalApplicationsFilters(prev => ({
+                            ...prev,
+                            page: (prev.page ?? 0) + 1
+                          }));
                         }}
                         disabled={historicalApplicationsPagination.page >= historicalApplicationsPagination.pages}
                       >
@@ -3014,7 +3039,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                       <CardDescription>選擇要管理的郵件模板類型</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <Tabs value={emailTemplateTab} onValueChange={setEmailTemplateTab}>
+                      <Tabs value={emailTemplateTab} onValueChange={(value) => setEmailTemplateTab(value as 'single' | 'bulk')}>
                         <TabsList className="grid grid-cols-2 h-auto">
                           <TabsTrigger value="single" className="flex flex-col items-center p-3">
                             <Mail className="h-4 w-4 mb-1" />

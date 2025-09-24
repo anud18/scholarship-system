@@ -104,7 +104,7 @@ export function MatrixQuotaTable({
 
       if (response.success && response.data) {
         // Update local data with deep copy to ensure reactivity
-        const updatedData = JSON.parse(JSON.stringify(localData))
+        const updatedData = JSON.parse(JSON.stringify(localData)) as MatrixQuotaData
         updatedData.phd_quotas[editingCell.subType][editingCell.college].total_quota = newValue
         updatedData.phd_quotas[editingCell.subType][editingCell.college].available = 
           newValue - updatedData.phd_quotas[editingCell.subType][editingCell.college].used
@@ -115,8 +115,8 @@ export function MatrixQuotaTable({
         let grandAvailable = 0
         let grandApplications = 0
         
-        Object.values(updatedData.phd_quotas).forEach(colleges => {
-          Object.values(colleges).forEach(cell => {
+        Object.values(updatedData.phd_quotas).forEach((colleges) => {
+          Object.values(colleges as Record<string, QuotaCell>).forEach((cell) => {
             grandTotal += cell.total_quota
             grandUsed += cell.used
             grandAvailable += cell.available

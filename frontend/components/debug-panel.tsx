@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import type { JSX } from 'react'
 import { X, Bug, ChevronDown, ChevronRight, Copy, CheckCircle2, Server, Cloud, Settings, Database, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { apiClient } from '@/lib/api'
@@ -32,7 +33,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     ))
 
   // Helper functions to detect data sources
-  const detectEnvironment = () => {
+  const detectEnvironment = (): 'dev' | 'test' | 'prod' | 'unknown' => {
     if (typeof window === 'undefined') return 'unknown'
     
     const hostname = window.location.hostname
@@ -46,7 +47,10 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     return 'unknown'
   }
 
-  const detectPortalSource = (jwtPayload: any, portalData: any) => {
+  const detectPortalSource = (
+    jwtPayload: any,
+    portalData: any
+  ): 'mock' | 'real' | 'unknown' => {
     // If JWT has debug_mode flag, check portal data source
     if (jwtPayload?.debug_mode && portalData) {
       // Mock portal data typically has fewer fields and simpler structure
@@ -72,7 +76,10 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     return 'unknown'
   }
 
-  const detectStudentApiSource = (jwtPayload: any, studentData: any) => {
+  const detectStudentApiSource = (
+    jwtPayload: any,
+    studentData: any
+  ): 'mock' | 'real' | 'unknown' => {
     // If JWT has debug_mode flag, check student data source
     if (jwtPayload?.debug_mode && studentData) {
       // Mock student API data has specific characteristics

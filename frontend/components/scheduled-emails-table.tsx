@@ -91,10 +91,11 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
       
       const response = await apiClient.emailManagement.getScheduledEmails(params)
       if (response.success && response.data) {
-        setScheduledEmails(response.data.items)
+        const { items, total } = response.data
+        setScheduledEmails(items)
         setPagination(prev => ({
           ...prev,
-          total: response.data.total
+          total
         }))
       }
     } catch (error) {
@@ -222,7 +223,7 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
     if (!selectedEmail) return
     
     try {
-      await apiClient.updateScheduledEmail(selectedEmail.id, {
+      await apiClient.emailManagement.updateScheduledEmail(selectedEmail.id, {
         subject: editingSubject,
         body: editingBody
       })

@@ -600,7 +600,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                                 </div>
                                 <ProfessorAssignmentDropdown
                                   applicationId={app.id}
-                                  currentProfessorId={app.professor?.nycu_id || app.professor_id}
+                                  currentProfessorId={app.professor?.nycu_id ?? (app.professor_id ? String(app.professor_id) : undefined)}
                                   onAssigned={(professor) => handleProfessorAssigned(app.id, professor)}
                                   compact={true}
                                 />
@@ -618,7 +618,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                                 </div>
                                 <ProfessorAssignmentDropdown
                                   applicationId={app.id}
-                                  currentProfessorId={app.professor?.nycu_id || app.professor_id}
+                                  currentProfessorId={app.professor?.nycu_id ?? (app.professor_id ? String(app.professor_id) : undefined)}
                                   onAssigned={(professor) => handleProfessorAssigned(app.id, professor)}
                                 />
                               </div>

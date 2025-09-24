@@ -185,7 +185,6 @@ export default function SSOCallbackPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex items-center justify-center">
-        {console.log('⏸️ SSO Callback Suspense fallback is rendering!')}
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl text-nycu-navy-800">

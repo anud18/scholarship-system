@@ -65,13 +65,32 @@ export interface ApplicationFile {
   uploaded_at: string
 }
 
+export type ApplicationStatus =
+  | 'draft'
+  | 'submitted'
+  | 'pending_review'
+  | 'pending_recommendation'
+  | 'under_review'
+  | 'professor_review_pending'
+  | 'professor_reviewed'
+  | 'college_review_pending'
+  | 'college_reviewed'
+  | 'recommended'
+  | 'approved'
+  | 'rejected'
+  | 'returned'
+  | 'withdrawn'
+  | 'cancelled'
+  | 'pending'
+  | 'completed'
+
 export interface Application {
   id: number
   app_id?: string  // 申請編號，格式如 APP-2025-000001
   student_id: string
   scholarship_type: string
   scholarship_type_zh?: string  // 中文獎學金類型名稱
-  status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'withdrawn'
+  status: ApplicationStatus
   is_renewal?: boolean  // 是否為續領申請
   personal_statement?: string
   gpa_requirement_met: boolean
@@ -80,7 +99,10 @@ export interface Application {
   approved_at?: string
   created_at: string
   updated_at: string
-  
+  is_recommended?: boolean
+  professor_review_completed?: boolean
+  college_review_completed?: boolean
+
   // 動態表單資料
   form_data?: Record<string, any>  // 動態表單資料 (前端格式)
   submitted_form_data?: Record<string, any>  // 後端格式的表單資料，包含整合後的文件資訊
@@ -115,6 +137,7 @@ export interface Application {
     nycu_id: string
     name: string
     email: string
+    dept_name?: string
   }  // 關聯的教授資訊
   
   // Scholarship configuration
@@ -169,9 +192,9 @@ export interface EmailTemplate {
   body_template: string
   cc?: string | null
   bcc?: string | null
-  sending_type: 'single' | 'bulk'
+  sending_type?: 'single' | 'bulk'
   recipient_options?: RecipientOption[] | null
-  requires_approval: boolean
+  requires_approval?: boolean
   max_recipients?: number | null
   updated_at?: string | null
 }
@@ -228,25 +251,25 @@ export interface NotificationResponse {
 
 export interface ScholarshipType {
   id: number
-  configuration_id: number  // ID of the specific configuration this eligibility is for
+  configuration_id?: number  // ID of the specific configuration this eligibility is for
   code: string
   name: string
   name_en?: string
-  description: string
+  description?: string
   description_en?: string
-  amount: string
-  currency: string
-  application_cycle: 'semester' | 'yearly'
-  application_start_date: string
-  application_end_date: string
-  sub_type_selection_mode: 'single' | 'multiple' | 'hierarchical'
-  eligible_sub_types: Array<{
+  amount?: string
+  currency?: string
+  application_cycle?: 'semester' | 'yearly'
+  application_start_date?: string
+  application_end_date?: string
+  sub_type_selection_mode?: 'single' | 'multiple' | 'hierarchical'
+  eligible_sub_types?: Array<{
     value: string | null
     label: string
     label_en: string
     is_default: boolean
   }>
-  passed: Array<{
+  passed?: Array<{
     rule_id: number
     rule_name: string
     rule_type: string
@@ -258,7 +281,7 @@ export interface ScholarshipType {
     is_warning: boolean
     is_hard_rule: boolean
   }>
-  warnings: Array<{
+  warnings?: Array<{
     rule_id: number
     rule_name: string
     rule_type: string
@@ -270,7 +293,7 @@ export interface ScholarshipType {
     is_warning: boolean
     is_hard_rule: boolean
   }>
-  errors: Array<{
+  errors?: Array<{
     rule_id: number
     rule_name: string
     rule_type: string
@@ -282,12 +305,12 @@ export interface ScholarshipType {
     is_warning: boolean
     is_hard_rule: boolean
   }>
-  created_at: string
+  created_at?: string
 }
 
 export interface ScholarshipRule {
-  id: number
-  scholarship_type_id: number
+  id?: number
+  scholarship_type_id?: number
   sub_type?: string
   academic_year?: number
   semester?: string
@@ -312,8 +335,8 @@ export interface ScholarshipRule {
   created_by?: number
   updated_by?: number
   academic_period_label?: string
-  created_at: string
-  updated_at: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface SubTypeOption {
@@ -634,6 +657,11 @@ export interface ScholarshipFormConfig {
   scholarship_type: string
   fields: ApplicationField[]
   documents: ApplicationDocument[]
+  title?: string
+  title_en?: string
+  color?: string
+  hasWhitelist?: boolean
+  whitelist_student_ids?: Record<string, number[]>
 }
 
 export interface FormConfigSaveRequest {
@@ -747,13 +775,17 @@ export interface ScholarshipConfiguration {
   description_en?: string
   amount: number
   currency: string
+  title?: string
+  title_en?: string
+  color?: string
   // Quota management fields
   has_quota_limit?: boolean
   has_college_quota?: boolean
   quota_management_mode?: string
   total_quota?: number
   quotas?: Record<string, any>
-  whitelist_student_ids: Record<string, number[]>
+  whitelist_student_ids?: Record<string, number[]>
+  hasWhitelist?: boolean
   renewal_application_start_date?: string
   renewal_application_end_date?: string
   application_start_date?: string
@@ -1006,7 +1038,7 @@ class ApiClient {
     return ''
   }
 
-  private async request<T>(
+  async request<T = any>(
     endpoint: string,
     options: RequestInit & { params?: Record<string, any> } = {}
   ): Promise<ApiResponse<T>> {
@@ -1744,7 +1776,7 @@ class ApiClient {
       return this.request(`/admin/scholarship-rules/${id}`);
     },
 
-    createScholarshipRule: async (rule: Omit<ScholarshipRule, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<ScholarshipRule>> => {
+    createScholarshipRule: async (rule: Partial<ScholarshipRule>): Promise<ApiResponse<ScholarshipRule>> => {
       return this.request('/admin/scholarship-rules', {
         method: 'POST',
         body: JSON.stringify(rule),
@@ -1774,7 +1806,7 @@ class ApiClient {
       rule_ids?: number[];
       overwrite_existing?: boolean;
     }): Promise<ApiResponse<ScholarshipRule[]>> => {
-      const response = await this.request('/admin/scholarship-rules/copy', {
+      const response = await this.request<ScholarshipRule[]>('/admin/scholarship-rules/copy', {
         method: 'POST',
         body: JSON.stringify(copyRequest),
       });
@@ -1795,7 +1827,7 @@ class ApiClient {
     // 規則模板管理
     getRuleTemplates: async (scholarship_type_id?: number): Promise<ApiResponse<ScholarshipRule[]>> => {
       const queryParams = scholarship_type_id ? `?scholarship_type_id=${scholarship_type_id}` : '';
-      return this.request(`/admin/scholarship-rules/templates${queryParams}`);
+      return this.request<ScholarshipRule[]>(`/admin/scholarship-rules/templates${queryParams}`);
     },
 
     createRuleTemplate: async (templateRequest: {
@@ -2166,37 +2198,23 @@ class ApiClient {
       try {
         const params = statusFilter ? `?status_filter=${statusFilter}` : '';
         console.log('🔍 Requesting professor applications with params:', params);
-        
-        // The /professor/applications endpoint returns PaginatedResponse directly, not wrapped in ApiResponse
+
         const response = await this.request<PaginatedResponse<Application>>(`/professor/applications${params}`);
         console.log('📨 Professor applications raw response:', response);
-        
-        // Check if response is a direct PaginatedResponse (backend returns this directly)
-        if (response && 'items' in response && 'total' in response && 'pages' in response) {
-          console.log('✅ Got direct PaginatedResponse:', response.items.length, 'applications, total:', response.total);
+
+        if (response.success && response.data && Array.isArray(response.data.items)) {
+          console.log('✅ Loaded professor applications:', response.data.items.length);
           return {
             success: true,
-            message: 'Applications loaded successfully',
-            data: response.items
+            message: response.message || 'Applications loaded successfully',
+            data: response.data.items
           };
         }
-        // Handle wrapped ApiResponse format (fallback for consistency)
-        else if (response && 'success' in response && response.success && response.data) {
-          if ('items' in response.data && Array.isArray(response.data.items)) {
-            console.log('✅ Got wrapped ApiResponse with paginated data:', response.data.items.length, 'applications');
-            return {
-              success: true,
-              message: response.message || 'Applications loaded successfully',
-              data: response.data.items
-            };
-          }
-        }
-        
-        // Handle error or unexpected response format
+
         console.warn('⚠️ Unexpected response format:', response);
         return {
           success: false,
-          message: 'Failed to load applications - unexpected response format',
+          message: response.message || 'Failed to load applications - unexpected response format',
           data: []
         };
       } catch (error: any) {

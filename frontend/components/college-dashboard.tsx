@@ -35,6 +35,7 @@ interface CollegeDashboardProps {
 interface ScholarshipConfig {
   id: number
   name: string
+  code?: string
   subTypes: { code: string; name: string }[]
 }
 

@@ -411,7 +411,6 @@ export default function ScholarshipManagementSystem() {
           {/* 儀表板 - 只有 admin 和 super_admin 可見 */}
           {(user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="dashboard" className="space-y-4">
-              {console.log('📊 Rendering AdminDashboard for role:', user.role)}
               <AdminDashboard
                 stats={stats}
                 recentApplications={recentApplications}
@@ -433,10 +432,8 @@ export default function ScholarshipManagementSystem() {
 
           {/* 主要功能頁面 */}
           <TabsContent value="main" className="space-y-4">
-            {console.log('📄 Rendering main TabsContent for role:', user.role)}
             {user.role === "student" && (
               <>
-                {console.log('🎒 Rendering EnhancedStudentPortal')}
                 <EnhancedStudentPortal user={{
                   ...user,
                   studentType: "undergraduate" // 默認值，實際應該從用戶數據中獲取
@@ -445,19 +442,16 @@ export default function ScholarshipManagementSystem() {
             )}
             {user.role === "professor" && (
               <>
-                {console.log('🎓 Rendering ProfessorReviewComponent')}
                 <ProfessorReviewComponent user={user} />
               </>
             )}
             {user.role === "college" && (
               <>
-                {console.log('🏫 Rendering CollegeDashboard')}
                 <CollegeDashboard user={user} locale={locale} />
               </>
             )}
             {(user.role === "admin" || user.role === "super_admin") && (
               <>
-                {console.log('👑 Rendering AdminScholarshipDashboard for role:', user.role)}
                 <AdminScholarshipDashboard user={user} />
               </>
             )}
@@ -466,7 +460,6 @@ export default function ScholarshipManagementSystem() {
           {/* 系統管理 - 只有 admin 和 super_admin 可見 */}
           {(user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="admin" className="space-y-4">
-              {console.log('⚙️ Rendering AdminManagementInterface for role:', user.role)}
               <AdminManagementInterface user={user} />
             </TabsContent>
           )}

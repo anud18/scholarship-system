@@ -212,7 +212,7 @@ export function CopyRulesModal({
             <Checkbox
               id="overwrite-existing"
               checked={overwriteExisting}
-              onCheckedChange={setOverwriteExisting}
+              onCheckedChange={(checked) => setOverwriteExisting(checked === true)}
             />
             <Label htmlFor="overwrite-existing" className="text-sm">
               覆蓋已存在的重複規則

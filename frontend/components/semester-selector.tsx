@@ -31,7 +31,7 @@ interface AcademicYearOption {
 interface CombinationOption {
   value: string;
   academic_year: number;
-  semester: string;
+  semester: string | null;
   label: string;
   label_en: string;
   is_current: boolean;
@@ -219,12 +219,13 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
       const response = await apiClient.college.getAvailableCombinations();
       
       if (response.success && response.data) {
+        const payload = response.data
         // 將 API 回傳的資料轉換為組合選項格式
         const combinationOptions: CombinationOption[] = [];
         
         // 基於學年和學期創建組合選項
-        response.data.academic_years.forEach(year => {
-          response.data.semesters.forEach(semester => {
+        payload.academic_years.forEach((year: number) => {
+          payload.semesters.forEach((semester: string) => {
             const semesterLabel = semester === 'FIRST' ? '第一學期' : '第二學期';
             const semesterNum = semester === 'FIRST' ? '1' : '2';
             
@@ -240,8 +241,8 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
         });
         
         // 如果只有一個學期選項，可能是學年制
-        if (response.data.semesters.length === 0) {
-          response.data.academic_years.forEach(year => {
+        if (payload.semesters.length === 0) {
+          payload.academic_years.forEach((year: number) => {
             combinationOptions.push({
               value: year.toString(),
               academic_year: year,
