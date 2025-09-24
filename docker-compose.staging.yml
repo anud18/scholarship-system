@@ -4,7 +4,7 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: scholarship_postgres_test
+    container_name: scholarship_postgres_staging
     environment:
       POSTGRES_DB: scholarship_db
       POSTGRES_USER: scholarship_user
@@ -12,39 +12,25 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_test_data:/var/lib/postgresql/data
+      - postgres_staging_data:/var/lib/postgresql/data
     networks:
-      - scholarship_test_network
+      - scholarship_staging_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U scholarship_user -d scholarship_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: scholarship_pgadmin_test
-    ports:
-      - "8081:80"
-    environment:
-      PGADMIN_DEFAULT_EMAIL: test@test.com
-      PGADMIN_DEFAULT_PASSWORD: test123
-    networks:
-      - scholarship_test_network
-    depends_on:
-      - postgres
-    restart: unless-stopped
-
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: scholarship_redis_test
+    container_name: scholarship_redis_staging
     ports:
       - "6379:6379"
     volumes:
-      - redis_test_data:/data
+      - redis_staging_data:/data
     networks:
-      - scholarship_test_network
+      - scholarship_staging_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -54,7 +40,7 @@ services:
   # MinIO Object Storage
   minio:
     image: minio/minio:latest
-    container_name: scholarship_minio_test
+    container_name: scholarship_minio_staging
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -62,9 +48,9 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin123
     volumes:
-      - minio_test_data:/data
+      - minio_staging_data:/data
     networks:
-      - scholarship_test_network
+      - scholarship_staging_network
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -77,7 +63,7 @@ services:
     build: 
       context: ./backend
       dockerfile: Dockerfile
-    container_name: scholarship_backend_test
+    container_name: scholarship_backend_staging
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     expose:
       - "8000"
@@ -85,10 +71,10 @@ services:
       DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
       DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: test-secret-key-for-docker-testing-only
+      SECRET_KEY: staging-secret-key-for-docker-staging-only
       DEBUG: "true"
       CORS_ORIGINS: "*"
-      ENVIRONMENT: development
+      ENVIRONMENT: staging
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin123
@@ -96,11 +82,11 @@ services:
       MINIO_SECURE: "false"
       # Mock SSO Configuration for Testing (fallback)
       ENABLE_MOCK_SSO: "true"
-      MOCK_SSO_DOMAIN: test.university.edu
+      MOCK_SSO_DOMAIN: staging.university.edu
       # Portal SSO Configuration (real Portal for testing)
       PORTAL_SSO_ENABLED: "true"
       PORTAL_JWT_SERVER_URL: "https://portal.test.nycu.edu.tw/jwt/portal"
-      PORTAL_TEST_MODE: "false"
+      PORTAL_STAGING_MODE: "false"
       PORTAL_SSO_TIMEOUT: "10.0"
       # Student API Configuration (Real NYCU API)
       STUDENT_API_ENABLED: "true"
@@ -109,8 +95,6 @@ services:
       STUDENT_API_HMAC_KEY: "2a5e453eb3a673a8ab3d65eb5ffa0b290acbadb6ecdd160d41"
       STUDENT_API_TIMEOUT: "10.0"
       STUDENT_API_ENCODE_TYPE: "UTF-8"
-    volumes:
-      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,48 +103,23 @@ services:
       minio:
         condition: service_healthy
     networks:
-      - scholarship_test_network
+      - scholarship_staging_network
     restart: unless-stopped
-
-  # Mock Student API - Disabled (using real NYCU Student API)
-  # mock-student-api:
-  #   build:
-  #     context: ./mock-student-api
-  #     dockerfile: Dockerfile
-  #   container_name: scholarship_mock_student_api_test
-  #   command: uvicorn main:app --host 0.0.0.0 --port 8080
-  #   ports:
-  #     - "8080:8080"
-  #   environment:
-  #     DATABASE_URL: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
-  #     MOCK_HMAC_KEY_HEX: 4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
-  #     STRICT_TIME_CHECK: "false"  # Relaxed for testing
-  #     STRICT_ENCODE_CHECK: "false"
-  #     TIME_TOLERANCE_MINUTES: "30"  # Extended tolerance for testing
-  #   volumes:
-  #     - ./mock-student-api:/app
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   networks:
-  #     - scholarship_test_network
-  #   restart: unless-stopped
 
   # Nginx Load Balancer
   nginx:
     image: nginx:alpine
-    container_name: scholarship_nginx_test
+    container_name: scholarship_nginx_staging
     ports:
-      - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.test.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/nginx.staging.conf:/etc/nginx/nginx.conf:ro
+      - /etc/nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       - backend
       - frontend
     networks:
-      - scholarship_test_network
+      - scholarship_staging_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "https://localhost/health", "-k"]
@@ -174,33 +133,29 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: builder
-    container_name: scholarship_frontend_test
+    container_name: scholarship_frontend_staging
     command: npm start
     expose:
       - "3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://140.113.7.148
+      NEXT_PUBLIC_API_URL: http://140.113.7.148 # TODO
       NODE_ENV: production
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       - backend
     networks:
-      - scholarship_test_network
+      - scholarship_staging_network
     restart: unless-stopped
 
 volumes:
-  postgres_test_data:
+  postgres_staging_data:
     driver: local
-  redis_test_data:
+  redis_staging_data:
     driver: local
-  minio_test_data:
+  minio_staging_data:
     driver: local
 
 networks:
-  scholarship_test_network:
+  scholarship_staging_network:
     driver: bridge 

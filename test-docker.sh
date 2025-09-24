@@ -304,7 +304,7 @@ asyncio.run(init_test_data())
         echo "  - Source code mounted for live editing"
         echo "  - PostgreSQL, Redis, MinIO included locally"
         echo ""
-        echo "For production/test environments, use: ./docker-manager.sh"
+        echo "For production/staging environments, use: ./docker-manager.sh"
         exit 1
         ;;
 esac
