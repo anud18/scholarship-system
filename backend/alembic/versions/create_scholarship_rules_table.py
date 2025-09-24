@@ -20,10 +20,70 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Check if table already exists
+    # Check if tables already exist
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     existing_tables = inspector.get_table_names()
+
+    # Create scholarship_types table first if it doesn't exist
+    if "scholarship_types" not in existing_tables:
+        # Create required enums
+        op.execute(
+            """
+            DO $$ BEGIN
+                CREATE TYPE subtypeselectionmode AS ENUM ('SINGLE', 'MULTIPLE');
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$;
+        """
+        )
+
+        op.execute(
+            """
+            DO $$ BEGIN
+                CREATE TYPE applicationcycle AS ENUM ('SEMESTER', 'ANNUAL');
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$;
+        """
+        )
+
+        # Create scholarship_types table
+        op.create_table(
+            "scholarship_types",
+            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("code", sa.String(50), nullable=False),
+            sa.Column("name", sa.String(200), nullable=False),
+            sa.Column("name_en", sa.String(200), nullable=True),
+            sa.Column("description", sa.Text(), nullable=True),
+            sa.Column("description_en", sa.Text(), nullable=True),
+            sa.Column("category", sa.String(50), nullable=False),
+            sa.Column("sub_type_list", postgresql.JSON(astext_type=sa.Text()), nullable=True),
+            sa.Column(
+                "sub_type_selection_mode",
+                sa.Enum("SINGLE", "MULTIPLE", name="subtypeselectionmode"),
+                nullable=False,
+                server_default="SINGLE",
+            ),
+            sa.Column(
+                "application_cycle",
+                sa.Enum("SEMESTER", "ANNUAL", name="applicationcycle"),
+                nullable=False,
+                server_default="SEMESTER",
+            ),
+            sa.Column("whitelist_enabled", sa.Boolean(), nullable=True, server_default=sa.text("false")),
+            sa.Column("status", sa.String(20), nullable=True, server_default="active"),
+            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")),
+            sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")),
+            sa.Column("created_by", sa.Integer(), nullable=True),
+            sa.Column("updated_by", sa.Integer(), nullable=True),
+            sa.ForeignKeyConstraint(["created_by"], ["users.id"]),
+            sa.ForeignKeyConstraint(["updated_by"], ["users.id"]),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("code"),
+        )
+        op.create_index("ix_scholarship_types_id", "scholarship_types", ["id"])
+        op.create_index("ix_scholarship_types_code", "scholarship_types", ["code"])
 
     if "scholarship_rules" in existing_tables:
         # Table already exists, skip creation
@@ -68,10 +128,21 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Drop indexes first
+    # Drop scholarship_rules indexes first
     op.drop_index("ix_scholarship_rules_semester", table_name="scholarship_rules")
     op.drop_index("ix_scholarship_rules_academic_year", table_name="scholarship_rules")
     op.drop_index("ix_scholarship_rules_id", table_name="scholarship_rules")
 
-    # Drop table
+    # Drop scholarship_rules table
     op.drop_table("scholarship_rules")
+
+    # Drop scholarship_types indexes
+    op.drop_index("ix_scholarship_types_code", table_name="scholarship_types")
+    op.drop_index("ix_scholarship_types_id", table_name="scholarship_types")
+
+    # Drop scholarship_types table
+    op.drop_table("scholarship_types")
+
+    # Drop enums
+    op.execute("DROP TYPE IF EXISTS applicationcycle CASCADE")
+    op.execute("DROP TYPE IF EXISTS subtypeselectionmode CASCADE")
