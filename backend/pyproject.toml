@@ -14,6 +14,7 @@ extend-exclude = '''
   | build
   | dist
   | alembic/versions
+  | alembic/versions_backup
 )/
 '''
 
@@ -25,4 +26,4 @@ include_trailing_comma = true
 force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
-skip_glob = ["*/alembic/versions/*"]
+skip_glob = ["*/alembic/versions/*", "*/alembic/versions_backup/*"]
