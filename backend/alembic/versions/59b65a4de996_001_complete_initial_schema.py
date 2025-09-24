@@ -33,6 +33,7 @@ def upgrade() -> None:
             DO $$ BEGIN
                 CREATE TYPE usertype AS ENUM ('student', 'employee');
                 CREATE TYPE userrole AS ENUM ('student', 'admin', 'department_admin', 'college_admin', 'scholarship_committee', 'professor');
+                CREATE TYPE employeestatus AS ENUM ('在職', '退休', '在學', '畢業');
                 CREATE TYPE notificationtype AS ENUM ('INFO', 'WARNING', 'ERROR', 'SUCCESS', 'REMINDER');
                 CREATE TYPE notificationpriority AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT');
                 CREATE TYPE semester AS ENUM ('FIRST', 'SECOND', 'SUMMER', 'ANNUAL');
@@ -96,5 +97,6 @@ def downgrade() -> None:
         op.execute("DROP TYPE IF EXISTS semester CASCADE")
         op.execute("DROP TYPE IF EXISTS notificationpriority CASCADE")
         op.execute("DROP TYPE IF EXISTS notificationtype CASCADE")
+        op.execute("DROP TYPE IF EXISTS employeestatus CASCADE")
         op.execute("DROP TYPE IF EXISTS userrole CASCADE")
         op.execute("DROP TYPE IF EXISTS usertype CASCADE")
