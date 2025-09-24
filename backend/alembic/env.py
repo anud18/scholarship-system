@@ -29,7 +29,7 @@ target_metadata = Base.metadata
 
 # Set database URL from settings
 # Alembic needs the sync URL for internal operations, async is handled by async_engine_from_config
-database_url = settings.database_url_sync if hasattr(settings, 'database_url_sync') else settings.database_url
+database_url = settings.database_url_sync if hasattr(settings, "database_url_sync") else settings.database_url
 config.set_main_option("sqlalchemy.url", database_url)
 
 

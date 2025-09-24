@@ -280,8 +280,8 @@ async def seed_scholarships(session: AsyncSession):
     """
     print("🎓 Creating scholarship data...")
 
+    from app.models.enums import ApplicationCycle, ScholarshipCategory, ScholarshipStatus, SubTypeSelectionMode
     from app.models.scholarship import ScholarshipType
-    from app.models.enums import ScholarshipCategory, ApplicationCycle, SubTypeSelectionMode, ScholarshipStatus
 
     # 基本獎學金類型
     scholarships_data = [
@@ -326,7 +326,8 @@ async def seed_scholarships(session: AsyncSession):
 
     for scholarship_data in scholarships_data:
         await session.execute(
-            text("""
+            text(
+                """
                 INSERT INTO scholarship_types (code, name, name_en, description, description_en,
                                               category, application_cycle, whitelist_enabled,
                                               sub_type_selection_mode, status, sub_type_list)
@@ -344,11 +345,12 @@ async def seed_scholarships(session: AsyncSession):
                     sub_type_selection_mode = EXCLUDED.sub_type_selection_mode,
                     status = EXCLUDED.status,
                     sub_type_list = EXCLUDED.sub_type_list
-            """),
+            """
+            ),
             {
                 **scholarship_data,
                 "sub_type_list": scholarship_data.get("sub_type_list"),
-            }
+            },
         )
 
     await session.commit()
@@ -402,7 +404,8 @@ async def seed_application_fields(session: AsyncSession):
 
     for field_data in direct_phd_fields:
         await session.execute(
-            text("""
+            text(
+                """
                 INSERT INTO application_fields (scholarship_type, field_name, field_label, field_label_en,
                                                 field_type, is_required, placeholder, max_length,
                                                 display_order, is_active, help_text, created_by, updated_by)
@@ -420,8 +423,9 @@ async def seed_application_fields(session: AsyncSession):
                     is_active = EXCLUDED.is_active,
                     help_text = EXCLUDED.help_text,
                     updated_by = EXCLUDED.updated_by
-            """),
-            field_data
+            """
+            ),
+            field_data,
         )
 
     await session.commit()
