@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "add_rule_enable_fields"
-down_revision = "ea5d2bc75b8b"
+down_revision = "create_scholarship_rules_table"
 branch_labels = None
 depends_on = None
 
@@ -28,9 +28,7 @@ def upgrade() -> None:
     )
 
     # Update existing records to have both fields enabled by default
-    op.execute(
-        "UPDATE scholarship_rules SET is_initial_enabled = true, is_renewal_enabled = true"
-    )
+    op.execute("UPDATE scholarship_rules SET is_initial_enabled = true, is_renewal_enabled = true")
 
 
 def downgrade() -> None:
