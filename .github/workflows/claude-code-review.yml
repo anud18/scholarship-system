@@ -34,6 +34,10 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@beta
+        # Optional: Skip review for certain conditions
+        if: |
+          !contains(github.event.pull_request.title, '[skip-review]') &&
+          !contains(github.event.pull_request.title, '[WIP]')
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -71,8 +75,5 @@ jobs:
           # Optional: Add specific tools for running tests or linting
           # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
           
-          # Optional: Skip review for certain conditions
-          if: |
-            !contains(github.event.pull_request.title, '[skip-review]') &&
-            !contains(github.event.pull_request.title, '[WIP]')
+
 
