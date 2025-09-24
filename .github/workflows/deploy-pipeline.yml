@@ -114,13 +114,13 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push ${{ matrix.component }} image
+        id: docker_build
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.component }}
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-${{ matrix.component }}:${{ needs.pre-deployment.outputs.version }}
-            ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-${{ matrix.component }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -128,7 +128,7 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Image digest
-        run: echo "Image digest: ${{ steps.meta.outputs.digest }}"
+        run: echo "Image digest for ${{ matrix.component }}: ${{ steps.docker_build.outputs.digest }}"
 
   # Deploy to staging environment
   deploy-staging:
