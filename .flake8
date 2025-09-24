@@ -1,0 +1,25 @@
+[flake8]
+max-line-length = 120
+extend-ignore = E203,E501,W503,E712
+exclude =
+    .git,
+    __pycache__,
+    alembic,
+    backend/htmlcov,
+    backend/uploads,
+    backend/app/api/,
+    app/api/,
+    backend/app/models/,
+    app/models/,
+    backend/app/schemas/,
+    app/schemas/,
+    backend/app/services/,
+    app/services/,
+    backend/app/tests/,
+    app/tests/,
+    backend/app/static/,
+    app/static/,
+    mock-student-api,
+    frontend,
+    venv
+jobs = 1
