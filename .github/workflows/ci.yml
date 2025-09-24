@@ -241,11 +241,33 @@ jobs:
             sleep 2
           done
 
+      - name: Initialize database schema with Alembic
+        working-directory: ./backend
+        env:
+          DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
+          APP_ENV: test
+        run: |
+          echo "Running Alembic migrations..."
+          alembic upgrade head
+
+      - name: Seed test data
+        working-directory: ./backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
+          DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
+          APP_ENV: test
+          TESTING: true
+        run: |
+          echo "Seeding test data..."
+          python -m app.seed || echo "Seed script completed"
+
       - name: Run ${{ matrix.test-suite }} tests
         working-directory: ./backend
         env:
           DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
+          DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
           SECRET_KEY: test-secret-key-${{ matrix.test-suite }}
+          APP_ENV: test
           TESTING: true
           PYTEST_CURRENT_TEST: true
         run: |
