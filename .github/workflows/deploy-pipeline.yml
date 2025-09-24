@@ -163,25 +163,37 @@ jobs:
           cd ~/scholarship-staging
 
       - name: Create docker-compose.staging.yml
+        env:
+          BACKEND_IMAGE: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }}
+          FRONTEND_IMAGE: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-frontend:${{ needs.pre-deployment.outputs.version }}
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          DATABASE_URL_SYNC: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
+          REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
+          SECRET_KEY: ${{ secrets.STAGING_SECRET_KEY }}
+          CORS_ORIGINS: ${{ secrets.STAGING_CORS_ORIGINS }}
+          MINIO_ENDPOINT: ${{ secrets.STAGING_MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.STAGING_MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.STAGING_MINIO_SECRET_KEY }}
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
         run: |
-          cat > ~/scholarship-staging/docker-compose.yml << 'EOF'
+          cat > ~/scholarship-staging/docker-compose.yml << EOF
           version: '3.8'
 
           services:
             backend:
-              image: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }}
+              image: ${BACKEND_IMAGE}
               container_name: scholarship_staging_backend
               environment:
-                - DATABASE_URL=${{ secrets.STAGING_DATABASE_URL }}
-                - DATABASE_URL_SYNC=${{ secrets.STAGING_DATABASE_URL_SYNC }}
-                - REDIS_URL=${{ secrets.STAGING_REDIS_URL }}
-                - SECRET_KEY=${{ secrets.STAGING_SECRET_KEY }}
+                - DATABASE_URL=${DATABASE_URL}
+                - DATABASE_URL_SYNC=${DATABASE_URL_SYNC}
+                - REDIS_URL=${REDIS_URL}
+                - SECRET_KEY=${SECRET_KEY}
                 - APP_ENV=staging
                 - DEBUG=false
-                - CORS_ORIGINS=${{ secrets.STAGING_CORS_ORIGINS }}
-                - MINIO_ENDPOINT=${{ secrets.STAGING_MINIO_ENDPOINT }}
-                - MINIO_ACCESS_KEY=${{ secrets.STAGING_MINIO_ACCESS_KEY }}
-                - MINIO_SECRET_KEY=${{ secrets.STAGING_MINIO_SECRET_KEY }}
+                - CORS_ORIGINS=${CORS_ORIGINS}
+                - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+                - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+                - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
                 - MINIO_BUCKET_NAME=scholarship-staging
                 - MINIO_SECURE=true
               ports:
@@ -197,10 +209,10 @@ jobs:
                 - staging_network
 
             frontend:
-              image: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-frontend:${{ needs.pre-deployment.outputs.version }}
+              image: ${FRONTEND_IMAGE}
               container_name: scholarship_staging_frontend
               environment:
-                - NEXT_PUBLIC_API_URL=${{ secrets.STAGING_API_URL }}
+                - NEXT_PUBLIC_API_URL=${STAGING_API_URL}
                 - NEXT_PUBLIC_ENVIRONMENT=staging
                 - NODE_ENV=production
               ports:
