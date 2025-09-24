@@ -16,8 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 # Import routers
 from app.api.v1.api import api_router
 from app.core.config import settings
-from app.core.exceptions import (ScholarshipException,
-                                 scholarship_exception_handler)
+from app.core.exceptions import ScholarshipException, scholarship_exception_handler
 
 # Configure logging
 logging.basicConfig(

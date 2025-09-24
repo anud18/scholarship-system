@@ -3,14 +3,16 @@ Pydantic schemas for email management
 """
 
 from datetime import datetime
-from typing import List, Optional, Any, Dict
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
-from app.models.email_management import EmailStatus, ScheduleStatus, EmailCategory
+from app.models.email_management import EmailCategory, EmailStatus, ScheduleStatus
 
 
 class EmailHistoryBase(BaseModel):
     """Base schema for email history"""
+
     recipient_email: str
     cc_emails: Optional[str] = None
     bcc_emails: Optional[str] = None
@@ -30,9 +32,10 @@ class EmailHistoryBase(BaseModel):
 
 class EmailHistoryRead(EmailHistoryBase):
     """Schema for reading email history"""
+
     id: int
     sent_at: datetime
-    
+
     # Related entity names for display
     application_app_id: Optional[str] = None
     scholarship_type_name: Optional[str] = None
@@ -65,7 +68,9 @@ class EmailHistoryRead(EmailHistoryBase):
             "email_size_bytes": obj.email_size_bytes,
             # Related data
             "application_app_id": obj.application.app_id if obj.application else None,
-            "scholarship_type_name": obj.scholarship_type.name if obj.scholarship_type else None,
+            "scholarship_type_name": obj.scholarship_type.name
+            if obj.scholarship_type
+            else None,
             "sent_by_username": obj.sent_by.nycu_id if obj.sent_by else None,
             "template_description": obj.template.key if obj.template else None,
         }
@@ -74,6 +79,7 @@ class EmailHistoryRead(EmailHistoryBase):
 
 class EmailHistoryListResponse(BaseModel):
     """Response schema for paginated email history"""
+
     items: List[EmailHistoryRead]
     total: int
     skip: int
@@ -82,6 +88,7 @@ class EmailHistoryListResponse(BaseModel):
 
 class ScheduledEmailBase(BaseModel):
     """Base schema for scheduled email"""
+
     recipient_email: str
     cc_emails: Optional[str] = None
     bcc_emails: Optional[str] = None
@@ -98,11 +105,13 @@ class ScheduledEmailBase(BaseModel):
 
 class ScheduledEmailCreate(ScheduledEmailBase):
     """Schema for creating scheduled email"""
+
     created_by_user_id: int
 
 
 class ScheduledEmailUpdate(BaseModel):
     """Schema for updating scheduled email"""
+
     approval_notes: Optional[str] = None
     subject: Optional[str] = None
     body: Optional[str] = None
@@ -110,6 +119,7 @@ class ScheduledEmailUpdate(BaseModel):
 
 class ScheduledEmailRead(ScheduledEmailBase):
     """Schema for reading scheduled email"""
+
     id: int
     status: ScheduleStatus
     approved_by_user_id: Optional[int] = None
@@ -120,14 +130,14 @@ class ScheduledEmailRead(ScheduledEmailBase):
     updated_at: Optional[datetime] = None
     retry_count: int = 0
     last_error: Optional[str] = None
-    
+
     # Related entity names for display
     application_app_id: Optional[str] = None
     scholarship_type_name: Optional[str] = None
     created_by_username: Optional[str] = None
     approved_by_username: Optional[str] = None
     template_description: Optional[str] = None
-    
+
     # Computed properties
     is_due: bool = False
     is_ready_to_send: bool = False
@@ -163,9 +173,13 @@ class ScheduledEmailRead(ScheduledEmailBase):
             "priority": obj.priority,
             # Related data
             "application_app_id": obj.application.app_id if obj.application else None,
-            "scholarship_type_name": obj.scholarship_type.name if obj.scholarship_type else None,
+            "scholarship_type_name": obj.scholarship_type.name
+            if obj.scholarship_type
+            else None,
             "created_by_username": obj.created_by.nycu_id if obj.created_by else None,
-            "approved_by_username": obj.approved_by.nycu_id if obj.approved_by else None,
+            "approved_by_username": obj.approved_by.nycu_id
+            if obj.approved_by
+            else None,
             "template_description": obj.template.key if obj.template else None,
             # Computed properties
             "is_due": obj.is_due,
@@ -176,6 +190,7 @@ class ScheduledEmailRead(ScheduledEmailBase):
 
 class ScheduledEmailListResponse(BaseModel):
     """Response schema for paginated scheduled emails"""
+
     items: List[ScheduledEmailRead]
     total: int
     skip: int
@@ -184,6 +199,7 @@ class ScheduledEmailListResponse(BaseModel):
 
 class EmailProcessingStats(BaseModel):
     """Schema for email processing statistics"""
+
     processed: int = 0
     sent: int = 0
     failed: int = 0
@@ -192,6 +208,7 @@ class EmailProcessingStats(BaseModel):
 
 class EmailFilterOptions(BaseModel):
     """Schema for email filter options"""
+
     categories: List[str]
     email_statuses: List[str]
     schedule_statuses: List[str]
@@ -200,6 +217,7 @@ class EmailFilterOptions(BaseModel):
 
 class EmailSummaryStats(BaseModel):
     """Schema for email summary statistics"""
+
     total_sent_today: int = 0
     total_sent_this_week: int = 0
     total_sent_this_month: int = 0

@@ -2,19 +2,26 @@
 Pydantic schemas for pre-authorization functionality
 """
 
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional, List
 
 
 class PreAuthorizeUserRequest(BaseModel):
     """Request schema for pre-authorizing a user"""
+
     nycu_id: str = Field(..., description="NYCU ID of the user to pre-authorize")
-    role: str = Field(..., description="Role to assign (student, professor, college, admin)")
-    comment: Optional[str] = Field(None, description="Optional comment for the pre-authorization")
+    role: str = Field(
+        ..., description="Role to assign (student, professor, college, admin)"
+    )
+    comment: Optional[str] = Field(
+        None, description="Optional comment for the pre-authorization"
+    )
 
 
 class PreAuthorizeUserResponse(BaseModel):
     """Response schema for pre-authorizing a user"""
+
     success: bool
     message: str
     data: dict
@@ -22,13 +29,17 @@ class PreAuthorizeUserResponse(BaseModel):
 
 class AssignScholarshipRequest(BaseModel):
     """Request schema for assigning a scholarship to an admin"""
+
     admin_nycu_id: str = Field(..., description="NYCU ID of the admin")
     scholarship_id: int = Field(..., description="ID of the scholarship to assign")
-    comment: Optional[str] = Field(None, description="Optional comment for the assignment")
+    comment: Optional[str] = Field(
+        None, description="Optional comment for the assignment"
+    )
 
 
 class AssignScholarshipResponse(BaseModel):
     """Response schema for assigning a scholarship to an admin"""
+
     success: bool
     message: str
     data: dict
@@ -36,6 +47,7 @@ class AssignScholarshipResponse(BaseModel):
 
 class PreAuthorizedUser(BaseModel):
     """Schema for a pre-authorized user"""
+
     nycu_id: str
     name: str
     email: str
@@ -46,6 +58,7 @@ class PreAuthorizedUser(BaseModel):
 
 class PreAuthorizedUserList(BaseModel):
     """Response schema for list of pre-authorized users"""
+
     success: bool
     message: str
     data: List[PreAuthorizedUser]
@@ -53,6 +66,7 @@ class PreAuthorizedUserList(BaseModel):
 
 class AdminScholarship(BaseModel):
     """Schema for admin-scholarship assignment"""
+
     admin_nycu_id: str
     scholarship_id: int
     assigned_at: str
@@ -60,6 +74,7 @@ class AdminScholarship(BaseModel):
 
 class AdminScholarshipList(BaseModel):
     """Response schema for list of admin-scholarship assignments"""
+
     success: bool
     message: str
     data: List[AdminScholarship]
@@ -67,6 +82,7 @@ class AdminScholarshipList(BaseModel):
 
 class UserInfo(BaseModel):
     """Schema for user information"""
+
     nycu_id: str
     name: str
     email: str
@@ -81,6 +97,7 @@ class UserInfo(BaseModel):
 
 class UserInfoResponse(BaseModel):
     """Response schema for user information"""
+
     success: bool
     message: str
-    data: UserInfo 
+    data: UserInfo

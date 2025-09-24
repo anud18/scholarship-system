@@ -10,7 +10,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -23,6 +23,7 @@ TEST_DATABASE_URL = "sqlite:///:memory:"
 TEST_DATABASE_URL_ASYNC = "sqlite+aiosqlite:///:memory:"
 
 from app.core.config import settings
+
 settings.database_url_sync = TEST_DATABASE_URL
 settings.database_url = TEST_DATABASE_URL_ASYNC  # Set async URL early too
 
@@ -32,9 +33,9 @@ settings.database_url = TEST_DATABASE_URL_ASYNC  # Set async URL early too
 from app.db.base_class import Base  # Use the correct Base class that models use
 from app.db.deps import get_db
 from app.main import app
-from app.models.user import User, UserRole, UserType
-from app.models.scholarship import ScholarshipType
 from app.models.application import Application, ApplicationStatus
+from app.models.scholarship import ScholarshipType
+from app.models.user import User, UserRole, UserType
 
 # Create test engines - use sync only for service tests
 test_engine_sync = create_engine(
@@ -83,7 +84,7 @@ async def db() -> AsyncGenerator[AsyncSession, None]:
     """Create a new database session for a test."""
     if not test_engine or not TestingSessionLocal:
         pytest.skip("Async database tests require aiosqlite")
-    
+
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -98,24 +99,25 @@ async def db() -> AsyncGenerator[AsyncSession, None]:
 def db_sync() -> Generator[Session, None, None]:
     """Create a new sync database session for a test."""
     Base.metadata.create_all(bind=test_engine_sync)
-    
+
     with TestingSessionLocalSync() as session:
         yield session
-    
+
     Base.metadata.drop_all(bind=test_engine_sync)
 
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create a test client."""
+
     async def override_get_db():
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
-    
+
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
-    
+
     app.dependency_overrides.clear()
 
 
@@ -179,7 +181,7 @@ async def test_scholarship(db: AsyncSession) -> ScholarshipType:
         category="undergraduate_freshman",
         eligible_student_types=["undergraduate"],
         max_ranking_percent=10.0,
-        gpa_requirement=3.8
+        gpa_requirement=3.8,
     )
     db.add(scholarship)
     await db.commit()
@@ -200,8 +202,10 @@ async def test_application(
         academic_year=2024,
         semester="first",
         student_data={"name": "Test Student"},
-        submitted_form_data={"personal_statement": "This is my test personal statement."},
-        agree_terms=True
+        submitted_form_data={
+            "personal_statement": "This is my test personal statement."
+        },
+        agree_terms=True,
     )
     db.add(application)
     await db.commit()
@@ -219,7 +223,7 @@ async def authenticated_client(client: AsyncClient, test_user: User) -> AsyncCli
     response = await client.post("/api/v1/auth/login", data=login_data)
     assert response.status_code == 200
     token = response.json()["access_token"]
-    
+
     client.headers.update({"Authorization": f"Bearer {token}"})
     return client
 
@@ -234,7 +238,7 @@ async def admin_client(client: AsyncClient, test_admin: User) -> AsyncClient:
     response = await client.post("/api/v1/auth/login", data=login_data)
     assert response.status_code == 200
     token = response.json()["access_token"]
-    
+
     client.headers.update({"Authorization": f"Bearer {token}"})
     return client
 
@@ -245,6 +249,7 @@ async def admin_client(client: AsyncClient, test_admin: User) -> AsyncClient:
 def admin_user():
     """Create mock admin user."""
     from unittest.mock import Mock
+
     user = Mock(spec=User)
     user.id = 1
     user.nycu_id = "adminuser"
@@ -259,6 +264,7 @@ def admin_user():
 def regular_user():
     """Create mock regular user."""
     from unittest.mock import Mock
+
     user = Mock(spec=User)
     user.id = 2
     user.nycu_id = "testuser"
@@ -273,6 +279,7 @@ def regular_user():
 def student_user():
     """Create mock student user."""
     from unittest.mock import Mock
+
     user = Mock(spec=User)
     user.id = 3
     user.nycu_id = "student123"
@@ -287,6 +294,7 @@ def student_user():
 def scholarship_type():
     """Create mock scholarship type."""
     from unittest.mock import Mock
+
     scholarship = Mock(spec=ScholarshipType)
     scholarship.id = 1
     scholarship.code = "test_scholarship"
@@ -309,10 +317,12 @@ def mock_email_service():
 def mock_ocr_service():
     """Mock OCR service."""
     mock = AsyncMock()
-    mock.process_document = AsyncMock(return_value={
-        "text": "Sample extracted text",
-        "confidence": 0.95,
-    })
+    mock.process_document = AsyncMock(
+        return_value={
+            "text": "Sample extracted text",
+            "confidence": 0.95,
+        }
+    )
     return mock
 
 
@@ -366,32 +376,36 @@ def sample_scholarship_data():
 def performance_monitor():
     """Monitor performance metrics during tests."""
     import time
-    
+
     class PerformanceMonitor:
         def __init__(self):
             self.start_time = None
             self.end_time = None
             self.memory_start = None
             self.memory_end = None
-        
+
         def start(self):
             self.start_time = time.time()
             # Could add memory tracking here
-        
+
         def stop(self):
             self.end_time = time.time()
-        
+
         @property
         def duration(self):
             if self.start_time and self.end_time:
                 return self.end_time - self.start_time
             return None
-        
+
         def assert_performance(self, max_duration: float):
             """Assert that operation completed within max_duration seconds."""
-            assert self.duration is not None, "Performance monitoring not started/stopped"
-            assert self.duration < max_duration, f"Operation took {self.duration:.2f}s, expected < {max_duration}s"
-    
+            assert (
+                self.duration is not None
+            ), "Performance monitoring not started/stopped"
+            assert (
+                self.duration < max_duration
+            ), f"Operation took {self.duration:.2f}s, expected < {max_duration}s"
+
     return PerformanceMonitor()
 
 

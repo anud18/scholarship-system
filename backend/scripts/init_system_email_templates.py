@@ -4,15 +4,17 @@ Initialize default system email templates
 """
 
 import asyncio
-import sys
 import os
+import sys
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models.system_setting import EmailTemplate, SendingType
-from app.db.session import AsyncSessionLocal
 from sqlalchemy import select
+
+from app.db.session import AsyncSessionLocal
+from app.models.system_setting import EmailTemplate, SendingType
+
 
 async def initialize_system_email_templates():
     """Initialize default system email templates"""
@@ -25,7 +27,9 @@ async def initialize_system_email_templates():
         existing_templates = list(result.scalars().all())
 
         if existing_templates:
-            print(f"📊 Found {len(existing_templates)} existing templates, skipping initialization")
+            print(
+                f"📊 Found {len(existing_templates)} existing templates, skipping initialization"
+            )
             return
 
         # Define default email templates
@@ -53,7 +57,7 @@ async def initialize_system_email_templates():
 國立陽明交通大學
 獎學金管理系統""",
                 "sending_type": SendingType.SINGLE,
-                "recipient_options": [{"label": "申請學生", "value": "student"}]
+                "recipient_options": [{"label": "申請學生", "value": "student"}],
             },
             {
                 "key": "application_submitted_admin",
@@ -73,7 +77,7 @@ async def initialize_system_email_templates():
 
 獎學金管理系統""",
                 "sending_type": SendingType.SINGLE,
-                "recipient_options": [{"label": "管理員", "value": "admin"}]
+                "recipient_options": [{"label": "管理員", "value": "admin"}],
             },
             {
                 "key": "professor_review_notification",
@@ -92,7 +96,7 @@ async def initialize_system_email_templates():
 國立陽明交通大學
 獎學金管理系統""",
                 "sending_type": SendingType.SINGLE,
-                "recipient_options": [{"label": "指導教授", "value": "professor"}]
+                "recipient_options": [{"label": "指導教授", "value": "professor"}],
             },
             {
                 "key": "professor_review_submitted_admin",
@@ -107,7 +111,7 @@ async def initialize_system_email_templates():
 
 獎學金管理系統""",
                 "sending_type": SendingType.SINGLE,
-                "recipient_options": [{"label": "管理員", "value": "admin"}]
+                "recipient_options": [{"label": "管理員", "value": "admin"}],
             },
             # Bulk sending type templates
             {
@@ -132,9 +136,9 @@ async def initialize_system_email_templates():
                 "recipient_options": [
                     {"label": "全體學生", "value": "all_students"},
                     {"label": "特定科系學生", "value": "department_students"},
-                    {"label": "特定年級學生", "value": "grade_students"}
+                    {"label": "特定年級學生", "value": "grade_students"},
                 ],
-                "max_recipients": 500
+                "max_recipients": 500,
             },
             {
                 "key": "application_deadline_reminder",
@@ -152,10 +156,10 @@ async def initialize_system_email_templates():
                 "sending_type": SendingType.BULK,
                 "recipient_options": [
                     {"label": "尚未申請的學生", "value": "non_applicants"},
-                    {"label": "申請未完成的學生", "value": "incomplete_applicants"}
+                    {"label": "申請未完成的學生", "value": "incomplete_applicants"},
                 ],
-                "max_recipients": 1000
-            }
+                "max_recipients": 1000,
+            },
         ]
 
         print(f"📧 Creating {len(default_templates)} default email templates...")
@@ -164,7 +168,9 @@ async def initialize_system_email_templates():
         for template_data in default_templates:
             template = EmailTemplate(**template_data)
             db.add(template)
-            print(f"   ✅ Created template: {template_data['key']} ({template_data['sending_type'].value})")
+            print(
+                f"   ✅ Created template: {template_data['key']} ({template_data['sending_type'].value})"
+            )
 
         await db.commit()
 
@@ -178,6 +184,7 @@ async def initialize_system_email_templates():
         print("\n   Bulk sending templates:")
         print("   - scholarship_announcement: 獎學金公告")
         print("   - application_deadline_reminder: 申請截止提醒")
+
 
 if __name__ == "__main__":
     asyncio.run(initialize_system_email_templates())

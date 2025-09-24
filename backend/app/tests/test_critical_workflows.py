@@ -8,11 +8,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.core.exceptions import (AuthorizationError, ConflictError,
-                                 ValidationError)
+from app.core.exceptions import AuthorizationError, ConflictError, ValidationError
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import (QuotaManagementMode, Semester,
-                              SubTypeSelectionMode)
+from app.models.enums import QuotaManagementMode, Semester, SubTypeSelectionMode
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
 from app.schemas.application import ApplicationCreate, ApplicationFormData
@@ -329,8 +327,9 @@ class TestCriticalBusinessLogic:
             assert len(result["successful_approvals"]) == 2
 
         # Check quota availability - should show 0 available
-        from app.services.scholarship_configuration_service import \
-            ScholarshipConfigurationService
+        from app.services.scholarship_configuration_service import (
+            ScholarshipConfigurationService,
+        )
 
         config_service = ScholarshipConfigurationService(db)
 

@@ -8,8 +8,7 @@ from typing import Any, Dict
 
 from sqlalchemy import text
 
-from app.db.session import (AsyncSessionLocal, async_engine,
-                            invalidate_connection_pools)
+from app.db.session import AsyncSessionLocal, async_engine, invalidate_connection_pools
 
 logger = logging.getLogger(__name__)
 

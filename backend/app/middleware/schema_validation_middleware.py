@@ -66,8 +66,7 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
                     )
                     # Try to invalidate connection pools to resolve the issue
                     try:
-                        from app.db.session import \
-                            invalidate_connection_pools_sync
+                        from app.db.session import invalidate_connection_pools_sync
 
                         invalidate_connection_pools_sync()
                         logger.info(

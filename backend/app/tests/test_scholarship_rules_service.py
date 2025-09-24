@@ -11,8 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipRule, ScholarshipType
-from app.schemas.scholarship import (ScholarshipRuleCreate,
-                                     ScholarshipRuleUpdate)
+from app.schemas.scholarship import ScholarshipRuleCreate, ScholarshipRuleUpdate
 from app.services.scholarship_rules_service import ScholarshipRulesService
 
 

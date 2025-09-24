@@ -10,15 +10,16 @@ Tests admin-only endpoints including:
 - Permission validation
 """
 
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
 import pytest_asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal
 
-from app.models.user import UserRole
-from app.models.application import Application, ApplicationStatus
 from app.core.exceptions import AuthorizationError
+from app.models.application import Application, ApplicationStatus
+from app.models.user import UserRole
 
 
 @pytest.mark.api
@@ -58,8 +59,8 @@ class TestAdminEndpoints:
         """Create sample applications using client's DB"""
         from app.db.deps import get_db
         from app.main import app
-        from app.models.user import User, UserRole, UserType
         from app.models.scholarship import ScholarshipType
+        from app.models.user import User, UserRole, UserType
 
         # Get DB from client's override
         get_db_override = app.dependency_overrides[get_db]
@@ -113,7 +114,7 @@ class TestAdminEndpoints:
                 academic_year=113,
                 semester="FIRST",
                 sub_type_selection_mode="SINGLE",
-                created_at=datetime.now(timezone.utc)
+                created_at=datetime.now(timezone.utc),
             ),
             Application(
                 app_id="APP-2024-000002",
@@ -123,8 +124,8 @@ class TestAdminEndpoints:
                 academic_year=113,
                 semester="FIRST",
                 sub_type_selection_mode="SINGLE",
-                created_at=datetime.now(timezone.utc) - timedelta(days=1)
-            )
+                created_at=datetime.now(timezone.utc) - timedelta(days=1),
+            ),
         ]
         for app in apps:
             db.add(app)
@@ -135,7 +136,9 @@ class TestAdminEndpoints:
         return apps
 
     @pytest.mark.asyncio
-    async def test_get_all_applications_success(self, admin_client, sample_applications):
+    async def test_get_all_applications_success(
+        self, admin_client, sample_applications
+    ):
         """Test successful retrieval of all applications"""
         # Act
         response = await admin_client.get("/api/v1/admin/applications")
@@ -157,17 +160,14 @@ class TestAdminEndpoints:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_get_all_applications_with_filters(self, admin_client, sample_applications):
+    async def test_get_all_applications_with_filters(
+        self, admin_client, sample_applications
+    ):
         """Test applications endpoint with query filters"""
         # Act - Use real DB with filters
         response = await admin_client.get(
             "/api/v1/admin/applications",
-            params={
-                "status": "submitted",
-                "academic_year": 113,
-                "page": 1,
-                "size": 10
-            }
+            params={"status": "submitted", "academic_year": 113, "page": 1, "size": 10},
         )
 
         # Assert
@@ -183,7 +183,7 @@ class TestAdminEndpoints:
     async def test_get_historical_applications(self, admin_client):
         """Test historical applications endpoint"""
         # Arrange
-        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_get_db.return_value.__aenter__.return_value = mock_db
 
@@ -209,18 +209,18 @@ class TestAdminEndpoints:
     async def test_get_dashboard_stats_success(self, admin_client):
         """Test dashboard statistics endpoint"""
         # Arrange
-        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_get_db.return_value.__aenter__.return_value = mock_db
 
             # Mock various statistical queries
             mock_db.execute.return_value.scalar.side_effect = [
                 100,  # total_applications
-                25,   # pending_applications
-                50,   # approved_applications
-                15,   # rejected_applications
-                10,   # active_scholarships
-                5     # recent_applications
+                25,  # pending_applications
+                50,  # approved_applications
+                15,  # rejected_applications
+                10,  # active_scholarships
+                5,  # recent_applications
             ]
 
             # Act
@@ -237,12 +237,14 @@ class TestAdminEndpoints:
             assert "avg_processing_time" in data["data"]
 
     @pytest.mark.asyncio
-    async def test_assign_professor_to_application_success(self, admin_client, client, sample_applications):
+    async def test_assign_professor_to_application_success(
+        self, admin_client, client, sample_applications
+    ):
         """Test successful professor assignment"""
         # Arrange - Create a professor in the DB
         from app.db.deps import get_db
         from app.main import app
-        from app.models.user import User, UserType, UserRole
+        from app.models.user import User, UserRole, UserType
 
         get_db_override = app.dependency_overrides.get(get_db)
         db_gen = get_db_override()
@@ -266,7 +268,7 @@ class TestAdminEndpoints:
         # Act
         response = await admin_client.put(
             f"/api/v1/admin/applications/{application_id}/assign-professor",
-            json=professor_data
+            json=professor_data,
         )
 
         # Assert
@@ -284,7 +286,7 @@ class TestAdminEndpoints:
         # Act
         response = await admin_client.put(
             f"/api/v1/admin/applications/{application_id}/assign-professor",
-            json=professor_data
+            json=professor_data,
         )
 
         # Assert
@@ -295,7 +297,9 @@ class TestAdminEndpoints:
     async def test_get_recent_applications(self, admin_client, sample_applications):
         """Test recent applications endpoint"""
         # Act - Use real DB
-        response = await admin_client.get("/api/v1/admin/recent-applications")  # Fixed URL
+        response = await admin_client.get(
+            "/api/v1/admin/recent-applications"
+        )  # Fixed URL
 
         # Assert
         assert response.status_code == 200
@@ -306,10 +310,12 @@ class TestAdminEndpoints:
         assert len(data["data"]) >= 0
 
     @pytest.mark.asyncio
-    async def test_get_applications_by_scholarship(self, admin_client, scholarship_type):
+    async def test_get_applications_by_scholarship(
+        self, admin_client, scholarship_type
+    ):
         """Test applications by scholarship type endpoint"""
         # Arrange
-        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_get_db.return_value.__aenter__.return_value = mock_db
 
@@ -324,10 +330,16 @@ class TestAdminEndpoints:
             mock_count_result = Mock()
             mock_count_result.scalar.return_value = 0
 
-            mock_db.execute.side_effect = [mock_scholarship_result, mock_apps_result, mock_count_result]
+            mock_db.execute.side_effect = [
+                mock_scholarship_result,
+                mock_apps_result,
+                mock_count_result,
+            ]
 
             # Act
-            response = await admin_client.get(f"/api/v1/admin/scholarships/{scholarship_type.id}/applications")
+            response = await admin_client.get(
+                f"/api/v1/admin/scholarships/{scholarship_type.id}/applications"
+            )
 
             # Assert
             assert response.status_code == 200
@@ -338,13 +350,23 @@ class TestAdminEndpoints:
     async def test_get_available_professors(self, admin_client):
         """Test available professors endpoint"""
         # Arrange
-        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_get_db.return_value.__aenter__.return_value = mock_db
 
             mock_professors = [
-                Mock(id=1, name="Prof. Smith", email="smith@university.edu", nycu_id="P001"),
-                Mock(id=2, name="Prof. Johnson", email="johnson@university.edu", nycu_id="P002")
+                Mock(
+                    id=1,
+                    name="Prof. Smith",
+                    email="smith@university.edu",
+                    nycu_id="P001",
+                ),
+                Mock(
+                    id=2,
+                    name="Prof. Johnson",
+                    email="johnson@university.edu",
+                    nycu_id="P002",
+                ),
             ]
 
             mock_result = Mock()
@@ -364,12 +386,17 @@ class TestAdminEndpoints:
     async def test_get_available_professors_with_search(self, admin_client):
         """Test professors endpoint with search parameter"""
         # Arrange
-        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_get_db.return_value.__aenter__.return_value = mock_db
 
             mock_professors = [
-                Mock(id=1, name="Prof. Smith", email="smith@university.edu", nycu_id="P001")
+                Mock(
+                    id=1,
+                    name="Prof. Smith",
+                    email="smith@university.edu",
+                    nycu_id="P001",
+                )
             ]
 
             mock_result = Mock()
@@ -392,21 +419,20 @@ class TestAdminEndpoints:
         application_ids = [1, 2, 3]
         bulk_data = {
             "application_ids": application_ids,
-            "comments": "Bulk approval for qualified candidates"
+            "comments": "Bulk approval for qualified candidates",
         }
 
-        with patch('app.services.bulk_approval_service.BulkApprovalService') as mock_service_class:
+        with patch(
+            "app.services.bulk_approval_service.BulkApprovalService"
+        ) as mock_service_class:
             mock_service = mock_service_class.return_value
-            mock_service.bulk_approve_applications = AsyncMock(return_value={
-                "approved": 3,
-                "failed": 0,
-                "details": []
-            })
+            mock_service.bulk_approve_applications = AsyncMock(
+                return_value={"approved": 3, "failed": 0, "details": []}
+            )
 
             # Act
             response = await admin_client.post(
-                "/api/v1/admin/applications/bulk-approve",
-                json=bulk_data
+                "/api/v1/admin/applications/bulk-approve", json=bulk_data
             )
 
             # Assert
@@ -421,13 +447,12 @@ class TestAdminEndpoints:
         # Arrange
         bulk_data = {
             "application_ids": [],  # Empty list should cause validation error
-            "comments": "Invalid bulk operation"
+            "comments": "Invalid bulk operation",
         }
 
         # Act
         response = await admin_client.post(
-            "/api/v1/admin/applications/bulk-approve",
-            json=bulk_data
+            "/api/v1/admin/applications/bulk-approve", json=bulk_data
         )
 
         # Assert
@@ -437,17 +462,23 @@ class TestAdminEndpoints:
     async def test_export_applications_csv(self, admin_client):
         """Test applications export in CSV format"""
         # Arrange
-        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_get_db.return_value.__aenter__.return_value = mock_db
 
             # Mock export service
-            with patch('app.services.export_service.ExportService') as mock_export_class:
+            with patch(
+                "app.services.export_service.ExportService"
+            ) as mock_export_class:
                 mock_export = mock_export_class.return_value
-                mock_export.export_applications_csv = AsyncMock(return_value="csv_content")
+                mock_export.export_applications_csv = AsyncMock(
+                    return_value="csv_content"
+                )
 
                 # Act
-                response = await admin_client.get("/api/v1/admin/applications/export?format=csv")
+                response = await admin_client.get(
+                    "/api/v1/admin/applications/export?format=csv"
+                )
 
                 # Assert
                 assert response.status_code == 200
@@ -457,7 +488,7 @@ class TestAdminEndpoints:
     async def test_system_health_check(self, admin_client):
         """Test system health check endpoint"""
         # Arrange
-        with patch('app.core.database_health.check_database_health') as mock_db_health:
+        with patch("app.core.database_health.check_database_health") as mock_db_health:
             mock_db_health.return_value = {"status": "healthy", "connections": 5}
 
             # Act
@@ -473,10 +504,10 @@ class TestAdminEndpoints:
     async def test_get_system_logs(self, admin_client):
         """Test system logs endpoint"""
         # Arrange
-        with patch('builtins.open', create=True) as mock_open:
+        with patch("builtins.open", create=True) as mock_open:
             mock_open.return_value.__enter__.return_value.readlines.return_value = [
                 "2024-01-01 00:00:01 INFO Application started\n",
-                "2024-01-01 00:00:02 INFO Database connected\n"
+                "2024-01-01 00:00:02 INFO Database connected\n",
             ]
 
             # Act
@@ -495,17 +526,18 @@ class TestAdminEndpoints:
         settings_data = {
             "max_file_size": 10485760,  # 10MB
             "allowed_file_types": ["pdf", "jpg", "png"],
-            "email_notifications_enabled": True
+            "email_notifications_enabled": True,
         }
 
-        with patch('app.services.system_setting_service.SystemSettingService') as mock_service_class:
+        with patch(
+            "app.services.system_setting_service.SystemSettingService"
+        ) as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.update_settings = AsyncMock(return_value=settings_data)
 
             # Act
             response = await admin_client.put(
-                "/api/v1/admin/system/settings",
-                json=settings_data
+                "/api/v1/admin/system/settings", json=settings_data
             )
 
             # Assert
@@ -517,13 +549,23 @@ class TestAdminEndpoints:
     async def test_get_audit_logs(self, admin_client):
         """Test audit logs retrieval"""
         # Arrange
-        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
+        with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
             mock_db = AsyncMock()
             mock_get_db.return_value.__aenter__.return_value = mock_db
 
             mock_logs = [
-                Mock(id=1, action="CREATE_APPLICATION", user_id=1, timestamp=datetime.now(timezone.utc)),
-                Mock(id=2, action="APPROVE_APPLICATION", user_id=2, timestamp=datetime.now(timezone.utc))
+                Mock(
+                    id=1,
+                    action="CREATE_APPLICATION",
+                    user_id=1,
+                    timestamp=datetime.now(timezone.utc),
+                ),
+                Mock(
+                    id=2,
+                    action="APPROVE_APPLICATION",
+                    user_id=2,
+                    timestamp=datetime.now(timezone.utc),
+                ),
             ]
 
             mock_result = Mock()
@@ -557,7 +599,7 @@ class TestAdminEndpoints:
         # Act
         response = await admin_client.post(
             "/api/v1/admin/applications/1/assign-professor",
-            json={"invalid_field": "invalid_value"}
+            json={"invalid_field": "invalid_value"},
         )
 
         # Assert

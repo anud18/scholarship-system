@@ -10,18 +10,20 @@ Tests utility modules including:
 - Validation helpers
 """
 
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
+import pytest
 from jose import jwt
 
-from app.core.security import create_access_token
-from app.core.exceptions import (
-    ValidationError, NotFoundError, AuthorizationError,
-    BusinessLogicError
-    # FileStorageError  # Not implemented yet
-)
 from app.core.config import settings
+from app.core.exceptions import (  # FileStorageError  # Not implemented yet
+    AuthorizationError,
+    BusinessLogicError,
+    NotFoundError,
+    ValidationError,
+)
+from app.core.security import create_access_token
+
 # Note: These utilities are defined in the tests for demonstration
 # In a real project, these would be imported from actual utility modules
 
@@ -44,7 +46,9 @@ class TestSecurityFunctions:
         assert len(token) > 0
 
         # Verify token can be decoded
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
         assert payload["sub"] == "user@university.edu"
         assert payload["role"] == "student"
         assert "exp" in payload
@@ -58,7 +62,9 @@ class TestSecurityFunctions:
         token = create_access_token(data=data)
 
         # Assert
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
         assert "exp" in payload
 
         # Verify expiry is set to default (15 minutes from now)
@@ -76,7 +82,9 @@ class TestSecurityFunctions:
         token = create_access_token(data=data)
 
         # Act - Decode the token manually for verification
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
 
         # Assert
         assert payload["sub"] == "user@university.edu"
@@ -91,7 +99,9 @@ class TestSecurityFunctions:
 
         # Act
         token = create_access_token(data=data, expires_delta=custom_expiry)
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
 
         # Assert
         exp_time = datetime.fromtimestamp(payload["exp"])
@@ -127,7 +137,9 @@ class TestCustomExceptions:
         resource_id = "123"
 
         # Act
-        error = NotFoundError(message, resource_type=resource_type, resource_id=resource_id)
+        error = NotFoundError(
+            message, resource_type=resource_type, resource_id=resource_id
+        )
 
         # Assert
         assert str(error) == message
@@ -168,7 +180,9 @@ class TestCustomExceptions:
         storage_path = "/uploads/documents/"
 
         # Act
-        error = FileStorageError(message, file_name=file_name, storage_path=storage_path)
+        error = FileStorageError(
+            message, file_name=file_name, storage_path=storage_path
+        )
 
         # Assert
         assert str(error) == message
@@ -397,36 +411,39 @@ class TestConfigurationSettings:
     def test_settings_environment_detection(self):
         """Test environment detection in settings"""
         # Act & Assert
-        assert hasattr(settings, 'environment')
+        assert hasattr(settings, "environment")
         assert isinstance(settings.environment, str)
 
     def test_settings_database_url_format(self):
         """Test database URL format validation"""
         # Act & Assert
-        assert hasattr(settings, 'database_url')
+        assert hasattr(settings, "database_url")
         if settings.database_url:
             assert isinstance(settings.database_url, str)
-            assert any(protocol in settings.database_url for protocol in ['postgresql', 'sqlite'])
+            assert any(
+                protocol in settings.database_url
+                for protocol in ["postgresql", "sqlite"]
+            )
 
     def test_settings_security_configurations(self):
         """Test security-related configuration presence"""
         # Act & Assert
-        assert hasattr(settings, 'secret_key')
-        assert hasattr(settings, 'algorithm')
-        assert hasattr(settings, 'access_token_expire_minutes')
+        assert hasattr(settings, "secret_key")
+        assert hasattr(settings, "algorithm")
+        assert hasattr(settings, "access_token_expire_minutes")
 
         assert isinstance(settings.secret_key, str)
         assert len(settings.secret_key) >= 32  # Minimum recommended length
-        assert settings.algorithm in ['HS256', 'RS256']
+        assert settings.algorithm in ["HS256", "RS256"]
         assert isinstance(settings.access_token_expire_minutes, int)
         assert settings.access_token_expire_minutes > 0
 
     def test_settings_email_configurations(self):
         """Test email-related configuration presence"""
         # Act & Assert
-        assert hasattr(settings, 'smtp_host')
-        assert hasattr(settings, 'smtp_port')
-        assert hasattr(settings, 'smtp_username')
+        assert hasattr(settings, "smtp_host")
+        assert hasattr(settings, "smtp_port")
+        assert hasattr(settings, "smtp_username")
 
         if settings.smtp_host:
             assert isinstance(settings.smtp_host, str)
@@ -439,9 +456,9 @@ class TestConfigurationSettings:
     def test_settings_storage_configurations(self):
         """Test storage-related configuration presence"""
         # Act & Assert
-        assert hasattr(settings, 'minio_endpoint')
-        assert hasattr(settings, 'minio_access_key')
-        assert hasattr(settings, 'minio_secret_key')
+        assert hasattr(settings, "minio_endpoint")
+        assert hasattr(settings, "minio_access_key")
+        assert hasattr(settings, "minio_secret_key")
 
         # Note: These might be None in test environment
         if settings.minio_endpoint:
@@ -459,11 +476,12 @@ class TestValidationHelpers:
             "user@university.edu",
             "student.name@nycu.edu.tw",
             "test+label@example.com",
-            "admin@domain.org"
+            "admin@domain.org",
         ]
 
         # Act & Assert
         from email_validator import validate_email
+
         for email in valid_emails:
             try:
                 validate_email(email)
@@ -480,17 +498,19 @@ class TestValidationHelpers:
             "@domain.com",
             "user@",
             "user space@domain.com",
-            ""
+            "",
         ]
 
         # Act & Assert
-        from email_validator import validate_email, EmailNotValidError
+        from email_validator import EmailNotValidError, validate_email
+
         for email in invalid_emails:
             with pytest.raises(EmailNotValidError):
                 validate_email(email)
 
     def test_validate_nycu_id_format(self):
         """Test NYCU ID validation"""
+
         # Arrange
         def validate_nycu_id(nycu_id: str) -> bool:
             """Simple NYCU ID validation for testing"""
@@ -510,6 +530,7 @@ class TestValidationHelpers:
 
     def test_validate_gpa_range(self):
         """Test GPA validation"""
+
         # Arrange
         def validate_gpa(gpa: float) -> bool:
             """GPA validation for testing"""
@@ -527,14 +548,16 @@ class TestValidationHelpers:
 
     def test_sanitize_filename(self):
         """Test filename sanitization"""
+
         # Arrange
         def sanitize_filename(filename: str) -> str:
             """Filename sanitization for testing"""
             import re
+
             # Remove potentially dangerous characters
-            sanitized = re.sub(r'[<>:"/\\|?*]', '_', filename)
+            sanitized = re.sub(r'[<>:"/\\|?*]', "_", filename)
             # Remove leading/trailing whitespace and dots
-            sanitized = sanitized.strip(' .')
+            sanitized = sanitized.strip(" .")
             return sanitized
 
         test_cases = [
@@ -542,7 +565,7 @@ class TestValidationHelpers:
             ("file with spaces.txt", "file with spaces.txt"),
             ("file<>:pipe.doc", "file___pipe.doc"),
             ("../../../etc/passwd", "..___..___.._etc_passwd"),
-            ("  .dotfile.txt  ", "dotfile.txt")
+            ("  .dotfile.txt  ", "dotfile.txt"),
         ]
 
         # Act & Assert

@@ -3,31 +3,34 @@ Email notification service for scholarship management system
 Handles automated notifications for application status changes, reminders, and deadlines
 """
 
-from typing import Dict, Any
-from datetime import datetime, timezone, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict
+
 from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application, ApplicationStatus
 from app.models.user import User
+
 # Student model removed - student data now fetched from external API
 from app.services.email_service import EmailService
 from app.services.student_service import StudentService
-
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 class ScholarshipNotificationService:
     """Service for managing scholarship-related email notifications"""
-    
+
     def __init__(self, db: AsyncSession):
         self.db = db
         self.email_service = EmailService()
         self.student_service = StudentService()
-    
-    async def send_application_submitted_notification(self, application: Application) -> bool:
+
+    async def send_application_submitted_notification(
+        self, application: Application
+    ) -> bool:
         """Send notification when application is submitted"""
         try:
             # Get student data from external API and user information
@@ -43,12 +46,12 @@ class ScholarshipNotificationService:
             if not student_data:
                 logger.error(f"Student data not found for application {application.id}")
                 return False
-            
-            student_name = student_data.get('name', 'N/A')
-            
+
+            student_name = student_data.get("name", "N/A")
+
             # Prepare email content
             subject = f"Scholarship Application Submitted - {application.app_id}"
-            
+
             # HTML template for application submission
             html_content = f"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -97,26 +100,30 @@ class ScholarshipNotificationService:
                 </p>
             </div>
             """
-            
+
             # Send email
             success = await self.email_service.send_email(
-                to_email=user.email,
-                subject=subject,
-                html_content=html_content
+                to_email=user.email, subject=subject, html_content=html_content
             )
-            
+
             if success:
-                logger.info(f"Application submission notification sent to {user.email} for application {application.app_id}")
+                logger.info(
+                    f"Application submission notification sent to {user.email} for application {application.app_id}"
+                )
             else:
-                logger.error(f"Failed to send submission notification for application {application.app_id}")
-            
+                logger.error(
+                    f"Failed to send submission notification for application {application.app_id}"
+                )
+
             return success
-            
+
         except Exception as e:
             logger.error(f"Error sending application submission notification: {str(e)}")
             return False
-    
-    async def send_status_change_notification(self, application: Application, old_status: str, new_status: str) -> bool:
+
+    async def send_status_change_notification(
+        self, application: Application, old_status: str, new_status: str
+    ) -> bool:
         """Send notification when application status changes"""
         try:
             stmt = select(User).where(User.id == application.user_id)
@@ -130,41 +137,44 @@ class ScholarshipNotificationService:
             if not student_data:
                 logger.error(f"Student data not found for application {application.id}")
                 return False
-            
-            student_name = student_data.get('name', 'N/A')
-            
+
+            student_name = student_data.get("name", "N/A")
+
             # Determine notification content based on status
             status_messages = {
                 ApplicationStatus.UNDER_REVIEW.value: {
                     "title": "Application Under Review",
                     "message": "Your scholarship application is now under review by our committee.",
-                    "color": "#4299e1"
+                    "color": "#4299e1",
                 },
                 ApplicationStatus.APPROVED.value: {
                     "title": "Application Approved! 🎉",
                     "message": "Congratulations! Your scholarship application has been approved.",
-                    "color": "#48bb78"
+                    "color": "#48bb78",
                 },
                 ApplicationStatus.REJECTED.value: {
                     "title": "Application Decision",
                     "message": "We regret to inform you that your scholarship application was not approved this time.",
-                    "color": "#f56565"
+                    "color": "#f56565",
                 },
                 ApplicationStatus.RETURNED.value: {
                     "title": "Application Returned for Revision",
                     "message": "Your application requires additional information or corrections.",
-                    "color": "#ed8936"
-                }
+                    "color": "#ed8936",
+                },
             }
-            
-            status_info = status_messages.get(new_status, {
-                "title": "Application Status Updated",
-                "message": f"Your application status has been updated to: {new_status}",
-                "color": "#4299e1"
-            })
-            
+
+            status_info = status_messages.get(
+                new_status,
+                {
+                    "title": "Application Status Updated",
+                    "message": f"Your application status has been updated to: {new_status}",
+                    "color": "#4299e1",
+                },
+            )
+
             subject = f"{status_info['title']} - {application.app_id}"
-            
+
             html_content = f"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: {status_info['color']};">{status_info['title']}</h2>
@@ -194,42 +204,46 @@ class ScholarshipNotificationService:
                 Scholarship Management Team</p>
             </div>
             """
-            
+
             success = await self.email_service.send_email(
-                to_email=user.email,
-                subject=subject,
-                html_content=html_content
+                to_email=user.email, subject=subject, html_content=html_content
             )
-            
-            logger.info(f"Status change notification sent for application {application.app_id}: {old_status} -> {new_status}")
+
+            logger.info(
+                f"Status change notification sent for application {application.app_id}: {old_status} -> {new_status}"
+            )
             return success
-            
+
         except Exception as e:
             logger.error(f"Error sending status change notification: {str(e)}")
             return False
-    
-    async def send_deadline_reminder_notifications(self, days_before: int = 7) -> Dict[str, int]:
+
+    async def send_deadline_reminder_notifications(
+        self, days_before: int = 7
+    ) -> Dict[str, int]:
         """Send reminder notifications for approaching deadlines"""
         try:
             cutoff_date = datetime.now(timezone.utc) + timedelta(days=days_before)
-            
+
             # Find applications with approaching review deadlines
             stmt = select(Application).where(
                 and_(
                     Application.review_deadline.isnot(None),
                     Application.review_deadline <= cutoff_date,
-                    Application.status.in_([
-                        ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.UNDER_REVIEW.value
-                    ])
+                    Application.status.in_(
+                        [
+                            ApplicationStatus.SUBMITTED.value,
+                            ApplicationStatus.UNDER_REVIEW.value,
+                        ]
+                    ),
                 )
             )
             result = await self.db.execute(stmt)
             applications = result.scalars().all()
-            
+
             sent_count = 0
             failed_count = 0
-            
+
             for application in applications:
                 try:
                     stmt = select(User).where(User.id == application.user_id)
@@ -244,13 +258,17 @@ class ScholarshipNotificationService:
                     if not student_data:
                         failed_count += 1
                         continue
-                    
-                    student_name = student_data.get('name', 'N/A')
-                    
-                    days_remaining = (application.review_deadline - datetime.now(timezone.utc)).days
-                    
-                    subject = f"Scholarship Review Deadline Reminder - {application.app_id}"
-                    
+
+                    student_name = student_data.get("name", "N/A")
+
+                    days_remaining = (
+                        application.review_deadline - datetime.now(timezone.utc)
+                    ).days
+
+                    subject = (
+                        f"Scholarship Review Deadline Reminder - {application.app_id}"
+                    )
+
                     html_content = f"""
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                         <h2 style="color: #ed8936;">Review Deadline Reminder</h2>
@@ -276,35 +294,39 @@ class ScholarshipNotificationService:
                         Scholarship Management Team</p>
                     </div>
                     """
-                    
+
                     success = await self.email_service.send_email(
-                        to_email=user.email,
-                        subject=subject,
-                        html_content=html_content
+                        to_email=user.email, subject=subject, html_content=html_content
                     )
-                    
+
                     if success:
                         sent_count += 1
                     else:
                         failed_count += 1
-                        
+
                 except Exception as e:
-                    logger.error(f"Error sending deadline reminder for application {application.id}: {str(e)}")
+                    logger.error(
+                        f"Error sending deadline reminder for application {application.id}: {str(e)}"
+                    )
                     failed_count += 1
-            
-            logger.info(f"Deadline reminders sent: {sent_count} successful, {failed_count} failed")
-            
+
+            logger.info(
+                f"Deadline reminders sent: {sent_count} successful, {failed_count} failed"
+            )
+
             return {
                 "sent": sent_count,
                 "failed": failed_count,
-                "total_applications": len(applications)
+                "total_applications": len(applications),
             }
-            
+
         except Exception as e:
             logger.error(f"Error in deadline reminder batch process: {str(e)}")
             return {"sent": 0, "failed": 0, "total_applications": 0}
-    
-    async def send_professor_review_request(self, application: Application, professor_user: User) -> bool:
+
+    async def send_professor_review_request(
+        self, application: Application, professor_user: User
+    ) -> bool:
         """Send email to professor requesting review"""
         try:
             # Get student data from snapshot
@@ -312,12 +334,12 @@ class ScholarshipNotificationService:
             if not student_data:
                 logger.error(f"Student data not found for application {application.id}")
                 return False
-            
-            student_name = student_data.get('name', 'N/A')
-            student_no = student_data.get('student_id', 'N/A')
-            
+
+            student_name = student_data.get("name", "N/A")
+            student_no = student_data.get("student_id", "N/A")
+
             subject = f"Professor Review Request - {application.app_id}"
-            
+
             html_content = f"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #2c5282;">Professor Review Request</h2>
@@ -350,25 +372,29 @@ class ScholarshipNotificationService:
                 Scholarship Management Team</p>
             </div>
             """
-            
+
             success = await self.email_service.send_email(
                 to_email=professor_user.email,
                 subject=subject,
-                html_content=html_content
+                html_content=html_content,
             )
-            
-            logger.info(f"Professor review request sent to {professor_user.email} for application {application.app_id}")
+
+            logger.info(
+                f"Professor review request sent to {professor_user.email} for application {application.app_id}"
+            )
             return success
-            
+
         except Exception as e:
             logger.error(f"Error sending professor review request: {str(e)}")
             return False
-    
-    async def send_batch_processing_notification(self, admin_email: str, processing_results: Dict[str, Any]) -> bool:
+
+    async def send_batch_processing_notification(
+        self, admin_email: str, processing_results: Dict[str, Any]
+    ) -> bool:
         """Send notification to admin about batch processing results"""
         try:
             subject = f"Scholarship Batch Processing Complete - {processing_results.get('semester', 'N/A')}"
-            
+
             html_content = f"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #2c5282;">Batch Processing Complete</h2>
@@ -393,16 +419,14 @@ class ScholarshipNotificationService:
                 Scholarship Management System</p>
             </div>
             """
-            
+
             success = await self.email_service.send_email(
-                to_email=admin_email,
-                subject=subject,
-                html_content=html_content
+                to_email=admin_email, subject=subject, html_content=html_content
             )
-            
+
             logger.info(f"Batch processing notification sent to {admin_email}")
             return success
-            
+
         except Exception as e:
             logger.error(f"Error sending batch processing notification: {str(e)}")
             return False

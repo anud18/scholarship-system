@@ -3,8 +3,7 @@ Database session management
 """
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
-                                    create_async_engine)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 
@@ -73,8 +72,7 @@ async def handle_cached_statement_error(
     This function addresses the PostgreSQL asyncpg cached statement plan invalidation
     issue that occurs after schema or configuration changes.
     """
-    from sqlalchemy.dialects.postgresql.asyncpg import \
-        InvalidCachedStatementError
+    from sqlalchemy.dialects.postgresql.asyncpg import InvalidCachedStatementError
 
     try:
         return await operation_func(*args, **kwargs)

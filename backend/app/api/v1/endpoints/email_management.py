@@ -4,23 +4,24 @@ Email management API endpoints for viewing email history and scheduled emails
 
 from datetime import datetime
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.deps import get_db
 from app.core.security import require_admin
+from app.db.deps import get_db
+from app.models.email_management import EmailCategory, EmailStatus, ScheduleStatus
 from app.models.user import User
-from app.models.email_management import EmailStatus, ScheduleStatus, EmailCategory
-from app.services.email_management_service import EmailManagementService
-from app.schemas.email_management import (
-    EmailHistoryRead,
-    EmailHistoryListResponse,
-    ScheduledEmailRead,
-    ScheduledEmailListResponse,
-    ScheduledEmailUpdate,
-    EmailProcessingStats
-)
 from app.schemas.common import ApiResponse
+from app.schemas.email_management import (
+    EmailHistoryListResponse,
+    EmailHistoryRead,
+    EmailProcessingStats,
+    ScheduledEmailListResponse,
+    ScheduledEmailRead,
+    ScheduledEmailUpdate,
+)
+from app.services.email_management_service import EmailManagementService
 
 router = APIRouter()
 email_service = EmailManagementService()
@@ -55,23 +56,18 @@ async def get_email_history(
         scholarship_type_id=scholarship_type_id,
         recipient_email=recipient_email,
         date_from=date_from,
-        date_to=date_to
+        date_to=date_to,
     )
-    
+
     # Convert ORM objects to Pydantic models
     email_items = [EmailHistoryRead.from_orm_with_relations(email) for email in emails]
-    
+
     response_data = EmailHistoryListResponse(
-        items=email_items,
-        total=total,
-        skip=skip,
-        limit=limit
+        items=email_items, total=total, skip=skip, limit=limit
     )
-    
+
     return ApiResponse(
-        success=True,
-        message="Email history retrieved successfully",
-        data=response_data
+        success=True, message="Email history retrieved successfully", data=response_data
     )
 
 
@@ -104,23 +100,22 @@ async def get_scheduled_emails(
         requires_approval=requires_approval,
         email_category=email_category,
         scheduled_from=scheduled_from,
-        scheduled_to=scheduled_to
+        scheduled_to=scheduled_to,
     )
-    
+
     # Convert ORM objects to Pydantic models
-    email_items = [ScheduledEmailRead.from_orm_with_relations(email) for email in emails]
-    
+    email_items = [
+        ScheduledEmailRead.from_orm_with_relations(email) for email in emails
+    ]
+
     response_data = ScheduledEmailListResponse(
-        items=email_items,
-        total=total,
-        skip=skip,
-        limit=limit
+        items=email_items, total=total, skip=skip, limit=limit
     )
-    
+
     return ApiResponse(
         success=True,
         message="Scheduled emails retrieved successfully",
-        data=response_data
+        data=response_data,
     )
 
 
@@ -136,8 +131,10 @@ async def get_due_scheduled_emails(
     Only superadmins can access this endpoint for system processing.
     """
     if not current_user.is_super_admin():
-        raise HTTPException(status_code=403, detail="Only superadmins can access due emails")
-    
+        raise HTTPException(
+            status_code=403, detail="Only superadmins can access due emails"
+        )
+
     emails = await email_service.get_due_scheduled_emails(db=db, limit=limit)
     return emails
 
@@ -161,7 +158,7 @@ async def approve_scheduled_email(
             db=db,
             email_id=email_id,
             approved_by_user_id=current_user.id,
-            notes=approval_data.approval_notes
+            notes=approval_data.approval_notes,
         )
         return scheduled_email
     except ValueError as e:
@@ -185,8 +182,7 @@ async def cancel_scheduled_email(
         # Check if user has permission to cancel this email
         # This is handled within the service method for permission checking
         scheduled_email = await email_service.cancel_scheduled_email(
-            db=db,
-            email_id=email_id
+            db=db, email_id=email_id
         )
         return scheduled_email
     except ValueError as e:
@@ -209,13 +205,10 @@ async def update_scheduled_email(
     """
     if not current_user.is_super_admin():
         raise HTTPException(status_code=403, detail="Super admin access required")
-    
+
     try:
         scheduled_email = await email_service.update_scheduled_email(
-            db=db,
-            email_id=email_id,
-            subject=update_data.subject,
-            body=update_data.body
+            db=db, email_id=email_id, subject=update_data.subject, body=update_data.body
         )
         return scheduled_email
     except ValueError as e:
@@ -236,13 +229,17 @@ async def process_due_emails(
     Only superadmins can trigger email processing.
     """
     if not current_user.is_super_admin():
-        raise HTTPException(status_code=403, detail="Only superadmins can process emails")
-    
+        raise HTTPException(
+            status_code=403, detail="Only superadmins can process emails"
+        )
+
     try:
         stats = await email_service.process_due_emails(db=db, batch_size=batch_size)
         return EmailProcessingStats(**stats)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process emails: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to process emails: {str(e)}"
+        )
 
 
 @router.get("/categories", response_model=List[str])
@@ -264,5 +261,5 @@ async def get_email_statuses(
     """
     return {
         "email_statuses": [status.value for status in EmailStatus],
-        "schedule_statuses": [status.value for status in ScheduleStatus]
+        "schedule_statuses": [status.value for status in ScheduleStatus],
     }

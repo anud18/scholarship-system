@@ -93,18 +93,11 @@ jobs:
         working-directory: ./backend
         run: |
           pip install -r requirements.txt
-          pip install black isort flake8 mypy pylint
+          pip install black flake8 mypy pylint
 
           echo "::group::Black Format Check"
           black --check --diff . || {
             echo "::error::Code formatting issues found. Run 'black .' to fix."
-            exit 1
-          }
-          echo "::endgroup::"
-
-          echo "::group::isort Import Check"
-          isort --check-only --diff . || {
-            echo "::error::Import sorting issues found. Run 'isort .' to fix."
             exit 1
           }
           echo "::endgroup::"

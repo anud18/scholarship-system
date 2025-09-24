@@ -10,21 +10,27 @@ Tests all major application management functionality:
 - Integration with external services
 """
 
-import pytest
-from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone
 from decimal import Decimal
+from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.application_service import ApplicationService, get_student_data_from_user
-from app.models.application import Application, ApplicationStatus, Semester
-from app.models.user import User, UserRole
-from app.models.scholarship import ScholarshipType
-from app.schemas.application import ApplicationCreate, ApplicationUpdate
 from app.core.exceptions import (
-    NotFoundError, ConflictError, ValidationError,
-    BusinessLogicError, AuthorizationError
+    AuthorizationError,
+    BusinessLogicError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
+from app.models.application import Application, ApplicationStatus, Semester
+from app.models.scholarship import ScholarshipType
+from app.models.user import User, UserRole
+from app.schemas.application import ApplicationCreate, ApplicationUpdate
+from app.services.application_service import (
+    ApplicationService,
+    get_student_data_from_user,
 )
 
 
@@ -41,7 +47,7 @@ class TestApplicationService:
     @pytest.fixture
     def application_service(self, mock_db_session):
         """Create ApplicationService instance with mocked dependencies"""
-        with patch('app.services.application_service.EmailService'):
+        with patch("app.services.application_service.EmailService"):
             service = ApplicationService(mock_db_session)
             service.emailService = AsyncMock()
             return service
@@ -55,7 +61,7 @@ class TestApplicationService:
             name="Test Student",
             nycu_id="11011001",
             role=UserRole.STUDENT,
-            is_active=True
+            is_active=True,
         )
 
     @pytest.fixture
@@ -66,7 +72,7 @@ class TestApplicationService:
             email="admin@university.edu",
             name="Admin User",
             role=UserRole.ADMIN,
-            is_active=True
+            is_active=True,
         )
 
     @pytest.fixture
@@ -77,7 +83,7 @@ class TestApplicationService:
             email="professor@university.edu",
             name="Professor User",
             role=UserRole.PROFESSOR,
-            is_active=True
+            is_active=True,
         )
 
     @pytest.fixture
@@ -92,7 +98,7 @@ class TestApplicationService:
             is_active=True,
             is_application_period=True,
             academic_year=113,
-            semester=Semester.FIRST
+            semester=Semester.FIRST,
         )
 
     @pytest.fixture
@@ -109,14 +115,14 @@ class TestApplicationService:
                 "name": "Test Student",
                 "student_id": "11011001",
                 "department": "Computer Science",
-                "gpa": 3.85
+                "gpa": 3.85,
             },
             submitted_form_data={
                 "personal_statement": "I am passionate about computer science...",
                 "career_goals": "To become a software engineer",
-                "extracurricular_activities": "Programming club, volunteer work"
+                "extracurricular_activities": "Programming club, volunteer work",
             },
-            agree_terms=True
+            agree_terms=True,
         )
 
     @pytest.fixture
@@ -136,18 +142,22 @@ class TestApplicationService:
             student_data={
                 "name": "Test Student",
                 "student_id": "11011001",
-                "department": "Computer Science"
+                "department": "Computer Science",
             },
-            submitted_form_data={
-                "personal_statement": "Test statement"
-            },
+            submitted_form_data={"personal_statement": "Test statement"},
             agree_terms=True,
             created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
+            updated_at=datetime.now(timezone.utc),
         )
 
     @pytest.mark.asyncio
-    async def test_create_application_success(self, application_service, student_user, application_create_data, scholarship_type):
+    async def test_create_application_success(
+        self,
+        application_service,
+        student_user,
+        application_create_data,
+        scholarship_type,
+    ):
         """Test successful application creation"""
         # Arrange
         mock_scholarship_query = Mock()
@@ -159,11 +169,13 @@ class TestApplicationService:
         application_service.db.refresh = AsyncMock()
 
         # Mock app_id generation
-        with patch('app.services.application_service.ApplicationService._generate_app_id', return_value="APP-2024-000001"):
+        with patch(
+            "app.services.application_service.ApplicationService._generate_app_id",
+            return_value="APP-2024-000001",
+        ):
             # Act
             result = await application_service.create_application(
-                user=student_user,
-                application_data=application_create_data
+                user=student_user, application_data=application_create_data
             )
 
             # Assert
@@ -172,7 +184,9 @@ class TestApplicationService:
             assert result is not None
 
     @pytest.mark.asyncio
-    async def test_create_application_invalid_scholarship(self, application_service, student_user, application_create_data):
+    async def test_create_application_invalid_scholarship(
+        self, application_service, student_user, application_create_data
+    ):
         """Test application creation with invalid scholarship type"""
         # Arrange
         mock_scholarship_query = Mock()
@@ -182,12 +196,17 @@ class TestApplicationService:
         # Act & Assert
         with pytest.raises(NotFoundError, match="Scholarship type not found"):
             await application_service.create_application(
-                user=student_user,
-                application_data=application_create_data
+                user=student_user, application_data=application_create_data
             )
 
     @pytest.mark.asyncio
-    async def test_create_application_inactive_scholarship(self, application_service, student_user, application_create_data, scholarship_type):
+    async def test_create_application_inactive_scholarship(
+        self,
+        application_service,
+        student_user,
+        application_create_data,
+        scholarship_type,
+    ):
         """Test application creation with inactive scholarship"""
         # Arrange
         scholarship_type.is_active = False
@@ -200,12 +219,17 @@ class TestApplicationService:
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="not available for applications"):
             await application_service.create_application(
-                user=student_user,
-                application_data=application_create_data
+                user=student_user, application_data=application_create_data
             )
 
     @pytest.mark.asyncio
-    async def test_create_application_duplicate_prevention(self, application_service, student_user, application_create_data, scholarship_type):
+    async def test_create_application_duplicate_prevention(
+        self,
+        application_service,
+        student_user,
+        application_create_data,
+        scholarship_type,
+    ):
         """Test prevention of duplicate applications"""
         # Arrange
         mock_scholarship_query = Mock()
@@ -213,19 +237,25 @@ class TestApplicationService:
 
         # Mock existing application check
         mock_existing_query = Mock()
-        mock_existing_query.scalar_one_or_none.return_value = Mock(id=1)  # Existing application
+        mock_existing_query.scalar_one_or_none.return_value = Mock(
+            id=1
+        )  # Existing application
 
-        application_service.db.execute.side_effect = [mock_scholarship_query, mock_existing_query]
+        application_service.db.execute.side_effect = [
+            mock_scholarship_query,
+            mock_existing_query,
+        ]
 
         # Act & Assert
         with pytest.raises(ConflictError, match="already applied"):
             await application_service.create_application(
-                user=student_user,
-                application_data=application_create_data
+                user=student_user, application_data=application_create_data
             )
 
     @pytest.mark.asyncio
-    async def test_get_application_by_id_success(self, application_service, mock_application):
+    async def test_get_application_by_id_success(
+        self, application_service, mock_application
+    ):
         """Test successful application retrieval by ID"""
         # Arrange
         mock_query_result = Mock()
@@ -252,7 +282,9 @@ class TestApplicationService:
             await application_service.get_application_by_id(application_id=999)
 
     @pytest.mark.asyncio
-    async def test_get_user_applications(self, application_service, student_user, mock_application):
+    async def test_get_user_applications(
+        self, application_service, student_user, mock_application
+    ):
         """Test retrieving user's applications"""
         # Arrange
         mock_query_result = Mock()
@@ -267,13 +299,15 @@ class TestApplicationService:
         assert result[0] == mock_application
 
     @pytest.mark.asyncio
-    async def test_update_application_success(self, application_service, student_user, mock_application):
+    async def test_update_application_success(
+        self, application_service, student_user, mock_application
+    ):
         """Test successful application update"""
         # Arrange
         update_data = ApplicationUpdate(
             submitted_form_data={
                 "personal_statement": "Updated statement",
-                "career_goals": "Updated goals"
+                "career_goals": "Updated goals",
             }
         )
 
@@ -285,17 +319,20 @@ class TestApplicationService:
 
         # Act
         result = await application_service.update_application(
-            user=student_user,
-            application_id=1,
-            update_data=update_data
+            user=student_user, application_id=1, update_data=update_data
         )
 
         # Assert
-        assert mock_application.submitted_form_data["personal_statement"] == "Updated statement"
+        assert (
+            mock_application.submitted_form_data["personal_statement"]
+            == "Updated statement"
+        )
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_update_application_permission_denied(self, application_service, professor_user, mock_application):
+    async def test_update_application_permission_denied(
+        self, application_service, professor_user, mock_application
+    ):
         """Test application update with insufficient permissions"""
         # Arrange
         update_data = ApplicationUpdate(
@@ -309,18 +346,20 @@ class TestApplicationService:
         # Act & Assert
         with pytest.raises(AuthorizationError):
             await application_service.update_application(
-                user=professor_user,
-                application_id=1,
-                update_data=update_data
+                user=professor_user, application_id=1, update_data=update_data
             )
 
     @pytest.mark.asyncio
-    async def test_update_application_invalid_status(self, application_service, student_user, mock_application):
+    async def test_update_application_invalid_status(
+        self, application_service, student_user, mock_application
+    ):
         """Test application update when application is not in draft status"""
         # Arrange
         mock_application.status = ApplicationStatus.SUBMITTED.value
         update_data = ApplicationUpdate(
-            submitted_form_data={"personal_statement": "Cannot update submitted application"}
+            submitted_form_data={
+                "personal_statement": "Cannot update submitted application"
+            }
         )
 
         mock_query_result = Mock()
@@ -330,19 +369,19 @@ class TestApplicationService:
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="cannot be modified"):
             await application_service.update_application(
-                user=student_user,
-                application_id=1,
-                update_data=update_data
+                user=student_user, application_id=1, update_data=update_data
             )
 
     @pytest.mark.asyncio
-    async def test_submit_application_success(self, application_service, student_user, mock_application):
+    async def test_submit_application_success(
+        self, application_service, student_user, mock_application
+    ):
         """Test successful application submission"""
         # Arrange
         mock_application.status = ApplicationStatus.DRAFT.value
         mock_application.submitted_form_data = {
             "personal_statement": "Complete statement with 100+ characters for validation purposes.",
-            "career_goals": "Detailed career goals"
+            "career_goals": "Detailed career goals",
         }
 
         mock_query_result = Mock()
@@ -350,11 +389,12 @@ class TestApplicationService:
         application_service.db.execute.return_value = mock_query_result
         application_service.db.commit = AsyncMock()
 
-        with patch.object(application_service, '_validate_application_completeness', return_value=True):
+        with patch.object(
+            application_service, "_validate_application_completeness", return_value=True
+        ):
             # Act
             result = await application_service.submit_application(
-                user=student_user,
-                application_id=1
+                user=student_user, application_id=1
             )
 
             # Assert
@@ -363,7 +403,9 @@ class TestApplicationService:
             application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_submit_application_incomplete_data(self, application_service, student_user, mock_application):
+    async def test_submit_application_incomplete_data(
+        self, application_service, student_user, mock_application
+    ):
         """Test application submission with incomplete data"""
         # Arrange
         mock_application.status = ApplicationStatus.DRAFT.value
@@ -375,16 +417,21 @@ class TestApplicationService:
         mock_query_result.scalar_one_or_none.return_value = mock_application
         application_service.db.execute.return_value = mock_query_result
 
-        with patch.object(application_service, '_validate_application_completeness', return_value=False):
+        with patch.object(
+            application_service,
+            "_validate_application_completeness",
+            return_value=False,
+        ):
             # Act & Assert
             with pytest.raises(ValidationError, match="incomplete"):
                 await application_service.submit_application(
-                    user=student_user,
-                    application_id=1
+                    user=student_user, application_id=1
                 )
 
     @pytest.mark.asyncio
-    async def test_withdraw_application_success(self, application_service, student_user, mock_application):
+    async def test_withdraw_application_success(
+        self, application_service, student_user, mock_application
+    ):
         """Test successful application withdrawal"""
         # Arrange
         mock_application.status = ApplicationStatus.SUBMITTED.value
@@ -396,9 +443,7 @@ class TestApplicationService:
 
         # Act
         result = await application_service.withdraw_application(
-            user=student_user,
-            application_id=1,
-            reason="Changed my mind"
+            user=student_user, application_id=1, reason="Changed my mind"
         )
 
         # Assert
@@ -406,7 +451,9 @@ class TestApplicationService:
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_withdraw_application_invalid_status(self, application_service, student_user, mock_application):
+    async def test_withdraw_application_invalid_status(
+        self, application_service, student_user, mock_application
+    ):
         """Test withdrawal of application in invalid status"""
         # Arrange
         mock_application.status = ApplicationStatus.APPROVED.value
@@ -418,13 +465,13 @@ class TestApplicationService:
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="cannot be withdrawn"):
             await application_service.withdraw_application(
-                user=student_user,
-                application_id=1,
-                reason="Too late"
+                user=student_user, application_id=1, reason="Too late"
             )
 
     @pytest.mark.asyncio
-    async def test_delete_application_admin_permission(self, application_service, admin_user, mock_application):
+    async def test_delete_application_admin_permission(
+        self, application_service, admin_user, mock_application
+    ):
         """Test application deletion by admin"""
         # Arrange
         mock_query_result = Mock()
@@ -434,17 +481,16 @@ class TestApplicationService:
         application_service.db.commit = AsyncMock()
 
         # Act
-        await application_service.delete_application(
-            user=admin_user,
-            application_id=1
-        )
+        await application_service.delete_application(user=admin_user, application_id=1)
 
         # Assert
         application_service.db.delete.assert_called_once_with(mock_application)
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_delete_application_permission_denied(self, application_service, student_user, mock_application):
+    async def test_delete_application_permission_denied(
+        self, application_service, student_user, mock_application
+    ):
         """Test application deletion without admin permission"""
         # Arrange
         mock_query_result = Mock()
@@ -454,12 +500,13 @@ class TestApplicationService:
         # Act & Assert
         with pytest.raises(AuthorizationError):
             await application_service.delete_application(
-                user=student_user,
-                application_id=1
+                user=student_user, application_id=1
             )
 
     @pytest.mark.asyncio
-    async def test_update_application_status_admin(self, application_service, admin_user, mock_application):
+    async def test_update_application_status_admin(
+        self, application_service, admin_user, mock_application
+    ):
         """Test application status update by admin"""
         # Arrange
         mock_query_result = Mock()
@@ -472,7 +519,7 @@ class TestApplicationService:
             user=admin_user,
             application_id=1,
             new_status=ApplicationStatus.UNDER_REVIEW,
-            comments="Review started"
+            comments="Review started",
         )
 
         # Assert
@@ -480,7 +527,9 @@ class TestApplicationService:
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_search_applications_with_filters(self, application_service, admin_user):
+    async def test_search_applications_with_filters(
+        self, application_service, admin_user
+    ):
         """Test application search with various filters"""
         # Arrange
         mock_applications = [Mock(id=1), Mock(id=2)]
@@ -490,7 +539,10 @@ class TestApplicationService:
         mock_count_result = Mock()
         mock_count_result.scalar.return_value = 2
 
-        application_service.db.execute.side_effect = [mock_query_result, mock_count_result]
+        application_service.db.execute.side_effect = [
+            mock_query_result,
+            mock_count_result,
+        ]
 
         # Act
         results, total = await application_service.search_applications(
@@ -500,7 +552,7 @@ class TestApplicationService:
             academic_year=113,
             search_term="computer science",
             page=1,
-            size=10
+            size=10,
         )
 
         # Assert
@@ -516,32 +568,43 @@ class TestApplicationService:
             submitted_form_data={
                 "personal_statement": "A comprehensive personal statement with more than 100 characters describing my background, goals, and motivation.",
                 "career_goals": "Detailed career objectives",
-                "extracurricular_activities": "List of activities"
+                "extracurricular_activities": "List of activities",
             },
-            agree_terms=True
+            agree_terms=True,
         )
 
         incomplete_application = Mock(
-            submitted_form_data={
-                "personal_statement": "Too short"
-            },
-            agree_terms=False
+            submitted_form_data={"personal_statement": "Too short"}, agree_terms=False
         )
 
         # Act & Assert
-        assert application_service._validate_application_completeness(complete_application) == True
-        assert application_service._validate_application_completeness(incomplete_application) == False
+        assert (
+            application_service._validate_application_completeness(complete_application)
+            == True
+        )
+        assert (
+            application_service._validate_application_completeness(
+                incomplete_application
+            )
+            == False
+        )
 
     @pytest.mark.asyncio
     async def test_generate_app_id_uniqueness(self, application_service):
         """Test application ID generation ensures uniqueness"""
         # Arrange
         mock_existing_query = Mock()
-        mock_existing_query.scalar_one_or_none.side_effect = [Mock(id=1), None]  # First ID exists, second is unique
-        application_service.db.execute.side_effect = [mock_existing_query, mock_existing_query]
+        mock_existing_query.scalar_one_or_none.side_effect = [
+            Mock(id=1),
+            None,
+        ]  # First ID exists, second is unique
+        application_service.db.execute.side_effect = [
+            mock_existing_query,
+            mock_existing_query,
+        ]
 
         # Act
-        with patch('uuid.uuid4', side_effect=[Mock(hex='123456'), Mock(hex='789012')]):
+        with patch("uuid.uuid4", side_effect=[Mock(hex="123456"), Mock(hex="789012")]):
             app_id = await application_service._generate_app_id()
 
         # Assert
@@ -549,7 +612,9 @@ class TestApplicationService:
         assert len(app_id) == 17  # APP- + year + 6 digit hex
 
     @pytest.mark.asyncio
-    async def test_email_notification_on_submission(self, application_service, student_user, mock_application):
+    async def test_email_notification_on_submission(
+        self, application_service, student_user, mock_application
+    ):
         """Test email notification is sent on application submission"""
         # Arrange
         mock_application.status = ApplicationStatus.DRAFT.value
@@ -562,18 +627,25 @@ class TestApplicationService:
         application_service.db.execute.return_value = mock_query_result
         application_service.db.commit = AsyncMock()
 
-        with patch.object(application_service, '_validate_application_completeness', return_value=True):
+        with patch.object(
+            application_service, "_validate_application_completeness", return_value=True
+        ):
             # Act
             await application_service.submit_application(
-                user=student_user,
-                application_id=1
+                user=student_user, application_id=1
             )
 
             # Assert
             application_service.emailService.send_application_confirmation.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_database_transaction_rollback_on_error(self, application_service, student_user, application_create_data, scholarship_type):
+    async def test_database_transaction_rollback_on_error(
+        self,
+        application_service,
+        student_user,
+        application_create_data,
+        scholarship_type,
+    ):
         """Test database transaction rollback on error"""
         # Arrange
         mock_scholarship_query = Mock()
@@ -581,14 +653,15 @@ class TestApplicationService:
         application_service.db.execute.return_value = mock_scholarship_query
 
         application_service.db.add = Mock()
-        application_service.db.commit = AsyncMock(side_effect=Exception("Database error"))
+        application_service.db.commit = AsyncMock(
+            side_effect=Exception("Database error")
+        )
         application_service.db.rollback = AsyncMock()
 
         # Act & Assert
         with pytest.raises(Exception, match="Database error"):
             await application_service.create_application(
-                user=student_user,
-                application_data=application_create_data
+                user=student_user, application_data=application_create_data
             )
 
         application_service.db.rollback.assert_called_once()
@@ -602,21 +675,21 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_success(self):
         """Test successful student data retrieval"""
         # Arrange
-        user = User(
-            id=1,
-            role=UserRole.STUDENT,
-            nycu_id="11011001"
-        )
+        user = User(id=1, role=UserRole.STUDENT, nycu_id="11011001")
 
         mock_student_data = {
             "name": "Test Student",
             "student_id": "11011001",
-            "department": "Computer Science"
+            "department": "Computer Science",
         }
 
-        with patch('app.services.application_service.StudentService') as mock_service_class:
+        with patch(
+            "app.services.application_service.StudentService"
+        ) as mock_service_class:
             mock_service = mock_service_class.return_value
-            mock_service.get_student_basic_info = AsyncMock(return_value=mock_student_data)
+            mock_service.get_student_basic_info = AsyncMock(
+                return_value=mock_student_data
+            )
 
             # Act
             result = await get_student_data_from_user(user)
@@ -629,11 +702,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_non_student_user(self):
         """Test student data retrieval for non-student user"""
         # Arrange
-        user = User(
-            id=1,
-            role=UserRole.PROFESSOR,
-            nycu_id="11011001"
-        )
+        user = User(id=1, role=UserRole.PROFESSOR, nycu_id="11011001")
 
         # Act
         result = await get_student_data_from_user(user)
@@ -645,11 +714,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_no_nycu_id(self):
         """Test student data retrieval without NYCU ID"""
         # Arrange
-        user = User(
-            id=1,
-            role=UserRole.STUDENT,
-            nycu_id=None
-        )
+        user = User(id=1, role=UserRole.STUDENT, nycu_id=None)
 
         # Act
         result = await get_student_data_from_user(user)

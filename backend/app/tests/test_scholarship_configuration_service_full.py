@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
-from app.services.scholarship_configuration_service import \
-    ScholarshipConfigurationService
+from app.services.scholarship_configuration_service import (
+    ScholarshipConfigurationService,
+)
 
 
 @pytest.mark.asyncio

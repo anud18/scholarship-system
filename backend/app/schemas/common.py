@@ -2,9 +2,11 @@
 Common schemas for API responses and pagination
 """
 
-from typing import Any, Generic, List, Optional, TypeVar, Dict
-from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
+from typing import Any, Dict, Generic, List, Optional, TypeVar
+
+from pydantic import BaseModel, ConfigDict, Field
+
 from app.models.system_setting import SendingType
 
 T = TypeVar("T")
@@ -12,6 +14,7 @@ T = TypeVar("T")
 
 class MessageResponse(BaseModel):
     """Standard message response"""
+
     success: bool = True
     message: str
     trace_id: Optional[str] = None
@@ -19,6 +22,7 @@ class MessageResponse(BaseModel):
 
 class ApiResponse(BaseModel, Generic[T]):
     """Standard API response format"""
+
     success: bool = True
     message: str
     data: Optional[T] = None
@@ -28,25 +32,29 @@ class ApiResponse(BaseModel, Generic[T]):
 
 class PaginationParams(BaseModel):
     """Pagination parameters"""
+
     page: int = Field(1, ge=1, description="Page number")
     size: int = Field(20, ge=1, le=100, description="Items per page")
     sort_by: Optional[str] = Field(None, description="Sort field")
-    sort_order: Optional[str] = Field("asc", pattern="^(asc|desc)$", description="Sort order")
+    sort_order: Optional[str] = Field(
+        "asc", pattern="^(asc|desc)$", description="Sort order"
+    )
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
     """Paginated response wrapper"""
+
     items: List[T]
     total: int
     page: int
     size: int
     pages: int
-    
+
     @property
     def has_next(self) -> bool:
         """Check if there are more pages"""
         return self.page < self.pages
-    
+
     @property
     def has_prev(self) -> bool:
         """Check if there are previous pages"""
@@ -55,6 +63,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 class ValidationErrorDetail(BaseModel):
     """Validation error detail"""
+
     field: str
     message: str
     value: Any = None
@@ -62,6 +71,7 @@ class ValidationErrorDetail(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Error response"""
+
     success: bool = False
     message: str
     errors: Optional[List[ValidationErrorDetail]] = None
@@ -70,13 +80,14 @@ class ErrorResponse(BaseModel):
 
 class SystemSettingSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     key: str
     value: str
 
 
 class RecipientOptionSchema(BaseModel):
     """Schema for recipient option"""
+
     value: str
     label: str
     description: str
@@ -99,6 +110,7 @@ class EmailTemplateSchema(BaseModel):
 
 class EmailTemplateUpdateSchema(BaseModel):
     """Schema for updating email templates"""
+
     key: str
     subject_template: str
     body_template: str
@@ -107,4 +119,4 @@ class EmailTemplateUpdateSchema(BaseModel):
     sending_type: str = "single"
     recipient_options: Optional[List[Dict[str, str]]] = None
     requires_approval: bool = False
-    max_recipients: Optional[int] = None 
+    max_recipients: Optional[int] = None

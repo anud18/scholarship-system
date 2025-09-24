@@ -5,25 +5,25 @@
 """
 
 import asyncio
-import sys
 import os
+import sys
 from datetime import datetime, timedelta
 
 # 添加項目根目錄到Python路徑
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.db.session import AsyncSessionLocal
+from app.models.notification import NotificationPriority, NotificationType
 from app.services.notification_service import NotificationService
-from app.models.notification import NotificationType, NotificationPriority
 
 
 async def create_test_announcements():
     """創建測試系統公告"""
     print("🚀 開始創建測試系統公告...")
-    
+
     async with AsyncSessionLocal() as session:
         service = NotificationService(session)
-        
+
         # 測試公告列表
         test_announcements = [
             {
@@ -33,7 +33,7 @@ async def create_test_announcements():
                 "message_en": "Dear users, the system will undergo routine maintenance from 11:00 PM on June 15, 2025 to 1:00 AM the next day. Service may be unavailable during this time. We apologize for any inconvenience.",
                 "notification_type": NotificationType.WARNING.value,
                 "priority": NotificationPriority.HIGH.value,
-                "expires_at": datetime.utcnow() + timedelta(days=30)
+                "expires_at": datetime.utcnow() + timedelta(days=30),
             },
             {
                 "title": "🎉 新功能上線通知",
@@ -42,7 +42,7 @@ async def create_test_announcements():
                 "message_en": "The scholarship management system now includes a notification feature! You can now receive timely updates on application status, review results, and important system announcements.",
                 "notification_type": NotificationType.SUCCESS.value,
                 "priority": NotificationPriority.NORMAL.value,
-                "action_url": "/notifications"
+                "action_url": "/notifications",
             },
             {
                 "title": "⚠️ 申請截止日期提醒",
@@ -52,7 +52,7 @@ async def create_test_announcements():
                 "notification_type": NotificationType.REMINDER.value,
                 "priority": NotificationPriority.URGENT.value,
                 "action_url": "/scholarships",
-                "expires_at": datetime.utcnow() + timedelta(days=15)
+                "expires_at": datetime.utcnow() + timedelta(days=15),
             },
             {
                 "title": "📢 系統操作指南發布",
@@ -61,7 +61,7 @@ async def create_test_announcements():
                 "message_en": "To help everyone better use the scholarship management system, we have released a detailed operation guide. Please check the help documentation or contact technical support.",
                 "notification_type": NotificationType.INFO.value,
                 "priority": NotificationPriority.NORMAL.value,
-                "action_url": "/help"
+                "action_url": "/help",
             },
             {
                 "title": "🔒 安全政策更新",
@@ -69,16 +69,16 @@ async def create_test_announcements():
                 "message": "為了保護您的帳戶安全，系統已更新密碼安全政策。請確保您的密碼至少包含8個字符，包括大小寫字母、數字和特殊符號。",
                 "message_en": "To protect your account security, the system has updated the password security policy. Please ensure your password contains at least 8 characters, including uppercase and lowercase letters, numbers, and special symbols.",
                 "notification_type": NotificationType.WARNING.value,
-                "priority": NotificationPriority.NORMAL.value
-            }
+                "priority": NotificationPriority.NORMAL.value,
+            },
         ]
-        
+
         created_count = 0
-        
+
         try:
             for announcement_data in test_announcements:
                 print(f"📢 創建公告: {announcement_data['title']}")
-                
+
                 announcement = await service.createSystemAnnouncement(
                     title=announcement_data["title"],
                     title_en=announcement_data["title_en"],
@@ -88,16 +88,16 @@ async def create_test_announcements():
                     priority=announcement_data["priority"],
                     action_url=announcement_data.get("action_url"),
                     expires_at=announcement_data.get("expires_at"),
-                    metadata={"source": "test_script", "created_by": "system"}
+                    metadata={"source": "test_script", "created_by": "system"},
                 )
-                
+
                 created_count += 1
                 print(f"   ✅ 成功創建，ID: {announcement.id}")
-            
+
             print("\n🎉 測試公告創建完成！")
             print(f"   📊 總共創建了 {created_count} 條系統公告")
             print("   🔗 您現在可以在管理介面的「系統公告」頁面查看這些公告")
-            
+
         except Exception as e:
             print(f"❌ 創建公告時發生錯誤: {str(e)}")
             await session.rollback()
@@ -107,22 +107,25 @@ async def create_test_announcements():
 async def verify_announcements():
     """驗證公告是否成功創建"""
     print("\n🔍 驗證系統公告...")
-    
+
     async with AsyncSessionLocal() as session:
         service = NotificationService(session)
-        
+
         try:
             # 查詢所有系統公告
-            from sqlalchemy import select, func
+            from sqlalchemy import func, select
+
             from app.models.notification import Notification
-            
+
             # 統計系統公告數量
-            count_stmt = select(func.count(Notification.id)).where(Notification.user_id.is_(None))
+            count_stmt = select(func.count(Notification.id)).where(
+                Notification.user_id.is_(None)
+            )
             count_result = await session.execute(count_stmt)
             total_announcements = count_result.scalar()
-            
+
             print(f"   📊 資料庫中共有 {total_announcements} 條系統公告")
-            
+
             # 獲取最新的5條公告
             stmt = (
                 select(Notification)
@@ -130,17 +133,19 @@ async def verify_announcements():
                 .order_by(Notification.created_at.desc())
                 .limit(5)
             )
-            
+
             result = await session.execute(stmt)
             recent_announcements = result.scalars().all()
-            
+
             print("   📋 最近創建的公告:")
             for i, announcement in enumerate(recent_announcements, 1):
                 print(f"      {i}. {announcement.title} (ID: {announcement.id})")
-                print(f"         類型: {announcement.notification_type}, 優先級: {announcement.priority}")
+                print(
+                    f"         類型: {announcement.notification_type}, 優先級: {announcement.priority}"
+                )
                 print(f"         創建時間: {announcement.created_at}")
                 print()
-                
+
         except Exception as e:
             print(f"❌ 驗證公告時發生錯誤: {str(e)}")
 
@@ -150,11 +155,11 @@ async def main():
     print("=" * 60)
     print("    獎學金系統 - 測試公告創建腳本")
     print("=" * 60)
-    
+
     try:
         await create_test_announcements()
         await verify_announcements()
-        
+
         print("\n" + "=" * 60)
         print("✅ 測試完成！現在您可以:")
         print("   1. 啟動後端服務 (uvicorn app.main:app --reload --port 8000)")
@@ -162,12 +167,13 @@ async def main():
         print("   3. 以管理員身份登入系統")
         print("   4. 前往「系統公告管理」頁面查看公告列表")
         print("=" * 60)
-        
+
     except Exception as e:
         print(f"\n❌ 執行過程中發生錯誤: {str(e)}")
         import traceback
+
         traceback.print_exc()
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

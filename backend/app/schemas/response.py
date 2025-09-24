@@ -2,13 +2,16 @@
 Standard API response schemas following the project patterns
 """
 
-from typing import Generic, TypeVar, Optional, List
+from typing import Generic, List, Optional, TypeVar
+
 from pydantic import BaseModel
 
-DataType = TypeVar('DataType')
+DataType = TypeVar("DataType")
+
 
 class ApiResponse(BaseModel, Generic[DataType]):
     """Standard API response format"""
+
     success: bool
     message: str
     data: Optional[DataType] = None
@@ -17,11 +20,13 @@ class ApiResponse(BaseModel, Generic[DataType]):
 
     class Config:
         """Pydantic configuration"""
+
         from_attributes = True
 
 
 class ValidationError(BaseModel):
     """Validation error detail"""
+
     field: str
     message: str
     code: Optional[str] = None
@@ -29,6 +34,7 @@ class ValidationError(BaseModel):
 
 class DetailedApiResponse(BaseModel, Generic[DataType]):
     """Detailed API response with validation errors"""
+
     success: bool
     message: str
     data: Optional[DataType] = None
@@ -38,11 +44,13 @@ class DetailedApiResponse(BaseModel, Generic[DataType]):
 
     class Config:
         """Pydantic configuration"""
+
         from_attributes = True
 
 
 class PaginatedApiResponse(BaseModel, Generic[DataType]):
     """Paginated API response"""
+
     success: bool
     message: str
     data: Optional[List[DataType]] = None
@@ -55,4 +63,5 @@ class PaginatedApiResponse(BaseModel, Generic[DataType]):
 
     class Config:
         """Pydantic configuration"""
-        from_attributes = True 
+
+        from_attributes = True

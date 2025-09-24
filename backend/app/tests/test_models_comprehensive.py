@@ -9,18 +9,19 @@ Tests model functionality including:
 - Serialization and deserialization
 """
 
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+
+import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.models.user import User, UserRole, UserType
 from app.models.application import Application, ApplicationStatus, Semester
-from app.models.scholarship import ScholarshipType
-from app.models.email_management import EmailHistory, EmailStatus, EmailCategory
-from app.models.notification import Notification, NotificationType, NotificationPriority
+from app.models.email_management import EmailCategory, EmailHistory, EmailStatus
 from app.models.enums import Semester
+from app.models.notification import Notification, NotificationPriority, NotificationType
+from app.models.scholarship import ScholarshipType
+from app.models.user import User, UserRole, UserType
 
 
 @pytest.mark.unit
@@ -37,7 +38,7 @@ class TestUserModel:
             "nycu_id": "11011001",
             "role": UserRole.STUDENT,
             "user_type": UserType.STUDENT,
-            "is_active": True
+            "is_active": True,
         }
 
         # Act
@@ -61,13 +62,13 @@ class TestUserModel:
             email="duplicate@university.edu",
             name="User One",
             nycu_id="11011001",
-            role=UserRole.STUDENT
+            role=UserRole.STUDENT,
         )
         user2 = User(
             email="duplicate@university.edu",
             name="User Two",
             nycu_id="11011002",
-            role=UserRole.STUDENT
+            role=UserRole.STUDENT,
         )
 
         # Act & Assert
@@ -86,13 +87,13 @@ class TestUserModel:
             email="user1@university.edu",
             name="User One",
             nycu_id="11011001",
-            role=UserRole.STUDENT
+            role=UserRole.STUDENT,
         )
         user2 = User(
             email="user2@university.edu",
             name="User Two",
             nycu_id="11011001",  # Duplicate NYCU ID
-            role=UserRole.STUDENT
+            role=UserRole.STUDENT,
         )
 
         # Act & Assert
@@ -111,7 +112,7 @@ class TestUserModel:
             email="test@university.edu",
             name="John Doe",
             nycu_id="11011001",
-            role=UserRole.STUDENT
+            role=UserRole.STUDENT,
         )
 
         # Act & Assert
@@ -170,7 +171,7 @@ class TestApplicationModel:
             email="student@university.edu",
             name="Test Student",
             nycu_id="11011001",
-            role=UserRole.STUDENT
+            role=UserRole.STUDENT,
         )
         db.add(user)
         await db.commit()
@@ -185,7 +186,7 @@ class TestApplicationModel:
             name="Test Scholarship",
             category="undergraduate_freshman",
             amount=Decimal("50000"),
-            is_active=True
+            is_active=True,
         )
         db.add(scholarship)
         await db.commit()
@@ -206,7 +207,7 @@ class TestApplicationModel:
             "semester": Semester.FIRST,
             "student_data": {"name": "Test Student", "gpa": 3.8},
             "submitted_form_data": {"statement": "Test statement"},
-            "agree_terms": True
+            "agree_terms": True,
         }
 
         # Act
@@ -223,7 +224,9 @@ class TestApplicationModel:
         assert application.created_at is not None
 
     @pytest.mark.asyncio
-    async def test_application_unique_app_id_constraint(self, db, test_user, test_scholarship):
+    async def test_application_unique_app_id_constraint(
+        self, db, test_user, test_scholarship
+    ):
         """Test that app_id must be unique"""
         # Arrange
         app_id = "APP-2024-DUPLICATE"
@@ -232,14 +235,14 @@ class TestApplicationModel:
             app_id=app_id,
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value
+            status=ApplicationStatus.DRAFT.value,
         )
 
         app2 = Application(
             app_id=app_id,  # Duplicate app_id
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value
+            status=ApplicationStatus.DRAFT.value,
         )
 
         # Act & Assert
@@ -251,14 +254,16 @@ class TestApplicationModel:
             await db.commit()
 
     @pytest.mark.asyncio
-    async def test_application_status_transitions(self, db, test_user, test_scholarship):
+    async def test_application_status_transitions(
+        self, db, test_user, test_scholarship
+    ):
         """Test application status transitions"""
         # Arrange
         application = Application(
             app_id="APP-2024-STATUS",
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value
+            status=ApplicationStatus.DRAFT.value,
         )
         db.add(application)
         await db.commit()
@@ -289,7 +294,7 @@ class TestApplicationModel:
             app_id="APP-2024-REL",
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value
+            status=ApplicationStatus.DRAFT.value,
         )
         db.add(application)
         await db.commit()
@@ -299,7 +304,10 @@ class TestApplicationModel:
         result = await db.execute(
             select(Application)
             .where(Application.id == application.id)
-            .options(selectinload(Application.student), selectinload(Application.scholarship_type))
+            .options(
+                selectinload(Application.student),
+                selectinload(Application.scholarship_type),
+            )
         )
         app_with_relations = result.scalar_one()
 
@@ -315,13 +323,13 @@ class TestApplicationModel:
             "name": "Test Student",
             "department": "Computer Science",
             "gpa": 3.85,
-            "graduation_year": 2024
+            "graduation_year": 2024,
         }
 
         form_data = {
             "personal_statement": "I am passionate about computer science...",
             "career_goals": "To become a software engineer",
-            "extracurricular": ["Programming club", "Volunteer work"]
+            "extracurricular": ["Programming club", "Volunteer work"],
         }
 
         application = Application(
@@ -330,7 +338,7 @@ class TestApplicationModel:
             scholarship_type_id=test_scholarship.id,
             status=ApplicationStatus.DRAFT.value,
             student_data=student_data,
-            submitted_form_data=form_data
+            submitted_form_data=form_data,
         )
 
         # Act
@@ -341,7 +349,10 @@ class TestApplicationModel:
         # Assert
         assert application.student_data["name"] == "Test Student"
         assert application.student_data["gpa"] == 3.85
-        assert application.submitted_form_data["personal_statement"] == "I am passionate about computer science..."
+        assert (
+            application.submitted_form_data["personal_statement"]
+            == "I am passionate about computer science..."
+        )
         assert len(application.submitted_form_data["extracurricular"]) == 2
 
 
@@ -364,7 +375,7 @@ class TestScholarshipTypeModel:
             "is_active": True,
             "is_application_period": True,
             "application_start_date": datetime.now(timezone.utc),
-            "application_end_date": datetime.now(timezone.utc) + timedelta(days=30)
+            "application_end_date": datetime.now(timezone.utc) + timedelta(days=30),
         }
 
         # Act
@@ -389,14 +400,14 @@ class TestScholarshipTypeModel:
             code=code,
             name="First Scholarship",
             category="undergraduate",
-            amount=Decimal("30000")
+            amount=Decimal("30000"),
         )
 
         scholarship2 = ScholarshipType(
             code=code,  # Duplicate code
             name="Second Scholarship",
             category="graduate",
-            amount=Decimal("40000")
+            amount=Decimal("40000"),
         )
 
         # Act & Assert
@@ -420,7 +431,7 @@ class TestScholarshipTypeModel:
             is_active=True,
             is_application_period=True,
             application_start_date=now - timedelta(days=1),
-            application_end_date=now + timedelta(days=30)
+            application_end_date=now + timedelta(days=30),
         )
 
         # Inactive scholarship
@@ -428,7 +439,7 @@ class TestScholarshipTypeModel:
             code="inactive",
             name="Inactive Scholarship",
             is_active=False,
-            is_application_period=True
+            is_application_period=True,
         )
 
         # Expired scholarship
@@ -438,7 +449,7 @@ class TestScholarshipTypeModel:
             is_active=True,
             is_application_period=True,
             application_start_date=now - timedelta(days=60),
-            application_end_date=now - timedelta(days=30)
+            application_end_date=now - timedelta(days=30),
         )
 
         # Act & Assert
@@ -451,9 +462,7 @@ class TestScholarshipTypeModel:
         """Test application_count property"""
         # Arrange
         scholarship = ScholarshipType(
-            code="count_test",
-            name="Count Test Scholarship",
-            is_active=True
+            code="count_test", name="Count Test Scholarship", is_active=True
         )
         db.add(scholarship)
         await db.commit()
@@ -465,7 +474,7 @@ class TestScholarshipTypeModel:
                 app_id=f"APP-2024-{i:06d}",
                 user_id=test_user.id,
                 scholarship_type_id=scholarship.id,
-                status=ApplicationStatus.SUBMITTED.value
+                status=ApplicationStatus.SUBMITTED.value,
             )
             db.add(app)
 
@@ -473,8 +482,7 @@ class TestScholarshipTypeModel:
 
         # Act - Query with application count
         result = await db.execute(
-            select(ScholarshipType)
-            .where(ScholarshipType.id == scholarship.id)
+            select(ScholarshipType).where(ScholarshipType.id == scholarship.id)
         )
         scholarship_from_db = result.scalar_one()
 
@@ -499,7 +507,7 @@ class TestEmailHistoryModel:
             "status": EmailStatus.SENT,
             "category": EmailCategory.APPLICATION_CONFIRMATION,
             "sent_at": datetime.now(timezone.utc),
-            "template_data": {"student_name": "John Doe", "app_id": "APP-2024-000001"}
+            "template_data": {"student_name": "John Doe", "app_id": "APP-2024-000001"},
         }
 
         # Act
@@ -522,7 +530,7 @@ class TestEmailHistoryModel:
             recipient_email="test@university.edu",
             subject="Test",
             body="Test body",
-            status=EmailStatus.PENDING
+            status=EmailStatus.PENDING,
         )
 
         # Act
@@ -557,7 +565,7 @@ class TestNotificationModel:
             "notification_type": NotificationType.APPLICATION_STATUS,
             "priority": NotificationPriority.NORMAL,
             "is_read": False,
-            "data": {"application_id": 1, "new_status": "approved"}
+            "data": {"application_id": 1, "new_status": "approved"},
         }
 
         # Act
@@ -582,7 +590,7 @@ class TestNotificationModel:
             title="Test Notification",
             message="Test message",
             notification_type=NotificationType.SYSTEM_ANNOUNCEMENT,
-            is_read=False
+            is_read=False,
         )
         db.add(notification)
         await db.commit()
@@ -605,7 +613,7 @@ class TestNotificationModel:
             user_id=99999,  # Non-existent user
             title="Test",
             message="Test message",
-            notification_type=NotificationType.SYSTEM_ANNOUNCEMENT
+            notification_type=NotificationType.SYSTEM_ANNOUNCEMENT,
         )
 
         # Act & Assert
@@ -625,7 +633,7 @@ class TestModelTimestamps:
         user = User(
             email="timestamp@university.edu",
             name="Timestamp User",
-            role=UserRole.STUDENT
+            role=UserRole.STUDENT,
         )
 
         # Act
@@ -642,9 +650,7 @@ class TestModelTimestamps:
         """Test that updated_at is automatically updated"""
         # Arrange
         user = User(
-            email="update@university.edu",
-            name="Update User",
-            role=UserRole.STUDENT
+            email="update@university.edu", name="Update User", role=UserRole.STUDENT
         )
         db.add(user)
         await db.commit()
