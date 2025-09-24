@@ -32,9 +32,7 @@ async def create_notification_reads_table():
         print("✅ notification_reads table created successfully!")
 
         # Test the new functionality
-        async_session = sessionmaker(
-            engine, class_=AsyncSession, expire_on_commit=False
-        )
+        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with async_session() as session:
             # Check if table exists and has correct structure
             result = await session.execute(
@@ -51,9 +49,7 @@ async def create_notification_reads_table():
             columns = result.fetchall()
             print("\n📋 Table structure:")
             for col in columns:
-                print(
-                    f"  - {col[0]}: {col[1]} ({'NULL' if col[2] == 'YES' else 'NOT NULL'})"
-                )
+                print(f"  - {col[0]}: {col[1]} ({'NULL' if col[2] == 'YES' else 'NOT NULL'})")
 
             # Check constraints
             constraint_result = await session.execute(
@@ -93,9 +89,7 @@ async def test_notification_service():
             service = NotificationService(session)
 
             # Find or create a test user
-            result = await session.execute(
-                select(User).where(User.nycu_id == "test_user")
-            )
+            result = await session.execute(select(User).where(User.nycu_id == "test_user"))
             test_user = result.scalar_one_or_none()
 
             if not test_user:
@@ -137,15 +131,11 @@ async def test_notification_service():
 
             # Test marking as read
             if notifications:
-                success = await service.markNotificationAsRead(
-                    notifications[0]["id"], test_user.id
-                )
+                success = await service.markNotificationAsRead(notifications[0]["id"], test_user.id)
                 print(f"✅ Marked notification as read: {success}")
 
                 # Check unread count again
-                new_unread_count = await service.getUnreadNotificationCount(
-                    test_user.id
-                )
+                new_unread_count = await service.getUnreadNotificationCount(test_user.id)
                 print(f"✅ New unread count: {new_unread_count}")
 
             # Test mark all as read

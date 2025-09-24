@@ -83,9 +83,7 @@ async def debug_clone_issue():
             await db.refresh(application)
 
             print(f"✅ 申請已建立: {application.app_id}")
-            print(
-                f"📊 初始 form_data.documents: {len(application.submitted_form_data.get('documents', []))} 個文件"
-            )
+            print(f"📊 初始 form_data.documents: {len(application.submitted_form_data.get('documents', []))} 個文件")
 
             # 執行文件複製，詳細追蹤
             print("\n🔍 開始詳細追蹤複製過程...")
@@ -100,9 +98,7 @@ async def debug_clone_issue():
                 print("❌ 無法找到個人資料")
                 return False
 
-            print(
-                f"✅ 找到個人資料，bank_document_photo_url: {user_profile.bank_document_photo_url}"
-            )
+            print(f"✅ 找到個人資料，bank_document_photo_url: {user_profile.bank_document_photo_url}")
 
             # 檢查是否已有 ApplicationFile
             stmt = select(ApplicationFile).where(
@@ -193,9 +189,7 @@ async def debug_clone_issue():
             result = await db.execute(stmt)
             reloaded_application = result.scalar_one()
 
-            documents_after_reload = reloaded_application.submitted_form_data.get(
-                "documents", []
-            )
+            documents_after_reload = reloaded_application.submitted_form_data.get("documents", [])
             print(f"🔍 重新載入後，form_data.documents 有 {len(documents_after_reload)} 個文件")
 
             if documents_after_reload:

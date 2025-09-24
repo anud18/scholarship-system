@@ -36,27 +36,12 @@ def test_application_create_with_dynamic_fields():
     assert application.agree_terms is True
 
     # Verify dynamic fields are preserved
-    assert (
-        application.university_academic_performance
-        == "Excellent academic performance with GPA 3.8"
-    )
-    assert (
-        application.research_interests_and_directions
-        == "Machine Learning and Artificial Intelligence"
-    )
+    assert application.university_academic_performance == "Excellent academic performance with GPA 3.8"
+    assert application.research_interests_and_directions == "Machine Learning and Artificial Intelligence"
     assert application.expected_graduation_date == "2025-06-15"
-    assert (
-        application.personal_statement
-        == "I am a dedicated student with strong research interests..."
-    )
-    assert (
-        application.research_proposal
-        == "My research focuses on developing novel ML algorithms..."
-    )
-    assert (
-        application.budget_plan
-        == "Total budget: $5000 for research materials and conference attendance"
-    )
+    assert application.personal_statement == "I am a dedicated student with strong research interests..."
+    assert application.research_proposal == "My research focuses on developing novel ML algorithms..."
+    assert application.budget_plan == "Total budget: $5000 for research materials and conference attendance"
     assert (
         application.milestone_plan
         == "Q1: Literature review, Q2: Algorithm development, Q3: Implementation, Q4: Evaluation"
@@ -90,14 +75,8 @@ def test_application_create_model_dump_includes_dynamic_fields():
 
     # Verify values are correct
     assert dumped_data["scholarship_type"] == "undergraduate_freshman"
-    assert (
-        dumped_data["university_academic_performance"]
-        == "Excellent academic performance with GPA 3.8"
-    )
-    assert (
-        dumped_data["research_interests_and_directions"]
-        == "Machine Learning and Artificial Intelligence"
-    )
+    assert dumped_data["university_academic_performance"] == "Excellent academic performance with GPA 3.8"
+    assert dumped_data["research_interests_and_directions"] == "Machine Learning and Artificial Intelligence"
 
 
 def test_application_update_with_dynamic_fields():
@@ -114,12 +93,6 @@ def test_application_update_with_dynamic_fields():
     application_update = ApplicationUpdate(**update_data)
 
     # Verify dynamic fields are preserved
-    assert (
-        application_update.university_academic_performance
-        == "Updated academic performance description"
-    )
-    assert (
-        application_update.research_interests_and_directions
-        == "Updated research interests"
-    )
+    assert application_update.university_academic_performance == "Updated academic performance description"
+    assert application_update.research_interests_and_directions == "Updated research interests"
     assert application_update.personal_statement == "Updated personal statement"

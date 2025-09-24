@@ -95,23 +95,17 @@ class ScholarshipTypeBase(BaseModel):
         # Validate application date range
         if self.application_end_date and self.application_start_date:
             if self.application_end_date <= self.application_start_date:
-                raise ValueError(
-                    "application_end_date must be after application_start_date"
-                )
+                raise ValueError("application_end_date must be after application_start_date")
 
         # Validate professor review period
         if self.professor_review_end and self.professor_review_start:
             if self.professor_review_end <= self.professor_review_start:
-                raise ValueError(
-                    "professor_review_end must be after professor_review_start"
-                )
+                raise ValueError("professor_review_end must be after professor_review_start")
 
         # Validate college review period
         if self.college_review_end and self.college_review_start:
             if self.college_review_end <= self.college_review_start:
-                raise ValueError(
-                    "college_review_end must be after college_review_start"
-                )
+                raise ValueError("college_review_end must be after college_review_start")
 
         return self
 
@@ -160,55 +154,37 @@ class ScholarshipRuleBase(BaseModel):
     rule_type: str = Field(..., min_length=1, max_length=50, description="Rule type")
     tag: Optional[str] = Field(None, max_length=20, description="Rule tag")
     description: Optional[str] = Field(None, description="Rule description")
-    condition_field: str = Field(
-        ..., min_length=1, max_length=100, description="Field to check"
-    )
+    condition_field: str = Field(..., min_length=1, max_length=100, description="Field to check")
     operator: str = Field(
         ...,
         pattern=r"^(>=|<=|==|!=|>|<|in|not_in|contains|not_contains)$",
         description="Comparison operator",
     )
-    expected_value: str = Field(
-        ..., min_length=1, max_length=500, description="Expected value"
-    )
+    expected_value: str = Field(..., min_length=1, max_length=500, description="Expected value")
     message: Optional[str] = Field(None, description="Validation message")
     message_en: Optional[str] = Field(None, description="English validation message")
     is_hard_rule: bool = Field(False, description="Whether this is a hard requirement")
     is_warning: bool = Field(False, description="Whether this is a warning rule")
     priority: int = Field(0, ge=0, le=999, description="Rule priority (0-999)")
     is_active: bool = Field(True, description="Whether rule is active")
-    is_initial_enabled: bool = Field(
-        True, description="Whether rule is enabled for initial applications"
-    )
-    is_renewal_enabled: bool = Field(
-        True, description="Whether rule is enabled for renewal applications"
-    )
-    sub_type: Optional[str] = Field(
-        None, max_length=50, description="Sub-type this rule applies to"
-    )
+    is_initial_enabled: bool = Field(True, description="Whether rule is enabled for initial applications")
+    is_renewal_enabled: bool = Field(True, description="Whether rule is enabled for renewal applications")
+    sub_type: Optional[str] = Field(None, max_length=50, description="Sub-type this rule applies to")
 
     # Academic context fields
-    academic_year: Optional[int] = Field(
-        None, ge=100, le=200, description="Academic year (Taiwan calendar)"
-    )
+    academic_year: Optional[int] = Field(None, ge=100, le=200, description="Academic year (Taiwan calendar)")
     semester: Optional[Semester] = Field(None, description="Semester")
 
     # Template fields
     is_template: bool = Field(False, description="Whether this is a template rule")
-    template_name: Optional[str] = Field(
-        None, max_length=100, description="Template name"
-    )
-    template_description: Optional[str] = Field(
-        None, description="Template description"
-    )
+    template_name: Optional[str] = Field(None, max_length=100, description="Template name")
+    template_description: Optional[str] = Field(None, description="Template description")
 
     @field_validator("academic_year")
     @classmethod
     def validate_academic_year(cls, v):
         if v is not None and (v < 100 or v > 200):
-            raise ValueError(
-                "Academic year must be between 100 and 200 (Taiwan calendar)"
-            )
+            raise ValueError("Academic year must be between 100 and 200 (Taiwan calendar)")
         return v
 
     @model_validator(mode="after")
@@ -255,9 +231,7 @@ class ScholarshipRuleResponse(ScholarshipRuleBase):
 
 
 class RuleMessage(BaseModel):
-    rule_id: Union[
-        int, str
-    ]  # Can be int for normal rules or string for subtype unified errors
+    rule_id: Union[int, str]  # Can be int for normal rules or string for subtype unified errors
     rule_name: str
     rule_type: str
     tag: Optional[str] = None
@@ -385,19 +359,13 @@ class ScholarshipRuleFilter(BaseModel):
 class RuleCopyRequest(BaseModel):
     """Schema for copying rules between periods"""
 
-    source_academic_year: Optional[int] = Field(
-        None, description="Source academic year"
-    )
+    source_academic_year: Optional[int] = Field(None, description="Source academic year")
     source_semester: Optional[Semester] = Field(None, description="Source semester")
     target_academic_year: int = Field(..., description="Target academic year")
     target_semester: Optional[Semester] = Field(None, description="Target semester")
-    scholarship_type_ids: Optional[List[int]] = Field(
-        None, description="Scholarship type IDs to copy"
-    )
+    scholarship_type_ids: Optional[List[int]] = Field(None, description="Scholarship type IDs to copy")
     rule_ids: Optional[List[int]] = Field(None, description="Specific rule IDs to copy")
-    overwrite_existing: bool = Field(
-        False, description="Whether to overwrite existing rules"
-    )
+    overwrite_existing: bool = Field(False, description="Whether to overwrite existing rules")
 
     @field_validator("source_academic_year", "target_academic_year")
     @classmethod
@@ -432,16 +400,10 @@ class RuleCopyRequest(BaseModel):
 class RuleTemplateRequest(BaseModel):
     """Schema for creating rule templates"""
 
-    template_name: str = Field(
-        ..., min_length=1, max_length=100, description="Template name"
-    )
-    template_description: Optional[str] = Field(
-        None, description="Template description"
-    )
+    template_name: str = Field(..., min_length=1, max_length=100, description="Template name")
+    template_description: Optional[str] = Field(None, description="Template description")
     scholarship_type_id: int = Field(..., ge=1, description="Scholarship type ID")
-    rule_ids: List[int] = Field(
-        ..., min_items=1, description="Rule IDs to include in template"
-    )
+    rule_ids: List[int] = Field(..., min_items=1, description="Rule IDs to include in template")
 
     @field_validator("rule_ids")
     @classmethod
@@ -455,14 +417,10 @@ class ApplyTemplateRequest(BaseModel):
     """Schema for applying rule templates"""
 
     template_id: int = Field(..., ge=1, description="Template rule ID")
-    scholarship_type_id: int = Field(
-        ..., ge=1, description="Target scholarship type ID"
-    )
+    scholarship_type_id: int = Field(..., ge=1, description="Target scholarship type ID")
     academic_year: int = Field(..., description="Target academic year")
     semester: Optional[Semester] = Field(None, description="Target semester")
-    overwrite_existing: bool = Field(
-        False, description="Whether to overwrite existing rules"
-    )
+    overwrite_existing: bool = Field(False, description="Whether to overwrite existing rules")
 
     @field_validator("academic_year")
     @classmethod
@@ -482,13 +440,9 @@ class ApplyTemplateRequest(BaseModel):
 class BulkRuleOperation(BaseModel):
     """Schema for bulk rule operations"""
 
-    operation: str = Field(
-        ..., pattern=r"^(activate|deactivate|delete)$", description="Operation type"
-    )
+    operation: str = Field(..., pattern=r"^(activate|deactivate|delete)$", description="Operation type")
     rule_ids: List[int] = Field(..., min_items=1, description="Rule IDs to operate on")
-    parameters: Optional[Dict[str, Any]] = Field(
-        None, description="Operation-specific parameters"
-    )
+    parameters: Optional[Dict[str, Any]] = Field(None, description="Operation-specific parameters")
 
     @field_validator("rule_ids")
     @classmethod

@@ -54,15 +54,11 @@ class ScholarshipService:
 
     def _should_bypass_application_period(self) -> bool:
         """Check if should bypass application period in dev mode"""
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get(
-            "ALWAYS_OPEN_APPLICATION", False
-        )
+        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("ALWAYS_OPEN_APPLICATION", False)
 
     def _should_bypass_whitelist(self) -> bool:
         """Check if should bypass whitelist in dev mode"""
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get(
-            "BYPASS_WHITELIST", False
-        )
+        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False)
 
     async def get_eligible_scholarships(
         self, student_data: Dict[str, Any], user_id: Optional[int] = None
@@ -91,16 +87,11 @@ class ScholarshipService:
 
         for config in active_configs:
             # First filter by application period - only show scholarships within their application period
-            if (
-                not self._should_bypass_application_period()
-                and not config.is_application_period
-            ):
+            if not self._should_bypass_application_period() and not config.is_application_period:
                 continue
 
             # Determine which student API type is required for this configuration
-            required_api_type = (
-                await eligibility_service.determine_required_student_api_type(config)
-            )
+            required_api_type = await eligibility_service.determine_required_student_api_type(config)
 
             # Get appropriate student data based on rule requirements
             current_student_data = student_data  # Default to basic data
@@ -111,9 +102,7 @@ class ScholarshipService:
 
                 if cache_key not in student_data_cache["student_term"]:
                     # Convert semester enum to string for API call
-                    semester_str = (
-                        config.semester.value if config.semester else "1"
-                    )  # Default to first semester
+                    semester_str = config.semester.value if config.semester else "1"  # Default to first semester
                     academic_year_str = str(config.academic_year)
 
                     # Fetch term-specific data
@@ -126,22 +115,16 @@ class ScholarshipService:
                             if term_data:
                                 # Merge basic data with term-specific data
                                 current_student_data = {**student_data, **term_data}
-                                student_data_cache["student_term"][
-                                    cache_key
-                                ] = current_student_data
+                                student_data_cache["student_term"][cache_key] = current_student_data
                             else:
                                 logger.warning(
                                     f"Could not fetch term data for student {student_code}, AY{academic_year_str}, semester {semester_str}"
                                 )
                                 # Continue with basic data if term data unavailable
-                                student_data_cache["student_term"][
-                                    cache_key
-                                ] = student_data
+                                student_data_cache["student_term"][cache_key] = student_data
                                 current_student_data = student_data
                         except Exception as e:
-                            logger.warning(
-                                f"Student term API unavailable, continuing with basic data: {e}"
-                            )
+                            logger.warning(f"Student term API unavailable, continuing with basic data: {e}")
                             # Fall back to basic data when API is unavailable
                             student_data_cache["student_term"][cache_key] = student_data
                             current_student_data = student_data
@@ -158,16 +141,12 @@ class ScholarshipService:
                 is_eligible,
                 reasons,
                 eligibility_details,
-            ) = await eligibility_service.get_detailed_eligibility_check(
-                current_student_data, config, user_id
-            )
+            ) = await eligibility_service.get_detailed_eligibility_check(current_student_data, config, user_id)
 
             # Always get application status if user_id is provided, regardless of eligibility
             application_status = {}
             if user_id:
-                application_status = await eligibility_service.get_application_status(
-                    user_id, config
-                )
+                application_status = await eligibility_service.get_application_status(user_id, config)
 
             if is_eligible:
                 # Build scholarship response with configuration data
@@ -190,8 +169,7 @@ class ScholarshipService:
                     "name": config.config_name or scholarship_type.name,
                     "name_en": scholarship_type.name_en,
                     "description": config.description or scholarship_type.description,
-                    "description_en": config.description_en
-                    or scholarship_type.description_en,
+                    "description_en": config.description_en or scholarship_type.description_en,
                     "category": scholarship_type.category,
                     "academic_year": config.academic_year,
                     "semester": config.semester.value if config.semester else None,
@@ -199,8 +177,7 @@ class ScholarshipService:
                     if scholarship_type.application_cycle
                     else "semester",
                     "sub_type_list": eligible_subtypes,  # Only eligible subtypes
-                    "all_sub_type_list": scholarship_type.sub_type_list
-                    or [],  # All subtypes for reference
+                    "all_sub_type_list": scholarship_type.sub_type_list or [],  # All subtypes for reference
                     "subtype_eligibility": subtype_eligibility_info,  # Detailed eligibility per subtype
                     "sub_type_selection_mode": scholarship_type.sub_type_selection_mode.value
                     if scholarship_type.sub_type_selection_mode
@@ -219,9 +196,7 @@ class ScholarshipService:
                     "requires_professor_recommendation": config.requires_professor_recommendation,
                     "requires_college_review": config.requires_college_review,
                     "requires_interview": getattr(config, "requires_interview", False),
-                    "requires_research_proposal": getattr(
-                        config, "requires_research_proposal", False
-                    ),
+                    "requires_research_proposal": getattr(config, "requires_research_proposal", False),
                     # Eligibility info
                     "whitelist_enabled": scholarship_type.whitelist_enabled,
                     "whitelist_student_ids": config.whitelist_student_ids or {},
@@ -235,9 +210,7 @@ class ScholarshipService:
                 (
                     quota_available,
                     quota_info,
-                ) = await config_service.check_quota_availability(
-                    config, student_data.get("department_code")
-                )
+                ) = await config_service.check_quota_availability(config, student_data.get("department_code"))
 
                 scholarship_dict.update(
                     {
@@ -248,16 +221,10 @@ class ScholarshipService:
                         "warnings": eligibility_details.get("warnings", []),
                         "errors": eligibility_details.get("errors", []),
                         # Add application status information
-                        "application_status": application_status.get(
-                            "application_status"
-                        ),
+                        "application_status": application_status.get("application_status"),
                         "can_apply": application_status.get("can_apply", True),
-                        "status_display": application_status.get(
-                            "status_display", "可申請"
-                        ),
-                        "has_application": application_status.get(
-                            "has_application", False
-                        ),
+                        "status_display": application_status.get("status_display", "可申請"),
+                        "has_application": application_status.get("has_application", False),
                         "application_id": application_status.get("application_id"),
                     }
                 )
@@ -370,9 +337,7 @@ class ScholarshipService:
 
         return eligible_subtypes_with_names, subtype_eligibility_info
 
-    async def _get_subtype_translations(
-        self, scholarship_type_id: int
-    ) -> Dict[str, Dict[str, str]]:
+    async def _get_subtype_translations(self, scholarship_type_id: int) -> Dict[str, Dict[str, str]]:
         """Get subtype name translations from database"""
         from sqlalchemy import select
 
@@ -541,9 +506,7 @@ class ScholarshipApplicationService:
             stmt = stmt.where(Application.status == status)
 
         # Order by priority score (higher first), then by submission time (earlier first)
-        stmt = stmt.order_by(
-            desc(Application.priority_score), asc(Application.submitted_at)
-        ).limit(limit)
+        stmt = stmt.order_by(desc(Application.priority_score), asc(Application.submitted_at)).limit(limit)
 
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -591,9 +554,7 @@ class ScholarshipApplicationService:
         # Get count of applications for this year
         from sqlalchemy import func
 
-        stmt = select(func.count(Application.id)).where(
-            Application.academic_year == academic_year
-        )
+        stmt = select(func.count(Application.id)).where(Application.academic_year == academic_year)
         result = await self.db.execute(stmt)
         count = result.scalar()
 
@@ -637,9 +598,7 @@ class ScholarshipApplicationService:
 
         return score
 
-    def _validate_application_documents(
-        self, application: "Application"
-    ) -> Tuple[bool, str]:
+    def _validate_application_documents(self, application: "Application") -> Tuple[bool, str]:
         """Validate that all required documents are uploaded"""
 
         required_docs = application.scholarship_type.required_documents or []
@@ -669,9 +628,7 @@ class ScholarshipApplicationService:
         self.db.add(review)
         return review
 
-    def _create_professor_review_request(
-        self, application: "Application"
-    ) -> "ProfessorReview":
+    def _create_professor_review_request(self, application: "Application") -> "ProfessorReview":
         """Create professor review request"""
 
         # In a real implementation, this would determine the appropriate professor
@@ -773,9 +730,7 @@ class ScholarshipQuotaService:
             ): 100,
         }
 
-        total_quota = default_quotas.get(
-            (main_scholarship_type, sub_scholarship_type), 20
-        )
+        total_quota = default_quotas.get((main_scholarship_type, sub_scholarship_type), 20)
 
         return {
             "main_type": main_scholarship_type,
@@ -785,9 +740,7 @@ class ScholarshipQuotaService:
             "total_used": approved_count,
             "total_available": total_quota - approved_count,
             "pending": pending_count,
-            "usage_percent": (approved_count / total_quota * 100)
-            if total_quota > 0
-            else 0,
+            "usage_percent": (approved_count / total_quota * 100) if total_quota > 0 else 0,
         }
 
     async def process_applications_by_priority(
@@ -795,9 +748,7 @@ class ScholarshipQuotaService:
     ) -> Dict[str, int]:
         """Process applications by priority within quota limits"""
 
-        quota_status = self.get_quota_status_by_type(
-            main_scholarship_type, sub_scholarship_type, semester
-        )
+        quota_status = self.get_quota_status_by_type(main_scholarship_type, sub_scholarship_type, semester)
 
         if quota_status["total_available"] <= 0:
             return {"processed": 0, "approved": 0, "message": "No remaining quota"}

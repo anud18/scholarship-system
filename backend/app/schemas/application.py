@@ -164,15 +164,9 @@ class ApplicationFormData(BaseModel):
 class ApplicationCreate(BaseModel):
     """建立申請"""
 
-    scholarship_type: str = Field(
-        ..., description="獎學金類型代碼", example="undergraduate_freshman"
-    )
-    configuration_id: int = Field(
-        ..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", example=1
-    )
-    scholarship_subtype_list: List[str] = Field(
-        default=[], description="獎學金子類型列表", example=["general", "special"]
-    )
+    scholarship_type: str = Field(..., description="獎學金類型代碼", example="undergraduate_freshman")
+    configuration_id: int = Field(..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", example=1)
+    scholarship_subtype_list: List[str] = Field(default=[], description="獎學金子類型列表", example=["general", "special"])
     form_data: ApplicationFormData = Field(..., description="表單資料")
     agree_terms: Optional[bool] = Field(False, description="同意條款")
     is_renewal: Optional[bool] = Field(False, description="是否為續領申請")
@@ -254,13 +248,9 @@ class ApplicationReviewResponse(BaseModel):
 class ProfessorReviewItemCreate(BaseModel):
     """Professor review item creation schema"""
 
-    sub_type_code: str = Field(
-        ..., description="Scholarship sub-type code (e.g., 'moe_1w')"
-    )
+    sub_type_code: str = Field(..., description="Scholarship sub-type code (e.g., 'moe_1w')")
     is_recommended: bool = Field(..., description="Whether to recommend this sub-type")
-    comments: Optional[str] = Field(
-        None, description="Comments for this specific sub-type"
-    )
+    comments: Optional[str] = Field(None, description="Comments for this specific sub-type")
 
 
 class ProfessorReviewItemResponse(BaseModel):
@@ -278,9 +268,7 @@ class ProfessorReviewItemResponse(BaseModel):
 
 class ProfessorReviewCreate(BaseModel):
     recommendation: Optional[str] = None
-    items: List[ProfessorReviewItemCreate] = Field(
-        default=[], description="Individual sub-type recommendations"
-    )
+    items: List[ProfessorReviewItemCreate] = Field(default=[], description="Individual sub-type recommendations")
 
 
 class ProfessorReviewResponse(BaseModel):
@@ -295,9 +283,7 @@ class ProfessorReviewResponse(BaseModel):
     review_status: Optional[str] = None
     reviewed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
-    items: List[ProfessorReviewItemResponse] = Field(
-        default=[], description="Individual sub-type recommendations"
-    )
+    items: List[ProfessorReviewItemResponse] = Field(default=[], description="Individual sub-type recommendations")
 
 
 class ApplicationResponse(BaseModel):
@@ -347,10 +333,7 @@ class ApplicationResponse(BaseModel):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(
-            self.status
-            in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value]
-        )
+        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
 
     @property
     def is_submitted(self) -> bool:
@@ -431,10 +414,7 @@ class ApplicationListResponse(BaseModel):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(
-            self.status
-            in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value]
-        )
+        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
 
     @property
     def is_submitted(self) -> bool:
@@ -468,16 +448,12 @@ class DashboardStats(BaseModel):
 
     total_applications: int = Field(0, description="Total number of applications")
     draft_applications: int = Field(0, description="Number of draft applications")
-    submitted_applications: int = Field(
-        0, description="Number of submitted applications"
-    )
+    submitted_applications: int = Field(0, description="Number of submitted applications")
     approved_applications: int = Field(0, description="Number of approved applications")
     rejected_applications: int = Field(0, description="Number of rejected applications")
     pending_review: int = Field(0, description="Number of applications pending review")
     total_amount: Decimal = Field(0, description="Total scholarship amount approved")
-    recent_activities: List[Dict[str, Any]] = Field(
-        [], description="Recent application activities"
-    )
+    recent_activities: List[Dict[str, Any]] = Field([], description="Recent application activities")
 
 
 class ProfessorAssignmentRequest(BaseModel):

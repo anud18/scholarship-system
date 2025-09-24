@@ -27,9 +27,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
-) -> User:
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     """Get current authenticated user"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -38,20 +36,14 @@ async def get_current_user(
     )
 
     try:
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
 
-    stmt = (
-        select(User)
-        .options(selectinload(User.admin_scholarships))
-        .where(User.id == int(user_id))
-    )
+    stmt = select(User).options(selectinload(User.admin_scholarships)).where(User.id == int(user_id))
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
     if user is None:

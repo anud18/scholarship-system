@@ -46,9 +46,7 @@ class TestSecurityFunctions:
         assert len(token) > 0
 
         # Verify token can be decoded
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         assert payload["sub"] == "user@university.edu"
         assert payload["role"] == "student"
         assert "exp" in payload
@@ -62,9 +60,7 @@ class TestSecurityFunctions:
         token = create_access_token(data=data)
 
         # Assert
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         assert "exp" in payload
 
         # Verify expiry is set to default (15 minutes from now)
@@ -82,9 +78,7 @@ class TestSecurityFunctions:
         token = create_access_token(data=data)
 
         # Act - Decode the token manually for verification
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
 
         # Assert
         assert payload["sub"] == "user@university.edu"
@@ -99,9 +93,7 @@ class TestSecurityFunctions:
 
         # Act
         token = create_access_token(data=data, expires_delta=custom_expiry)
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
 
         # Assert
         exp_time = datetime.fromtimestamp(payload["exp"])
@@ -137,9 +129,7 @@ class TestCustomExceptions:
         resource_id = "123"
 
         # Act
-        error = NotFoundError(
-            message, resource_type=resource_type, resource_id=resource_id
-        )
+        error = NotFoundError(message, resource_type=resource_type, resource_id=resource_id)
 
         # Assert
         assert str(error) == message
@@ -180,9 +170,7 @@ class TestCustomExceptions:
         storage_path = "/uploads/documents/"
 
         # Act
-        error = FileStorageError(
-            message, file_name=file_name, storage_path=storage_path
-        )
+        error = FileStorageError(message, file_name=file_name, storage_path=storage_path)
 
         # Assert
         assert str(error) == message
@@ -420,10 +408,7 @@ class TestConfigurationSettings:
         assert hasattr(settings, "database_url")
         if settings.database_url:
             assert isinstance(settings.database_url, str)
-            assert any(
-                protocol in settings.database_url
-                for protocol in ["postgresql", "sqlite"]
-            )
+            assert any(protocol in settings.database_url for protocol in ["postgresql", "sqlite"])
 
     def test_settings_security_configurations(self):
         """Test security-related configuration presence"""

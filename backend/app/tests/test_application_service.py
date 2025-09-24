@@ -132,9 +132,7 @@ class TestApplicationService:
             ]
 
             # Should not raise any exception
-            await service._validate_student_eligibility(
-                mock_student, "undergraduate_freshman", mock_application_data
-            )
+            await service._validate_student_eligibility(mock_student, "undergraduate_freshman", mock_application_data)
 
     @pytest.mark.asyncio
     async def test_validate_student_eligibility_scholarship_not_found(
@@ -147,9 +145,7 @@ class TestApplicationService:
             mock_execute.return_value = mock_result
 
             with pytest.raises(NotFoundError, match="Scholarship type"):
-                await service._validate_student_eligibility(
-                    mock_student, "invalid_scholarship", mock_application_data
-                )
+                await service._validate_student_eligibility(mock_student, "invalid_scholarship", mock_application_data)
 
     @pytest.mark.asyncio
     async def test_validate_student_eligibility_inactive_scholarship(
@@ -190,18 +186,14 @@ class TestApplicationService:
         self, service, mock_student, mock_scholarship_type, mock_application_data
     ):
         """Test eligibility validation when student type is not eligible"""
-        mock_scholarship_type.eligible_student_types = [
-            "graduate"
-        ]  # Only graduate students eligible
+        mock_scholarship_type.eligible_student_types = ["graduate"]  # Only graduate students eligible
 
         with patch.object(service.db, "execute") as mock_execute:
             mock_result = Mock()
             mock_result.scalar_one_or_none.return_value = mock_scholarship_type
             mock_execute.return_value = mock_result
 
-            with pytest.raises(
-                ValidationError, match="Student type undergraduate is not eligible"
-            ):
+            with pytest.raises(ValidationError, match="Student type undergraduate is not eligible"):
                 await service._validate_student_eligibility(
                     mock_student, "undergraduate_freshman", mock_application_data
                 )
@@ -221,9 +213,7 @@ class TestApplicationService:
                 existing_application,  # Existing application found
             ]
 
-            with pytest.raises(
-                ConflictError, match="You already have an active application"
-            ):
+            with pytest.raises(ConflictError, match="You already have an active application"):
                 await service._validate_student_eligibility(
                     mock_student, "undergraduate_freshman", mock_application_data
                 )
@@ -444,14 +434,10 @@ class TestApplicationService:
             is_renewal=True,
         )
 
-        with patch.object(
-            service, "get_application_by_id", return_value=mock_application
-        ), patch.object(service.db, "commit") as mock_commit, patch.object(
-            service.db, "refresh"
-        ) as mock_refresh:
-            result = await service.update_application(
-                application_id, update_data, mock_user
-            )
+        with patch.object(service, "get_application_by_id", return_value=mock_application), patch.object(
+            service.db, "commit"
+        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
+            result = await service.update_application(application_id, update_data, mock_user)
 
             assert result == mock_application
             assert mock_application.status == ApplicationStatus.DRAFT.value
@@ -482,9 +468,7 @@ class TestApplicationService:
             )
         )
 
-        with patch.object(
-            service, "get_application_by_id", return_value=mock_application
-        ):
+        with patch.object(service, "get_application_by_id", return_value=mock_application):
             with pytest.raises(ValidationError, match="Application cannot be edited"):
                 await service.update_application(application_id, update_data, mock_user)
 
@@ -533,9 +517,7 @@ class TestApplicationService:
         with patch.object(service.db, "execute") as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = mock_application
 
-            with pytest.raises(
-                ValidationError, match="Only draft applications can be deleted"
-            ):
+            with pytest.raises(ValidationError, match="Only draft applications can be deleted"):
                 await service.delete_application(application_id, mock_user)
 
     @pytest.mark.asyncio
@@ -557,7 +539,5 @@ class TestApplicationService:
         with patch.object(service.db, "execute") as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = mock_application
 
-            with pytest.raises(
-                AuthorizationError, match="You can only delete your own applications"
-            ):
+            with pytest.raises(AuthorizationError, match="You can only delete your own applications"):
                 await service.delete_application(application_id, mock_user)

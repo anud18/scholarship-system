@@ -65,9 +65,7 @@ async def test_complete_bank_doc_flow():
                 "bank_name": "測試銀行",
                 "account_holder_name": user.name,
             }
-            user_profile = await profile_service.create_user_profile(
-                profile_data, user.id
-            )
+            user_profile = await profile_service.create_user_profile(profile_data, user.id)
 
         # Simulate bank document upload (normally would come from file upload)
         if not user_profile.bank_document_object_name:
@@ -77,17 +75,11 @@ async def test_complete_bank_doc_flow():
             await db.commit()
             print(f"✅ Added bank document to profile: {fake_object_name}")
         else:
-            print(
-                f"✅ User already has bank document: {user_profile.bank_document_object_name}"
-            )
+            print(f"✅ User already has bank document: {user_profile.bank_document_object_name}")
 
         # Step 3: Find an eligible scholarship configuration
         print("\n🎓 Finding eligible scholarship configuration...")
-        stmt = (
-            select(ScholarshipConfiguration)
-            .where(ScholarshipConfiguration.is_active == True)
-            .limit(1)
-        )
+        stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.is_active == True).limit(1)
         result = await db.execute(stmt)
         config = result.scalar_one_or_none()
 
@@ -122,9 +114,7 @@ async def test_complete_bank_doc_flow():
         )
 
         try:
-            application = await application_service.create_application(
-                application_data, user
-            )
+            application = await application_service.create_application(application_data, user)
             print(f"✅ Created application: {application.app_id}")
         except Exception as e:
             print(f"❌ Failed to create application: {e}")
@@ -136,9 +126,7 @@ async def test_complete_bank_doc_flow():
         update_data = {"form_data": form_data, "status": "draft"}
 
         try:
-            updated_application = await application_service.update_application(
-                application.id, update_data, user
-            )
+            updated_application = await application_service.update_application(application.id, update_data, user)
             print("✅ Application updated successfully")
         except Exception as e:
             print(f"❌ Failed to update application: {e}")
@@ -169,9 +157,7 @@ async def test_complete_bank_doc_flow():
                     print(f"  - file_size: {doc.get('file_size')}")
                     print(f"  - mime_type: {doc.get('mime_type')}")
                     print(f"  - is_verified: {doc.get('is_verified')}")
-                    print(
-                        f"  - is_cloned_from_profile: {doc.get('is_cloned_from_profile')}"
-                    )
+                    print(f"  - is_cloned_from_profile: {doc.get('is_cloned_from_profile')}")
 
                     if doc.get("document_type") == "bank_account_proof":
                         bank_doc_found = True
@@ -207,9 +193,7 @@ async def test_complete_bank_doc_flow():
                 if not bank_doc_found:
                     print("❌ Bank account proof document not found in application")
                 else:
-                    print(
-                        "\n🎉 SUCCESS! Bank document is properly stored in application."
-                    )
+                    print("\n🎉 SUCCESS! Bank document is properly stored in application.")
             else:
                 print("❌ No documents array found in submitted_form_data")
         else:
@@ -219,10 +203,7 @@ async def test_complete_bank_doc_flow():
         print("\n📱 Frontend Data Structure Test:")
         print("=" * 40)
 
-        if (
-            updated_application.submitted_form_data
-            and "documents" in updated_application.submitted_form_data
-        ):
+        if updated_application.submitted_form_data and "documents" in updated_application.submitted_form_data:
             documents = updated_application.submitted_form_data["documents"]
 
             # Convert to frontend format (simulate what frontend dialog does)

@@ -49,10 +49,7 @@ def validate_response_data(data: Any, schema: Type[BaseModel]) -> bool:
             field_path = " -> ".join(str(loc) for loc in error["loc"])
             error_details.append(f"Field '{field_path}': {error['msg']}")
 
-        raise SchemaValidationError(
-            f"Schema validation failed for {schema.__name__}:\n"
-            + "\n".join(error_details)
-        )
+        raise SchemaValidationError(f"Schema validation failed for {schema.__name__}:\n" + "\n".join(error_details))
 
 
 def convert_sqlalchemy_to_response_dict(
@@ -95,13 +92,10 @@ def convert_sqlalchemy_to_response_dict(
             if value is not None:
                 if relationship.uselist:  # One-to-many or many-to-many
                     result[relationship.key] = [
-                        convert_sqlalchemy_to_response_dict(item, exclude_fields, False)
-                        for item in value
+                        convert_sqlalchemy_to_response_dict(item, exclude_fields, False) for item in value
                     ]
                 else:  # One-to-one or many-to-one
-                    result[relationship.key] = convert_sqlalchemy_to_response_dict(
-                        value, exclude_fields, False
-                    )
+                    result[relationship.key] = convert_sqlalchemy_to_response_dict(value, exclude_fields, False)
 
     return result
 
@@ -230,9 +224,7 @@ def debug_response_schema_mismatch(
                 if field_name in expected_schema.model_fields:
                     expected_type = expected_schema.model_fields[field_name].annotation
                     actual_type = type(field_value).__name__
-                    debug_logger.debug(
-                        f"Field '{field_name}': expected {expected_type}, got {actual_type}"
-                    )
+                    debug_logger.debug(f"Field '{field_name}': expected {expected_type}, got {actual_type}")
 
 
 # Decorator for automatic response validation in development
@@ -256,13 +248,9 @@ def validate_response_schema(schema: Type[BaseModel]):
             if settings.debug:
                 try:
                     validate_response_data(result, schema)
-                    logger.debug(
-                        f"✅ Response schema validation passed for {func.__name__}"
-                    )
+                    logger.debug(f"✅ Response schema validation passed for {func.__name__}")
                 except SchemaValidationError as e:
-                    logger.error(
-                        f"❌ Response schema validation failed for {func.__name__}: {e}"
-                    )
+                    logger.error(f"❌ Response schema validation failed for {func.__name__}: {e}")
                     # In development, we might want to raise the error
                     # In production, we might want to log and continue
                     raise

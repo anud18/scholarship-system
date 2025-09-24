@@ -81,9 +81,7 @@ async def create_comprehensive_application(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Application creation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Application creation failed: {str(e)}")
     finally:
         sync_session.close()
 
@@ -106,9 +104,7 @@ async def submit_comprehensive_application(
         if not success:
             raise HTTPException(status_code=400, detail=message)
 
-        return ApiResponse(
-            success=True, message=message, data={"application_id": application_id}
-        )
+        return ApiResponse(success=True, message=message, data={"application_id": application_id})
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Submission failed: {str(e)}")
@@ -161,12 +157,8 @@ async def get_applications_by_priority(
                     "priority_score": app.priority_score,
                     "is_renewal": app.is_renewal,
                     "status": app.status,
-                    "submitted_at": app.submitted_at.isoformat()
-                    if app.submitted_at
-                    else None,
-                    "review_deadline": app.review_deadline.isoformat()
-                    if app.review_deadline
-                    else None,
+                    "submitted_at": app.submitted_at.isoformat() if app.submitted_at else None,
+                    "review_deadline": app.review_deadline.isoformat() if app.review_deadline else None,
                     "is_overdue": app.is_overdue,
                 }
             )
@@ -186,9 +178,7 @@ async def get_applications_by_priority(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to retrieve applications: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve applications: {str(e)}")
     finally:
         sync_session.close()
 
@@ -212,9 +202,7 @@ async def get_quota_status(
         main_type_enum = ScholarshipMainType(main_type)
         sub_type_enum = ScholarshipSubType(sub_type)
     except ValueError as e:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid scholarship type: {str(e)}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid scholarship type: {str(e)}")
 
     sync_session = sessionmaker(bind=db.bind)()
 
@@ -229,9 +217,7 @@ async def get_quota_status(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get quota status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get quota status: {str(e)}")
     finally:
         sync_session.close()
 
@@ -252,9 +238,7 @@ async def process_applications_by_priority(
         main_type_enum = ScholarshipMainType(main_type)
         sub_type_enum = ScholarshipSubType(sub_type)
     except ValueError as e:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid scholarship type: {str(e)}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid scholarship type: {str(e)}")
 
     sync_session = sessionmaker(bind=db.bind)()
 
@@ -262,14 +246,10 @@ async def process_applications_by_priority(
         service = ScholarshipQuotaService(sync_session)
         result = service.process_applications_by_priority(main_type, sub_type, semester)
 
-        return ApiResponse(
-            success=True, message="Applications processed successfully", data=result
-        )
+        return ApiResponse(success=True, message="Applications processed successfully", data=result)
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to process applications: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to process applications: {str(e)}")
     finally:
         sync_session.close()
 
@@ -299,9 +279,7 @@ async def process_renewal_applications(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to process renewals: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to process renewals: {str(e)}")
     finally:
         sync_session.close()
 
@@ -382,9 +360,7 @@ async def get_scholarship_dashboard(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get dashboard data: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get dashboard data: {str(e)}")
     finally:
         sync_session.close()
 
@@ -394,14 +370,8 @@ async def get_available_scholarship_types(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Get available scholarship main and sub types"""
-    main_types = [
-        {"value": t.value, "name": t.value.replace("_", " ").title()}
-        for t in ScholarshipMainType
-    ]
-    sub_types = [
-        {"value": t.value, "name": t.value.replace("_", " ").title()}
-        for t in ScholarshipSubType
-    ]
+    main_types = [{"value": t.value, "name": t.value.replace("_", " ").title()} for t in ScholarshipMainType]
+    sub_types = [{"value": t.value, "name": t.value.replace("_", " ").title()} for t in ScholarshipSubType]
 
     return ApiResponse(
         success=True,
@@ -425,9 +395,7 @@ async def simulate_priority_processing(
     from app.core.config import settings
 
     if not settings.debug:
-        raise HTTPException(
-            status_code=403, detail="Only available in development mode"
-        )
+        raise HTTPException(status_code=403, detail="Only available in development mode")
 
     from sqlalchemy.orm import sessionmaker
 
@@ -462,9 +430,7 @@ async def simulate_priority_processing(
                     "is_renewal": app.is_renewal,
                     "original_priority": app.priority_score,
                     "calculated_priority": priority_score,
-                    "submission_date": app.submitted_at.isoformat()
-                    if app.submitted_at
-                    else None,
+                    "submission_date": app.submitted_at.isoformat() if app.submitted_at else None,
                 }
             )
 

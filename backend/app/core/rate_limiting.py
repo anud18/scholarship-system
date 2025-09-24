@@ -19,9 +19,7 @@ class RateLimiter:
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         self.redis = redis.from_url(redis_url, decode_responses=True)
 
-    async def is_rate_limited(
-        self, key: str, limit: int, window_seconds: int
-    ) -> tuple[bool, int]:
+    async def is_rate_limited(self, key: str, limit: int, window_seconds: int) -> tuple[bool, int]:
         """
         Check if a key is rate limited using sliding window
 
@@ -130,9 +128,7 @@ def rate_limit(
 
             # Check rate limit
             limiter = get_rate_limiter()
-            is_limited, remaining = await limiter.is_rate_limited(
-                rate_key, requests, window_seconds
-            )
+            is_limited, remaining = await limiter.is_rate_limited(rate_key, requests, window_seconds)
 
             if is_limited:
                 logger.warning(f"Rate limit exceeded for {rate_key}")

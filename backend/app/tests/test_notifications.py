@@ -166,18 +166,14 @@ class TestNotificationAPI:
         return user
 
     @pytest.mark.asyncio
-    async def test_get_user_notifications(
-        self, client: AsyncClient, test_user_with_notifications: User
-    ):
+    async def test_get_user_notifications(self, client: AsyncClient, test_user_with_notifications: User):
         """Test getting user notifications"""
         # Mock authentication
         # In a real test, you would need to set up proper authentication
 
         response = await client.get(
             "/api/v1/notifications",
-            headers={
-                "Authorization": f"Bearer mock_token_for_{test_user_with_notifications.id}"
-            },
+            headers={"Authorization": f"Bearer mock_token_for_{test_user_with_notifications.id}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -186,15 +182,11 @@ class TestNotificationAPI:
         assert len(data["data"]) >= 2  # User notifications + system announcements
 
     @pytest.mark.asyncio
-    async def test_get_unread_count(
-        self, client: AsyncClient, test_user_with_notifications: User
-    ):
+    async def test_get_unread_count(self, client: AsyncClient, test_user_with_notifications: User):
         """Test getting unread notification count"""
         response = await client.get(
             "/api/v1/notifications/unread-count",
-            headers={
-                "Authorization": f"Bearer mock_token_for_{test_user_with_notifications.id}"
-            },
+            headers={"Authorization": f"Bearer mock_token_for_{test_user_with_notifications.id}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -227,9 +219,7 @@ class TestNotificationAPI:
         if notification:
             response = await client.patch(
                 f"/api/v1/notifications/{notification.id}/read",
-                headers={
-                    "Authorization": f"Bearer mock_token_for_{test_user_with_notifications.id}"
-                },
+                headers={"Authorization": f"Bearer mock_token_for_{test_user_with_notifications.id}"},
             )
 
             assert response.status_code == status.HTTP_200_OK
@@ -249,18 +239,14 @@ class TestNotificationAPI:
         from sqlalchemy import select
 
         result = await db_session.execute(
-            select(Notification)
-            .where(Notification.user_id == test_user_with_notifications.id)
-            .limit(1)
+            select(Notification).where(Notification.user_id == test_user_with_notifications.id).limit(1)
         )
         notification = result.scalar_one_or_none()
 
         if notification:
             response = await client.patch(
                 f"/api/v1/notifications/{notification.id}/dismiss",
-                headers={
-                    "Authorization": f"Bearer mock_token_for_{test_user_with_notifications.id}"
-                },
+                headers={"Authorization": f"Bearer mock_token_for_{test_user_with_notifications.id}"},
             )
 
             assert response.status_code == status.HTTP_200_OK
@@ -329,9 +315,7 @@ class TestNotificationIntegration:
 
         # Count student's personal notifications
         student_count = await db_session.execute(
-            select(func.count(Notification.id)).where(
-                Notification.user_id == student.id
-            )
+            select(func.count(Notification.id)).where(Notification.user_id == student.id)
         )
         assert student_count.scalar() == 2
 

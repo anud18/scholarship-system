@@ -45,17 +45,13 @@ async def check_admin_users():
     try:
         async with AsyncSessionLocal() as session:
             # 查詢所有管理員用戶
-            stmt = select(User).where(
-                User.role.in_([UserRole.ADMIN, UserRole.SUPER_ADMIN])
-            )
+            stmt = select(User).where(User.role.in_([UserRole.ADMIN, UserRole.SUPER_ADMIN]))
             result = await session.execute(stmt)
             admin_users = result.scalars().all()
 
             print(f"📊 找到 {len(admin_users)} 個管理員用戶:")
             for admin in admin_users:
-                print(
-                    f"   - ID: {admin.id}, Email: {admin.email}, Role: {admin.role.value}"
-                )
+                print(f"   - ID: {admin.id}, Email: {admin.email}, Role: {admin.role.value}")
 
             if not admin_users:
                 print("⚠️  警告：沒有找到管理員用戶！")
@@ -77,9 +73,7 @@ async def check_existing_announcements():
     try:
         async with AsyncSessionLocal() as session:
             # 統計系統公告
-            count_stmt = select(func.count(Notification.id)).where(
-                Notification.user_id.is_(None)
-            )
+            count_stmt = select(func.count(Notification.id)).where(Notification.user_id.is_(None))
             count_result = await session.execute(count_stmt)
             total_announcements = count_result.scalar()
 
@@ -167,9 +161,7 @@ async def test_api_simulation():
             conditions = [Notification.user_id.is_(None)]
 
             # 查詢總數
-            count_stmt = select(func.count(Notification.id)).where(
-                func.and_(*conditions)
-            )
+            count_stmt = select(func.count(Notification.id)).where(func.and_(*conditions))
             count_result = await session.execute(count_stmt)
             total = count_result.scalar()
 
@@ -242,9 +234,7 @@ async def check_notification_model():
 
     try:
         # 檢查模型屬性
-        notification_attrs = [
-            attr for attr in dir(Notification) if not attr.startswith("_")
-        ]
+        notification_attrs = [attr for attr in dir(Notification) if not attr.startswith("_")]
         print("📋 Notification 模型屬性:")
         for attr in notification_attrs:
             print(f"   - {attr}")

@@ -82,9 +82,7 @@ class TestStudentService:
         }
 
     @pytest.mark.asyncio
-    async def test_get_student_snapshot_with_student_object(
-        self, service, mock_student
-    ):
+    async def test_get_student_snapshot_with_student_object(self, service, mock_student):
         """Test getting student snapshot with Student object"""
         result = await service.get_student_snapshot(mock_student)
 
@@ -219,11 +217,9 @@ class TestStudentService:
             "notes": "Updated notes",
         }
 
-        with patch.object(
-            service, "get_student_by_id", return_value=mock_student
-        ), patch.object(service.db, "commit") as mock_commit, patch.object(
-            service.db, "refresh"
-        ) as mock_refresh:
+        with patch.object(service, "get_student_by_id", return_value=mock_student), patch.object(
+            service.db, "commit"
+        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
             result = await service.update_student_info(student_id, update_info)
 
             # Verify student attributes were updated
@@ -247,9 +243,7 @@ class TestStudentService:
                 await service.update_student_info(student_id, update_info)
 
     @pytest.mark.asyncio
-    async def test_update_student_info_ignores_invalid_fields(
-        self, service, mock_student
-    ):
+    async def test_update_student_info_ignores_invalid_fields(self, service, mock_student):
         """Test that updating student info ignores fields that don't exist on model"""
         student_id = 1
         update_info = {
@@ -266,13 +260,9 @@ class TestStudentService:
                 return False
             return original_hasattr(obj, attr)
 
-        with patch.object(
-            service, "get_student_by_id", return_value=mock_student
-        ), patch.object(service.db, "commit"), patch.object(
-            service.db, "refresh"
-        ), patch(
-            "builtins.hasattr", side_effect=mock_hasattr
-        ):
+        with patch.object(service, "get_student_by_id", return_value=mock_student), patch.object(
+            service.db, "commit"
+        ), patch.object(service.db, "refresh"), patch("builtins.hasattr", side_effect=mock_hasattr):
             result = await service.update_student_info(student_id, update_info)
 
             # Verify valid field was updated
@@ -311,9 +301,7 @@ class TestStudentService:
         mock_students = [Mock(spec=Student) for _ in range(3)]
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalars.return_value.all.return_value = (
-                mock_students
-            )
+            mock_execute.return_value.scalars.return_value.all.return_value = mock_students
 
             result = await service.get_students_by_department(depno)
 
@@ -340,9 +328,7 @@ class TestStudentService:
         mock_students = [Mock(spec=Student) for _ in range(5)]
 
         with patch.object(service.db, "execute") as mock_execute:
-            mock_execute.return_value.scalars.return_value.all.return_value = (
-                mock_students
-            )
+            mock_execute.return_value.scalars.return_value.all.return_value = mock_students
 
             result = await service.get_students_by_academy(aca_no)
 

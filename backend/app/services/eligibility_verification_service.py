@@ -41,9 +41,7 @@ class EligibilityVerificationService:
         try:
             # Fetch student data from external API
             student_data = self.student_service.get_student_info(student_id)
-            stmt = select(ScholarshipType).where(
-                ScholarshipType.id == scholarship_type_id
-            )
+            stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_type_id)
             result = await self.db.execute(stmt)
             scholarship_type = result.scalar_one_or_none()
 
@@ -139,9 +137,7 @@ class EligibilityVerificationService:
             existing_app = result.scalar_one_or_none()
 
             if existing_app:
-                failure_reasons.append(
-                    f"Already has an active application ({existing_app.app_id})"
-                )
+                failure_reasons.append(f"Already has an active application ({existing_app.app_id})")
                 verification_results["checks_performed"].append(
                     {
                         "check": "duplicate_application",
@@ -159,9 +155,7 @@ class EligibilityVerificationService:
                 )
 
             # 5. Academic eligibility checks
-            academic_eligible, academic_details = self._check_academic_eligibility(
-                student_data, scholarship_type
-            )
+            academic_eligible, academic_details = self._check_academic_eligibility(student_data, scholarship_type)
             verification_results["checks_performed"].extend(academic_details["checks"])
             verification_results["scores"].update(academic_details["scores"])
 
@@ -169,9 +163,7 @@ class EligibilityVerificationService:
                 failure_reasons.extend(academic_details["failures"])
 
             # 6. Scholarship-specific rule validation
-            rules_passed, rules_details = await self._validate_scholarship_rules(
-                student_data, scholarship_type
-            )
+            rules_passed, rules_details = await self._validate_scholarship_rules(student_data, scholarship_type)
             verification_results["checks_performed"].extend(rules_details["checks"])
             verification_results["scores"].update(rules_details["scores"])
 
@@ -185,20 +177,12 @@ class EligibilityVerificationService:
             verification_results["checks_performed"].extend(renewal_details["checks"])
             if renewal_details.get("is_renewal_candidate"):
                 verification_results["renewal_candidate"] = True
-                verification_results["previous_applications"] = renewal_details.get(
-                    "previous_applications", []
-                )
+                verification_results["previous_applications"] = renewal_details.get("previous_applications", [])
 
             # 8. Calculate overall eligibility score
             total_checks = len(verification_results["checks_performed"])
-            passed_checks = sum(
-                1
-                for check in verification_results["checks_performed"]
-                if check["passed"]
-            )
-            eligibility_score = (
-                (passed_checks / total_checks * 100) if total_checks > 0 else 0
-            )
+            passed_checks = sum(1 for check in verification_results["checks_performed"] if check["passed"])
+            eligibility_score = (passed_checks / total_checks * 100) if total_checks > 0 else 0
 
             verification_results["eligibility_score"] = eligibility_score
             verification_results["total_checks"] = total_checks
@@ -237,9 +221,7 @@ class EligibilityVerificationService:
             )
             return False, details
 
-        details["checks"].append(
-            {"check": "student_data", "passed": True, "details": "Student data found"}
-        )
+        details["checks"].append({"check": "student_data", "passed": True, "details": "Student data found"})
 
         # Determine student type
         student_type = self._determine_student_type(student)
@@ -272,9 +254,7 @@ class EligibilityVerificationService:
             details["scores"]["required_gpa"] = float(scholarship_type.min_gpa)
 
             if not gpa_eligible:
-                details["failures"].append(
-                    f"GPA {term_record.gpa} below minimum {scholarship_type.min_gpa}"
-                )
+                details["failures"].append(f"GPA {term_record.gpa} below minimum {scholarship_type.min_gpa}")
                 details["checks"].append(
                     {
                         "check": "gpa_requirement",
@@ -333,15 +313,11 @@ class EligibilityVerificationService:
         for rule in rules:
             try:
                 # Get the value to check based on rule's condition field
-                value_to_check = self._get_student_value_for_rule(
-                    student, rule.condition_field
-                )
+                value_to_check = self._get_student_value_for_rule(student, rule.condition_field)
 
                 if value_to_check is None:
                     if rule.is_required:
-                        details["failures"].append(
-                            f"Required field {rule.condition_field} is missing"
-                        )
+                        details["failures"].append(f"Required field {rule.condition_field} is missing")
                         details["checks"].append(
                             {
                                 "check": f"rule_{rule.rule_name}",
@@ -372,15 +348,11 @@ class EligibilityVerificationService:
             except Exception as e:
                 logger.error(f"Error validating rule {rule.id}: {str(e)}")
                 if rule.is_required:
-                    details["failures"].append(
-                        f"Rule validation error: {rule.rule_name}"
-                    )
+                    details["failures"].append(f"Rule validation error: {rule.rule_name}")
 
         # Calculate overall rule score
         if rule_scores:
-            details["scores"]["overall_rule_score"] = sum(rule_scores) / len(
-                rule_scores
-            )
+            details["scores"]["overall_rule_score"] = sum(rule_scores) / len(rule_scores)
 
         is_eligible = len(details["failures"]) == 0
         return is_eligible, details
@@ -418,9 +390,7 @@ class EligibilityVerificationService:
                     "app_id": app.app_id,
                     "semester": app.semester,
                     "academic_year": app.academic_year,
-                    "approved_at": app.approved_at.isoformat()
-                    if app.approved_at
-                    else None,
+                    "approved_at": app.approved_at.isoformat() if app.approved_at else None,
                 }
                 for app in previous_apps[:3]  # Last 3 applications
             ]
@@ -454,9 +424,7 @@ class EligibilityVerificationService:
         else:
             return "undergraduate"
 
-    def _get_student_value_for_rule(
-        self, student: Dict[str, Any], field_name: str
-    ) -> Any:
+    def _get_student_value_for_rule(self, student: Dict[str, Any], field_name: str) -> Any:
         """Get student value for rule validation"""
 
         # Map field names to actual values from student data
@@ -492,9 +460,7 @@ class EligibilityVerificationService:
             else:
                 # This would require a batch API endpoint to get all students
                 # For now, return an error message
-                return {
-                    "error": "Batch verification without specific student IDs not supported yet"
-                }
+                return {"error": "Batch verification without specific student IDs not supported yet"}
 
             results = {
                 "scholarship_type_id": scholarship_type_id,
@@ -512,9 +478,7 @@ class EligibilityVerificationService:
                         is_eligible,
                         failure_reasons,
                         verification_details,
-                    ) = await self.verify_student_eligibility(
-                        student_id, scholarship_type_id, semester
-                    )
+                    ) = await self.verify_student_eligibility(student_id, scholarship_type_id, semester)
 
                     student_result = {
                         "student_id": student_id,
@@ -522,9 +486,7 @@ class EligibilityVerificationService:
                         "student_no": student_data.get("std_stdcode", ""),
                         "is_eligible": is_eligible,
                         "failure_reasons": failure_reasons,
-                        "eligibility_score": verification_details.get(
-                            "eligibility_score", 0
-                        ),
+                        "eligibility_score": verification_details.get("eligibility_score", 0),
                         "verification_details": verification_details,
                     }
 
@@ -534,12 +496,8 @@ class EligibilityVerificationService:
                         results["ineligible_students"].append(student_result)
 
                 except Exception as e:
-                    logger.error(
-                        f"Error verifying eligibility for student {student_id}: {str(e)}"
-                    )
-                    results["verification_errors"].append(
-                        {"student_id": student_id, "error": str(e)}
-                    )
+                    logger.error(f"Error verifying eligibility for student {student_id}: {str(e)}")
+                    results["verification_errors"].append({"student_id": student_id, "error": str(e)})
 
             results["eligible_count"] = len(results["eligible_students"])
             results["ineligible_count"] = len(results["ineligible_students"])

@@ -27,12 +27,8 @@ class Settings(BaseSettings):
     base_url: str = "http://localhost:8000"  # Base URL for the application
 
     # Database
-    database_url: str = (
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/scholarship_test"
-    )
-    database_url_sync: str = (
-        "postgresql://postgres:postgres@localhost:5432/scholarship_test"
-    )
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/scholarship_test"
+    database_url_sync: str = "postgresql://postgres:postgres@localhost:5432/scholarship_test"
 
     # Security
     secret_key: str = "test-secret-key-for-development-only-please-change-in-production-this-is-32-chars"
@@ -41,9 +37,7 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
 
     # CORS
-    cors_origins: str = (
-        "http://localhost:3000,http://140.113.207.40:3000,http://140.113.0.229:3000"
-    )
+    cors_origins: str = "http://localhost:3000,http://140.113.207.40:3000,http://140.113.0.229:3000"
 
     # Email
     smtp_host: str = "smtp.gmail.com"
@@ -105,7 +99,9 @@ class Settings(BaseSettings):
     student_api_enabled: bool = True
     student_api_base_url: str = "http://localhost:8080"  # Mock API in development
     student_api_account: str = "scholarship"
-    student_api_hmac_key: str = "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"  # Mock key for development
+    student_api_hmac_key: str = (
+        "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"  # Mock key for development
+    )
     student_api_timeout: float = 10.0
     student_api_encode_type: Optional[str] = "UTF-8"
 
@@ -144,14 +140,8 @@ class Settings(BaseSettings):
         """Only allow bypassing time restrictions in test environments"""
         import os
 
-        if v and not (
-            os.getenv("PYTEST_CURRENT_TEST")
-            or os.getenv("CI")
-            or os.getenv("TESTING") == "true"
-        ):
-            raise ValueError(
-                "Time restrictions bypass only allowed in test environments"
-            )
+        if v and not (os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING") == "true"):
+            raise ValueError("Time restrictions bypass only allowed in test environments")
         return bool(v)
 
     @field_validator("cors_origins", mode="before")
@@ -190,9 +180,7 @@ class Settings(BaseSettings):
     @property
     def testing(self) -> bool:
         """Check if we're in a testing environment"""
-        return bool(
-            os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING")
-        )
+        return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING"))
 
     class Config:
         env_file = ".env"

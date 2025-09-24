@@ -31,9 +31,7 @@ from app.services.portal_sso_service import PortalSSOService
 router = APIRouter()
 
 
-@router.post(
-    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
     auth_service = AuthService(db)
@@ -77,9 +75,7 @@ async def logout():
 
 
 @router.post("/refresh")
-async def refresh_token(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+async def refresh_token(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Refresh access token"""
     auth_service = AuthService(db)
     token_response = await auth_service.create_tokens(current_user)
@@ -101,9 +97,7 @@ async def refresh_token(
 async def get_mock_users(db: AsyncSession = Depends(get_db)):
     """Get available mock users for development login"""
     if not settings.enable_mock_sso:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Mock SSO is disabled"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mock SSO is disabled")
 
     mock_sso_service = MockSSOService(db)
     users = await mock_sso_service.get_mock_users()
@@ -116,20 +110,14 @@ async def get_mock_users(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/mock-sso/login")
-async def mock_sso_login(
-    request_data: PortalSSORequest, db: AsyncSession = Depends(get_db)
-):
+async def mock_sso_login(request_data: PortalSSORequest, db: AsyncSession = Depends(get_db)):
     """Login as mock user for development"""
     if not settings.enable_mock_sso:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Mock SSO is disabled"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mock SSO is disabled")
 
     nycu_id = request_data.nycu_id or request_data.username  # 支持兩種參數名稱
     if not nycu_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="NYCU ID is required"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="NYCU ID is required")
 
     try:
         mock_sso_service = MockSSOService(db)
@@ -197,9 +185,7 @@ async def portal_sso_verify(
     It verifies the token with Portal JWT server and logs in the user.
     """
     if not settings.portal_sso_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Portal SSO is disabled"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Portal SSO is disabled")
 
     # Debug logging to see what parameters are being sent
     import logging
@@ -259,17 +245,13 @@ async def portal_sso_verify(
 
         user_info = auth_result.get("user", {})
         nycu_id = user_info.get("nycu_id", "unknown")
-        logger.info(
-            f"Redirecting user {nycu_id} to frontend via Portal verification: {redirect_url}"
-        )
+        logger.info(f"Redirecting user {nycu_id} to frontend via Portal verification: {redirect_url}")
 
         # Return redirect response
         return RedirectResponse(
             url=redirect_url,
             status_code=302,
-            headers={
-                "Set-Cookie": f"access_token={auth_result['access_token']}; Path=/; HttpOnly; Secure"
-            },
+            headers={"Set-Cookie": f"access_token={auth_result['access_token']}; Path=/; HttpOnly; Secure"},
         )
     except Exception as e:
         logger.error(f"Portal SSO error: {str(e)}")
@@ -283,9 +265,7 @@ async def portal_sso_verify(
 async def portal_sso_verify_get(username: str, db: AsyncSession = Depends(get_db)):
     """Get portal SSO data for a specific user (GET method for testing)"""
     if not settings.enable_mock_sso:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Portal SSO is disabled"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Portal SSO is disabled")
 
     try:
         mock_sso_service = MockSSOService(db)
@@ -334,12 +314,8 @@ async def get_developer_profiles(developer_id: str, db: AsyncSession = Depends(g
             "username": user.nycu_id,
             "email": user.email,
             "full_name": user.name,
-            "chinese_name": user.raw_data.get("chinese_name")
-            if user.raw_data
-            else None,
-            "english_name": user.raw_data.get("english_name")
-            if user.raw_data
-            else None,
+            "chinese_name": user.raw_data.get("chinese_name") if user.raw_data else None,
+            "english_name": user.raw_data.get("english_name") if user.raw_data else None,
             "role": user.role.value,
             "is_active": True,  # All developer users are active
             "created_at": user.created_at.isoformat() if user.created_at else None,
@@ -370,10 +346,7 @@ async def quick_setup_developer(developer_id: str, db: AsyncSession = Depends(ge
     dev_service = DeveloperProfileService(db)
     users = await dev_service.quick_setup_developer(developer_id)
 
-    profiles = [
-        {"username": user.nycu_id, "full_name": user.name, "role": user.role.value}
-        for user in users
-    ]
+    profiles = [{"username": user.nycu_id, "full_name": user.name, "role": user.role.value} for user in users]
 
     return {
         "success": True,
@@ -478,10 +451,7 @@ async def create_staff_suite(developer_id: str, db: AsyncSession = Depends(get_d
     dev_service = DeveloperProfileService(db)
     users = await dev_service.create_developer_test_suite(developer_id, profiles)
 
-    created_profiles = [
-        {"username": user.nycu_id, "full_name": user.name, "role": user.role.value}
-        for user in users
-    ]
+    created_profiles = [{"username": user.nycu_id, "full_name": user.name, "role": user.role.value} for user in users]
 
     return {
         "success": True,
@@ -495,9 +465,7 @@ async def create_staff_suite(developer_id: str, db: AsyncSession = Depends(get_d
 
 
 @router.delete("/dev-profiles/{developer_id}")
-async def delete_developer_profiles(
-    developer_id: str, db: AsyncSession = Depends(get_db)
-):
+async def delete_developer_profiles(developer_id: str, db: AsyncSession = Depends(get_db)):
     """Delete all test profiles for a developer"""
     if not settings.enable_mock_sso:
         raise HTTPException(
@@ -516,9 +484,7 @@ async def delete_developer_profiles(
 
 
 @router.delete("/dev-profiles/{developer_id}/{role}")
-async def delete_specific_profile(
-    developer_id: str, role: str, db: AsyncSession = Depends(get_db)
-):
+async def delete_specific_profile(developer_id: str, role: str, db: AsyncSession = Depends(get_db)):
     """Delete a specific test profile for a developer"""
     if not settings.enable_mock_sso:
         raise HTTPException(
@@ -543,6 +509,4 @@ async def delete_specific_profile(
                 detail=f"Profile not found: {developer_id}/{role}",
             )
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {role}"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {role}")

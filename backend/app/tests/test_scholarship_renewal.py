@@ -87,14 +87,10 @@ class TestScholarshipRenewalPeriod:
 
         # 測試續領教授審查期間
         scholarship_with_renewal.renewal_application_end_date = now - timedelta(days=1)
-        scholarship_with_renewal.renewal_professor_review_start = now - timedelta(
-            days=1
-        )
+        scholarship_with_renewal.renewal_professor_review_start = now - timedelta(days=1)
         scholarship_with_renewal.renewal_professor_review_end = now + timedelta(days=5)
 
-        assert (
-            scholarship_with_renewal.get_current_review_stage() == "renewal_professor"
-        )
+        assert scholarship_with_renewal.get_current_review_stage() == "renewal_professor"
 
         # 測試續領學院審查期間
         scholarship_with_renewal.renewal_professor_review_end = now - timedelta(days=1)
@@ -109,9 +105,7 @@ class TestScholarshipRenewalPeriod:
         scholarship_with_renewal.professor_review_start = now - timedelta(days=1)
         scholarship_with_renewal.professor_review_end = now + timedelta(days=5)
 
-        assert (
-            scholarship_with_renewal.get_current_review_stage() == "general_professor"
-        )
+        assert scholarship_with_renewal.get_current_review_stage() == "general_professor"
 
         # 測試一般學院審查期間
         scholarship_with_renewal.professor_review_end = now - timedelta(days=1)
@@ -126,22 +120,10 @@ class TestScholarshipRenewalPeriod:
 
         assert "renewal" in timeline
         assert "general" in timeline
-        assert (
-            timeline["renewal"]["application_start"]
-            == scholarship_with_renewal.renewal_application_start_date
-        )
-        assert (
-            timeline["renewal"]["application_end"]
-            == scholarship_with_renewal.renewal_application_end_date
-        )
-        assert (
-            timeline["general"]["application_start"]
-            == scholarship_with_renewal.application_start_date
-        )
-        assert (
-            timeline["general"]["application_end"]
-            == scholarship_with_renewal.application_end_date
-        )
+        assert timeline["renewal"]["application_start"] == scholarship_with_renewal.renewal_application_start_date
+        assert timeline["renewal"]["application_end"] == scholarship_with_renewal.renewal_application_end_date
+        assert timeline["general"]["application_start"] == scholarship_with_renewal.application_start_date
+        assert timeline["general"]["application_end"] == scholarship_with_renewal.application_end_date
 
     def test_next_deadline(self, scholarship_with_renewal):
         """Test next deadline calculation"""

@@ -29,15 +29,11 @@ class EligibilityService:
 
     def _should_bypass_whitelist(self) -> bool:
         """Check if should bypass whitelist in dev mode"""
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get(
-            "BYPASS_WHITELIST", False
-        )
+        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False)
 
     def _should_bypass_application_period(self) -> bool:
         """Check if should bypass application period in dev mode"""
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get(
-            "ALWAYS_OPEN_APPLICATION", False
-        )
+        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("ALWAYS_OPEN_APPLICATION", False)
 
     async def check_student_eligibility(
         self,
@@ -83,10 +79,7 @@ class EligibilityService:
 
                 if not (app_start <= now <= app_end):
                     # Check renewal application period if applicable
-                    if (
-                        config.renewal_application_start_date
-                        and config.renewal_application_end_date
-                    ):
+                    if config.renewal_application_start_date and config.renewal_application_end_date:
                         renewal_start = config.renewal_application_start_date
                         if renewal_start.tzinfo is None:
                             renewal_start = renewal_start.replace(tzinfo=timezone.utc)
@@ -101,10 +94,7 @@ class EligibilityService:
                         reasons.append("不在申請期間內")
 
         # Check whitelist if enabled (unless bypassed in dev mode)
-        if (
-            config.scholarship_type.whitelist_enabled
-            and not self._should_bypass_whitelist()
-        ):
+        if config.scholarship_type.whitelist_enabled and not self._should_bypass_whitelist():
             student_id = student_data.get("std_stdcode", "")
             whitelist_ids = config.whitelist_student_ids or {}
 
@@ -121,9 +111,7 @@ class EligibilityService:
 
         # All eligibility requirements (GPA, year/grade, department, etc.) are now handled by scholarship rules
         # Check scholarship rules - this covers all types of requirements
-        rules_passed, rule_failures = await self._check_scholarship_rules(
-            student_data, config
-        )
+        rules_passed, rule_failures = await self._check_scholarship_rules(student_data, config)
         if not rules_passed:
             reasons.extend(rule_failures)
 
@@ -183,10 +171,7 @@ class EligibilityService:
 
                 if not (app_start <= now <= app_end):
                     # Check renewal application period if applicable
-                    if (
-                        config.renewal_application_start_date
-                        and config.renewal_application_end_date
-                    ):
+                    if config.renewal_application_start_date and config.renewal_application_end_date:
                         renewal_start = config.renewal_application_start_date
                         if renewal_start.tzinfo is None:
                             renewal_start = renewal_start.replace(tzinfo=timezone.utc)
@@ -201,10 +186,7 @@ class EligibilityService:
                         reasons.append("不在申請期間內")
 
         # Check whitelist if enabled (unless bypassed in dev mode)
-        if (
-            config.scholarship_type.whitelist_enabled
-            and not self._should_bypass_whitelist()
-        ):
+        if config.scholarship_type.whitelist_enabled and not self._should_bypass_whitelist():
             student_id = student_data.get("std_stdcode", "")
             whitelist_ids = config.whitelist_student_ids or {}
 
@@ -244,8 +226,7 @@ class EligibilityService:
         stmt = select(ScholarshipRule).filter(
             ScholarshipRule.scholarship_type_id == config.scholarship_type_id,
             ScholarshipRule.is_active == True,
-            ScholarshipRule.is_template
-            == False,  # Exclude template rules from filtering
+            ScholarshipRule.is_template == False,  # Exclude template rules from filtering
         )
 
         # Filter by academic year and semester if specified
@@ -331,8 +312,7 @@ class EligibilityService:
         stmt = select(ScholarshipRule).filter(
             ScholarshipRule.scholarship_type_id == config.scholarship_type_id,
             ScholarshipRule.is_active == True,
-            ScholarshipRule.is_template
-            == False,  # Exclude template rules from filtering
+            ScholarshipRule.is_template == False,  # Exclude template rules from filtering
         )
 
         # Filter by academic year and semester if specified
@@ -429,9 +409,7 @@ class EligibilityService:
 
         return len(failure_reasons) == 0, failure_reasons, processed_details
 
-    async def determine_required_student_api_type(
-        self, config: ScholarshipConfiguration
-    ) -> str:
+    async def determine_required_student_api_type(self, config: ScholarshipConfiguration) -> str:
         """Determine which student API type is required based on scholarship rules
 
         Returns:
@@ -442,8 +420,7 @@ class EligibilityService:
         stmt = select(ScholarshipRule).filter(
             ScholarshipRule.scholarship_type_id == config.scholarship_type_id,
             ScholarshipRule.is_active == True,
-            ScholarshipRule.is_template
-            == False,  # Exclude template rules from filtering
+            ScholarshipRule.is_template == False,  # Exclude template rules from filtering
         )
 
         # Filter by academic year and semester if specified
@@ -482,9 +459,7 @@ class EligibilityService:
         # Default to basic student API
         return "student"
 
-    async def get_application_status(
-        self, user_id: int, config: ScholarshipConfiguration
-    ) -> Dict[str, Any]:
+    async def get_application_status(self, user_id: int, config: ScholarshipConfiguration) -> Dict[str, Any]:
         """Get application status for a specific scholarship configuration
 
         Returns:
@@ -578,9 +553,7 @@ class EligibilityService:
             "application_id": existing_application.id,
         }
 
-    def _evaluate_rule(
-        self, student_data: Dict[str, Any], rule: ScholarshipRule
-    ) -> bool:
+    def _evaluate_rule(self, student_data: Dict[str, Any], rule: ScholarshipRule) -> bool:
         """Evaluate a single rule against student data"""
 
         # Get the value from student data
@@ -649,9 +622,7 @@ class EligibilityService:
         return {
             "passed": details["passed"][:],  # Keep passed rules as-is
             "warnings": details["warnings"][:],  # Keep warnings as-is
-            "errors": details["errors"][
-                :
-            ],  # Keep all error rules with their original tags
+            "errors": details["errors"][:],  # Keep all error rules with their original tags
         }
 
     async def _check_existing_applications(

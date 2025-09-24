@@ -34,9 +34,7 @@ def western_to_taiwan_year(western_year: int) -> int:
     return western_year - 1911
 
 
-async def get_user_accessible_scholarship_ids(
-    user: User, db: AsyncSession
-) -> List[int]:
+async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> List[int]:
     """Get scholarship IDs that the user can access based on their role and permissions"""
     if user.is_super_admin():
         # Super admins can access all scholarships
@@ -46,9 +44,7 @@ async def get_user_accessible_scholarship_ids(
 
     elif user.is_admin():
         # Regular admins can only access scholarships they have permissions for
-        stmt = select(AdminScholarship.scholarship_id).where(
-            AdminScholarship.admin_id == user.id
-        )
+        stmt = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == user.id)
         result = await db.execute(stmt)
         return result.scalars().all()
 
@@ -62,9 +58,7 @@ async def get_user_accessible_scholarship_ids(
 
 @router.get("/available-semesters", response_model=ApiResponse)
 async def get_available_semesters(
-    scholarship_code: Optional[str] = Query(
-        None, description="Filter periods by specific scholarship code"
-    ),
+    scholarship_code: Optional[str] = Query(None, description="Filter periods by specific scholarship code"),
     quota_management_mode: Optional[str] = Query(
         None, description="Filter periods by quota management mode (e.g., 'matrix')"
     ),
@@ -75,9 +69,7 @@ async def get_available_semesters(
 
     try:
         # Get scholarship IDs user can access
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         if not accessible_scholarship_ids:
             return ApiResponse(
@@ -89,9 +81,7 @@ async def get_available_semesters(
         # Build query conditions
         conditions = [
             ScholarshipConfiguration.is_active == True,
-            ScholarshipConfiguration.scholarship_type_id.in_(
-                accessible_scholarship_ids
-            ),
+            ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
         ]
 
         # If scholarship_code filter is provided, add it to conditions
@@ -112,9 +102,7 @@ async def get_available_semesters(
                     data=[],
                 )
 
-            conditions.append(
-                ScholarshipConfiguration.scholarship_type_id == scholarship_id
-            )
+            conditions.append(ScholarshipConfiguration.scholarship_type_id == scholarship_id)
 
         # If quota_management_mode filter is provided, add it to conditions
         if quota_management_mode:
@@ -122,9 +110,7 @@ async def get_available_semesters(
 
             try:
                 mode_enum = QuotaManagementMode(quota_management_mode)
-                conditions.append(
-                    ScholarshipConfiguration.quota_management_mode == mode_enum
-                )
+                conditions.append(ScholarshipConfiguration.quota_management_mode == mode_enum)
             except ValueError:
                 return ApiResponse(
                     success=False,
@@ -207,15 +193,11 @@ async def get_matrix_quota_status(
             semester = None
 
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         # Find PhD scholarship type
         if not accessible_scholarship_ids:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="未找到可存取的獎學金"
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="未找到可存取的獎學金")
 
         phd_stmt = select(ScholarshipType).where(
             and_(
@@ -359,21 +341,15 @@ async def update_matrix_quota(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="配額不能為負數")
 
     if new_quota > 1000:  # Reasonable upper bound for scholarship quotas
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="配額數值過大（最大值：1000）"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="配額數值過大（最大值：1000）")
 
     try:
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         # Find PhD scholarship
         if not accessible_scholarship_ids:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="未找到可存取的獎學金"
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="未找到可存取的獎學金")
 
         phd_stmt = select(ScholarshipType).where(
             and_(
@@ -385,9 +361,7 @@ async def update_matrix_quota(
         phd_scholarship = phd_result.scalar_one_or_none()
 
         if not phd_scholarship:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="您沒有管理博士獎學金配額的權限"
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您沒有管理博士獎學金配額的權限")
 
         # Get the configuration for the specified academic year, or the most recent if not specified
         config_conditions = [
@@ -396,9 +370,7 @@ async def update_matrix_quota(
         ]
 
         if academic_year:
-            config_conditions.append(
-                ScholarshipConfiguration.academic_year == academic_year
-            )
+            config_conditions.append(ScholarshipConfiguration.academic_year == academic_year)
 
         config_stmt = (
             select(ScholarshipConfiguration)
@@ -439,11 +411,7 @@ async def update_matrix_quota(
 
         # Calculate totals
         sub_type_total = sum(config.quotas[sub_type].values())
-        grand_total = sum(
-            sum(colleges.values())
-            for colleges in config.quotas.values()
-            if isinstance(colleges, dict)
-        )
+        grand_total = sum(sum(colleges.values()) for colleges in config.quotas.values() if isinstance(colleges, dict))
 
         # Update total quota
         config.total_quota = grand_total
@@ -475,9 +443,7 @@ async def update_matrix_quota(
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.error(
-            f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True
-        )
+        logger.error(f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update matrix quota: {str(e)}",
@@ -485,9 +451,7 @@ async def update_matrix_quota(
 
 
 @router.get("/colleges", response_model=ApiResponse)
-async def get_colleges(
-    current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get college configurations from database"""
 
     try:
@@ -496,9 +460,7 @@ async def get_colleges(
 
         colleges = get_all_colleges()
 
-        return ApiResponse(
-            success=True, message=f"Retrieved {len(colleges)} colleges", data=colleges
-        )
+        return ApiResponse(success=True, message=f"Retrieved {len(colleges)} colleges", data=colleges)
 
     except Exception as e:
         raise HTTPException(
@@ -508,21 +470,15 @@ async def get_colleges(
 
 
 @router.get("/scholarship-types", response_model=ApiResponse)
-async def get_scholarship_types(
-    current_user: User = Depends(require_staff), db: AsyncSession = Depends(get_db)
-):
+async def get_scholarship_types(current_user: User = Depends(require_staff), db: AsyncSession = Depends(get_db)):
     """Get scholarship types that the user has access to"""
 
     try:
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         if not accessible_scholarship_ids:
-            return ApiResponse(
-                success=True, message="No accessible scholarship types found", data=[]
-            )
+            return ApiResponse(success=True, message="No accessible scholarship types found", data=[])
 
         # Get scholarship types with their configurations
         stmt = (
@@ -563,21 +519,13 @@ async def get_scholarship_types(
                 "name_en": stype.name_en or stype.name,
                 "category": stype.category,
                 "sub_types": stype.sub_type_list or [],
-                "has_quota_limit": latest_config.has_quota_limit
-                if latest_config
-                else False,
-                "has_college_quota": latest_config.has_college_quota
-                if latest_config
-                else False,
+                "has_quota_limit": latest_config.has_quota_limit if latest_config else False,
+                "has_college_quota": latest_config.has_college_quota if latest_config else False,
                 "quota_management_mode": latest_config.quota_management_mode.value
                 if latest_config and latest_config.quota_management_mode
                 else "none",
-                "application_period": stype.application_cycle.value
-                if stype.application_cycle
-                else "semester",
-                "description": latest_config.description
-                if latest_config
-                else stype.description or "",
+                "application_period": stype.application_cycle.value if stype.application_cycle else "semester",
+                "description": latest_config.description if latest_config else stype.description or "",
             }
             type_configs.append(type_config)
 
@@ -613,23 +561,17 @@ async def get_quota_overview(
             semester = None
 
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         if not accessible_scholarship_ids:
-            return ApiResponse(
-                success=True, message="No accessible scholarships found", data=[]
-            )
+            return ApiResponse(success=True, message="No accessible scholarships found", data=[])
 
         # Get configurations for this period
         stmt = (
             select(ScholarshipConfiguration)
             .where(
                 and_(
-                    ScholarshipConfiguration.scholarship_type_id.in_(
-                        accessible_scholarship_ids
-                    ),
+                    ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
                     ScholarshipConfiguration.academic_year == academic_year,
                     ScholarshipConfiguration.semester == semester
                     if semester
@@ -664,11 +606,7 @@ async def get_quota_overview(
                 elif config.total_quota:
                     # Split total quota among sub-types
                     num_sub_types = len(stype.sub_type_list or ["general"])
-                    allocated_quota = (
-                        config.total_quota // num_sub_types
-                        if num_sub_types > 0
-                        else config.total_quota
-                    )
+                    allocated_quota = config.total_quota // num_sub_types if num_sub_types > 0 else config.total_quota
 
                 # TODO: Get actual usage from applications
                 used_quota = 0
@@ -683,9 +621,7 @@ async def get_quota_overview(
                         "used_quota": used_quota,
                         "remaining_quota": max(0, allocated_quota - used_quota),
                         "applications_count": applications_count,
-                        "application_period": stype.application_cycle.value
-                        if stype.application_cycle
-                        else "semester",
+                        "application_period": stype.application_cycle.value if stype.application_cycle else "semester",
                         "current_period": period,
                     }
                 )
@@ -701,9 +637,7 @@ async def get_quota_overview(
                     "quota_management_mode": config.quota_management_mode.value
                     if config.quota_management_mode
                     else "none",
-                    "application_period": stype.application_cycle.value
-                    if stype.application_cycle
-                    else "semester",
+                    "application_period": stype.application_cycle.value if stype.application_cycle else "semester",
                     "description": config.description or stype.description or "",
                     "sub_types": sub_types,
                 }
@@ -740,25 +674,17 @@ async def create_scholarship_configuration(
 
     try:
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         scholarship_type_id = config_data.get("scholarship_type_id")
-        if (
-            not scholarship_type_id
-            or scholarship_type_id not in accessible_scholarship_ids
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="您沒有管理此獎學金的權限"
-            )
+        if not scholarship_type_id or scholarship_type_id not in accessible_scholarship_ids:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="您沒有管理此獎學金的權限")
 
         # Check if configuration already exists for this period
         existing_stmt = select(ScholarshipConfiguration).where(
             and_(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
-                ScholarshipConfiguration.academic_year
-                == config_data.get("academic_year"),
+                ScholarshipConfiguration.academic_year == config_data.get("academic_year"),
                 ScholarshipConfiguration.semester == config_data.get("semester"),
                 ScholarshipConfiguration.is_active == True,
             )
@@ -767,9 +693,7 @@ async def create_scholarship_configuration(
         existing_config = existing_result.scalar_one_or_none()
 
         if existing_config:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail="此學年度/學期已存在配置"
-            )
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此學年度/學期已存在配置")
 
         # Create new configuration
         new_config = ScholarshipConfiguration(
@@ -783,27 +707,15 @@ async def create_scholarship_configuration(
             amount=config_data["amount"],
             currency=config_data.get("currency", "TWD"),
             whitelist_student_ids=config_data.get("whitelist_student_ids", {}),
-            renewal_application_start_date=config_data.get(
-                "renewal_application_start_date"
-            ),
-            renewal_application_end_date=config_data.get(
-                "renewal_application_end_date"
-            ),
+            renewal_application_start_date=config_data.get("renewal_application_start_date"),
+            renewal_application_end_date=config_data.get("renewal_application_end_date"),
             application_start_date=config_data.get("application_start_date"),
             application_end_date=config_data.get("application_end_date"),
-            renewal_professor_review_start=config_data.get(
-                "renewal_professor_review_start"
-            ),
-            renewal_professor_review_end=config_data.get(
-                "renewal_professor_review_end"
-            ),
-            renewal_college_review_start=config_data.get(
-                "renewal_college_review_start"
-            ),
+            renewal_professor_review_start=config_data.get("renewal_professor_review_start"),
+            renewal_professor_review_end=config_data.get("renewal_professor_review_end"),
+            renewal_college_review_start=config_data.get("renewal_college_review_start"),
             renewal_college_review_end=config_data.get("renewal_college_review_end"),
-            requires_professor_recommendation=config_data.get(
-                "requires_professor_recommendation", False
-            ),
+            requires_professor_recommendation=config_data.get("requires_professor_recommendation", False),
             professor_review_start=config_data.get("professor_review_start"),
             professor_review_end=config_data.get("professor_review_end"),
             requires_college_review=config_data.get("requires_college_review", False),
@@ -847,9 +759,7 @@ async def get_scholarship_configuration(
 
     try:
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         # Get configuration with scholarship type
         stmt = (
@@ -857,9 +767,7 @@ async def get_scholarship_configuration(
             .where(
                 and_(
                     ScholarshipConfiguration.id == config_id,
-                    ScholarshipConfiguration.scholarship_type_id.in_(
-                        accessible_scholarship_ids
-                    ),
+                    ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
                 )
             )
             .options(selectinload(ScholarshipConfiguration.scholarship_type))
@@ -869,17 +777,13 @@ async def get_scholarship_configuration(
         config = result.scalar_one_or_none()
 
         if not config:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限")
 
         # Build response data
         config_data = {
             "id": config.id,
             "scholarship_type_id": config.scholarship_type_id,
-            "scholarship_type_name": config.scholarship_type.name
-            if config.scholarship_type
-            else None,
+            "scholarship_type_name": config.scholarship_type.name if config.scholarship_type else None,
             "academic_year": config.academic_year,
             "semester": config.semester.value if config.semester else None,
             "config_name": config.config_name,
@@ -898,9 +802,7 @@ async def get_scholarship_configuration(
             "application_start_date": config.application_start_date.isoformat()
             if config.application_start_date
             else None,
-            "application_end_date": config.application_end_date.isoformat()
-            if config.application_end_date
-            else None,
+            "application_end_date": config.application_end_date.isoformat() if config.application_end_date else None,
             "renewal_professor_review_start": config.renewal_professor_review_start.isoformat()
             if config.renewal_professor_review_start
             else None,
@@ -917,26 +819,14 @@ async def get_scholarship_configuration(
             "professor_review_start": config.professor_review_start.isoformat()
             if config.professor_review_start
             else None,
-            "professor_review_end": config.professor_review_end.isoformat()
-            if config.professor_review_end
-            else None,
+            "professor_review_end": config.professor_review_end.isoformat() if config.professor_review_end else None,
             "requires_college_review": config.requires_college_review,
-            "college_review_start": config.college_review_start.isoformat()
-            if config.college_review_start
-            else None,
-            "college_review_end": config.college_review_end.isoformat()
-            if config.college_review_end
-            else None,
-            "review_deadline": config.review_deadline.isoformat()
-            if config.review_deadline
-            else None,
+            "college_review_start": config.college_review_start.isoformat() if config.college_review_start else None,
+            "college_review_end": config.college_review_end.isoformat() if config.college_review_end else None,
+            "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
             "is_active": config.is_active,
-            "effective_start_date": config.effective_start_date.isoformat()
-            if config.effective_start_date
-            else None,
-            "effective_end_date": config.effective_end_date.isoformat()
-            if config.effective_end_date
-            else None,
+            "effective_start_date": config.effective_start_date.isoformat() if config.effective_start_date else None,
+            "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
             "version": config.version,
             "created_at": config.created_at.isoformat() if config.created_at else None,
             "updated_at": config.updated_at.isoformat() if config.updated_at else None,
@@ -964,17 +854,13 @@ async def update_scholarship_configuration(
 
     try:
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         # Get existing configuration
         stmt = select(ScholarshipConfiguration).where(
             and_(
                 ScholarshipConfiguration.id == config_id,
-                ScholarshipConfiguration.scholarship_type_id.in_(
-                    accessible_scholarship_ids
-                ),
+                ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
             )
         )
 
@@ -982,9 +868,7 @@ async def update_scholarship_configuration(
         config = result.scalar_one_or_none()
 
         if not config:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限")
 
         # Update fields (excluding quota-related fields)
         if "config_name" in config_data:
@@ -1005,61 +889,35 @@ async def update_scholarship_configuration(
         from app.utils.date_utils import parse_date_field
 
         if "renewal_application_start_date" in config_data:
-            config.renewal_application_start_date = parse_date_field(
-                config_data["renewal_application_start_date"]
-            )
+            config.renewal_application_start_date = parse_date_field(config_data["renewal_application_start_date"])
         if "renewal_application_end_date" in config_data:
-            config.renewal_application_end_date = parse_date_field(
-                config_data["renewal_application_end_date"]
-            )
+            config.renewal_application_end_date = parse_date_field(config_data["renewal_application_end_date"])
         if "application_start_date" in config_data:
-            config.application_start_date = parse_date_field(
-                config_data["application_start_date"]
-            )
+            config.application_start_date = parse_date_field(config_data["application_start_date"])
         if "application_end_date" in config_data:
-            config.application_end_date = parse_date_field(
-                config_data["application_end_date"]
-            )
+            config.application_end_date = parse_date_field(config_data["application_end_date"])
 
         # Update review periods
         if "renewal_professor_review_start" in config_data:
-            config.renewal_professor_review_start = parse_date_field(
-                config_data["renewal_professor_review_start"]
-            )
+            config.renewal_professor_review_start = parse_date_field(config_data["renewal_professor_review_start"])
         if "renewal_professor_review_end" in config_data:
-            config.renewal_professor_review_end = parse_date_field(
-                config_data["renewal_professor_review_end"]
-            )
+            config.renewal_professor_review_end = parse_date_field(config_data["renewal_professor_review_end"])
         if "renewal_college_review_start" in config_data:
-            config.renewal_college_review_start = parse_date_field(
-                config_data["renewal_college_review_start"]
-            )
+            config.renewal_college_review_start = parse_date_field(config_data["renewal_college_review_start"])
         if "renewal_college_review_end" in config_data:
-            config.renewal_college_review_end = parse_date_field(
-                config_data["renewal_college_review_end"]
-            )
+            config.renewal_college_review_end = parse_date_field(config_data["renewal_college_review_end"])
         if "requires_professor_recommendation" in config_data:
-            config.requires_professor_recommendation = config_data[
-                "requires_professor_recommendation"
-            ]
+            config.requires_professor_recommendation = config_data["requires_professor_recommendation"]
         if "professor_review_start" in config_data:
-            config.professor_review_start = parse_date_field(
-                config_data["professor_review_start"]
-            )
+            config.professor_review_start = parse_date_field(config_data["professor_review_start"])
         if "professor_review_end" in config_data:
-            config.professor_review_end = parse_date_field(
-                config_data["professor_review_end"]
-            )
+            config.professor_review_end = parse_date_field(config_data["professor_review_end"])
         if "requires_college_review" in config_data:
             config.requires_college_review = config_data["requires_college_review"]
         if "college_review_start" in config_data:
-            config.college_review_start = parse_date_field(
-                config_data["college_review_start"]
-            )
+            config.college_review_start = parse_date_field(config_data["college_review_start"])
         if "college_review_end" in config_data:
-            config.college_review_end = parse_date_field(
-                config_data["college_review_end"]
-            )
+            config.college_review_end = parse_date_field(config_data["college_review_end"])
         if "review_deadline" in config_data:
             config.review_deadline = parse_date_field(config_data["review_deadline"])
 
@@ -1067,13 +925,9 @@ async def update_scholarship_configuration(
         if "is_active" in config_data:
             config.is_active = config_data["is_active"]
         if "effective_start_date" in config_data:
-            config.effective_start_date = parse_date_field(
-                config_data["effective_start_date"]
-            )
+            config.effective_start_date = parse_date_field(config_data["effective_start_date"])
         if "effective_end_date" in config_data:
-            config.effective_end_date = parse_date_field(
-                config_data["effective_end_date"]
-            )
+            config.effective_end_date = parse_date_field(config_data["effective_end_date"])
         if "version" in config_data:
             config.version = config_data["version"]
 
@@ -1115,17 +969,13 @@ async def deactivate_scholarship_configuration(
 
     try:
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         # Get existing configuration
         stmt = select(ScholarshipConfiguration).where(
             and_(
                 ScholarshipConfiguration.id == config_id,
-                ScholarshipConfiguration.scholarship_type_id.in_(
-                    accessible_scholarship_ids
-                ),
+                ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
             )
         )
 
@@ -1133,9 +983,7 @@ async def deactivate_scholarship_configuration(
         config = result.scalar_one_or_none()
 
         if not config:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限")
 
         # Check if there are active applications using this configuration
         # This would need to be implemented based on your application model structure
@@ -1173,17 +1021,13 @@ async def duplicate_scholarship_configuration(
 
     try:
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         # Get source configuration
         stmt = select(ScholarshipConfiguration).where(
             and_(
                 ScholarshipConfiguration.id == config_id,
-                ScholarshipConfiguration.scholarship_type_id.in_(
-                    accessible_scholarship_ids
-                ),
+                ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
             )
         )
 
@@ -1191,9 +1035,7 @@ async def duplicate_scholarship_configuration(
         source_config = result.scalar_one_or_none()
 
         if not source_config:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="來源配置不存在或您沒有存取權限"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="來源配置不存在或您沒有存取權限")
 
         target_academic_year = target_data["academic_year"]
         target_semester = target_data.get("semester")
@@ -1201,8 +1043,7 @@ async def duplicate_scholarship_configuration(
         # Check if target configuration already exists
         existing_stmt = select(ScholarshipConfiguration).where(
             and_(
-                ScholarshipConfiguration.scholarship_type_id
-                == source_config.scholarship_type_id,
+                ScholarshipConfiguration.scholarship_type_id == source_config.scholarship_type_id,
                 ScholarshipConfiguration.academic_year == target_academic_year,
                 ScholarshipConfiguration.semester == target_semester,
                 ScholarshipConfiguration.is_active == True,
@@ -1212,18 +1053,14 @@ async def duplicate_scholarship_configuration(
         existing_config = existing_result.scalar_one_or_none()
 
         if existing_config:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail="目標學年度/學期已存在配置"
-            )
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="目標學年度/學期已存在配置")
 
         # Create duplicate configuration
         new_config = ScholarshipConfiguration(
             scholarship_type_id=source_config.scholarship_type_id,
             academic_year=target_academic_year,
             semester=target_semester,
-            config_name=target_data.get(
-                "config_name", f"{source_config.config_name} (複製)"
-            ),
+            config_name=target_data.get("config_name", f"{source_config.config_name} (複製)"),
             config_code=target_data["config_code"],
             description=source_config.description,
             description_en=source_config.description_en,
@@ -1261,13 +1098,9 @@ async def duplicate_scholarship_configuration(
 
 @router.get("/configurations/", response_model=ApiResponse)
 async def list_scholarship_configurations(
-    scholarship_type_id: Optional[int] = Query(
-        None, description="Filter by scholarship type ID"
-    ),
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
-    semester: Optional[str] = Query(
-        None, description="Filter by semester (first/second)"
-    ),
+    semester: Optional[str] = Query(None, description="Filter by semester (first/second)"),
     is_active: bool = Query(True, description="Filter by active status"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -1276,27 +1109,19 @@ async def list_scholarship_configurations(
 
     try:
         # Get accessible scholarship IDs
-        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(
-            current_user, db
-        )
+        accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         if not accessible_scholarship_ids:
-            return ApiResponse(
-                success=True, message="No accessible configurations found", data=[]
-            )
+            return ApiResponse(success=True, message="No accessible configurations found", data=[])
 
         # Build query conditions
         conditions = [
-            ScholarshipConfiguration.scholarship_type_id.in_(
-                accessible_scholarship_ids
-            ),
+            ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
             ScholarshipConfiguration.is_active == is_active,
         ]
 
         if scholarship_type_id:
-            conditions.append(
-                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id
-            )
+            conditions.append(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
 
         if academic_year:
             conditions.append(ScholarshipConfiguration.academic_year == academic_year)
@@ -1327,12 +1152,8 @@ async def list_scholarship_configurations(
             config_data = {
                 "id": config.id,
                 "scholarship_type_id": config.scholarship_type_id,
-                "scholarship_type_name": config.scholarship_type.name
-                if config.scholarship_type
-                else None,
-                "scholarship_type_code": config.scholarship_type.code
-                if config.scholarship_type
-                else None,
+                "scholarship_type_name": config.scholarship_type.name if config.scholarship_type else None,
+                "scholarship_type_code": config.scholarship_type.code if config.scholarship_type else None,
                 "academic_year": config.academic_year,
                 "semester": config.semester.value if config.semester else None,
                 "config_name": config.config_name,
@@ -1379,25 +1200,15 @@ async def list_scholarship_configurations(
                 "college_review_start": config.college_review_start.isoformat()
                 if config.college_review_start
                 else None,
-                "college_review_end": config.college_review_end.isoformat()
-                if config.college_review_end
-                else None,
-                "review_deadline": config.review_deadline.isoformat()
-                if config.review_deadline
-                else None,
+                "college_review_end": config.college_review_end.isoformat() if config.college_review_end else None,
+                "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
                 "effective_start_date": config.effective_start_date.isoformat()
                 if config.effective_start_date
                 else None,
-                "effective_end_date": config.effective_end_date.isoformat()
-                if config.effective_end_date
-                else None,
+                "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
                 "version": config.version,
-                "created_at": config.created_at.isoformat()
-                if config.created_at
-                else None,
-                "updated_at": config.updated_at.isoformat()
-                if config.updated_at
-                else None,
+                "created_at": config.created_at.isoformat() if config.created_at else None,
+                "updated_at": config.updated_at.isoformat() if config.updated_at else None,
             }
             config_list.append(config_data)
 

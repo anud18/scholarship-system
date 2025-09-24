@@ -33,9 +33,7 @@ class TestMockSSO:
     def test_mock_sso_login_success(self):
         """Test successful mock SSO login with existing user from init_db"""
         # Attempt login with existing user from init_db
-        response = client.post(
-            "/api/v1/auth/mock-sso/login", json={"username": "student001"}
-        )
+        response = client.post("/api/v1/auth/mock-sso/login", json={"username": "student001"})
 
         assert response.status_code == 200
         data = response.json()
@@ -46,9 +44,7 @@ class TestMockSSO:
 
     def test_mock_sso_login_invalid_user(self):
         """Test mock SSO login with invalid username"""
-        response = client.post(
-            "/api/v1/auth/mock-sso/login", json={"username": "nonexistent_user"}
-        )
+        response = client.post("/api/v1/auth/mock-sso/login", json={"username": "nonexistent_user"})
 
         assert response.status_code == 400
 
@@ -88,7 +84,5 @@ class TestMockSSO:
         response = client.get("/api/v1/auth/mock-sso/users")
         assert response.status_code == 404
 
-        response = client.post(
-            "/api/v1/auth/mock-sso/login", json={"username": "student001"}
-        )
+        response = client.post("/api/v1/auth/mock-sso/login", json={"username": "student001"})
         assert response.status_code == 404

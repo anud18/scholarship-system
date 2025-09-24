@@ -24,22 +24,16 @@ security = HTTPBearer(auto_error=False)
 # For testing purposes, you can add them back if needed, but they're not used in production
 
 
-def create_access_token(
-    data: Dict[str, Any], expires_delta: Optional[timedelta] = None
-) -> str:
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """Create JWT access token"""
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(
-            minutes=settings.access_token_expire_minutes
-        )
+        expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
 
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(
-        to_encode, settings.secret_key, algorithm=settings.algorithm
-    )
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encoded_jwt
 
 
@@ -49,18 +43,14 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
     expire = datetime.utcnow() + timedelta(days=settings.refresh_token_expire_days)
     to_encode.update({"exp": expire, "type": "refresh"})
 
-    encoded_jwt = jwt.encode(
-        to_encode, settings.secret_key, algorithm=settings.algorithm
-    )
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encoded_jwt
 
 
 def verify_token(token: str) -> Dict[str, Any]:
     """Verify and decode JWT token"""
     try:
-        payload = jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         return payload
     except jwt.ExpiredSignatureError:
         raise AuthenticationError("Token has expired")
@@ -88,11 +78,7 @@ async def get_current_user(
         raise AuthenticationError("Could not validate credentials")
 
     # Get user from database with relationships that will be used in-request
-    stmt = (
-        select(User)
-        .options(selectinload(User.admin_scholarships))
-        .where(User.id == user_id)
-    )
+    stmt = select(User).options(selectinload(User.admin_scholarships)).where(User.id == user_id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
     if user is None:
@@ -106,9 +92,7 @@ def require_role(required_role: UserRole):
 
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
         if not current_user.has_role(required_role):
-            raise AuthorizationError(
-                f"Access denied. Required role: {required_role.value}"
-            )
+            raise AuthorizationError(f"Access denied. Required role: {required_role.value}")
         return current_user
 
     return role_checker
@@ -120,9 +104,7 @@ def require_roles(*required_roles: UserRole):
     def roles_checker(current_user: User = Depends(get_current_user)) -> User:
         if not any(current_user.has_role(role) for role in required_roles):
             role_names = [role.value for role in required_roles]
-            raise AuthorizationError(
-                f"Access denied. Required roles: {', '.join(role_names)}"
-            )
+            raise AuthorizationError(f"Access denied. Required roles: {', '.join(role_names)}")
         return current_user
 
     return roles_checker
@@ -183,9 +165,7 @@ def require_scholarship_permission(scholarship_type_id: int):
 
     def permission_checker(current_user: User = Depends(require_admin)) -> User:
         if not current_user.has_scholarship_permission(scholarship_type_id):
-            raise AuthorizationError(
-                f"Access denied. No permission to manage scholarship type {scholarship_type_id}"
-            )
+            raise AuthorizationError(f"Access denied. No permission to manage scholarship type {scholarship_type_id}")
         return current_user
 
     return permission_checker
@@ -194,6 +174,4 @@ def require_scholarship_permission(scholarship_type_id: int):
 def check_scholarship_permission(user: User, scholarship_type_id: int) -> None:
     """Check if user has permission for a scholarship type and raise exception if not"""
     if not user.has_scholarship_permission(scholarship_type_id):
-        raise AuthorizationError(
-            f"Access denied. No permission to manage scholarship type {scholarship_type_id}"
-        )
+        raise AuthorizationError(f"Access denied. No permission to manage scholarship type {scholarship_type_id}")

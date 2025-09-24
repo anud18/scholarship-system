@@ -11,12 +11,8 @@ class PreAuthorizeUserRequest(BaseModel):
     """Request schema for pre-authorizing a user"""
 
     nycu_id: str = Field(..., description="NYCU ID of the user to pre-authorize")
-    role: str = Field(
-        ..., description="Role to assign (student, professor, college, admin)"
-    )
-    comment: Optional[str] = Field(
-        None, description="Optional comment for the pre-authorization"
-    )
+    role: str = Field(..., description="Role to assign (student, professor, college, admin)")
+    comment: Optional[str] = Field(None, description="Optional comment for the pre-authorization")
 
 
 class PreAuthorizeUserResponse(BaseModel):
@@ -32,9 +28,7 @@ class AssignScholarshipRequest(BaseModel):
 
     admin_nycu_id: str = Field(..., description="NYCU ID of the admin")
     scholarship_id: int = Field(..., description="ID of the scholarship to assign")
-    comment: Optional[str] = Field(
-        None, description="Optional comment for the assignment"
-    )
+    comment: Optional[str] = Field(None, description="Optional comment for the assignment")
 
 
 class AssignScholarshipResponse(BaseModel):

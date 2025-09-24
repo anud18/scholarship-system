@@ -45,9 +45,7 @@ async def check_database_health() -> Dict[str, Any]:
                 "checked_in": pool.checkedin(),
                 "checked_out": pool.checkedout(),
                 "overflow": pool.overflow(),
-                "invalid": pool.invalidated_count()
-                if hasattr(pool, "invalidated_count")
-                else 0,
+                "invalid": pool.invalidated_count() if hasattr(pool, "invalidated_count") else 0,
             }
 
     except Exception as e:
@@ -56,14 +54,9 @@ async def check_database_health() -> Dict[str, Any]:
         health_info["status"] = "unhealthy"
 
         # Check for specific PostgreSQL cached statement errors
-        if (
-            "InvalidCachedStatementError" in error_message
-            or "cached statement plan is invalid" in error_message
-        ):
+        if "InvalidCachedStatementError" in error_message or "cached statement plan is invalid" in error_message:
             health_info["cached_statement_error"] = True
-            logger.warning(
-                f"Detected cached statement error during health check: {error_message}"
-            )
+            logger.warning(f"Detected cached statement error during health check: {error_message}")
 
         logger.error(f"Database health check failed: {e}")
 
@@ -101,9 +94,7 @@ async def recover_from_cached_statement_error() -> bool:
     return False
 
 
-async def handle_database_operation_with_retry(
-    operation_func, max_retries: int = 3, *args, **kwargs
-):
+async def handle_database_operation_with_retry(operation_func, max_retries: int = 3, *args, **kwargs):
     """
     Execute a database operation with automatic retry on cached statement errors
 
@@ -126,13 +117,8 @@ async def handle_database_operation_with_retry(
             last_exception = e
 
             # Check if this is a cached statement error
-            if (
-                "InvalidCachedStatementError" in error_message
-                or "cached statement plan is invalid" in error_message
-            ):
-                logger.warning(
-                    f"Cached statement error on attempt {attempt + 1}/{max_retries + 1}: {error_message}"
-                )
+            if "InvalidCachedStatementError" in error_message or "cached statement plan is invalid" in error_message:
+                logger.warning(f"Cached statement error on attempt {attempt + 1}/{max_retries + 1}: {error_message}")
 
                 if attempt < max_retries:
                     # Attempt recovery
@@ -191,9 +177,7 @@ class DatabaseHealthMiddleware:
 
         # If we have cached statement errors, try to recover
         if health_info["cached_statement_error"]:
-            logger.warning(
-                "Attempting automatic recovery from cached statement error..."
-            )
+            logger.warning("Attempting automatic recovery from cached statement error...")
             recovery_success = await recover_from_cached_statement_error()
 
             if recovery_success:
@@ -202,8 +186,6 @@ class DatabaseHealthMiddleware:
 
         # If we have too many consecutive failures, this is a serious issue
         if self.consecutive_failures >= self.max_consecutive_failures:
-            logger.critical(
-                f"Database has been unhealthy for {self.consecutive_failures} consecutive checks"
-            )
+            logger.critical(f"Database has been unhealthy for {self.consecutive_failures} consecutive checks")
 
         return False

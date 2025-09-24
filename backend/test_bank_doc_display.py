@@ -61,9 +61,7 @@ async def test_bank_document_display():
             return
 
         print(f"✅ Found application: {application.app_id}")
-        print(
-            f"✅ Found user profile with bank document: {user_profile.bank_document_object_name}"
-        )
+        print(f"✅ Found user profile with bank document: {user_profile.bank_document_object_name}")
 
         # Clone bank documents (simulate saving draft)
         print("\n📋 Cloning bank document from profile to application...")
@@ -89,9 +87,7 @@ async def test_bank_document_display():
                     print(f"  - mime_type: {doc.get('mime_type')}")
                     print(f"  - is_verified: {doc.get('is_verified')}")
                     print(f"  - file_path: {doc.get('file_path')}")
-                    print(
-                        f"  - is_cloned_from_profile: {doc.get('is_cloned_from_profile')}"
-                    )
+                    print(f"  - is_cloned_from_profile: {doc.get('is_cloned_from_profile')}")
 
                     # Check if this is the bank document
                     if doc.get("document_type") == "bank_account_proof":
@@ -106,16 +102,12 @@ async def test_bank_document_display():
                             "mime_type",
                             "is_verified",
                         ]
-                        missing_fields = [
-                            field for field in required_fields if doc.get(field) is None
-                        ]
+                        missing_fields = [field for field in required_fields if doc.get(field) is None]
 
                         if missing_fields:
                             print(f"  ❌ Missing fields for frontend: {missing_fields}")
                         else:
-                            print(
-                                "  ✅ All required fields present for frontend display"
-                            )
+                            print("  ✅ All required fields present for frontend display")
             else:
                 print("❌ No 'documents' key found in submitted_form_data")
         else:
@@ -126,9 +118,7 @@ async def test_bank_document_display():
         print("✅ Frontend maps file_id -> id, document_type -> file_type")
         print("✅ getDocumentLabel() has mapping for 'bank_account_proof' -> '存摺封面'")
         print("✅ Fixed document badge shows when file_type === 'bank_account_proof'")
-        print(
-            "✅ All required fields (file_size, mime_type, is_verified) are now included"
-        )
+        print("✅ All required fields (file_size, mime_type, is_verified) are now included")
 
         print("\n🎉 Test Summary:")
         print("✅ Bank document cloning works correctly")

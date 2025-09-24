@@ -185,9 +185,7 @@ def test_database_compatibility():
 
     try:
         # Test that migration file is properly structured
-        migration_path = (
-            "backend/alembic/versions/002_enhance_applications_for_issue_10.py"
-        )
+        migration_path = "backend/alembic/versions/002_enhance_applications_for_issue_10.py"
 
         if os.path.exists(migration_path):
             with open(migration_path, "r") as f:

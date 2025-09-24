@@ -104,9 +104,7 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(
-        Integer, ForeignKey("users.id"), nullable=True, index=True
-    )  # 系統公告的 user_id 為 null
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # 系統公告的 user_id 為 null
 
     # Enhanced notification content
     title = Column(String(255), nullable=False)
@@ -131,9 +129,7 @@ class Notification(Base):
     )
 
     # Delivery channel
-    channel = Column(
-        Enum(NotificationChannel), default=NotificationChannel.IN_APP, nullable=False
-    )
+    channel = Column(Enum(NotificationChannel), default=NotificationChannel.IN_APP, nullable=False)
 
     # Enhanced metadata and context
     data = Column(JSON, default={})  # Facebook-style flexible data storage
@@ -157,34 +153,22 @@ class Notification(Base):
     email_sent_at = Column(DateTime(timezone=True))  # Legacy
 
     # Facebook-style grouping and batching
-    group_key = Column(
-        String(100), nullable=True, index=True
-    )  # For grouping similar notifications
+    group_key = Column(String(100), nullable=True, index=True)  # For grouping similar notifications
     batch_id = Column(String(50), nullable=True)  # For batched notifications
 
     # Enhanced timing
-    scheduled_at = Column(
-        DateTime(timezone=True), nullable=True
-    )  # Legacy: renamed to scheduled_for
-    scheduled_for = Column(
-        DateTime(timezone=True), nullable=True, index=True
-    )  # For delayed notifications
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)  # Legacy: renamed to scheduled_for
+    scheduled_for = Column(DateTime(timezone=True), nullable=True, index=True)  # For delayed notifications
     expires_at = Column(DateTime(timezone=True), nullable=True)
     read_at = Column(DateTime(timezone=True), nullable=True)
 
     # Enhanced timestamps
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
-    )
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="notifications")
-    read_records = relationship(
-        "NotificationRead", back_populates="notification", cascade="all, delete-orphan"
-    )
+    read_records = relationship("NotificationRead", back_populates="notification", cascade="all, delete-orphan")
 
     # Enhanced indexes for Facebook-style performance
     __table_args__ = (
@@ -207,9 +191,7 @@ class Notification(Base):
     @property
     def is_urgent(self) -> bool:
         """Check if notification is urgent"""
-        return bool(
-            self.priority in [NotificationPriority.CRITICAL, NotificationPriority.HIGH]
-        )
+        return bool(self.priority in [NotificationPriority.CRITICAL, NotificationPriority.HIGH])
 
     @property
     def is_critical(self) -> bool:
@@ -281,12 +263,8 @@ class Notification(Base):
             "is_read": self.is_read,
             "is_archived": self.is_archived,
             "is_hidden": self.is_hidden,
-            "priority": self.priority.value
-            if isinstance(self.priority, NotificationPriority)
-            else self.priority,
-            "channel": self.channel.value
-            if isinstance(self.channel, NotificationChannel)
-            else self.channel,
+            "priority": self.priority.value if isinstance(self.priority, NotificationPriority) else self.priority,
+            "channel": self.channel.value if isinstance(self.channel, NotificationChannel) else self.channel,
             "created_at": self.created_at.isoformat(),
             "read_at": self.read_at.isoformat() if self.read_at else None,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
@@ -304,12 +282,8 @@ class NotificationRead(Base):
     __tablename__ = "notification_reads"
 
     id = Column(Integer, primary_key=True, index=True)
-    notification_id = Column(
-        Integer, ForeignKey("notifications.id", ondelete="CASCADE"), nullable=False
-    )
-    user_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    notification_id = Column(Integer, ForeignKey("notifications.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     # 讀取狀態
     is_read = Column(Boolean, default=True)  # 創建記錄就表示已讀
@@ -323,11 +297,7 @@ class NotificationRead(Base):
     user = relationship("User")
 
     # 確保每個用戶對每個通知只有一個讀取記錄
-    __table_args__ = (
-        UniqueConstraint(
-            "notification_id", "user_id", name="_notification_user_read_uc"
-        ),
-    )
+    __table_args__ = (UniqueConstraint("notification_id", "user_id", name="_notification_user_read_uc"),)
 
     def __repr__(self):
         return f"<NotificationRead(notification_id={self.notification_id}, user_id={self.user_id}, read_at={self.read_at})>"
@@ -364,19 +334,13 @@ class NotificationPreference(Base):
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     user = relationship("User")
 
     # Unique constraint
-    __table_args__ = (
-        UniqueConstraint(
-            "user_id", "notification_type", name="_user_notification_type_uc"
-        ),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "notification_type", name="_user_notification_type_uc"),)
 
     def __repr__(self):
         return f"<NotificationPreference(user_id={self.user_id}, type={self.notification_type}, frequency={self.frequency})>"
@@ -408,10 +372,7 @@ class NotificationPreference(Base):
             return self.quiet_hours_start <= current_hour_minute <= self.quiet_hours_end
         else:
             # Overnight quiet hours (e.g., 22:00 to 07:00 next day)
-            return (
-                current_hour_minute >= self.quiet_hours_start
-                or current_hour_minute <= self.quiet_hours_end
-            )
+            return current_hour_minute >= self.quiet_hours_start or current_hour_minute <= self.quiet_hours_end
 
 
 class NotificationTemplate(Base):
@@ -433,26 +394,18 @@ class NotificationTemplate(Base):
 
     # Default settings
     default_channels = Column(JSON, default=["in_app"])  # Default delivery channels
-    default_priority = Column(
-        Enum(NotificationPriority), default=NotificationPriority.NORMAL
-    )
+    default_priority = Column(Enum(NotificationPriority), default=NotificationPriority.NORMAL)
 
     # Template variables documentation
-    variables = Column(
-        JSON, default={}
-    )  # Available template variables and their descriptions
+    variables = Column(JSON, default={})  # Available template variables and their descriptions
 
     # Settings
     is_active = Column(Boolean, default=True, nullable=False)
-    requires_user_action = Column(
-        Boolean, default=False, nullable=False
-    )  # Whether notification requires user action
+    requires_user_action = Column(Boolean, default=False, nullable=False)  # Whether notification requires user action
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         return f"<NotificationTemplate(type={self.type}, is_active={self.is_active})>"

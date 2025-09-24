@@ -42,9 +42,7 @@ async def get_fields_by_scholarship_type(
     service = ApplicationFieldService(db)
     fields = await service.get_fields_by_scholarship_type(scholarship_type)
 
-    return ApiResponse(
-        success=True, message=f"Fields retrieved for {scholarship_type}", data=fields
-    )
+    return ApiResponse(success=True, message=f"Fields retrieved for {scholarship_type}", data=fields)
 
 
 @router.post("/fields", response_model=ApiResponse[ApplicationFieldResponse])
@@ -57,9 +55,7 @@ async def create_field(
     service = ApplicationFieldService(db)
     field = await service.create_field(field_data, current_user.id)
 
-    return ApiResponse(
-        success=True, message="Application field created successfully", data=field
-    )
+    return ApiResponse(success=True, message="Application field created successfully", data=field)
 
 
 @router.put("/fields/{field_id}", response_model=ApiResponse[ApplicationFieldResponse])
@@ -74,13 +70,9 @@ async def update_field(
     field = await service.update_field(field_id, field_data, current_user.id)
 
     if not field:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Application field not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application field not found")
 
-    return ApiResponse(
-        success=True, message="Application field updated successfully", data=field
-    )
+    return ApiResponse(success=True, message="Application field updated successfully", data=field)
 
 
 @router.delete("/fields/{field_id}", response_model=ApiResponse[bool])
@@ -94,13 +86,9 @@ async def delete_field(
     success = await service.delete_field(field_id)
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Application field not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application field not found")
 
-    return ApiResponse(
-        success=True, message="Application field deleted successfully", data=True
-    )
+    return ApiResponse(success=True, message="Application field deleted successfully", data=True)
 
 
 # Application Document endpoints
@@ -134,14 +122,10 @@ async def create_document(
     service = ApplicationFieldService(db)
     document = await service.create_document(document_data, current_user.id)
 
-    return ApiResponse(
-        success=True, message="Application document created successfully", data=document
-    )
+    return ApiResponse(success=True, message="Application document created successfully", data=document)
 
 
-@router.put(
-    "/documents/{document_id}", response_model=ApiResponse[ApplicationDocumentResponse]
-)
+@router.put("/documents/{document_id}", response_model=ApiResponse[ApplicationDocumentResponse])
 async def update_document(
     document_id: int,
     document_data: ApplicationDocumentUpdate,
@@ -150,9 +134,7 @@ async def update_document(
 ):
     """Update an application document"""
     service = ApplicationFieldService(db)
-    document = await service.update_document(
-        document_id, document_data, current_user.id
-    )
+    document = await service.update_document(document_id, document_data, current_user.id)
 
     if not document:
         raise HTTPException(
@@ -160,9 +142,7 @@ async def update_document(
             detail="Application document not found",
         )
 
-    return ApiResponse(
-        success=True, message="Application document updated successfully", data=document
-    )
+    return ApiResponse(success=True, message="Application document updated successfully", data=document)
 
 
 @router.delete("/documents/{document_id}", response_model=ApiResponse[bool])
@@ -181,9 +161,7 @@ async def delete_document(
             detail="Application document not found",
         )
 
-    return ApiResponse(
-        success=True, message="Application document deleted successfully", data=True
-    )
+    return ApiResponse(success=True, message="Application document deleted successfully", data=True)
 
 
 # Combined form configuration endpoints
@@ -219,9 +197,7 @@ async def get_scholarship_form_config(
     except Exception as e:
         logger.error(f"API: Error getting form config for {scholarship_type}: {str(e)}")
         # 返回空的配置而不是拋出異常
-        empty_config = ScholarshipFormConfigResponse(
-            scholarship_type=scholarship_type, fields=[], documents=[]
-        )
+        empty_config = ScholarshipFormConfigResponse(scholarship_type=scholarship_type, fields=[], documents=[])
         return ApiResponse(
             success=True,
             message=f"Form configuration retrieved for {scholarship_type} (empty)",

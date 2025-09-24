@@ -32,9 +32,7 @@ router = APIRouter()
 
 @router.get("/", response_model=ApiResponse[List[ScholarshipRuleResponse]])
 async def list_scholarship_rules(
-    scholarship_type_id: Optional[int] = Query(
-        None, description="Filter by scholarship type ID"
-    ),
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
     sub_type: Optional[str] = Query(None, description="Filter by sub type"),
@@ -156,9 +154,7 @@ async def create_scholarship_rule(
     """Create a new scholarship rule"""
 
     # Validate scholarship type exists
-    scholarship_type_stmt = select(ScholarshipType).filter(
-        ScholarshipType.id == rule_data.scholarship_type_id
-    )
+    scholarship_type_stmt = select(ScholarshipType).filter(ScholarshipType.id == rule_data.scholarship_type_id)
     scholarship_type_result = await db.execute(scholarship_type_stmt)
     scholarship_type = scholarship_type_result.scalar_one_or_none()
 
@@ -170,19 +166,14 @@ async def create_scholarship_rule(
 
     # Validate sub_type if provided
     if rule_data.sub_type:
-        if (
-            not scholarship_type.sub_type_list
-            or rule_data.sub_type not in scholarship_type.sub_type_list
-        ):
+        if not scholarship_type.sub_type_list or rule_data.sub_type not in scholarship_type.sub_type_list:
             raise HTTPException(
                 status_code=400,
                 detail=f"Sub-type '{rule_data.sub_type}' is not valid for scholarship type '{scholarship_type.name}'",
             )
 
     # Create rule
-    rule = ScholarshipRule(
-        **rule_data.model_dump(), created_by=current_user.id, updated_by=current_user.id
-    )
+    rule = ScholarshipRule(**rule_data.model_dump(), created_by=current_user.id, updated_by=current_user.id)
 
     db.add(rule)
     await db.commit()
@@ -254,10 +245,7 @@ async def update_scholarship_rule(
     # Validate sub_type if provided
     if rule_update.sub_type:
         scholarship_type = rule.scholarship_type
-        if (
-            not scholarship_type.sub_type_list
-            or rule_update.sub_type not in scholarship_type.sub_type_list
-        ):
+        if not scholarship_type.sub_type_list or rule_update.sub_type not in scholarship_type.sub_type_list:
             raise HTTPException(
                 status_code=400,
                 detail=f"Sub-type '{rule_update.sub_type}' is not valid for scholarship type '{scholarship_type.name}'",
@@ -349,9 +337,7 @@ async def bulk_rule_operation(
             processed_count += 1
 
     else:
-        raise HTTPException(
-            status_code=400, detail=f"Unknown operation: {operation.operation}"
-        )
+        raise HTTPException(status_code=400, detail=f"Unknown operation: {operation.operation}")
 
     await db.commit()
 
@@ -378,19 +364,13 @@ async def copy_rules(
     source_stmt = select(ScholarshipRule)
 
     if copy_request.source_academic_year:
-        source_stmt = source_stmt.filter(
-            ScholarshipRule.academic_year == copy_request.source_academic_year
-        )
+        source_stmt = source_stmt.filter(ScholarshipRule.academic_year == copy_request.source_academic_year)
 
     if copy_request.source_semester:
-        source_stmt = source_stmt.filter(
-            ScholarshipRule.semester == copy_request.source_semester
-        )
+        source_stmt = source_stmt.filter(ScholarshipRule.semester == copy_request.source_semester)
 
     if copy_request.scholarship_type_ids:
-        source_stmt = source_stmt.filter(
-            ScholarshipRule.scholarship_type_id.in_(copy_request.scholarship_type_ids)
-        )
+        source_stmt = source_stmt.filter(ScholarshipRule.scholarship_type_id.in_(copy_request.scholarship_type_ids))
 
     if copy_request.rule_ids:
         source_stmt = source_stmt.filter(ScholarshipRule.id.in_(copy_request.rule_ids))
@@ -525,9 +505,7 @@ async def get_scholarship_type_sub_types(
     sub_types = []
 
     # Always include "通用" option (null sub_type)
-    sub_types.append(
-        {"value": None, "label": "通用", "label_en": "General", "is_default": True}
-    )
+    sub_types.append({"value": None, "label": "通用", "label_en": "General", "is_default": True})
 
     # Add specific sub-types
     for sub_type in sub_type_list:
@@ -535,12 +513,8 @@ async def get_scholarship_type_sub_types(
             sub_types.append(
                 {
                     "value": sub_type,
-                    "label": sub_type_translations.get("zh", {}).get(
-                        sub_type, sub_type
-                    ),
-                    "label_en": sub_type_translations.get("en", {}).get(
-                        sub_type, sub_type
-                    ),
+                    "label": sub_type_translations.get("zh", {}).get(sub_type, sub_type),
+                    "label_en": sub_type_translations.get("en", {}).get(sub_type, sub_type),
                     "is_default": False,
                 }
             )

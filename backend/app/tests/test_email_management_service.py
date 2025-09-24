@@ -119,9 +119,7 @@ class TestEmailManagementService:
         mock_db_session.execute.side_effect = [mock_query_result, mock_count_result]
 
         # Act
-        emails, total = await email_service.get_email_history(
-            db=mock_db_session, user=admin_user, limit=50
-        )
+        emails, total = await email_service.get_email_history(db=mock_db_session, user=admin_user, limit=50)
 
         # Assert
         assert len(emails) == 3
@@ -129,9 +127,7 @@ class TestEmailManagementService:
         assert mock_db_session.execute.call_count == 2  # One for data, one for count
 
     @pytest.mark.asyncio
-    async def test_get_email_history_permission_filtering(
-        self, email_service, mock_db_session, regular_user
-    ):
+    async def test_get_email_history_permission_filtering(self, email_service, mock_db_session, regular_user):
         """Test that regular users only see permitted emails"""
         # Arrange
         filtered_emails = []  # Regular users should see limited or no emails
@@ -144,18 +140,14 @@ class TestEmailManagementService:
         mock_db_session.execute.side_effect = [mock_query_result, mock_count_result]
 
         # Act
-        emails, total = await email_service.get_email_history(
-            db=mock_db_session, user=regular_user, limit=50
-        )
+        emails, total = await email_service.get_email_history(db=mock_db_session, user=regular_user, limit=50)
 
         # Assert
         assert len(emails) == 0
         assert total == 0
 
     @pytest.mark.asyncio
-    async def test_get_email_history_with_filters(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_get_email_history_with_filters(self, email_service, mock_db_session, admin_user):
         """Test email history retrieval with various filters"""
         # Arrange
         filtered_emails = [Mock(id=1, status=EmailStatus.SENT)]
@@ -183,9 +175,7 @@ class TestEmailManagementService:
         mock_db_session.execute.assert_called()
 
     @pytest.mark.asyncio
-    async def test_get_email_history_pagination(
-        self, email_service, mock_db_session, admin_user, sample_email_history
-    ):
+    async def test_get_email_history_pagination(self, email_service, mock_db_session, admin_user, sample_email_history):
         """Test email history pagination"""
         # Arrange
         paginated_emails = sample_email_history[:2]  # First page with 2 items
@@ -198,18 +188,14 @@ class TestEmailManagementService:
         mock_db_session.execute.side_effect = [mock_query_result, mock_count_result]
 
         # Act
-        emails, total = await email_service.get_email_history(
-            db=mock_db_session, user=admin_user, skip=0, limit=2
-        )
+        emails, total = await email_service.get_email_history(db=mock_db_session, user=admin_user, skip=0, limit=2)
 
         # Assert
         assert len(emails) == 2
         assert total == 3  # Total count should still be 3
 
     @pytest.mark.asyncio
-    async def test_get_email_history_date_range_filter(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_get_email_history_date_range_filter(self, email_service, mock_db_session, admin_user):
         """Test email history filtering by date range"""
         # Arrange
         date_from = datetime.now(timezone.utc) - timedelta(days=1)
@@ -234,9 +220,7 @@ class TestEmailManagementService:
         assert total == 1
 
     @pytest.mark.asyncio
-    async def test_get_scheduled_emails_admin(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_get_scheduled_emails_admin(self, email_service, mock_db_session, admin_user):
         """Test that admin can access all scheduled emails"""
         # Arrange
         scheduled_emails = [
@@ -252,18 +236,14 @@ class TestEmailManagementService:
         mock_db_session.execute.side_effect = [mock_query_result, mock_count_result]
 
         # Act
-        emails, total = await email_service.get_scheduled_emails(
-            db=mock_db_session, user=admin_user
-        )
+        emails, total = await email_service.get_scheduled_emails(db=mock_db_session, user=admin_user)
 
         # Assert
         assert len(emails) == 2
         assert total == 2
 
     @pytest.mark.asyncio
-    async def test_create_scheduled_email_success(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_create_scheduled_email_success(self, email_service, mock_db_session, admin_user):
         """Test successful creation of scheduled email"""
         # Arrange
         email_data = {
@@ -282,18 +262,14 @@ class TestEmailManagementService:
         # Act
         with patch.object(ScheduledEmail, "__init__", return_value=None) as mock_init:
             mock_init.return_value = None
-            result = await email_service.create_scheduled_email(
-                db=mock_db_session, user=admin_user, **email_data
-            )
+            result = await email_service.create_scheduled_email(db=mock_db_session, user=admin_user, **email_data)
 
         # Assert
         mock_db_session.add.assert_called_once()
         mock_db_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_create_scheduled_email_permission_denied(
-        self, email_service, mock_db_session, regular_user
-    ):
+    async def test_create_scheduled_email_permission_denied(self, email_service, mock_db_session, regular_user):
         """Test that regular users cannot create scheduled emails"""
         # Arrange
         email_data = {
@@ -305,40 +281,29 @@ class TestEmailManagementService:
 
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="permission"):
-            await email_service.create_scheduled_email(
-                db=mock_db_session, user=regular_user, **email_data
-            )
+            await email_service.create_scheduled_email(db=mock_db_session, user=regular_user, **email_data)
 
     @pytest.mark.asyncio
-    async def test_create_scheduled_email_invalid_schedule_time(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_create_scheduled_email_invalid_schedule_time(self, email_service, mock_db_session, admin_user):
         """Test validation for scheduled email time"""
         # Arrange
         email_data = {
             "recipient_emails": ["student1@university.edu"],
             "subject": "Test",
             "body": "Test body",
-            "scheduled_at": datetime.now(timezone.utc)
-            - timedelta(hours=1),  # Past time
+            "scheduled_at": datetime.now(timezone.utc) - timedelta(hours=1),  # Past time
         }
 
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="future"):
-            await email_service.create_scheduled_email(
-                db=mock_db_session, user=admin_user, **email_data
-            )
+            await email_service.create_scheduled_email(db=mock_db_session, user=admin_user, **email_data)
 
     @pytest.mark.asyncio
-    async def test_cancel_scheduled_email_success(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_cancel_scheduled_email_success(self, email_service, mock_db_session, admin_user):
         """Test successful cancellation of scheduled email"""
         # Arrange
         email_id = 1
-        mock_email = Mock(
-            id=email_id, status=ScheduleStatus.SCHEDULED, created_by=admin_user.id
-        )
+        mock_email = Mock(id=email_id, status=ScheduleStatus.SCHEDULED, created_by=admin_user.id)
 
         mock_query_result = Mock()
         mock_query_result.scalar_one_or_none.return_value = mock_email
@@ -346,18 +311,14 @@ class TestEmailManagementService:
         mock_db_session.commit = AsyncMock()
 
         # Act
-        result = await email_service.cancel_scheduled_email(
-            db=mock_db_session, user=admin_user, email_id=email_id
-        )
+        result = await email_service.cancel_scheduled_email(db=mock_db_session, user=admin_user, email_id=email_id)
 
         # Assert
         assert mock_email.status == ScheduleStatus.CANCELLED
         mock_db_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_cancel_scheduled_email_not_found(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_cancel_scheduled_email_not_found(self, email_service, mock_db_session, admin_user):
         """Test cancellation of non-existent scheduled email"""
         # Arrange
         email_id = 999
@@ -367,20 +328,14 @@ class TestEmailManagementService:
 
         # Act & Assert
         with pytest.raises(NotFoundError):
-            await email_service.cancel_scheduled_email(
-                db=mock_db_session, user=admin_user, email_id=email_id
-            )
+            await email_service.cancel_scheduled_email(db=mock_db_session, user=admin_user, email_id=email_id)
 
     @pytest.mark.asyncio
-    async def test_cancel_scheduled_email_already_sent(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_cancel_scheduled_email_already_sent(self, email_service, mock_db_session, admin_user):
         """Test cancellation of already sent email"""
         # Arrange
         email_id = 1
-        mock_email = Mock(
-            id=email_id, status=ScheduleStatus.SENT, created_by=admin_user.id
-        )
+        mock_email = Mock(id=email_id, status=ScheduleStatus.SENT, created_by=admin_user.id)
 
         mock_query_result = Mock()
         mock_query_result.scalar_one_or_none.return_value = mock_email
@@ -388,14 +343,10 @@ class TestEmailManagementService:
 
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="already sent"):
-            await email_service.cancel_scheduled_email(
-                db=mock_db_session, user=admin_user, email_id=email_id
-            )
+            await email_service.cancel_scheduled_email(db=mock_db_session, user=admin_user, email_id=email_id)
 
     @pytest.mark.asyncio
-    async def test_update_scheduled_email_success(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_update_scheduled_email_success(self, email_service, mock_db_session, admin_user):
         """Test successful update of scheduled email"""
         # Arrange
         email_id = 1
@@ -405,9 +356,7 @@ class TestEmailManagementService:
             "scheduled_at": datetime.now(timezone.utc) + timedelta(hours=2),
         }
 
-        mock_email = Mock(
-            id=email_id, status=ScheduleStatus.SCHEDULED, created_by=admin_user.id
-        )
+        mock_email = Mock(id=email_id, status=ScheduleStatus.SCHEDULED, created_by=admin_user.id)
 
         mock_query_result = Mock()
         mock_query_result.scalar_one_or_none.return_value = mock_email
@@ -426,9 +375,7 @@ class TestEmailManagementService:
         mock_db_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_email_statistics_admin(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_get_email_statistics_admin(self, email_service, mock_db_session, admin_user):
         """Test email statistics retrieval for admin"""
         # Arrange
         mock_stats = {
@@ -444,9 +391,7 @@ class TestEmailManagementService:
 
         # Act
         with patch.object(email_service, "_calculate_success_rate", return_value=95.2):
-            stats = await email_service.get_email_statistics(
-                db=mock_db_session, user=admin_user
-            )
+            stats = await email_service.get_email_statistics(db=mock_db_session, user=admin_user)
 
         # Assert
         assert stats["total_sent"] == 100
@@ -455,9 +400,7 @@ class TestEmailManagementService:
         assert stats["success_rate"] == 95.2
 
     @pytest.mark.asyncio
-    async def test_bulk_email_creation_validation(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_bulk_email_creation_validation(self, email_service, mock_db_session, admin_user):
         """Test validation for bulk email creation"""
         # Arrange - too many recipients
         large_recipient_list = [f"student{i}@university.edu" for i in range(1001)]
@@ -470,14 +413,10 @@ class TestEmailManagementService:
 
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="too many recipients"):
-            await email_service.create_scheduled_email(
-                db=mock_db_session, user=admin_user, **email_data
-            )
+            await email_service.create_scheduled_email(db=mock_db_session, user=admin_user, **email_data)
 
     @pytest.mark.asyncio
-    async def test_email_template_validation(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_email_template_validation(self, email_service, mock_db_session, admin_user):
         """Test email template validation"""
         # Arrange - empty subject and body
         email_data = {
@@ -488,17 +427,11 @@ class TestEmailManagementService:
         }
 
         # Act & Assert
-        with pytest.raises(
-            BusinessLogicError, match="Subject and body cannot be empty"
-        ):
-            await email_service.create_scheduled_email(
-                db=mock_db_session, user=admin_user, **email_data
-            )
+        with pytest.raises(BusinessLogicError, match="Subject and body cannot be empty"):
+            await email_service.create_scheduled_email(db=mock_db_session, user=admin_user, **email_data)
 
     @pytest.mark.asyncio
-    async def test_database_error_handling(
-        self, email_service, mock_db_session, admin_user
-    ):
+    async def test_database_error_handling(self, email_service, mock_db_session, admin_user):
         """Test proper handling of database errors"""
         # Arrange
         mock_db_session.execute.side_effect = Exception("Database connection failed")

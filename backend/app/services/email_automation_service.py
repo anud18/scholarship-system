@@ -42,9 +42,7 @@ class EmailAutomationService:
     def __init__(self):
         self.email_service = EmailService()
 
-    async def get_automation_rules(
-        self, db: AsyncSession, trigger_event: str
-    ) -> List[EmailAutomationRule]:
+    async def get_automation_rules(self, db: AsyncSession, trigger_event: str) -> List[EmailAutomationRule]:
         """Get active automation rules for a specific trigger event"""
         query = text(
             """
@@ -71,9 +69,7 @@ class EmailAutomationService:
 
         return rules
 
-    async def process_trigger(
-        self, db: AsyncSession, trigger_event: str, context: Dict[str, Any]
-    ):
+    async def process_trigger(self, db: AsyncSession, trigger_event: str, context: Dict[str, Any]):
         """Process a trigger event and send appropriate automated emails"""
         try:
             rules = await self.get_automation_rules(db, trigger_event)
@@ -90,13 +86,9 @@ class EmailAutomationService:
             logger.error(f"Failed to process trigger '{trigger_event}': {e}")
             raise
 
-    async def _process_single_rule(
-        self, db: AsyncSession, rule: EmailAutomationRule, context: Dict[str, Any]
-    ):
+    async def _process_single_rule(self, db: AsyncSession, rule: EmailAutomationRule, context: Dict[str, Any]):
         """Process a single automation rule"""
-        logger.info(
-            f"Processing rule: {rule.template_key} for trigger: {rule.trigger_event}"
-        )
+        logger.info(f"Processing rule: {rule.template_key} for trigger: {rule.trigger_event}")
 
         # Get recipients based on condition query
         recipients = await self._get_recipients(db, rule, context)
@@ -120,9 +112,7 @@ class EmailAutomationService:
 
                 if rule.delay_hours > 0:
                     # Schedule email for later
-                    scheduled_for = datetime.now(timezone.utc) + timedelta(
-                        hours=rule.delay_hours
-                    )
+                    scheduled_for = datetime.now(timezone.utc) + timedelta(hours=rule.delay_hours)
                     await self._schedule_automated_email(
                         db,
                         rule.template_key,
@@ -144,9 +134,7 @@ class EmailAutomationService:
                     )
 
             except Exception as e:
-                logger.error(
-                    f"Failed to send email to {recipient.get('email', 'unknown')}: {e}"
-                )
+                logger.error(f"Failed to send email to {recipient.get('email', 'unknown')}: {e}")
 
     async def _get_recipients(
         self, db: AsyncSession, rule: EmailAutomationRule, context: Dict[str, Any]
@@ -169,9 +157,7 @@ class EmailAutomationService:
             return recipients
 
         except Exception as e:
-            logger.error(
-                f"Failed to execute condition query for rule {rule.template_key}: {e}"
-            )
+            logger.error(f"Failed to execute condition query for rule {rule.template_key}: {e}")
             return []
 
     async def _send_automated_email(
@@ -187,9 +173,7 @@ class EmailAutomationService:
         try:
             # Prepare default subject and body (fallbacks)
             default_subject = f"Automated notification - {template_key}"
-            default_body = (
-                "This is an automated notification from the scholarship system."
-            )
+            default_body = "This is an automated notification from the scholarship system."
 
             # Email metadata for logging
             metadata = {
@@ -210,9 +194,7 @@ class EmailAutomationService:
                 **metadata,
             )
 
-            logger.info(
-                f"Sent automated email using template {template_key} to {recipient_email}"
-            )
+            logger.info(f"Sent automated email using template {template_key} to {recipient_email}")
 
         except Exception as e:
             logger.error(f"Failed to send automated email: {e}")
@@ -260,9 +242,7 @@ class EmailAutomationService:
                 **metadata,
             )
 
-            logger.info(
-                f"Scheduled automated email {template_key} for {recipient_email} at {scheduled_for}"
-            )
+            logger.info(f"Scheduled automated email {template_key} for {recipient_email} at {scheduled_for}")
             return scheduled_email
 
         except Exception as e:
@@ -301,9 +281,7 @@ class EmailAutomationService:
             "professor_email": application_data.get("professor_email", ""),
             "scholarship_type": application_data.get("scholarship_type", ""),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
-            "submit_date": application_data.get(
-                "submit_date", datetime.now().strftime("%Y-%m-%d")
-            ),
+            "submit_date": application_data.get("submit_date", datetime.now().strftime("%Y-%m-%d")),
             "system_url": "https://scholarship.nycu.edu.tw",  # Replace with actual URL
         }
 
@@ -322,9 +300,7 @@ class EmailAutomationService:
             "scholarship_type": review_data.get("scholarship_type", ""),
             "scholarship_type_id": review_data.get("scholarship_type_id"),
             "review_result": review_data.get("review_result", ""),
-            "review_date": review_data.get(
-                "review_date", datetime.now().strftime("%Y-%m-%d")
-            ),
+            "review_date": review_data.get("review_date", datetime.now().strftime("%Y-%m-%d")),
             "professor_recommendation": review_data.get("professor_recommendation", ""),
             "college_name": review_data.get("college_name", ""),
             "review_deadline": review_data.get("review_deadline", ""),
@@ -333,9 +309,7 @@ class EmailAutomationService:
 
         await self.process_trigger(db, "professor_review_submitted", context)
 
-    async def trigger_final_result_decided(
-        self, db: AsyncSession, application_id: int, result_data: Dict[str, Any]
-    ):
+    async def trigger_final_result_decided(self, db: AsyncSession, application_id: int, result_data: Dict[str, Any]):
         """Trigger emails when final result is decided"""
         context = {
             "application_id": application_id,
@@ -383,14 +357,8 @@ class EmailAutomationService:
                     # Parse CC and BCC
                     import json
 
-                    cc_emails = (
-                        json.loads(email_row.cc_emails) if email_row.cc_emails else None
-                    )
-                    bcc_emails = (
-                        json.loads(email_row.bcc_emails)
-                        if email_row.bcc_emails
-                        else None
-                    )
+                    cc_emails = json.loads(email_row.cc_emails) if email_row.cc_emails else None
+                    bcc_emails = json.loads(email_row.bcc_emails) if email_row.bcc_emails else None
 
                     # Send the email
                     metadata = {
@@ -423,9 +391,7 @@ class EmailAutomationService:
                     )
                     await db.execute(update_query, {"email_id": email_row.id})
 
-                    logger.info(
-                        f"Sent scheduled email {email_row.id} to {email_row.recipient_email}"
-                    )
+                    logger.info(f"Sent scheduled email {email_row.id} to {email_row.recipient_email}")
 
                 except Exception as e:
                     logger.error(f"Failed to send scheduled email {email_row.id}: {e}")
@@ -438,9 +404,7 @@ class EmailAutomationService:
                         WHERE id = :email_id
                     """
                     )
-                    await db.execute(
-                        fail_query, {"email_id": email_row.id, "error": str(e)}
-                    )
+                    await db.execute(fail_query, {"email_id": email_row.id, "error": str(e)})
 
             await db.commit()
 

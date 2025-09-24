@@ -195,9 +195,7 @@ class TestApplicationService:
 
         # Act & Assert
         with pytest.raises(NotFoundError, match="Scholarship type not found"):
-            await application_service.create_application(
-                user=student_user, application_data=application_create_data
-            )
+            await application_service.create_application(user=student_user, application_data=application_create_data)
 
     @pytest.mark.asyncio
     async def test_create_application_inactive_scholarship(
@@ -218,9 +216,7 @@ class TestApplicationService:
 
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="not available for applications"):
-            await application_service.create_application(
-                user=student_user, application_data=application_create_data
-            )
+            await application_service.create_application(user=student_user, application_data=application_create_data)
 
     @pytest.mark.asyncio
     async def test_create_application_duplicate_prevention(
@@ -237,9 +233,7 @@ class TestApplicationService:
 
         # Mock existing application check
         mock_existing_query = Mock()
-        mock_existing_query.scalar_one_or_none.return_value = Mock(
-            id=1
-        )  # Existing application
+        mock_existing_query.scalar_one_or_none.return_value = Mock(id=1)  # Existing application
 
         application_service.db.execute.side_effect = [
             mock_scholarship_query,
@@ -248,14 +242,10 @@ class TestApplicationService:
 
         # Act & Assert
         with pytest.raises(ConflictError, match="already applied"):
-            await application_service.create_application(
-                user=student_user, application_data=application_create_data
-            )
+            await application_service.create_application(user=student_user, application_data=application_create_data)
 
     @pytest.mark.asyncio
-    async def test_get_application_by_id_success(
-        self, application_service, mock_application
-    ):
+    async def test_get_application_by_id_success(self, application_service, mock_application):
         """Test successful application retrieval by ID"""
         # Arrange
         mock_query_result = Mock()
@@ -282,9 +272,7 @@ class TestApplicationService:
             await application_service.get_application_by_id(application_id=999)
 
     @pytest.mark.asyncio
-    async def test_get_user_applications(
-        self, application_service, student_user, mock_application
-    ):
+    async def test_get_user_applications(self, application_service, student_user, mock_application):
         """Test retrieving user's applications"""
         # Arrange
         mock_query_result = Mock()
@@ -299,9 +287,7 @@ class TestApplicationService:
         assert result[0] == mock_application
 
     @pytest.mark.asyncio
-    async def test_update_application_success(
-        self, application_service, student_user, mock_application
-    ):
+    async def test_update_application_success(self, application_service, student_user, mock_application):
         """Test successful application update"""
         # Arrange
         update_data = ApplicationUpdate(
@@ -323,21 +309,14 @@ class TestApplicationService:
         )
 
         # Assert
-        assert (
-            mock_application.submitted_form_data["personal_statement"]
-            == "Updated statement"
-        )
+        assert mock_application.submitted_form_data["personal_statement"] == "Updated statement"
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_update_application_permission_denied(
-        self, application_service, professor_user, mock_application
-    ):
+    async def test_update_application_permission_denied(self, application_service, professor_user, mock_application):
         """Test application update with insufficient permissions"""
         # Arrange
-        update_data = ApplicationUpdate(
-            submitted_form_data={"personal_statement": "Unauthorized update"}
-        )
+        update_data = ApplicationUpdate(submitted_form_data={"personal_statement": "Unauthorized update"})
 
         mock_query_result = Mock()
         mock_query_result.scalar_one_or_none.return_value = mock_application
@@ -345,21 +324,15 @@ class TestApplicationService:
 
         # Act & Assert
         with pytest.raises(AuthorizationError):
-            await application_service.update_application(
-                user=professor_user, application_id=1, update_data=update_data
-            )
+            await application_service.update_application(user=professor_user, application_id=1, update_data=update_data)
 
     @pytest.mark.asyncio
-    async def test_update_application_invalid_status(
-        self, application_service, student_user, mock_application
-    ):
+    async def test_update_application_invalid_status(self, application_service, student_user, mock_application):
         """Test application update when application is not in draft status"""
         # Arrange
         mock_application.status = ApplicationStatus.SUBMITTED.value
         update_data = ApplicationUpdate(
-            submitted_form_data={
-                "personal_statement": "Cannot update submitted application"
-            }
+            submitted_form_data={"personal_statement": "Cannot update submitted application"}
         )
 
         mock_query_result = Mock()
@@ -368,14 +341,10 @@ class TestApplicationService:
 
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="cannot be modified"):
-            await application_service.update_application(
-                user=student_user, application_id=1, update_data=update_data
-            )
+            await application_service.update_application(user=student_user, application_id=1, update_data=update_data)
 
     @pytest.mark.asyncio
-    async def test_submit_application_success(
-        self, application_service, student_user, mock_application
-    ):
+    async def test_submit_application_success(self, application_service, student_user, mock_application):
         """Test successful application submission"""
         # Arrange
         mock_application.status = ApplicationStatus.DRAFT.value
@@ -389,13 +358,9 @@ class TestApplicationService:
         application_service.db.execute.return_value = mock_query_result
         application_service.db.commit = AsyncMock()
 
-        with patch.object(
-            application_service, "_validate_application_completeness", return_value=True
-        ):
+        with patch.object(application_service, "_validate_application_completeness", return_value=True):
             # Act
-            result = await application_service.submit_application(
-                user=student_user, application_id=1
-            )
+            result = await application_service.submit_application(user=student_user, application_id=1)
 
             # Assert
             assert mock_application.status == ApplicationStatus.SUBMITTED.value
@@ -403,15 +368,11 @@ class TestApplicationService:
             application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_submit_application_incomplete_data(
-        self, application_service, student_user, mock_application
-    ):
+    async def test_submit_application_incomplete_data(self, application_service, student_user, mock_application):
         """Test application submission with incomplete data"""
         # Arrange
         mock_application.status = ApplicationStatus.DRAFT.value
-        mock_application.submitted_form_data = {
-            "personal_statement": "Too short"  # Incomplete data
-        }
+        mock_application.submitted_form_data = {"personal_statement": "Too short"}  # Incomplete data
 
         mock_query_result = Mock()
         mock_query_result.scalar_one_or_none.return_value = mock_application
@@ -424,14 +385,10 @@ class TestApplicationService:
         ):
             # Act & Assert
             with pytest.raises(ValidationError, match="incomplete"):
-                await application_service.submit_application(
-                    user=student_user, application_id=1
-                )
+                await application_service.submit_application(user=student_user, application_id=1)
 
     @pytest.mark.asyncio
-    async def test_withdraw_application_success(
-        self, application_service, student_user, mock_application
-    ):
+    async def test_withdraw_application_success(self, application_service, student_user, mock_application):
         """Test successful application withdrawal"""
         # Arrange
         mock_application.status = ApplicationStatus.SUBMITTED.value
@@ -451,9 +408,7 @@ class TestApplicationService:
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_withdraw_application_invalid_status(
-        self, application_service, student_user, mock_application
-    ):
+    async def test_withdraw_application_invalid_status(self, application_service, student_user, mock_application):
         """Test withdrawal of application in invalid status"""
         # Arrange
         mock_application.status = ApplicationStatus.APPROVED.value
@@ -464,14 +419,10 @@ class TestApplicationService:
 
         # Act & Assert
         with pytest.raises(BusinessLogicError, match="cannot be withdrawn"):
-            await application_service.withdraw_application(
-                user=student_user, application_id=1, reason="Too late"
-            )
+            await application_service.withdraw_application(user=student_user, application_id=1, reason="Too late")
 
     @pytest.mark.asyncio
-    async def test_delete_application_admin_permission(
-        self, application_service, admin_user, mock_application
-    ):
+    async def test_delete_application_admin_permission(self, application_service, admin_user, mock_application):
         """Test application deletion by admin"""
         # Arrange
         mock_query_result = Mock()
@@ -488,9 +439,7 @@ class TestApplicationService:
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_delete_application_permission_denied(
-        self, application_service, student_user, mock_application
-    ):
+    async def test_delete_application_permission_denied(self, application_service, student_user, mock_application):
         """Test application deletion without admin permission"""
         # Arrange
         mock_query_result = Mock()
@@ -499,14 +448,10 @@ class TestApplicationService:
 
         # Act & Assert
         with pytest.raises(AuthorizationError):
-            await application_service.delete_application(
-                user=student_user, application_id=1
-            )
+            await application_service.delete_application(user=student_user, application_id=1)
 
     @pytest.mark.asyncio
-    async def test_update_application_status_admin(
-        self, application_service, admin_user, mock_application
-    ):
+    async def test_update_application_status_admin(self, application_service, admin_user, mock_application):
         """Test application status update by admin"""
         # Arrange
         mock_query_result = Mock()
@@ -527,9 +472,7 @@ class TestApplicationService:
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_search_applications_with_filters(
-        self, application_service, admin_user
-    ):
+    async def test_search_applications_with_filters(self, application_service, admin_user):
         """Test application search with various filters"""
         # Arrange
         mock_applications = [Mock(id=1), Mock(id=2)]
@@ -573,21 +516,11 @@ class TestApplicationService:
             agree_terms=True,
         )
 
-        incomplete_application = Mock(
-            submitted_form_data={"personal_statement": "Too short"}, agree_terms=False
-        )
+        incomplete_application = Mock(submitted_form_data={"personal_statement": "Too short"}, agree_terms=False)
 
         # Act & Assert
-        assert (
-            application_service._validate_application_completeness(complete_application)
-            == True
-        )
-        assert (
-            application_service._validate_application_completeness(
-                incomplete_application
-            )
-            == False
-        )
+        assert application_service._validate_application_completeness(complete_application) == True
+        assert application_service._validate_application_completeness(incomplete_application) == False
 
     @pytest.mark.asyncio
     async def test_generate_app_id_uniqueness(self, application_service):
@@ -612,9 +545,7 @@ class TestApplicationService:
         assert len(app_id) == 17  # APP- + year + 6 digit hex
 
     @pytest.mark.asyncio
-    async def test_email_notification_on_submission(
-        self, application_service, student_user, mock_application
-    ):
+    async def test_email_notification_on_submission(self, application_service, student_user, mock_application):
         """Test email notification is sent on application submission"""
         # Arrange
         mock_application.status = ApplicationStatus.DRAFT.value
@@ -627,13 +558,9 @@ class TestApplicationService:
         application_service.db.execute.return_value = mock_query_result
         application_service.db.commit = AsyncMock()
 
-        with patch.object(
-            application_service, "_validate_application_completeness", return_value=True
-        ):
+        with patch.object(application_service, "_validate_application_completeness", return_value=True):
             # Act
-            await application_service.submit_application(
-                user=student_user, application_id=1
-            )
+            await application_service.submit_application(user=student_user, application_id=1)
 
             # Assert
             application_service.emailService.send_application_confirmation.assert_called_once()
@@ -653,16 +580,12 @@ class TestApplicationService:
         application_service.db.execute.return_value = mock_scholarship_query
 
         application_service.db.add = Mock()
-        application_service.db.commit = AsyncMock(
-            side_effect=Exception("Database error")
-        )
+        application_service.db.commit = AsyncMock(side_effect=Exception("Database error"))
         application_service.db.rollback = AsyncMock()
 
         # Act & Assert
         with pytest.raises(Exception, match="Database error"):
-            await application_service.create_application(
-                user=student_user, application_data=application_create_data
-            )
+            await application_service.create_application(user=student_user, application_data=application_create_data)
 
         application_service.db.rollback.assert_called_once()
 
@@ -683,13 +606,9 @@ class TestGetStudentDataFromUser:
             "department": "Computer Science",
         }
 
-        with patch(
-            "app.services.application_service.StudentService"
-        ) as mock_service_class:
+        with patch("app.services.application_service.StudentService") as mock_service_class:
             mock_service = mock_service_class.return_value
-            mock_service.get_student_basic_info = AsyncMock(
-                return_value=mock_student_data
-            )
+            mock_service.get_student_basic_info = AsyncMock(return_value=mock_student_data)
 
             # Act
             result = await get_student_data_from_user(user)

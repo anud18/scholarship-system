@@ -20,26 +20,18 @@ class ApplicationFieldBase(BaseModel):
     field_type: str = Field(default=FieldType.TEXT.value, description="Field type")
     is_required: bool = Field(default=False, description="Is field required")
     placeholder: Optional[str] = Field(None, description="Placeholder text")
-    placeholder_en: Optional[str] = Field(
-        None, description="Placeholder text (English)"
-    )
+    placeholder_en: Optional[str] = Field(None, description="Placeholder text (English)")
     max_length: Optional[int] = Field(None, description="Maximum length")
     min_value: Optional[float] = Field(None, description="Minimum value")
     max_value: Optional[float] = Field(None, description="Maximum value")
     step_value: Optional[float] = Field(None, description="Step value")
-    field_options: Optional[List[Dict[str, Any]]] = Field(
-        None, description="Field options"
-    )
+    field_options: Optional[List[Dict[str, Any]]] = Field(None, description="Field options")
     display_order: int = Field(default=0, description="Display order")
     is_active: bool = Field(default=True, description="Is field active")
     help_text: Optional[str] = Field(None, description="Help text")
     help_text_en: Optional[str] = Field(None, description="Help text (English)")
-    validation_rules: Optional[Dict[str, Any]] = Field(
-        None, description="Validation rules"
-    )
-    conditional_rules: Optional[Dict[str, Any]] = Field(
-        None, description="Conditional rules"
-    )
+    validation_rules: Optional[Dict[str, Any]] = Field(None, description="Validation rules")
+    conditional_rules: Optional[Dict[str, Any]] = Field(None, description="Conditional rules")
 
 
 class ApplicationFieldCreate(ApplicationFieldBase):
@@ -80,12 +72,8 @@ class ApplicationFieldResponse(ApplicationFieldBase):
     updated_by: Optional[int] = None
     # Fixed field properties
     is_fixed: Optional[bool] = Field(None, description="Is this a fixed field")
-    prefill_value: Optional[str] = Field(
-        None, description="Prefilled value from user profile"
-    )
-    bank_code: Optional[str] = Field(
-        None, description="Bank code for bank account fields"
-    )
+    prefill_value: Optional[str] = Field(None, description="Prefilled value from user profile")
+    bank_code: Optional[str] = Field(None, description="Bank code for bank account fields")
 
     class Config:
         from_attributes = True
@@ -98,24 +86,16 @@ class ApplicationDocumentBase(BaseModel):
     document_name: str = Field(..., description="Document name")
     document_name_en: Optional[str] = Field(None, description="Document name (English)")
     description: Optional[str] = Field(None, description="Document description")
-    description_en: Optional[str] = Field(
-        None, description="Document description (English)"
-    )
+    description_en: Optional[str] = Field(None, description="Document description (English)")
     is_required: bool = Field(default=True, description="Is document required")
-    accepted_file_types: List[str] = Field(
-        default=["PDF"], description="Accepted file types"
-    )
+    accepted_file_types: List[str] = Field(default=["PDF"], description="Accepted file types")
     max_file_size: str = Field(default="5MB", description="Maximum file size")
     max_file_count: int = Field(default=1, description="Maximum file count")
     display_order: int = Field(default=0, description="Display order")
     is_active: bool = Field(default=True, description="Is document active")
     upload_instructions: Optional[str] = Field(None, description="Upload instructions")
-    upload_instructions_en: Optional[str] = Field(
-        None, description="Upload instructions (English)"
-    )
-    validation_rules: Optional[Dict[str, Any]] = Field(
-        None, description="Validation rules"
-    )
+    upload_instructions_en: Optional[str] = Field(None, description="Upload instructions (English)")
+    validation_rules: Optional[Dict[str, Any]] = Field(None, description="Validation rules")
 
 
 class ApplicationDocumentCreate(ApplicationDocumentBase):
@@ -152,9 +132,7 @@ class ApplicationDocumentResponse(ApplicationDocumentBase):
     updated_by: Optional[int] = None
     # Fixed document properties
     is_fixed: Optional[bool] = Field(None, description="Is this a fixed document")
-    existing_file_url: Optional[str] = Field(
-        None, description="URL of existing file from user profile"
-    )
+    existing_file_url: Optional[str] = Field(None, description="URL of existing file from user profile")
 
     class Config:
         from_attributes = True

@@ -42,8 +42,7 @@ class TestCombinedScholarship:
                     "max_ranking_percent": 20,
                     "required_documents": ["transcript", "research_proposal"],
                     "application_start_date": datetime.now(timezone.utc),
-                    "application_end_date": datetime.now(timezone.utc)
-                    + timedelta(days=365),
+                    "application_end_date": datetime.now(timezone.utc) + timedelta(days=365),
                 }
             ],
         )
@@ -58,9 +57,7 @@ class TestCombinedScholarship:
         sub_scholarships = await service.get_scholarship_with_sub_types(scholarship.id)
         assert len(sub_scholarships.sub_scholarships) == 1
 
-        nstc_scholarship = next(
-            s for s in sub_scholarships.sub_scholarships if s.sub_type == "nstc"
-        )
+        nstc_scholarship = next(s for s in sub_scholarships.sub_scholarships if s.sub_type == "nstc")
 
         assert nstc_scholarship.amount == Decimal("40000")
 
@@ -96,9 +93,7 @@ class TestCombinedScholarship:
             "min_gpa": 3.7,
         }
 
-    async def test_get_eligible_combined_scholarships(
-        self, db_session: AsyncSession, test_student
-    ):
+    async def test_get_eligible_combined_scholarships(self, db_session: AsyncSession, test_student):
         """Test that combined scholarships appear in eligible list"""
         service = ScholarshipService(db_session)
 

@@ -43,9 +43,7 @@ class NotificationCreate(BaseModel):
     title_en: Optional[str] = Field(None, max_length=200, description="英文標題")
     message: str = Field(..., min_length=1, description="公告內容")
     message_en: Optional[str] = Field(None, description="英文內容")
-    notification_type: str = Field(
-        default=NotificationType.INFO.value, description="公告類型"
-    )
+    notification_type: str = Field(default=NotificationType.INFO.value, description="公告類型")
     priority: str = Field(default=NotificationPriority.NORMAL.value, description="優先級")
     action_url: Optional[str] = Field(None, max_length=500, description="行動連結")
     expires_at: Optional[datetime] = Field(None, description="過期時間")
@@ -55,9 +53,7 @@ class NotificationCreate(BaseModel):
     def validate_notification_type(cls, v):
         valid_types = [t.value for t in NotificationType]
         if v not in valid_types:
-            raise ValueError(
-                f"Invalid notification type. Must be one of: {valid_types}"
-            )
+            raise ValueError(f"Invalid notification type. Must be one of: {valid_types}")
         return v
 
     @validator("priority")
@@ -87,9 +83,7 @@ class NotificationUpdate(BaseModel):
         if v is not None:
             valid_types = [t.value for t in NotificationType]
             if v not in valid_types:
-                raise ValueError(
-                    f"Invalid notification type. Must be one of: {valid_types}"
-                )
+                raise ValueError(f"Invalid notification type. Must be one of: {valid_types}")
         return v
 
     @validator("priority")
@@ -97,7 +91,5 @@ class NotificationUpdate(BaseModel):
         if v is not None:
             valid_priorities = [p.value for p in NotificationPriority]
             if v not in valid_priorities:
-                raise ValueError(
-                    f"Invalid priority. Must be one of: {valid_priorities}"
-                )
+                raise ValueError(f"Invalid priority. Must be one of: {valid_priorities}")
         return v

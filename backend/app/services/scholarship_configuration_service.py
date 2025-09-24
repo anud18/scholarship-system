@@ -31,9 +31,7 @@ class ScholarshipConfigurationService:
         )
 
         if scholarship_type_id:
-            stmt = stmt.filter(
-                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id
-            )
+            stmt = stmt.filter(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
 
         result = await self.db.execute(stmt)
         configurations = result.scalars().all()
@@ -46,13 +44,9 @@ class ScholarshipConfigurationService:
 
         return effective_configs
 
-    async def get_configuration_by_code(
-        self, config_code: str
-    ) -> Optional[ScholarshipConfiguration]:
+    async def get_configuration_by_code(self, config_code: str) -> Optional[ScholarshipConfiguration]:
         """Get configuration by its unique code"""
-        stmt = select(ScholarshipConfiguration).filter(
-            ScholarshipConfiguration.config_code == config_code
-        )
+        stmt = select(ScholarshipConfiguration).filter(ScholarshipConfiguration.config_code == config_code)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -105,24 +99,18 @@ class ScholarshipConfigurationService:
             if college_quota:
                 # Get college-specific approved applications
                 # This would need additional tracking in applications table
-                college_approved = (
-                    0  # Placeholder - would implement college-specific counting
-                )
+                college_approved = 0  # Placeholder - would implement college-specific counting
 
                 quota_info["college_quota"] = college_quota
                 quota_info["college_used"] = college_approved
-                quota_info["college_available"] = max(
-                    0, college_quota - college_approved
-                )
+                quota_info["college_available"] = max(0, college_quota - college_approved)
 
                 if college_quota - college_approved <= 0:
                     return False, quota_info
 
         return True, quota_info
 
-    def calculate_application_score(
-        self, config: ScholarshipConfiguration, application_data: Dict[str, Any]
-    ) -> float:
+    def calculate_application_score(self, config: ScholarshipConfiguration, application_data: Dict[str, Any]) -> float:
         """Calculate application score based on configuration criteria"""
         if not config.scoring_criteria:
             return 0.0
@@ -179,18 +167,14 @@ class ScholarshipConfigurationService:
                 elif rule_type == "maximum_applications":
                     # Check if student has too many applications (using user_id now)
                     stmt = (
-                        select(func.count())
-                        .select_from(Application)
-                        .where(Application.user_id == application.user_id)
+                        select(func.count()).select_from(Application).where(Application.user_id == application.user_id)
                     )
                     result = await self.db.execute(stmt)
                     student_app_count = result.scalar() or 0
 
                     if student_app_count > threshold:
                         passed = False
-                        reason = (
-                            f"Too many applications: {student_app_count} > {threshold}"
-                        )
+                        reason = f"Too many applications: {student_app_count} > {threshold}"
                         break
 
                 elif rule_type == "required_field":
@@ -247,27 +231,15 @@ class ScholarshipConfigurationService:
             amount=config_data["amount"],
             currency=config_data.get("currency", "TWD"),
             whitelist_student_ids=config_data.get("whitelist_student_ids", {}),
-            renewal_application_start_date=config_data.get(
-                "renewal_application_start_date"
-            ),
-            renewal_application_end_date=config_data.get(
-                "renewal_application_end_date"
-            ),
+            renewal_application_start_date=config_data.get("renewal_application_start_date"),
+            renewal_application_end_date=config_data.get("renewal_application_end_date"),
             application_start_date=config_data.get("application_start_date"),
             application_end_date=config_data.get("application_end_date"),
-            renewal_professor_review_start=config_data.get(
-                "renewal_professor_review_start"
-            ),
-            renewal_professor_review_end=config_data.get(
-                "renewal_professor_review_end"
-            ),
-            renewal_college_review_start=config_data.get(
-                "renewal_college_review_start"
-            ),
+            renewal_professor_review_start=config_data.get("renewal_professor_review_start"),
+            renewal_professor_review_end=config_data.get("renewal_professor_review_end"),
+            renewal_college_review_start=config_data.get("renewal_college_review_start"),
             renewal_college_review_end=config_data.get("renewal_college_review_end"),
-            requires_professor_recommendation=config_data.get(
-                "requires_professor_recommendation", False
-            ),
+            requires_professor_recommendation=config_data.get("requires_professor_recommendation", False),
             professor_review_start=config_data.get("professor_review_start"),
             professor_review_end=config_data.get("professor_review_end"),
             requires_college_review=config_data.get("requires_college_review", False),
@@ -292,9 +264,7 @@ class ScholarshipConfigurationService:
     ) -> ScholarshipConfiguration:
         """Update an existing scholarship configuration"""
 
-        stmt = select(ScholarshipConfiguration).where(
-            ScholarshipConfiguration.id == config_id
-        )
+        stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == config_id)
         result = await self.db.execute(stmt)
         config = result.scalar_one_or_none()
 
@@ -341,14 +311,10 @@ class ScholarshipConfigurationService:
 
         return config
 
-    async def deactivate_configuration(
-        self, config_id: int, updated_by_user_id: int
-    ) -> ScholarshipConfiguration:
+    async def deactivate_configuration(self, config_id: int, updated_by_user_id: int) -> ScholarshipConfiguration:
         """Deactivate (soft delete) a scholarship configuration"""
 
-        stmt = select(ScholarshipConfiguration).where(
-            ScholarshipConfiguration.id == config_id
-        )
+        stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == config_id)
         result = await self.db.execute(stmt)
         config = result.scalar_one_or_none()
 
@@ -378,9 +344,7 @@ class ScholarshipConfigurationService:
     ) -> ScholarshipConfiguration:
         """Duplicate a scholarship configuration to a new academic period"""
 
-        stmt = select(ScholarshipConfiguration).where(
-            ScholarshipConfiguration.id == source_config_id
-        )
+        stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == source_config_id)
         result = await self.db.execute(stmt)
         source_config = result.scalar_one_or_none()
 
@@ -390,8 +354,7 @@ class ScholarshipConfigurationService:
         # Check if target configuration already exists
         stmt = select(ScholarshipConfiguration).where(
             and_(
-                ScholarshipConfiguration.scholarship_type_id
-                == source_config.scholarship_type_id,
+                ScholarshipConfiguration.scholarship_type_id == source_config.scholarship_type_id,
                 ScholarshipConfiguration.academic_year == target_academic_year,
                 ScholarshipConfiguration.semester == target_semester,
                 ScholarshipConfiguration.is_active.is_(True),
@@ -401,9 +364,7 @@ class ScholarshipConfigurationService:
         existing_target = result.scalar_one_or_none()
 
         if existing_target:
-            raise ValueError(
-                "Target configuration already exists for this academic period"
-            )
+            raise ValueError("Target configuration already exists for this academic period")
 
         # Create duplicate configuration
         new_config = ScholarshipConfiguration(
@@ -444,9 +405,7 @@ class ScholarshipConfigurationService:
         stmt = select(ScholarshipConfiguration)
 
         if scholarship_type_id:
-            stmt = stmt.where(
-                ScholarshipConfiguration.scholarship_type_id == scholarship_type_id
-            )
+            stmt = stmt.where(ScholarshipConfiguration.scholarship_type_id == scholarship_type_id)
 
         if academic_year:
             stmt = stmt.where(ScholarshipConfiguration.academic_year == academic_year)
@@ -483,9 +442,7 @@ class ScholarshipConfigurationService:
         # Academic year validation
         academic_year = config_data.get("academic_year")
         if academic_year and (academic_year < 100 or academic_year > 200):
-            errors.append(
-                "Academic year should be in Taiwan calendar format (e.g., 113)"
-            )
+            errors.append("Academic year should be in Taiwan calendar format (e.g., 113)")
 
         # Amount validation
         amount = config_data.get("amount")
@@ -512,9 +469,7 @@ class ScholarshipConfigurationService:
                     from datetime import datetime
 
                     if isinstance(start_date, str):
-                        start_dt = datetime.fromisoformat(
-                            start_date.replace("Z", "+00:00")
-                        )
+                        start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
                     else:
                         start_dt = start_date
 
@@ -526,20 +481,14 @@ class ScholarshipConfigurationService:
                     if start_dt >= end_dt:
                         errors.append(f"{end_field} must be after {start_field}")
                 except (ValueError, TypeError):
-                    errors.append(
-                        f"Invalid date format for {start_field} or {end_field}"
-                    )
+                    errors.append(f"Invalid date format for {start_field} or {end_field}")
 
         return errors
 
-    async def get_configuration_analytics(
-        self, config: ScholarshipConfiguration
-    ) -> Dict[str, Any]:
+    async def get_configuration_analytics(self, config: ScholarshipConfiguration) -> Dict[str, Any]:
         """Get analytics data for a configuration"""
         # Get applications for this configuration's scholarship type
-        stmt = select(Application).where(
-            Application.scholarship_type_id == config.scholarship_type_id
-        )
+        stmt = select(Application).where(Application.scholarship_type_id == config.scholarship_type_id)
         result = await self.db.execute(stmt)
         applications = result.scalars().all()
 
@@ -563,9 +512,7 @@ class ScholarshipConfigurationService:
         # Usage analytics
         approved_count = status_breakdown.get(ApplicationStatus.APPROVED.value, 0)
         usage_analytics = {
-            "approval_rate": (approved_count / total_applications) * 100
-            if total_applications > 0
-            else 0,
+            "approval_rate": (approved_count / total_applications) * 100 if total_applications > 0 else 0,
             "quota_usage": None,
             "college_breakdown": {},
         }
@@ -672,9 +619,7 @@ class ScholarshipConfigurationService:
                 # Check if exists
                 existing = await self.get_configuration_by_code(config_code)
                 if existing and not overwrite_existing:
-                    errors.append(
-                        f"Configuration {i+1}: Code '{config_code}' already exists"
-                    )
+                    errors.append(f"Configuration {i+1}: Code '{config_code}' already exists")
                     continue
 
                 # Validate scholarship type
@@ -683,16 +628,12 @@ class ScholarshipConfigurationService:
                     errors.append(f"Configuration {i+1}: Missing scholarship_type_id")
                     continue
 
-                stmt = select(ScholarshipType).where(
-                    ScholarshipType.id == scholarship_type_id
-                )
+                stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_type_id)
                 result = await self.db.execute(stmt)
                 scholarship_type = result.scalar_one_or_none()
 
                 if not scholarship_type:
-                    errors.append(
-                        f"Configuration {i+1}: Scholarship type {scholarship_type_id} not found"
-                    )
+                    errors.append(f"Configuration {i+1}: Scholarship type {scholarship_type_id} not found")
                     continue
 
                 # Create or update configuration
@@ -709,16 +650,12 @@ class ScholarshipConfigurationService:
                     imported_configs.append(existing)
                 else:
                     # Create new
-                    new_config = ScholarshipConfiguration(
-                        **config_data, created_by=user_id, updated_by=user_id
-                    )
+                    new_config = ScholarshipConfiguration(**config_data, created_by=user_id, updated_by=user_id)
 
                     # Validate
                     validation_errors = new_config.validate_quota_config()
                     if validation_errors:
-                        errors.append(
-                            f"Configuration {i+1}: {'; '.join(validation_errors)}"
-                        )
+                        errors.append(f"Configuration {i+1}: {'; '.join(validation_errors)}")
                         continue
 
                     self.db.add(new_config)

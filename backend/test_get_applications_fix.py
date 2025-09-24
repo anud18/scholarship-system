@@ -92,9 +92,7 @@ async def test_get_applications_with_cloned_files():
             await db.commit()
             await db.refresh(application_file)
 
-            print(
-                f"✅ ApplicationFile 記錄已建立: ID={application_file.id}, file_type={application_file.file_type}"
-            )
+            print(f"✅ ApplicationFile 記錄已建立: ID={application_file.id}, file_type={application_file.file_type}")
 
             # 現在測試 get_user_applications 方法
             app_service = ApplicationService(db)
@@ -129,9 +127,7 @@ async def test_get_applications_with_cloned_files():
                             "filename",
                             "is_verified",
                         ]
-                        missing_fields = [
-                            f for f in required_fields if f not in doc or doc[f] is None
-                        ]
+                        missing_fields = [f for f in required_fields if f not in doc or doc[f] is None]
 
                         if missing_fields:
                             print(f"       ❌ 缺少必要欄位: {missing_fields}")
@@ -140,9 +136,7 @@ async def test_get_applications_with_cloned_files():
                             print("       ✅ 前端所需欄位完整")
 
                     print("\n🎯 前端顯示模擬:")
-                    print(
-                        "   application-detail-dialog.tsx:178 會讀取 application.submitted_form_data.documents"
-                    )
+                    print("   application-detail-dialog.tsx:178 會讀取 application.submitted_form_data.documents")
                     print("   轉換為 ApplicationFile 格式：")
                     for doc in documents:
                         frontend_file = {

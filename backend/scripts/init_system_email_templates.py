@@ -27,9 +27,7 @@ async def initialize_system_email_templates():
         existing_templates = list(result.scalars().all())
 
         if existing_templates:
-            print(
-                f"📊 Found {len(existing_templates)} existing templates, skipping initialization"
-            )
+            print(f"📊 Found {len(existing_templates)} existing templates, skipping initialization")
             return
 
         # Define default email templates
@@ -168,9 +166,7 @@ async def initialize_system_email_templates():
         for template_data in default_templates:
             template = EmailTemplate(**template_data)
             db.add(template)
-            print(
-                f"   ✅ Created template: {template_data['key']} ({template_data['sending_type'].value})"
-            )
+            print(f"   ✅ Created template: {template_data['key']} ({template_data['sending_type'].value})")
 
         await db.commit()
 

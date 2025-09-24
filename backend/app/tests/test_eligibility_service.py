@@ -81,9 +81,7 @@ class TestEligibilityServiceBasicChecks:
 
     @pytest.fixture
     def mock_scholarship_type(self):
-        return Mock(
-            spec=ScholarshipType, id=1, code="test_scholarship", whitelist_enabled=False
-        )
+        return Mock(spec=ScholarshipType, id=1, code="test_scholarship", whitelist_enabled=False)
 
     @pytest.fixture
     def active_config(self, mock_scholarship_type):
@@ -103,121 +101,77 @@ class TestEligibilityServiceBasicChecks:
     def student_data(self):
         return {"std_stdcode": "112550001", "std_gpa": 3.5, "std_name": "Test Student"}
 
-    async def test_check_inactive_configuration(
-        self, service, active_config, student_data
-    ):
+    async def test_check_inactive_configuration(self, service, active_config, student_data):
         """Test eligibility check fails for inactive configuration"""
         active_config.is_active = False
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, active_config
-            )
+        with patch.object(service, "_should_bypass_application_period", return_value=False):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
         assert is_eligible == False
         assert "獎學金配置未啟用" in reasons
 
-    async def test_check_ineffective_configuration(
-        self, service, active_config, student_data
-    ):
+    async def test_check_ineffective_configuration(self, service, active_config, student_data):
         """Test eligibility check fails for ineffective configuration"""
         active_config.is_effective = False
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, active_config
-            )
+        with patch.object(service, "_should_bypass_application_period", return_value=False):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
         assert is_eligible == False
         assert "不在獎學金有效期間內" in reasons
 
-    async def test_check_outside_application_period(
-        self, service, active_config, student_data
-    ):
+    async def test_check_outside_application_period(self, service, active_config, student_data):
         """Test eligibility check fails outside application period"""
-        active_config.application_start_date = datetime.now(timezone.utc) - timedelta(
-            days=30
-        )
-        active_config.application_end_date = datetime.now(timezone.utc) - timedelta(
-            days=1
-        )
+        active_config.application_start_date = datetime.now(timezone.utc) - timedelta(days=30)
+        active_config.application_end_date = datetime.now(timezone.utc) - timedelta(days=1)
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, active_config
-            )
+        with patch.object(service, "_should_bypass_application_period", return_value=False), patch.object(
+            service, "_check_scholarship_rules", return_value=(True, [])
+        ):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
         assert is_eligible == False
         assert "不在申請期間內" in reasons
 
-    async def test_check_within_application_period(
-        self, service, active_config, student_data
-    ):
+    async def test_check_within_application_period(self, service, active_config, student_data):
         """Test eligibility check passes within application period"""
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, active_config
-            )
+        with patch.object(service, "_should_bypass_application_period", return_value=False), patch.object(
+            service, "_check_scholarship_rules", return_value=(True, [])
+        ):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
         assert is_eligible == True
         assert len(reasons) == 0
 
-    async def test_check_within_renewal_period(
-        self, service, active_config, student_data
-    ):
+    async def test_check_within_renewal_period(self, service, active_config, student_data):
         """Test eligibility check passes within renewal period"""
         # Main period expired
-        active_config.application_start_date = datetime.now(timezone.utc) - timedelta(
-            days=30
-        )
-        active_config.application_end_date = datetime.now(timezone.utc) - timedelta(
-            days=10
-        )
+        active_config.application_start_date = datetime.now(timezone.utc) - timedelta(days=30)
+        active_config.application_end_date = datetime.now(timezone.utc) - timedelta(days=10)
 
         # But renewal period is active
-        active_config.renewal_application_start_date = datetime.now(
-            timezone.utc
-        ) - timedelta(days=5)
-        active_config.renewal_application_end_date = datetime.now(
-            timezone.utc
-        ) + timedelta(days=5)
+        active_config.renewal_application_start_date = datetime.now(timezone.utc) - timedelta(days=5)
+        active_config.renewal_application_end_date = datetime.now(timezone.utc) + timedelta(days=5)
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, active_config
-            )
+        with patch.object(service, "_should_bypass_application_period", return_value=False), patch.object(
+            service, "_check_scholarship_rules", return_value=(True, [])
+        ):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
         assert is_eligible == True
         assert len(reasons) == 0
 
-    async def test_check_bypass_application_period(
-        self, service, active_config, student_data
-    ):
+    async def test_check_bypass_application_period(self, service, active_config, student_data):
         """Test application period bypass in dev mode"""
         # Set expired period
-        active_config.application_start_date = datetime.now(timezone.utc) - timedelta(
-            days=30
-        )
-        active_config.application_end_date = datetime.now(timezone.utc) - timedelta(
-            days=1
-        )
+        active_config.application_start_date = datetime.now(timezone.utc) - timedelta(days=30)
+        active_config.application_end_date = datetime.now(timezone.utc) - timedelta(days=1)
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=True
-        ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, active_config
-            )
+        with patch.object(service, "_should_bypass_application_period", return_value=True), patch.object(
+            service, "_check_scholarship_rules", return_value=(True, [])
+        ):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
         assert is_eligible == True
         assert len(reasons) == 0
@@ -250,16 +204,10 @@ class TestEligibilityServiceWhitelist:
         """Test whitelist allows listed student (dict format)"""
         student_data = {"std_stdcode": "112550001"}
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ), patch.object(
+        with patch.object(service, "_should_bypass_application_period", return_value=False), patch.object(
             service, "_should_bypass_whitelist", return_value=False
-        ), patch.object(
-            service, "_check_scholarship_rules", return_value=(True, [])
-        ):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, whitelist_config
-            )
+        ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, whitelist_config)
 
         assert is_eligible == True
         assert len(reasons) == 0
@@ -268,16 +216,10 @@ class TestEligibilityServiceWhitelist:
         """Test whitelist denies unlisted student (dict format)"""
         student_data = {"std_stdcode": "112550999"}
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ), patch.object(
+        with patch.object(service, "_should_bypass_application_period", return_value=False), patch.object(
             service, "_should_bypass_whitelist", return_value=False
-        ), patch.object(
-            service, "_check_scholarship_rules", return_value=(True, [])
-        ):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, whitelist_config
-            )
+        ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, whitelist_config)
 
         assert is_eligible == False
         assert "未在白名單中" in reasons
@@ -287,16 +229,10 @@ class TestEligibilityServiceWhitelist:
         whitelist_config.whitelist_student_ids = ["112550001", "112550002"]
         student_data = {"std_stdcode": "112550001"}
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ), patch.object(
+        with patch.object(service, "_should_bypass_application_period", return_value=False), patch.object(
             service, "_should_bypass_whitelist", return_value=False
-        ), patch.object(
-            service, "_check_scholarship_rules", return_value=(True, [])
-        ):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, whitelist_config
-            )
+        ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, whitelist_config)
 
         assert is_eligible == True
         assert len(reasons) == 0
@@ -305,16 +241,10 @@ class TestEligibilityServiceWhitelist:
         """Test whitelist bypass in dev mode"""
         student_data = {"std_stdcode": "112550999"}  # Not in whitelist
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ), patch.object(
+        with patch.object(service, "_should_bypass_application_period", return_value=False), patch.object(
             service, "_should_bypass_whitelist", return_value=True
-        ), patch.object(
-            service, "_check_scholarship_rules", return_value=(True, [])
-        ):
-            is_eligible, reasons = await service.check_student_eligibility(
-                student_data, whitelist_config
-            )
+        ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
+            is_eligible, reasons = await service.check_student_eligibility(student_data, whitelist_config)
 
         assert is_eligible == True
         assert len(reasons) == 0
@@ -352,9 +282,7 @@ class TestEligibilityServiceDetailedCheck:
             "errors": [],
         }
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ), patch.object(
+        with patch.object(service, "_should_bypass_application_period", return_value=False), patch.object(
             service,
             "_check_scholarship_rules_detailed",
             return_value=(True, [], mock_details),
@@ -363,9 +291,7 @@ class TestEligibilityServiceDetailedCheck:
                 is_eligible,
                 reasons,
                 details,
-            ) = await service.get_detailed_eligibility_check(
-                student_data, active_config
-            )
+            ) = await service.get_detailed_eligibility_check(student_data, active_config)
 
         assert is_eligible == True
         assert len(reasons) == 0
@@ -378,16 +304,12 @@ class TestEligibilityServiceDetailedCheck:
         active_config.is_active = False
         student_data = {"std_stdcode": "112550001"}
 
-        with patch.object(
-            service, "_should_bypass_application_period", return_value=False
-        ):
+        with patch.object(service, "_should_bypass_application_period", return_value=False):
             (
                 is_eligible,
                 reasons,
                 details,
-            ) = await service.get_detailed_eligibility_check(
-                student_data, active_config
-            )
+            ) = await service.get_detailed_eligibility_check(student_data, active_config)
 
         assert is_eligible == False
         assert "獎學金配置未啟用" in reasons

@@ -47,16 +47,12 @@ async def get_my_profile(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/student-info")
-async def get_student_info(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+async def get_student_info(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get student information"""
     from app.services.application_service import get_student_data_from_user
 
     if current_user.role.value != "student":
-        raise HTTPException(
-            status_code=403, detail="Only students can access student information"
-        )
+        raise HTTPException(status_code=403, detail="Only students can access student information")
 
     # Get student profile
     student = await get_student_data_from_user(current_user)
@@ -136,12 +132,8 @@ async def get_all_users(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
     role: Optional[str] = Query(None, description="Filter by role"),
-    roles: Optional[str] = Query(
-        None, description="Filter by multiple roles (comma-separated)"
-    ),
-    search: Optional[str] = Query(
-        None, description="Search by name, email, or nycu_id"
-    ),
+    roles: Optional[str] = Query(None, description="Filter by multiple roles (comma-separated)"),
+    search: Optional[str] = Query(None, description="Search by name, email, or nycu_id"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -158,9 +150,7 @@ async def get_all_users(
             user_roles = [UserRole(r) for r in role_list]
             stmt = stmt.where(User.role.in_(user_roles))
         except ValueError as e:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid role in roles parameter: {e}"
-            )
+            raise HTTPException(status_code=400, detail=f"Invalid role in roles parameter: {e}")
     elif role:
         # Handle single role (backward compatibility)
         try:
@@ -241,9 +231,7 @@ async def create_user(
     # Check if user already exists
     existing_user = await auth_service.get_user_by_email(user_data.email)
     if existing_user:
-        raise HTTPException(
-            status_code=409, detail="User with this email already exists"
-        )
+        raise HTTPException(status_code=409, detail="User with this email already exists")
 
     existing_nycu_id = await auth_service.get_user_by_nycu_id(user_data.nycu_id)
     if existing_nycu_id:
@@ -293,9 +281,7 @@ async def update_user(
 
 
 @router.get("/stats/overview")
-async def get_user_stats(
-    current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+async def get_user_stats(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get user statistics (admin only)"""
     # Total users by role
     role_stats = {}

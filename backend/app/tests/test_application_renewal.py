@@ -57,9 +57,7 @@ class TestApplicationRenewal:
         assert application.status == ApplicationStatus.SUBMITTED.value
 
     @pytest.mark.asyncio
-    async def test_create_new_application(
-        self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType
-    ):
+    async def test_create_new_application(self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType):
         """Test creating a new (non-renewal) application"""
         # Arrange
         service = ApplicationService(db)

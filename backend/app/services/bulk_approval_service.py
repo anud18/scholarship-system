@@ -115,17 +115,13 @@ class BulkApprovalService:
                             else:
                                 results["notifications_failed"] += 1
                         except Exception as e:
-                            logger.error(
-                                f"Failed to send notification for application {application.id}: {str(e)}"
-                            )
+                            logger.error(f"Failed to send notification for application {application.id}: {str(e)}")
                             results["notifications_failed"] += 1
 
                     logger.info(f"Bulk approved application {application.app_id}")
 
                 except Exception as e:
-                    logger.error(
-                        f"Failed to approve application {application.id}: {str(e)}"
-                    )
+                    logger.error(f"Failed to approve application {application.id}: {str(e)}")
                     await self.db.rollback()
                     results["failed_approvals"].append(
                         {
@@ -215,17 +211,13 @@ class BulkApprovalService:
                             else:
                                 results["notifications_failed"] += 1
                         except Exception as e:
-                            logger.error(
-                                f"Failed to send notification for application {application.id}: {str(e)}"
-                            )
+                            logger.error(f"Failed to send notification for application {application.id}: {str(e)}")
                             results["notifications_failed"] += 1
 
                     logger.info(f"Bulk rejected application {application.app_id}")
 
                 except Exception as e:
-                    logger.error(
-                        f"Failed to reject application {application.id}: {str(e)}"
-                    )
+                    logger.error(f"Failed to reject application {application.id}: {str(e)}")
                     await self.db.rollback()
                     results["failed_rejections"].append(
                         {
@@ -266,9 +258,7 @@ class BulkApprovalService:
             )
 
             if scholarship_type_id:
-                stmt = stmt.where(
-                    Application.scholarship_type_id == scholarship_type_id
-                )
+                stmt = stmt.where(Application.scholarship_type_id == scholarship_type_id)
 
             if main_type:
                 stmt = stmt.where(Application.main_scholarship_type == main_type)
@@ -333,13 +323,9 @@ class BulkApprovalService:
                     logger.info(f"Auto-approved application {application.app_id}")
 
                 except Exception as e:
-                    logger.error(
-                        f"Failed to auto-approve application {application.id}: {str(e)}"
-                    )
+                    logger.error(f"Failed to auto-approve application {application.id}: {str(e)}")
                     await self.db.rollback()
-                    auto_approval_failures.append(
-                        {"application_id": application.id, "error": str(e)}
-                    )
+                    auto_approval_failures.append({"application_id": application.id, "error": str(e)})
 
             return {
                 "criteria_applied": {
@@ -415,13 +401,9 @@ class BulkApprovalService:
                     )
 
                 except Exception as e:
-                    logger.error(
-                        f"Failed to update application {application.id}: {str(e)}"
-                    )
+                    logger.error(f"Failed to update application {application.id}: {str(e)}")
                     await self.db.rollback()
-                    update_failures.append(
-                        {"application_id": application.id, "error": str(e)}
-                    )
+                    update_failures.append({"application_id": application.id, "error": str(e)})
 
             return {
                 "total_requested": len(application_ids),
@@ -437,9 +419,7 @@ class BulkApprovalService:
             logger.error(f"Bulk status update failed: {str(e)}")
             raise
 
-    def _meets_approval_criteria(
-        self, application: Application, criteria: Dict[str, Any]
-    ) -> bool:
+    def _meets_approval_criteria(self, application: Application, criteria: Dict[str, Any]) -> bool:
         """Check if application meets approval criteria"""
 
         try:
@@ -452,8 +432,7 @@ class BulkApprovalService:
             if "max_ranking" in criteria:
                 if (
                     application.class_ranking_percent
-                    and float(application.class_ranking_percent)
-                    > criteria["max_ranking"]
+                    and float(application.class_ranking_percent) > criteria["max_ranking"]
                 ):
                     return False
 
@@ -468,10 +447,7 @@ class BulkApprovalService:
                     return False
 
             # Check document completeness if specified
-            if (
-                "require_complete_documents" in criteria
-                and criteria["require_complete_documents"]
-            ):
+            if "require_complete_documents" in criteria and criteria["require_complete_documents"]:
                 # This would check if all required documents are uploaded
                 # Implementation would depend on document validation logic
                 pass
@@ -479,9 +455,7 @@ class BulkApprovalService:
             return True
 
         except Exception as e:
-            logger.error(
-                f"Error checking approval criteria for application {application.id}: {str(e)}"
-            )
+            logger.error(f"Error checking approval criteria for application {application.id}: {str(e)}")
             return False
 
     async def batch_process_with_notifications(
@@ -533,9 +507,7 @@ class BulkApprovalService:
                         "processed_at": datetime.now(timezone.utc).isoformat(),
                     }
 
-                    await self.notification_service.send_batch_processing_notification(
-                        admin_email, notification_data
-                    )
+                    await self.notification_service.send_batch_processing_notification(admin_email, notification_data)
                 except Exception as e:
                     logger.error(f"Failed to send admin notification: {str(e)}")
 

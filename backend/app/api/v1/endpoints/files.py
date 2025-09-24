@@ -48,9 +48,7 @@ async def get_file_proxy(
         auth_service = AuthService(db)
         user_result = await auth_service.get_user_by_id(user_id)
         if not user_result:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user"
-            )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user")
 
         current_user = user_result
 
@@ -59,9 +57,7 @@ async def get_file_proxy(
             select(ApplicationFile)
             .options(selectinload(ApplicationFile.application))
             .join(Application)
-            .where(
-                and_(ApplicationFile.id == file_id, Application.id == application_id)
-            )
+            .where(and_(ApplicationFile.id == file_id, Application.id == application_id))
         )
         result = await db.execute(stmt)
         file_record = result.scalar_one_or_none()
@@ -100,11 +96,7 @@ async def get_file_proxy(
         file_stream = minio_service.get_file_stream(file_record.object_name)
 
         # Determine content type
-        content_type = (
-            file_record.mime_type
-            or file_record.content_type
-            or "application/octet-stream"
-        )
+        content_type = file_record.mime_type or file_record.content_type or "application/octet-stream"
 
         # Create streaming response
         def generate():
@@ -157,9 +149,7 @@ async def download_file_proxy(
         auth_service = AuthService(db)
         user_result = await auth_service.get_user_by_id(user_id)
         if not user_result:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user"
-            )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user")
 
         current_user = user_result
 
@@ -168,9 +158,7 @@ async def download_file_proxy(
             select(ApplicationFile)
             .options(selectinload(ApplicationFile.application))
             .join(Application)
-            .where(
-                and_(ApplicationFile.id == file_id, Application.id == application_id)
-            )
+            .where(and_(ApplicationFile.id == file_id, Application.id == application_id))
         )
         result = await db.execute(stmt)
         file_record = result.scalar_one_or_none()
@@ -209,11 +197,7 @@ async def download_file_proxy(
         file_stream = minio_service.get_file_stream(file_record.object_name)
 
         # Determine content type
-        content_type = (
-            file_record.mime_type
-            or file_record.content_type
-            or "application/octet-stream"
-        )
+        content_type = file_record.mime_type or file_record.content_type or "application/octet-stream"
 
         # Create streaming response with download headers
         def generate():

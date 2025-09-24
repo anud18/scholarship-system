@@ -118,9 +118,7 @@ async def verify_announcements():
             from app.models.notification import Notification
 
             # 統計系統公告數量
-            count_stmt = select(func.count(Notification.id)).where(
-                Notification.user_id.is_(None)
-            )
+            count_stmt = select(func.count(Notification.id)).where(Notification.user_id.is_(None))
             count_result = await session.execute(count_stmt)
             total_announcements = count_result.scalar()
 
@@ -140,9 +138,7 @@ async def verify_announcements():
             print("   📋 最近創建的公告:")
             for i, announcement in enumerate(recent_announcements, 1):
                 print(f"      {i}. {announcement.title} (ID: {announcement.id})")
-                print(
-                    f"         類型: {announcement.notification_type}, 優先級: {announcement.priority}"
-                )
+                print(f"         類型: {announcement.notification_type}, 優先級: {announcement.priority}")
                 print(f"         創建時間: {announcement.created_at}")
                 print()
 

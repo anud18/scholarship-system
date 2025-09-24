@@ -67,10 +67,7 @@ async def get_school_identities(
     result = await session.execute(select(SchoolIdentity))
     school_identities = result.scalars().all()
 
-    return [
-        {"id": school_identity.id, "name": school_identity.name}
-        for school_identity in school_identities
-    ]
+    return [{"id": school_identity.id, "name": school_identity.name} for school_identity in school_identities]
 
 
 @router.get("/academies")
@@ -81,10 +78,7 @@ async def get_academies(
     result = await session.execute(select(Academy).order_by(Academy.code))
     academies = result.scalars().all()
 
-    return [
-        {"id": academy.id, "code": academy.code, "name": academy.name}
-        for academy in academies
-    ]
+    return [{"id": academy.id, "code": academy.code, "name": academy.name} for academy in academies]
 
 
 @router.get("/departments")
@@ -95,10 +89,7 @@ async def get_departments(
     result = await session.execute(select(Department).order_by(Department.code))
     departments = result.scalars().all()
 
-    return [
-        {"id": department.id, "code": department.code, "name": department.name}
-        for department in departments
-    ]
+    return [{"id": department.id, "code": department.code, "name": department.name} for department in departments]
 
 
 @router.get("/enroll-types")
@@ -139,13 +130,9 @@ async def get_all_reference_data(
     statuses_result = await session.execute(select(StudyingStatus))
     school_identities_result = await session.execute(select(SchoolIdentity))
     academies_result = await session.execute(select(Academy).order_by(Academy.code))
-    departments_result = await session.execute(
-        select(Department).order_by(Department.code)
-    )
+    departments_result = await session.execute(select(Department).order_by(Department.code))
     enroll_types_result = await session.execute(
-        select(EnrollType)
-        .options(selectinload(EnrollType.degree))
-        .order_by(EnrollType.degreeId, EnrollType.code)
+        select(EnrollType).options(selectinload(EnrollType.degree)).order_by(EnrollType.degreeId, EnrollType.code)
     )
 
     degrees = degrees_result.scalars().all()
@@ -158,23 +145,14 @@ async def get_all_reference_data(
 
     return {
         "degrees": [{"id": degree.id, "name": degree.name} for degree in degrees],
-        "identities": [
-            {"id": identity.id, "name": identity.name} for identity in identities
-        ],
-        "studying_statuses": [
-            {"id": status.id, "name": status.name} for status in statuses
-        ],
+        "identities": [{"id": identity.id, "name": identity.name} for identity in identities],
+        "studying_statuses": [{"id": status.id, "name": status.name} for status in statuses],
         "school_identities": [
-            {"id": school_identity.id, "name": school_identity.name}
-            for school_identity in school_identities
+            {"id": school_identity.id, "name": school_identity.name} for school_identity in school_identities
         ],
-        "academies": [
-            {"id": academy.id, "code": academy.code, "name": academy.name}
-            for academy in academies
-        ],
+        "academies": [{"id": academy.id, "code": academy.code, "name": academy.name} for academy in academies],
         "departments": [
-            {"id": department.id, "code": department.code, "name": department.name}
-            for department in departments
+            {"id": department.id, "code": department.code, "name": department.name} for department in departments
         ],
         "enroll_types": [
             {
@@ -202,9 +180,7 @@ async def get_available_semesters() -> dict:
     taiwan_year = current_year - 1911
 
     # Determine current semester (8月以前為第二學期，8月以後為第一學期)
-    current_semester = (
-        Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
-    )
+    current_semester = Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
 
     # Generate academic years: current - 2 to current + 2
     academic_years = []
@@ -246,9 +222,7 @@ async def get_available_semesters() -> dict:
 
 @router.get("/semester-academic-year-combinations")
 async def get_semester_academic_year_combinations(
-    include_statistics: bool = Query(
-        False, description="Include application statistics"
-    ),
+    include_statistics: bool = Query(False, description="Include application statistics"),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get semester and academic year combinations with optional statistics"""
@@ -258,9 +232,7 @@ async def get_semester_academic_year_combinations(
     current_year = datetime.now().year
     current_month = datetime.now().month
     taiwan_year = current_year - 1911
-    current_semester = (
-        Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
-    )
+    current_semester = Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
 
     combinations = []
 
@@ -270,11 +242,7 @@ async def get_semester_academic_year_combinations(
 
         for semester in [Semester.FIRST.value, Semester.SECOND.value]:
             semester_label = "第一學期" if semester == Semester.FIRST.value else "第二學期"
-            semester_label_en = (
-                "First Semester"
-                if semester == Semester.FIRST.value
-                else "Second Semester"
-            )
+            semester_label_en = "First Semester" if semester == Semester.FIRST.value else "Second Semester"
 
             combination = {
                 "value": f"{year}-{semester}",
@@ -283,8 +251,7 @@ async def get_semester_academic_year_combinations(
                 "label": f"{year}學年{semester_label}",
                 "label_en": f"Academic Year {year + 1911}-{year + 1912} {semester_label_en}",
                 "is_current": year == taiwan_year and semester == current_semester,
-                "sort_order": year * 10
-                + (1 if semester == Semester.FIRST.value else 2),
+                "sort_order": year * 10 + (1 if semester == Semester.FIRST.value else 2),
             }
 
             # Add statistics if requested
@@ -341,11 +308,7 @@ async def get_active_academic_periods(
 
     for row in result:
         semester_label = "第一學期" if row.semester == Semester.FIRST.value else "第二學期"
-        semester_label_en = (
-            "First Semester"
-            if row.semester == Semester.FIRST.value
-            else "Second Semester"
-        )
+        semester_label_en = "First Semester" if row.semester == Semester.FIRST.value else "Second Semester"
 
         active_periods.append(
             {
@@ -355,12 +318,8 @@ async def get_active_academic_periods(
                 "label": f"{row.academic_year}學年{semester_label}",
                 "label_en": f"Academic Year {row.academic_year + 1911}-{row.academic_year + 1912} {semester_label_en}",
                 "application_count": row.application_count,
-                "first_application": row.first_application.isoformat()
-                if row.first_application
-                else None,
-                "last_application": row.last_application.isoformat()
-                if row.last_application
-                else None,
+                "first_application": row.first_application.isoformat() if row.first_application else None,
+                "last_application": row.last_application.isoformat() if row.last_application else None,
             }
         )
 
@@ -371,9 +330,7 @@ async def get_active_academic_periods(
 async def get_scholarship_periods(
     scholarship_id: Optional[int] = Query(None, description="Scholarship type ID"),
     scholarship_code: Optional[str] = Query(None, description="Scholarship type code"),
-    application_cycle: Optional[str] = Query(
-        None, description="Application cycle filter (semester/yearly)"
-    ),
+    application_cycle: Optional[str] = Query(None, description="Application cycle filter (semester/yearly)"),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get appropriate academic periods based on scholarship application cycle"""
@@ -383,9 +340,7 @@ async def get_scholarship_periods(
     current_year = datetime.now().year
     current_month = datetime.now().month
     taiwan_year = current_year - 1911
-    current_semester = (
-        Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
-    )
+    current_semester = Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
 
     # Get scholarship info if specified
     scholarship_cycle = None
@@ -406,11 +361,7 @@ async def get_scholarship_periods(
             scholarship_name = scholarship.name
 
     # Use provided cycle or detected cycle
-    cycle = application_cycle or (
-        scholarship_cycle.value
-        if scholarship_cycle
-        else ApplicationCycle.SEMESTER.value
-    )
+    cycle = application_cycle or (scholarship_cycle.value if scholarship_cycle else ApplicationCycle.SEMESTER.value)
 
     periods = []
 
@@ -437,11 +388,7 @@ async def get_scholarship_periods(
 
             for semester in [Semester.FIRST.value, Semester.SECOND.value]:
                 semester_label = "第一學期" if semester == Semester.FIRST.value else "第二學期"
-                semester_label_en = (
-                    "First Semester"
-                    if semester == Semester.FIRST.value
-                    else "Second Semester"
-                )
+                semester_label_en = "First Semester" if semester == Semester.FIRST.value else "Second Semester"
 
                 periods.append(
                     {
@@ -450,11 +397,9 @@ async def get_scholarship_periods(
                         "semester": semester,
                         "label": f"{year}學年{semester_label}",
                         "label_en": f"Academic Year {year + 1911}-{year + 1912} {semester_label_en}",
-                        "is_current": year == taiwan_year
-                        and semester == current_semester,
+                        "is_current": year == taiwan_year and semester == current_semester,
                         "cycle": "semester",
-                        "sort_order": year * 10
-                        + (1 if semester == Semester.FIRST.value else 2),
+                        "sort_order": year * 10 + (1 if semester == Semester.FIRST.value else 2),
                     }
                 )
 
@@ -487,9 +432,7 @@ async def get_scholarship_types_with_cycles(
 
     for scholarship in scholarships:
         cycle = (
-            scholarship.application_cycle.value
-            if scholarship.application_cycle
-            else ApplicationCycle.SEMESTER.value
+            scholarship.application_cycle.value if scholarship.application_cycle else ApplicationCycle.SEMESTER.value
         )
         cycle_counts[cycle] += 1
 
@@ -501,12 +444,8 @@ async def get_scholarship_types_with_cycles(
                 "name_en": scholarship.name_en,
                 "category": scholarship.category,
                 "application_cycle": cycle,
-                "cycle_label": "學年制"
-                if cycle == ApplicationCycle.YEARLY.value
-                else "學期制",
-                "cycle_label_en": "Yearly"
-                if cycle == ApplicationCycle.YEARLY.value
-                else "Semester",
+                "cycle_label": "學年制" if cycle == ApplicationCycle.YEARLY.value else "學期制",
+                "cycle_label_en": "Yearly" if cycle == ApplicationCycle.YEARLY.value else "Semester",
             }
         )
 

@@ -102,9 +102,7 @@ class CollegeReviewService:
             ApplicationStatus.RECOMMENDED.value,
             ApplicationStatus.UNDER_REVIEW.value,
         ]:
-            raise BusinessLogicError(
-                f"Application {application_id} is not in reviewable state"
-            )
+            raise BusinessLogicError(f"Application {application_id} is not in reviewable state")
 
         # Calculate scores if not provided
         if not review_data.get("ranking_score"):
@@ -187,9 +185,7 @@ class CollegeReviewService:
             select(Application)
             .options(
                 selectinload(Application.scholarship_type_ref),
-                selectinload(Application.professor_reviews).selectinload(
-                    ProfessorReview.professor
-                ),
+                selectinload(Application.professor_reviews).selectinload(ProfessorReview.professor),
                 selectinload(Application.files),
                 selectinload(Application.reviews),  # Load all application reviews
                 selectinload(Application.student),  # Load student information
@@ -231,9 +227,7 @@ class CollegeReviewService:
                     stmt = stmt.where(
                         or_(
                             Application.semester == semester_enum,
-                            Application.semester.is_(
-                                None
-                            ),  # Include yearly scholarships
+                            Application.semester.is_(None),  # Include yearly scholarships
                         )
                     )
                 except ValueError:
@@ -249,16 +243,12 @@ class CollegeReviewService:
         # Get college review data for all applications in a single batch query
         application_ids = [app.id for app in applications]
         if application_ids:
-            college_reviews_stmt = select(CollegeReview).where(
-                CollegeReview.application_id.in_(application_ids)
-            )
+            college_reviews_stmt = select(CollegeReview).where(CollegeReview.application_id.in_(application_ids))
             college_reviews_result = await self.db.execute(college_reviews_stmt)
             college_reviews = college_reviews_result.scalars().all()
 
             # Create lookup dictionary for college reviews
-            college_review_lookup = {
-                review.application_id: review for review in college_reviews
-            }
+            college_review_lookup = {review.application_id: review for review in college_reviews}
         else:
             college_review_lookup = {}
 
@@ -271,12 +261,8 @@ class CollegeReviewService:
             app_data = {
                 "id": app.id,
                 "app_id": app.app_id,
-                "student_id": app.student_data.get("std_stdcode")
-                if app.student_data
-                else "N/A",
-                "student_name": app.student_data.get("std_cname")
-                if app.student_data
-                else "N/A",
+                "student_id": app.student_data.get("std_stdcode") if app.student_data else "N/A",
+                "student_name": app.student_data.get("std_cname") if app.student_data else "N/A",
                 "scholarship_type": app.main_scholarship_type,
                 "sub_type": app.sub_scholarship_type,
                 "academic_year": app.academic_year,
@@ -287,9 +273,7 @@ class CollegeReviewService:
                 "student_data": app.student_data,  # Include full student_data for API endpoint processing
                 "professor_review_completed": len(app.professor_reviews) > 0,
                 "college_review_completed": college_review is not None,
-                "college_review_score": college_review.ranking_score
-                if college_review
-                else None,
+                "college_review_score": college_review.ranking_score if college_review else None,
             }
             formatted_applications.append(app_data)
 
@@ -418,9 +402,7 @@ class CollegeReviewService:
         # Ensure all applications have college reviews (create default ones if needed)
         from app.models.college_review import CollegeReview
 
-        college_review_lookup = {
-            review.application_id: review for review in college_reviews
-        }
+        college_review_lookup = {review.application_id: review for review in college_reviews}
 
         # Create default college reviews for applications that don't have them
         applications_with_reviews = []
@@ -493,9 +475,7 @@ class CollegeReviewService:
 
         applications_with_reviews.sort(key=sort_key, reverse=True)
 
-        for rank_position, (app, college_review) in enumerate(
-            applications_with_reviews, 1
-        ):
+        for rank_position, (app, college_review) in enumerate(applications_with_reviews, 1):
             ranking_item = CollegeRankingItem(
                 ranking_id=ranking.id,
                 application_id=app.id,
@@ -518,9 +498,7 @@ class CollegeReviewService:
                 selectinload(CollegeRanking.items)
                 .selectinload(CollegeRankingItem.application)
                 .selectinload(Application.scholarship_type_ref),
-                selectinload(CollegeRanking.items).selectinload(
-                    CollegeRankingItem.college_review
-                ),
+                selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.college_review),
                 selectinload(CollegeRanking.scholarship_type),
                 selectinload(CollegeRanking.creator),
                 selectinload(CollegeRanking.finalizer),
@@ -531,9 +509,7 @@ class CollegeReviewService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def update_ranking_order(
-        self, ranking_id: int, new_order: List[Dict[str, Any]]
-    ) -> CollegeRanking:
+    async def update_ranking_order(self, ranking_id: int, new_order: List[Dict[str, Any]]) -> CollegeRanking:
         """Update the ranking order of applications with transaction safety"""
 
         async with self.db.begin():  # Atomic transaction
@@ -541,11 +517,7 @@ class CollegeReviewService:
                 # Get ranking with pessimistic locking
                 ranking_stmt = (
                     select(CollegeRanking)
-                    .options(
-                        selectinload(CollegeRanking.items).selectinload(
-                            CollegeRankingItem.application
-                        )
-                    )
+                    .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
                     .where(CollegeRanking.id == ranking_id)
                     .with_for_update()
                 )
@@ -554,14 +526,10 @@ class CollegeReviewService:
                 ranking = ranking_result.scalar_one_or_none()
 
                 if not ranking:
-                    raise RankingNotFoundError(
-                        f"Ranking with ID {ranking_id} not found"
-                    )
+                    raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
 
                 if ranking.is_finalized:
-                    raise RankingModificationError(
-                        f"Cannot modify finalized ranking {ranking_id}"
-                    )
+                    raise RankingModificationError(f"Cannot modify finalized ranking {ranking_id}")
 
                 # Validate input
                 if not new_order:
@@ -569,9 +537,7 @@ class CollegeReviewService:
 
                 positions = [item.get("position") for item in new_order]
                 if len(positions) != len(set(positions)):
-                    raise InvalidRankingDataError(
-                        "Duplicate positions found in ranking update"
-                    )
+                    raise InvalidRankingDataError("Duplicate positions found in ranking update")
 
                 # Update rank positions with validation
                 updated_count = 0
@@ -583,23 +549,17 @@ class CollegeReviewService:
                         continue
 
                     # Find the ranking item
-                    ranking_item = next(
-                        (item for item in ranking.items if item.id == item_id), None
-                    )
+                    ranking_item = next((item for item in ranking.items if item.id == item_id), None)
 
                     if ranking_item and ranking_item.rank_position != new_position:
                         ranking_item.rank_position = new_position
                         # Also update the application's ranking position for consistency
                         if ranking_item.application:
-                            ranking_item.application.final_ranking_position = (
-                                new_position
-                            )
+                            ranking_item.application.final_ranking_position = new_position
                         updated_count += 1
 
                 if updated_count == 0:
-                    raise InvalidRankingDataError(
-                        "No valid position updates found in ranking data"
-                    )
+                    raise InvalidRankingDataError("No valid position updates found in ranking data")
 
                 ranking.updated_at = datetime.now(timezone.utc)
                 await self.db.flush()
@@ -718,13 +678,9 @@ class CollegeReviewService:
                     "professor_name": getattr(application, "professor_name", ""),
                     "professor_email": getattr(application, "professor_email", ""),
                     "college_name": getattr(application, "college_name", ""),
-                    "scholarship_type": getattr(application.scholarship, "name", "")
-                    if application.scholarship
-                    else "",
+                    "scholarship_type": getattr(application.scholarship, "name", "") if application.scholarship else "",
                     "scholarship_type_id": application.scholarship_type_id,
-                    "college_emails": [
-                        "mock_college@nycu.edu.tw"
-                    ],  # TODO: Get actual college emails
+                    "college_emails": ["mock_college@nycu.edu.tw"],  # TODO: Get actual college emails
                 }
 
                 result_data = {
@@ -735,36 +691,26 @@ class CollegeReviewService:
                 }
 
                 # Trigger email automation for final result
-                await email_automation_service.trigger_final_result_decided(
-                    self.db, application.id, result_data
-                )
+                await email_automation_service.trigger_final_result_decided(self.db, application.id, result_data)
 
         except Exception as e:
             logger.error(f"Failed to trigger automated result emails: {e}")
 
         return distribution
 
-    async def finalize_ranking(
-        self, ranking_id: int, finalizer_id: int
-    ) -> CollegeRanking:
+    async def finalize_ranking(self, ranking_id: int, finalizer_id: int) -> CollegeRanking:
         """Finalize a ranking (makes it read-only) with concurrent access protection"""
 
         async with self.db.begin():  # Atomic transaction
             try:
                 # Get ranking with pessimistic locking to prevent concurrent modifications
-                ranking_stmt = (
-                    select(CollegeRanking)
-                    .where(CollegeRanking.id == ranking_id)
-                    .with_for_update()
-                )
+                ranking_stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id).with_for_update()
 
                 ranking_result = await self.db.execute(ranking_stmt)
                 ranking = ranking_result.scalar_one_or_none()
 
                 if not ranking:
-                    raise RankingNotFoundError(
-                        f"Ranking with ID {ranking_id} not found"
-                    )
+                    raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
 
                 if ranking.is_finalized:
                     raise RankingModificationError("Ranking is already finalized")
@@ -781,9 +727,7 @@ class CollegeReviewService:
             except (RankingNotFoundError, RankingModificationError):
                 raise  # Re-raise specific exceptions
             except Exception as e:
-                raise BusinessLogicError(
-                    f"Failed to finalize ranking {ranking_id}: {str(e)}"
-                )
+                raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}: {str(e)}")
 
     async def get_quota_status(
         self,
@@ -842,20 +786,14 @@ class CollegeReviewService:
         }
 
         for sub_type, total, allocated in app_counts:
-            sub_quota = (
-                config.get_sub_type_total_quota(sub_type)
-                if config.has_quota_limit
-                else None
-            )
+            sub_quota = config.get_sub_type_total_quota(sub_type) if config.has_quota_limit else None
 
             quota_status["sub_types"][sub_type] = {
                 "total_applications": total,
                 "allocated": allocated or 0,
                 "quota": sub_quota,
                 "remaining": (sub_quota - (allocated or 0)) if sub_quota else None,
-                "utilization_rate": ((allocated or 0) / sub_quota * 100)
-                if sub_quota
-                else None,
+                "utilization_rate": ((allocated or 0) / sub_quota * 100) if sub_quota else None,
             }
 
         return quota_status
@@ -880,9 +818,7 @@ class QuotaDistributionService:
             applications,
             key=lambda x: (
                 x.college_ranking_score or 0,
-                -(
-                    x.submitted_at.timestamp() if x.submitted_at else 0
-                ),  # Tie-breaker: earlier submission
+                -(x.submitted_at.timestamp() if x.submitted_at else 0),  # Tie-breaker: earlier submission
             ),
             reverse=True,
         )
@@ -897,9 +833,7 @@ class QuotaDistributionService:
                 "rank_position": i + 1,
                 "is_allocated": is_allocated,
                 "ranking_score": app.college_ranking_score,
-                "allocation_reason": "Within quota"
-                if is_allocated
-                else "Quota exceeded",
+                "allocation_reason": "Within quota" if is_allocated else "Quota exceeded",
             }
             results.append(result)
 
@@ -917,9 +851,7 @@ class QuotaDistributionService:
         grouped_apps = {}
         for app in applications:
             sub_type = app.sub_scholarship_type
-            college = (
-                app.student_data.get("college_code") if app.student_data else "unknown"
-            )
+            college = app.student_data.get("college_code") if app.student_data else "unknown"
 
             if sub_type not in grouped_apps:
                 grouped_apps[sub_type] = {}

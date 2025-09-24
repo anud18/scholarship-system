@@ -34,9 +34,7 @@ class ApplicationFieldService:
         self, scholarship_type: str, include_inactive: bool = False
     ) -> List[ApplicationFieldResponse]:
         """Get fields for a scholarship type"""
-        query = select(ApplicationField).where(
-            ApplicationField.scholarship_type == scholarship_type
-        )
+        query = select(ApplicationField).where(ApplicationField.scholarship_type == scholarship_type)
 
         # 如果不需要包含停用的欄位，則只返回啟用的
         if not include_inactive:
@@ -49,9 +47,7 @@ class ApplicationFieldService:
 
         return [ApplicationFieldResponse.model_validate(field) for field in fields]
 
-    async def get_field_by_id(
-        self, field_id: int
-    ) -> Optional[ApplicationFieldResponse]:
+    async def get_field_by_id(self, field_id: int) -> Optional[ApplicationFieldResponse]:
         """Get field by ID"""
         query = select(ApplicationField).where(ApplicationField.id == field_id)
         result = await self.db.execute(query)
@@ -61,13 +57,9 @@ class ApplicationFieldService:
             return ApplicationFieldResponse.model_validate(field)
         return None
 
-    async def create_field(
-        self, field_data: ApplicationFieldCreate, created_by: int
-    ) -> ApplicationFieldResponse:
+    async def create_field(self, field_data: ApplicationFieldCreate, created_by: int) -> ApplicationFieldResponse:
         """Create a new application field"""
-        field = ApplicationField(
-            **field_data.model_dump(), created_by=created_by, updated_by=created_by
-        )
+        field = ApplicationField(**field_data.model_dump(), created_by=created_by, updated_by=created_by)
 
         self.db.add(field)
         await self.db.commit()
@@ -115,11 +107,7 @@ class ApplicationFieldService:
     ) -> List[ApplicationFieldResponse]:
         """Bulk update fields for a scholarship type"""
         # First, delete existing fields for this scholarship type
-        await self.db.execute(
-            delete(ApplicationField).where(
-                ApplicationField.scholarship_type == scholarship_type
-            )
-        )
+        await self.db.execute(delete(ApplicationField).where(ApplicationField.scholarship_type == scholarship_type))
 
         # Create new fields
         created_fields = []
@@ -139,35 +127,27 @@ class ApplicationFieldService:
         for field in created_fields:
             await self.db.refresh(field)
 
-        return [
-            ApplicationFieldResponse.model_validate(field) for field in created_fields
-        ]
+        return [ApplicationFieldResponse.model_validate(field) for field in created_fields]
 
     # Application Document methods
     async def get_documents_by_scholarship_type(
         self, scholarship_type: str, include_inactive: bool = False
     ) -> List[ApplicationDocumentResponse]:
         """Get documents for a scholarship type"""
-        query = select(ApplicationDocument).where(
-            ApplicationDocument.scholarship_type == scholarship_type
-        )
+        query = select(ApplicationDocument).where(ApplicationDocument.scholarship_type == scholarship_type)
 
         # 如果不需要包含停用的文件，則只返回啟用的
         if not include_inactive:
             query = query.where(ApplicationDocument.is_active == True)
 
-        query = query.order_by(
-            ApplicationDocument.display_order, ApplicationDocument.id
-        )
+        query = query.order_by(ApplicationDocument.display_order, ApplicationDocument.id)
 
         result = await self.db.execute(query)
         documents = result.scalars().all()
 
         return [ApplicationDocumentResponse.model_validate(doc) for doc in documents]
 
-    async def get_document_by_id(
-        self, document_id: int
-    ) -> Optional[ApplicationDocumentResponse]:
+    async def get_document_by_id(self, document_id: int) -> Optional[ApplicationDocumentResponse]:
         """Get document by ID"""
         query = select(ApplicationDocument).where(ApplicationDocument.id == document_id)
         result = await self.db.execute(query)
@@ -181,9 +161,7 @@ class ApplicationFieldService:
         self, document_data: ApplicationDocumentCreate, created_by: int
     ) -> ApplicationDocumentResponse:
         """Create a new application document"""
-        document = ApplicationDocument(
-            **document_data.model_dump(), created_by=created_by, updated_by=created_by
-        )
+        document = ApplicationDocument(**document_data.model_dump(), created_by=created_by, updated_by=created_by)
 
         self.db.add(document)
         await self.db.commit()
@@ -238,9 +216,7 @@ class ApplicationFieldService:
         """Bulk update documents for a scholarship type"""
         # First, delete existing documents for this scholarship type
         await self.db.execute(
-            delete(ApplicationDocument).where(
-                ApplicationDocument.scholarship_type == scholarship_type
-            )
+            delete(ApplicationDocument).where(ApplicationDocument.scholarship_type == scholarship_type)
         )
 
         # Create new documents
@@ -261,9 +237,7 @@ class ApplicationFieldService:
         for document in created_documents:
             await self.db.refresh(document)
 
-        return [
-            ApplicationDocumentResponse.model_validate(doc) for doc in created_documents
-        ]
+        return [ApplicationDocumentResponse.model_validate(doc) for doc in created_documents]
 
     # Fixed fields methods
     async def get_user_profile_data(self, user_id: int) -> Optional[Dict[str, Any]]:
@@ -312,9 +286,7 @@ class ApplicationFieldService:
             "is_active": True,
             "help_text": "請填寫正確的郵局局帳號或玉山銀行帳號以便獎學金匯款",
             "help_text_en": "Please provide your correct Post Office or ESUN Bank account number for scholarship remittance",
-            "prefill_value": prefill_data.get("account_number", "")
-            if prefill_data
-            else "",
+            "prefill_value": prefill_data.get("account_number", "") if prefill_data else "",
             "bank_code": prefill_data.get("bank_code", "") if prefill_data else "",
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
@@ -347,9 +319,7 @@ class ApplicationFieldService:
             "is_active": True,
             "upload_instructions": "請確保存摺封面清晰可讀，包含戶名、帳號、銀行名稱等資訊",
             "upload_instructions_en": "Please ensure the bank statement cover is clear and readable, including account name, account number, bank name, etc.",
-            "existing_file_url": prefill_data.get("bank_document_photo_url", "")
-            if prefill_data
-            else "",
+            "existing_file_url": prefill_data.get("bank_document_photo_url", "") if prefill_data else "",
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
             "created_by": 0,
@@ -385,9 +355,7 @@ class ApplicationFieldService:
                 "is_active": True,
                 "help_text": "請填寫指導教授的姓名",
                 "help_text_en": "Please provide the name of the advisor",
-                "prefill_value": prefill_data.get("advisor_name", "")
-                if prefill_data
-                else "",
+                "prefill_value": prefill_data.get("advisor_name", "") if prefill_data else "",
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
                 "created_by": 0,
@@ -413,9 +381,7 @@ class ApplicationFieldService:
                 "is_active": True,
                 "help_text": "請填寫指導教授的Email",
                 "help_text_en": "Please provide the email of the advisor",
-                "prefill_value": prefill_data.get("advisor_email", "")
-                if prefill_data
-                else "",
+                "prefill_value": prefill_data.get("advisor_email", "") if prefill_data else "",
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
                 "created_by": 0,
@@ -441,9 +407,7 @@ class ApplicationFieldService:
                 "is_active": True,
                 "help_text": "請填寫指導教授的交大編號（必填）",
                 "help_text_en": "Please provide the advisor NYCU ID (required)",
-                "prefill_value": prefill_data.get("advisor_nycu_id", "")
-                if prefill_data
-                else "",
+                "prefill_value": prefill_data.get("advisor_nycu_id", "") if prefill_data else "",
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
                 "created_by": 0,
@@ -453,9 +417,7 @@ class ApplicationFieldService:
 
         return fields
 
-    async def check_requires_professor_recommendation(
-        self, scholarship_type: str
-    ) -> bool:
+    async def check_requires_professor_recommendation(self, scholarship_type: str) -> bool:
         """Check if scholarship configuration requires professor recommendation"""
         try:
             # Query scholarship configurations to check requires_professor_recommendation
@@ -475,9 +437,7 @@ class ApplicationFieldService:
 
             return False
         except Exception as e:
-            self.logger.error(
-                f"Error checking professor recommendation requirement: {str(e)}"
-            )
+            self.logger.error(f"Error checking professor recommendation requirement: {str(e)}")
             return False
 
     async def inject_fixed_fields(
@@ -495,12 +455,8 @@ class ApplicationFieldService:
                 profile_data = await self.get_user_profile_data(user_id)
 
             # Calculate display orders
-            max_field_order = max(
-                [f.get("display_order", 0) for f in fields], default=0
-            )
-            max_doc_order = max(
-                [d.get("display_order", 0) for d in documents], default=0
-            )
+            max_field_order = max([f.get("display_order", 0) for f in fields], default=0)
+            max_doc_order = max([d.get("display_order", 0) for d in documents], default=0)
 
             # Always inject bank account field and bank statement document
             bank_field = self._create_fixed_bank_account_field(
@@ -518,9 +474,7 @@ class ApplicationFieldService:
             documents.append(bank_doc)
 
             # Inject advisor fields if required
-            requires_advisor = await self.check_requires_professor_recommendation(
-                scholarship_type
-            )
+            requires_advisor = await self.check_requires_professor_recommendation(scholarship_type)
             if requires_advisor:
                 advisor_fields = self._create_fixed_advisor_fields(
                     display_order_start=max_field_order + 2,
@@ -549,31 +503,17 @@ class ApplicationFieldService:
     ) -> ScholarshipFormConfigResponse:
         """Get complete form configuration for a scholarship type with fixed fields injection"""
         try:
-            self.logger.debug(
-                f"Fetching form config for scholarship type: {scholarship_type}"
-            )
+            self.logger.debug(f"Fetching form config for scholarship type: {scholarship_type}")
 
-            fields = await self.get_fields_by_scholarship_type(
-                scholarship_type, include_inactive
-            )
+            fields = await self.get_fields_by_scholarship_type(scholarship_type, include_inactive)
             self.logger.debug(f"Found {len(fields)} fields for {scholarship_type}")
 
-            documents = await self.get_documents_by_scholarship_type(
-                scholarship_type, include_inactive
-            )
-            self.logger.debug(
-                f"Found {len(documents)} documents for {scholarship_type}"
-            )
+            documents = await self.get_documents_by_scholarship_type(scholarship_type, include_inactive)
+            self.logger.debug(f"Found {len(documents)} documents for {scholarship_type}")
 
             # Convert to dict format for fixed fields injection
-            fields_dict = [
-                field.model_dump() if hasattr(field, "model_dump") else field
-                for field in fields
-            ]
-            documents_dict = [
-                doc.model_dump() if hasattr(doc, "model_dump") else doc
-                for doc in documents
-            ]
+            fields_dict = [field.model_dump() if hasattr(field, "model_dump") else field for field in fields]
+            documents_dict = [doc.model_dump() if hasattr(doc, "model_dump") else doc for doc in documents]
 
             # Inject fixed fields and documents
             fields_dict, documents_dict = await self.inject_fixed_fields(
@@ -599,9 +539,7 @@ class ApplicationFieldService:
             return config
 
         except Exception as e:
-            self.logger.error(
-                f"Error getting form config for {scholarship_type}: {str(e)}"
-            )
+            self.logger.error(f"Error getting form config for {scholarship_type}: {str(e)}")
             # Re-raise the exception instead of returning empty config
             raise e
 
@@ -616,10 +554,6 @@ class ApplicationFieldService:
 
         # Update fields and documents
         fields = await self.bulk_update_fields(scholarship_type, fields_data, user_id)
-        documents = await self.bulk_update_documents(
-            scholarship_type, documents_data, user_id
-        )
+        documents = await self.bulk_update_documents(scholarship_type, documents_data, user_id)
 
-        return ScholarshipFormConfigResponse(
-            scholarship_type=scholarship_type, fields=fields, documents=documents
-        )
+        return ScholarshipFormConfigResponse(scholarship_type=scholarship_type, fields=fields, documents=documents)

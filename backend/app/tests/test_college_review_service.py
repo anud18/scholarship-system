@@ -95,9 +95,7 @@ class TestCollegeReviewService:
         }
 
         # Execute
-        result = await service.create_or_update_review(
-            application_id=1, reviewer_id=2001, review_data=review_data
-        )
+        result = await service.create_or_update_review(application_id=1, reviewer_id=2001, review_data=review_data)
 
         # Verify database operations were called
         service.db.add.assert_called_once()
@@ -115,9 +113,7 @@ class TestCollegeReviewService:
 
         # Should raise NotFoundError
         with pytest.raises(NotFoundError):
-            await service.create_or_update_review(
-                application_id=999, reviewer_id=2001, review_data=review_data
-            )
+            await service.create_or_update_review(application_id=999, reviewer_id=2001, review_data=review_data)
 
     async def test_create_review_invalid_application_status(self, service):
         """Test review creation with invalid application status"""
@@ -137,13 +133,9 @@ class TestCollegeReviewService:
 
         # Should raise BusinessLogicError
         with pytest.raises(BusinessLogicError):
-            await service.create_or_update_review(
-                application_id=1, reviewer_id=2001, review_data=review_data
-            )
+            await service.create_or_update_review(application_id=1, reviewer_id=2001, review_data=review_data)
 
-    async def test_ranking_finalization_concurrent_protection(
-        self, service, sample_ranking
-    ):
+    async def test_ranking_finalization_concurrent_protection(self, service, sample_ranking):
         """Test that ranking finalization has concurrent access protection"""
         # Mock database transaction context
         service.db.begin = AsyncMock().__aenter__.return_value.__aexit__ = AsyncMock()
@@ -164,9 +156,7 @@ class TestCollegeReviewService:
     async def test_finalize_already_finalized_ranking(self, service):
         """Test finalizing an already finalized ranking"""
         # Create finalized ranking
-        finalized_ranking = CollegeRanking(
-            id=1, is_finalized=True, ranking_status="finalized"
-        )
+        finalized_ranking = CollegeRanking(id=1, is_finalized=True, ranking_status="finalized")
 
         result = MagicMock()
         result.scalar_one_or_none.return_value = finalized_ranking

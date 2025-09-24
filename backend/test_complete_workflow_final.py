@@ -34,9 +34,7 @@ async def test_complete_professor_workflow_with_time_fix():
         result = await db.execute(stmt)
         scholarship_type = result.scalar_one()
 
-        stmt = select(ScholarshipConfiguration).filter(
-            ScholarshipConfiguration.config_code == "config_phd_114"
-        )
+        stmt = select(ScholarshipConfiguration).filter(ScholarshipConfiguration.config_code == "config_phd_114")
         result = await db.execute(stmt)
         phd_config = result.scalar_one()
 
@@ -99,9 +97,7 @@ async def test_complete_professor_workflow_with_time_fix():
         # Step 1: Get professor applications list
         print("\n📋 Step 1: 取得教授申請列表")
         try:
-            applications = await get_professor_applications(
-                status_filter=None, current_user=mock_professor, db=db
-            )
+            applications = await get_professor_applications(status_filter=None, current_user=mock_professor, db=db)
 
             print(f"✅ 找到 {len(applications)} 個申請")
             if applications:
@@ -117,9 +113,7 @@ async def test_complete_professor_workflow_with_time_fix():
         # Step 2: Get application sub-types
         print("\n🏷️ Step 2: 取得申請子類型")
         try:
-            sub_types = await get_application_sub_types(
-                application_id=test_app.id, current_user=mock_professor, db=db
-            )
+            sub_types = await get_application_sub_types(application_id=test_app.id, current_user=mock_professor, db=db)
 
             print(f"✅ 找到 {len(sub_types)} 個子類型:")
             for st in sub_types:
@@ -131,12 +125,8 @@ async def test_complete_professor_workflow_with_time_fix():
         # Step 3: Check existing review
         print("\n🔍 Step 3: 檢查現有審查")
         try:
-            existing_review = await get_professor_review(
-                application_id=test_app.id, current_user=mock_professor, db=db
-            )
-            print(
-                f"✅ 審查檢查完成 (ID: {existing_review.id}, 新審查: {existing_review.id == 0})"
-            )
+            existing_review = await get_professor_review(application_id=test_app.id, current_user=mock_professor, db=db)
+            print(f"✅ 審查檢查完成 (ID: {existing_review.id}, 新審查: {existing_review.id == 0})")
         except Exception as e:
             print(f"❌ Step 3 失敗: {e}")
             return
@@ -190,9 +180,7 @@ async def test_complete_professor_workflow_with_time_fix():
         # Step 5: Verify review was saved correctly
         print("\n✅ Step 5: 驗證審查已正確保存")
         try:
-            final_review = await get_professor_review(
-                application_id=test_app.id, current_user=mock_professor, db=db
-            )
+            final_review = await get_professor_review(application_id=test_app.id, current_user=mock_professor, db=db)
 
             print("✅ 審查驗證成功")
             print(f"   審查ID: {final_review.id}")
@@ -221,9 +209,7 @@ async def test_complete_professor_workflow_with_time_fix():
         print("   ✅ 時間授權期間從 professor_review_start → application_start_date")
         print("   ✅ 教授可以從學生申請提交後立即進行審查")
         print("   ✅ 審查期間: application_start_date 到 professor_review_end")
-        print(
-            '   ✅ 符合用戶要求: "once the student send out the application that the professor can do the review"'
-        )
+        print('   ✅ 符合用戶要求: "once the student send out the application that the professor can do the review"')
 
 
 if __name__ == "__main__":

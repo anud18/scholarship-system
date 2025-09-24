@@ -62,9 +62,7 @@ async def test_final_document_integration():
             # 使用 ApplicationService 創建申請（模擬前端行為）
             from app.schemas.application import ApplicationCreate, ApplicationFormData
 
-            form_data = ApplicationFormData(
-                fields={}, documents=[]  # 使用空的欄位避免驗證問題  # 初始沒有動態上傳的文件
-            )
+            form_data = ApplicationFormData(fields={}, documents=[])  # 使用空的欄位避免驗證問題  # 初始沒有動態上傳的文件
 
             application_data = ApplicationCreate(
                 scholarship_type="undergraduate_freshman",
@@ -119,9 +117,7 @@ async def test_final_document_integration():
                         "filename",
                         "is_verified",
                     ]
-                    missing = [
-                        f for f in required_fields if f not in doc or doc[f] is None
-                    ]
+                    missing = [f for f in required_fields if f not in doc or doc[f] is None]
 
                     if missing:
                         print(f"    ❌ 缺少欄位: {missing}")
@@ -129,17 +125,13 @@ async def test_final_document_integration():
                         print("    ✅ 前端所需欄位完整")
 
             # 檢查 ApplicationFile 記錄
-            stmt = select(ApplicationFile).where(
-                ApplicationFile.application_id == created_app.id
-            )
+            stmt = select(ApplicationFile).where(ApplicationFile.application_id == created_app.id)
             result = await db.execute(stmt)
             app_files = result.scalars().all()
 
             print(f"\n📋 ApplicationFile 記錄數量: {len(app_files)}")
             for file in app_files:
-                print(
-                    f"  - 類型: {file.file_type}, 檔名: {file.filename}, 已驗證: {file.is_verified}"
-                )
+                print(f"  - 類型: {file.file_type}, 檔名: {file.filename}, 已驗證: {file.is_verified}")
 
             # 最終驗證
             print("\n🎯 最終驗證:")
@@ -157,11 +149,7 @@ async def test_final_document_integration():
 
             # 檢查固定文件的特徵
             bank_doc = next(
-                (
-                    doc
-                    for doc in form_documents
-                    if doc.get("document_type") == "bank_account_proof"
-                ),
+                (doc for doc in form_documents if doc.get("document_type") == "bank_account_proof"),
                 None,
             )
             if bank_doc:

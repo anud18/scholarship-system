@@ -77,9 +77,7 @@ router = APIRouter()
 def require_super_admin(current_user: User = Depends(require_admin)) -> User:
     """Require super admin role"""
     if not current_user.is_super_admin():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Super admin access required"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin access required")
     return current_user
 
 
@@ -99,9 +97,7 @@ async def get_all_applications(
         select(Application, User, ScholarshipType)
         .options(selectinload(Application.scholarship_configuration))
         .join(User, Application.user_id == User.id)
-        .outerjoin(
-            ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
-        )
+        .outerjoin(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
     )
 
     # Apply filters
@@ -113,9 +109,7 @@ async def get_all_applications(
 
     if search:
         stmt = stmt.where(
-            (User.name.icontains(search))
-            | (User.nycu_id.icontains(search))
-            | (User.email.icontains(search))
+            (User.name.icontains(search)) | (User.nycu_id.icontains(search)) | (User.email.icontains(search))
         )
 
     # Get total count
@@ -142,19 +136,13 @@ async def get_all_applications(
             "app_id": app.app_id,
             "user_id": app.user_id,
             # "student_id": app.student_id,  # Removed - student data now from external API
-            "scholarship_type": scholarship_type.code
-            if scholarship_type
-            else "unknown",
-            "scholarship_type_id": app.scholarship_type_id
-            or (scholarship_type.id if scholarship_type else None),
-            "scholarship_type_zh": scholarship_type.name
-            if scholarship_type
-            else "Unknown Scholarship",
+            "scholarship_type": scholarship_type.code if scholarship_type else "unknown",
+            "scholarship_type_id": app.scholarship_type_id or (scholarship_type.id if scholarship_type else None),
+            "scholarship_type_zh": scholarship_type.name if scholarship_type else "Unknown Scholarship",
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
-            "academic_year": app.academic_year
-            or str(datetime.now().year - 1911),  # Convert to ROC year
+            "academic_year": app.academic_year or str(datetime.now().year - 1911),  # Convert to ROC year
             "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
             "submitted_form_data": app.submitted_form_data or {},
@@ -172,9 +160,7 @@ async def get_all_applications(
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
             # Additional fields for display - get from student_data first, fallback to user
-            "student_name": (
-                app.student_data.get("cname") if app.student_data else None
-            )
+            "student_name": (app.student_data.get("cname") if app.student_data else None)
             or (user.name if user else None),
             "student_no": (app.student_data.get("stdNo") if app.student_data else None)
             or getattr(user, "nycu_id", None),
@@ -187,9 +173,7 @@ async def get_all_applications(
                 "requires_college_review": app.scholarship_configuration.requires_college_review
                 if app.scholarship_configuration
                 else False,
-                "config_name": app.scholarship_configuration.config_name
-                if app.scholarship_configuration
-                else None,
+                "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None,
             }
             if app.scholarship_configuration
             else None,
@@ -225,9 +209,7 @@ async def get_historical_applications(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
     status: Optional[str] = Query(None, description="Filter by status"),
-    scholarship_type: Optional[str] = Query(
-        None, description="Filter by scholarship type"
-    ),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
     search: Optional[str] = Query(None, description="Search by student name or ID"),
@@ -247,9 +229,7 @@ async def get_historical_applications(
             ScholarshipType.code.label("scholarship_type_code"),
         )
         .join(User, Application.user_id == User.id)
-        .outerjoin(
-            ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
-        )
+        .outerjoin(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
     )
 
     # Create aliases for joined tables
@@ -316,9 +296,7 @@ async def get_historical_applications(
 
         # Extract student data from JSON if available
         student_data = app.student_data or {}
-        student_department = student_data.get("department") or student_data.get(
-            "dept_name"
-        )
+        student_department = student_data.get("department") or student_data.get("dept_name")
 
         historical_app = HistoricalApplicationResponse(
             id=app.id,
@@ -366,9 +344,7 @@ async def get_historical_applications(
 
 
 @router.get("/dashboard/stats", response_model=ApiResponse[Dict[str, Any]])
-async def get_dashboard_stats(
-    current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+async def get_dashboard_stats(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get dashboard statistics for admin"""
 
     # Get user's scholarship permissions
@@ -378,9 +354,7 @@ async def get_dashboard_stats(
         pass
     elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
         # Get user's scholarship permissions
-        permission_stmt = select(AdminScholarship.scholarship_id).where(
-            AdminScholarship.admin_id == current_user.id
-        )
+        permission_stmt = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
         permission_result = await db.execute(permission_stmt)
         allowed_scholarship_ids = [row[0] for row in permission_result.fetchall()]
 
@@ -391,30 +365,22 @@ async def get_dashboard_stats(
 
     # Total applications (filtered by permissions)
     stmt = select(func.count(Application.id))
-    if (
-        current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]
-        and allowed_scholarship_ids
-    ):
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     total_applications = result.scalar()
 
     # Applications by status (filtered by permissions)
-    stmt = select(Application.status, func.count(Application.id)).group_by(
-        Application.status
-    )
-    if (
-        current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]
-        and allowed_scholarship_ids
-    ):
+    stmt = select(Application.status, func.count(Application.id)).group_by(Application.status)
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     status_counts = {row[0]: row[1] for row in result.fetchall()}
 
     # Pending review count
-    pending_review = status_counts.get(
-        ApplicationStatus.SUBMITTED.value, 0
-    ) + status_counts.get(ApplicationStatus.UNDER_REVIEW.value, 0)
+    pending_review = status_counts.get(ApplicationStatus.SUBMITTED.value, 0) + status_counts.get(
+        ApplicationStatus.UNDER_REVIEW.value, 0
+    )
 
     # Approved this month (filtered by permissions)
     this_month = datetime.now().replace(day=1)
@@ -422,10 +388,7 @@ async def get_dashboard_stats(
         Application.status == ApplicationStatus.APPROVED.value,
         Application.approved_at >= this_month,
     )
-    if (
-        current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]
-        and allowed_scholarship_ids
-    ):
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     approved_this_month = result.scalar() or 0
@@ -438,31 +401,20 @@ async def get_dashboard_stats(
             case(
                 (
                     Application.approved_at.isnot(None),
-                    func.extract(
-                        "epoch", Application.approved_at - Application.submitted_at
-                    )
-                    / 86400,
+                    func.extract("epoch", Application.approved_at - Application.submitted_at) / 86400,
                 ),
                 (
                     Application.reviewed_at.isnot(None),
-                    func.extract(
-                        "epoch", Application.reviewed_at - Application.submitted_at
-                    )
-                    / 86400,
+                    func.extract("epoch", Application.reviewed_at - Application.submitted_at) / 86400,
                 ),
                 else_=None,
             )
         )
     ).where(
         Application.submitted_at.isnot(None),
-        Application.status.in_(
-            [ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]
-        ),
+        Application.status.in_([ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]),
     )
-    if (
-        current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]
-        and allowed_scholarship_ids
-    ):
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     avg_days = result.scalar()
@@ -571,9 +523,7 @@ async def update_email_template(
 
     # Validate sending_type
     if template.sending_type not in ["single", "bulk"]:
-        raise HTTPException(
-            status_code=400, detail="Invalid sending_type. Must be 'single' or 'bulk'"
-        )
+        raise HTTPException(status_code=400, detail="Invalid sending_type. Must be 'single' or 'bulk'")
 
     # Get existing template
     existing_template = await EmailTemplateService.get_template(db, template.key)
@@ -591,9 +541,7 @@ async def update_email_template(
             body_template=template.body_template,
             cc=template.cc,
             bcc=template.bcc,
-            sending_type=SendingType.SINGLE
-            if template.sending_type == "single"
-            else SendingType.BULK,
+            sending_type=SendingType.SINGLE if template.sending_type == "single" else SendingType.BULK,
             recipient_options=template.recipient_options,
             requires_approval=template.requires_approval,
             max_recipients=template.max_recipients,
@@ -616,9 +564,7 @@ async def update_email_template(
 
 @router.get("/email-templates", response_model=List[EmailTemplateSchema])
 async def get_email_templates(
-    sending_type: Optional[str] = Query(
-        None, description="Filter by sending type (single/bulk)"
-    ),
+    sending_type: Optional[str] = Query(None, description="Filter by sending type (single/bulk)"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -640,9 +586,7 @@ async def get_email_templates(
     return [EmailTemplateSchema.model_validate(template) for template in templates]
 
 
-@router.get(
-    "/recent-applications", response_model=ApiResponse[List[ApplicationListResponse]]
-)
+@router.get("/recent-applications", response_model=ApiResponse[List[ApplicationListResponse]])
 async def get_recent_applications(
     limit: int = Query(5, ge=1, le=20, description="Number of recent applications"),
     current_user: User = Depends(require_admin),
@@ -657,34 +601,25 @@ async def get_recent_applications(
         pass
     elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
         # Get user's scholarship permissions
-        permission_stmt = select(AdminScholarship.scholarship_id).where(
-            AdminScholarship.admin_id == current_user.id
-        )
+        permission_stmt = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
         permission_result = await db.execute(permission_stmt)
         allowed_scholarship_ids = [row[0] for row in permission_result.fetchall()]
 
         # If no permissions assigned, return empty list
         if not allowed_scholarship_ids:
-            return ApiResponse(
-                success=True, message="No scholarship permissions assigned", data=[]
-            )
+            return ApiResponse(success=True, message="No scholarship permissions assigned", data=[])
 
     # Build query with joins and load configurations
     stmt = (
         select(Application, User, ScholarshipType)
         .options(selectinload(Application.scholarship_configuration))
         .join(User, Application.user_id == User.id)
-        .outerjoin(
-            ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
-        )
+        .outerjoin(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
         .where(Application.status != ApplicationStatus.DRAFT.value)
     )
 
     # Apply scholarship permission filtering
-    if (
-        current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]
-        and allowed_scholarship_ids
-    ):
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
 
     stmt = stmt.order_by(desc(Application.created_at)).limit(limit)
@@ -710,11 +645,8 @@ async def get_recent_applications(
             "app_id": app.app_id,
             "user_id": app.user_id,
             # "student_id": app.student_id,  # Removed - student data now from external API
-            "scholarship_type": scholarship_type.code
-            if scholarship_type
-            else "unknown",
-            "scholarship_type_id": app.scholarship_type_id
-            or (scholarship_type.id if scholarship_type else None),
+            "scholarship_type": scholarship_type.code if scholarship_type else "unknown",
+            "scholarship_type_id": app.scholarship_type_id or (scholarship_type.id if scholarship_type else None),
             "scholarship_type_zh": scholarship_type_zh.get(
                 scholarship_type.code if scholarship_type else "unknown",
                 scholarship_type.code if scholarship_type else "unknown",
@@ -722,8 +654,7 @@ async def get_recent_applications(
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
-            "academic_year": app.academic_year
-            or str(datetime.now().year - 1911),  # Convert to ROC year
+            "academic_year": app.academic_year or str(datetime.now().year - 1911),  # Convert to ROC year
             "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
             "submitted_form_data": app.submitted_form_data or {},
@@ -741,9 +672,7 @@ async def get_recent_applications(
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
             # Additional fields for display - get from student_data first, fallback to user
-            "student_name": (
-                app.student_data.get("cname") if app.student_data else None
-            )
+            "student_name": (app.student_data.get("cname") if app.student_data else None)
             or (user.name if user else None),
             "student_no": (app.student_data.get("stdNo") if app.student_data else None)
             or getattr(user, "nycu_id", None),
@@ -756,9 +685,7 @@ async def get_recent_applications(
                 "requires_college_review": app.scholarship_configuration.requires_college_review
                 if app.scholarship_configuration
                 else False,
-                "config_name": app.scholarship_configuration.config_name
-                if app.scholarship_configuration
-                else None,
+                "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None,
             }
             if app.scholarship_configuration
             else None,
@@ -784,9 +711,7 @@ async def get_recent_applications(
     )
 
 
-@router.get(
-    "/system-announcements", response_model=ApiResponse[List[NotificationResponse]]
-)
+@router.get("/system-announcements", response_model=ApiResponse[List[NotificationResponse]])
 async def get_system_announcements(
     limit: int = Query(5, ge=1, le=20, description="Number of announcements"),
     current_user: User = Depends(require_admin),
@@ -798,12 +723,8 @@ async def get_system_announcements(
     # or notifications specifically for admins
     stmt = (
         select(Notification)
-        .where(
-            (Notification.user_id.is_(None)) | (Notification.user_id == current_user.id)
-        )
-        .where(
-            ~Notification.is_dismissed, Notification.related_resource_type == "system"
-        )
+        .where((Notification.user_id.is_(None)) | (Notification.user_id == current_user.id))
+        .where(~Notification.is_dismissed, Notification.related_resource_type == "system")
         .order_by(desc(Notification.created_at))
         .limit(limit)
     )
@@ -836,9 +757,7 @@ async def get_system_announcements(
             "expires_at": notification.expires_at,
             "read_at": notification.read_at,
             "created_at": notification.created_at,
-            "meta_data": notification.meta_data
-            if isinstance(notification.meta_data, (dict, type(None)))
-            else None,
+            "meta_data": notification.meta_data if isinstance(notification.meta_data, (dict, type(None))) else None,
         }
         response_list.append(NotificationResponse.model_validate(notification_dict))
 
@@ -856,9 +775,7 @@ async def get_system_announcements(
 async def get_all_announcements(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
-    notification_type: Optional[str] = Query(
-        None, description="Filter by notification type"
-    ),
+    notification_type: Optional[str] = Query(None, description="Filter by notification type"),
     priority: Optional[str] = Query(None, description="Filter by priority"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -866,9 +783,7 @@ async def get_all_announcements(
     """Get all system announcements with pagination (admin only)"""
 
     # Build query for system announcements
-    stmt = select(Notification).where(
-        Notification.user_id.is_(None), Notification.related_resource_type == "system"
-    )
+    stmt = select(Notification).where(Notification.user_id.is_(None), Notification.related_resource_type == "system")
 
     # Apply filters
     if notification_type:
@@ -902,9 +817,7 @@ async def get_all_announcements(
             "notification_type": ann.notification_type.value
             if hasattr(ann.notification_type, "value")
             else str(ann.notification_type),
-            "priority": ann.priority.value
-            if hasattr(ann.priority, "value")
-            else str(ann.priority),
+            "priority": ann.priority.value if hasattr(ann.priority, "value") else str(ann.priority),
             "related_resource_type": ann.related_resource_type,
             "related_resource_id": ann.related_resource_id,
             "action_url": ann.action_url,
@@ -914,9 +827,7 @@ async def get_all_announcements(
             "expires_at": ann.expires_at,
             "read_at": ann.read_at,
             "created_at": ann.created_at,
-            "meta_data": ann.meta_data
-            if isinstance(ann.meta_data, (dict, type(None)))
-            else None,
+            "meta_data": ann.meta_data if isinstance(ann.meta_data, (dict, type(None))) else None,
         }
         response_items.append(NotificationResponse.model_validate(ann_dict))
 
@@ -994,9 +905,7 @@ async def create_announcement(
         "expires_at": announcement.expires_at,
         "read_at": announcement.read_at,
         "created_at": announcement.created_at,
-        "meta_data": announcement.meta_data
-        if isinstance(announcement.meta_data, (dict, type(None)))
-        else None,
+        "meta_data": announcement.meta_data if isinstance(announcement.meta_data, (dict, type(None))) else None,
     }
 
     return ApiResponse(
@@ -1006,9 +915,7 @@ async def create_announcement(
     )
 
 
-@router.get(
-    "/announcements/{announcement_id}", response_model=ApiResponse[NotificationResponse]
-)
+@router.get("/announcements/{announcement_id}", response_model=ApiResponse[NotificationResponse])
 async def get_announcement(
     announcement_id: int,
     current_user: User = Depends(require_admin),
@@ -1053,9 +960,7 @@ async def get_announcement(
         "expires_at": announcement.expires_at,
         "read_at": announcement.read_at,
         "created_at": announcement.created_at,
-        "meta_data": announcement.meta_data
-        if isinstance(announcement.meta_data, (dict, type(None)))
-        else None,
+        "meta_data": announcement.meta_data if isinstance(announcement.meta_data, (dict, type(None))) else None,
     }
 
     return ApiResponse(
@@ -1065,9 +970,7 @@ async def get_announcement(
     )
 
 
-@router.put(
-    "/announcements/{announcement_id}", response_model=ApiResponse[NotificationResponse]
-)
+@router.put("/announcements/{announcement_id}", response_model=ApiResponse[NotificationResponse])
 async def update_announcement(
     announcement_id: int,
     announcement_data: NotificationUpdate,
@@ -1130,9 +1033,7 @@ async def update_announcement(
         "expires_at": announcement.expires_at,
         "read_at": announcement.read_at,
         "created_at": announcement.created_at,
-        "meta_data": announcement.meta_data
-        if isinstance(announcement.meta_data, (dict, type(None)))
-        else None,
+        "meta_data": announcement.meta_data if isinstance(announcement.meta_data, (dict, type(None))) else None,
     }
 
     return ApiResponse(
@@ -1142,9 +1043,7 @@ async def update_announcement(
     )
 
 
-@router.delete(
-    "/announcements/{announcement_id}", response_model=ApiResponse[MessageResponse]
-)
+@router.delete("/announcements/{announcement_id}", response_model=ApiResponse[MessageResponse])
 async def delete_announcement(
     announcement_id: int,
     current_user: User = Depends(require_admin),
@@ -1172,15 +1071,11 @@ async def delete_announcement(
     await db.delete(announcement)
     await db.commit()
 
-    return ApiResponse(
-        success=True, message="系統公告已成功刪除", data=MessageResponse(message="系統公告已成功刪除")
-    )
+    return ApiResponse(success=True, message="系統公告已成功刪除", data=MessageResponse(message="系統公告已成功刪除"))
 
 
 @router.get("/scholarships/stats", response_model=ApiResponse[Dict[str, Any]])
-async def get_scholarship_statistics(
-    current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+async def get_scholarship_statistics(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get scholarship-specific statistics for admin dashboard"""
 
     # Get user's scholarship permissions
@@ -1190,20 +1085,13 @@ async def get_scholarship_statistics(
         pass
     elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
         # Get user's scholarship permissions
-        permission_stmt = select(AdminScholarship.scholarship_id).where(
-            AdminScholarship.admin_id == current_user.id
-        )
+        permission_stmt = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
         permission_result = await db.execute(permission_stmt)
         allowed_scholarship_ids = [row[0] for row in permission_result.fetchall()]
 
     # Get all scholarship types (filtered by permissions)
-    stmt = select(ScholarshipType).where(
-        ScholarshipType.status == ScholarshipStatus.ACTIVE.value
-    )
-    if (
-        current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]
-        and allowed_scholarship_ids
-    ):
+    stmt = select(ScholarshipType).where(ScholarshipType.status == ScholarshipStatus.ACTIVE.value)
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
         stmt = stmt.where(ScholarshipType.id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     scholarships = result.scalars().all()
@@ -1212,9 +1100,7 @@ async def get_scholarship_statistics(
 
     for scholarship in scholarships:
         # Get applications for this scholarship type
-        stmt = select(Application).where(
-            Application.scholarship_type_id == scholarship.id
-        )
+        stmt = select(Application).where(Application.scholarship_type_id == scholarship.id)
         result = await db.execute(stmt)
         applications = result.scalars().all()
 
@@ -1237,17 +1123,14 @@ async def get_scholarship_statistics(
         completed_apps = [
             app
             for app in applications
-            if app.status
-            in [ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]
+            if app.status in [ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]
             and app.submitted_at
             and app.reviewed_at
         ]
 
         avg_wait_days = 0
         if completed_apps:
-            total_days = sum(
-                [(app.reviewed_at - app.submitted_at).days for app in completed_apps]
-            )
+            total_days = sum([(app.reviewed_at - app.submitted_at).days for app in completed_apps])
             avg_wait_days = round(total_days / len(completed_apps), 1)
 
         # Get sub-types if they exist
@@ -1339,11 +1222,7 @@ async def get_applications_by_scholarship(
                 for existing_doc in existing_docs:
                     # Find matching file record
                     matching_file = next(
-                        (
-                            f
-                            for f in app.files
-                            if f.file_type == existing_doc.get("document_id")
-                        ),
+                        (f for f in app.files if f.file_type == existing_doc.get("document_id")),
                         None,
                     )
                     if matching_file:
@@ -1355,8 +1234,7 @@ async def get_applications_by_scholarship(
                                 "filename": matching_file.filename,
                                 "original_filename": matching_file.original_filename,
                                 "file_size": matching_file.file_size,
-                                "mime_type": matching_file.mime_type
-                                or matching_file.content_type,
+                                "mime_type": matching_file.mime_type or matching_file.content_type,
                                 "file_path": f"{base_url}/files/applications/{app.id}/files/{matching_file.id}?token={access_token}",
                                 "download_url": f"{base_url}/files/applications/{app.id}/files/{matching_file.id}/download?token={access_token}",
                                 "is_verified": matching_file.is_verified,
@@ -1373,20 +1251,13 @@ async def get_applications_by_scholarship(
             "scholarship_type": scholarship.code,
             "scholarship_type_id": app.scholarship_type_id or scholarship.id,
             "scholarship_type_zh": scholarship.name,
-            "scholarship_name": app.scholarship_configuration.config_name
-            if app.scholarship_configuration
-            else None,
-            "amount": app.scholarship_configuration.amount
-            if app.scholarship_configuration
-            else None,
-            "currency": app.scholarship_configuration.currency
-            if app.scholarship_configuration
-            else "TWD",
+            "scholarship_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None,
+            "amount": app.scholarship_configuration.amount if app.scholarship_configuration else None,
+            "currency": app.scholarship_configuration.currency if app.scholarship_configuration else "TWD",
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
-            "academic_year": app.academic_year
-            or str(datetime.now().year - 1911),  # Convert to ROC year
+            "academic_year": app.academic_year or str(datetime.now().year - 1911),  # Convert to ROC year
             "semester": app.semester.value if app.semester else "1",
             "student_data": app.student_data or {},
             "submitted_form_data": processed_form_data,
@@ -1422,9 +1293,7 @@ async def get_applications_by_scholarship(
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
             # Additional fields for display - get from student_data first, fallback to user
-            "student_name": (
-                app.student_data.get("cname") if app.student_data else None
-            )
+            "student_name": (app.student_data.get("cname") if app.student_data else None)
             or (user.name if user else None),
             "student_no": (app.student_data.get("stdNo") if app.student_data else None)
             or getattr(user, "nycu_id", None),
@@ -1437,9 +1306,7 @@ async def get_applications_by_scholarship(
                 "requires_college_review": app.scholarship_configuration.requires_college_review
                 if app.scholarship_configuration
                 else False,
-                "config_name": app.scholarship_configuration.config_name
-                if app.scholarship_configuration
-                else None,
+                "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None,
             }
             if app.scholarship_configuration
             else None,
@@ -1515,17 +1382,14 @@ async def get_scholarship_sub_types(
         completed_apps = [
             app
             for app in applications
-            if app.status
-            in [ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]
+            if app.status in [ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]
             and app.submitted_at
             and app.reviewed_at
         ]
 
         avg_wait_days = 0
         if completed_apps:
-            total_days = sum(
-                [(app.reviewed_at - app.submitted_at).days for app in completed_apps]
-            )
+            total_days = sum([(app.reviewed_at - app.submitted_at).days for app in completed_apps])
             avg_wait_days = round(total_days / len(completed_apps), 1)
 
         sub_type_stats.append(
@@ -1548,9 +1412,7 @@ async def get_scholarship_sub_types(
     "/scholarships/sub-type-translations",
     response_model=ApiResponse[Dict[str, Dict[str, str]]],
 )
-async def get_sub_type_translations(
-    current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+async def get_sub_type_translations(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get sub-type name translations for all supported languages from database"""
 
     # Get all active scholarship types with their sub-type configurations
@@ -1631,9 +1493,7 @@ async def get_scholarship_sub_type_configs(
 
     # 為 general 子類型添加預設配置（如果沒有配置且在子類型列表中）
     if ScholarshipSubType.GENERAL.value in scholarship.sub_type_list:
-        general_config = scholarship.get_sub_type_config(
-            ScholarshipSubType.GENERAL.value
-        )
+        general_config = scholarship.get_sub_type_config(ScholarshipSubType.GENERAL.value)
         if not general_config:
             # 創建預設的 general 配置
             now = datetime.now(timezone.utc)
@@ -1689,9 +1549,7 @@ async def create_sub_type_config(
 
     # Validate sub_type_code
     if config_data.sub_type_code not in scholarship.sub_type_list:
-        raise HTTPException(
-            status_code=400, detail="Invalid sub_type_code for this scholarship"
-        )
+        raise HTTPException(status_code=400, detail="Invalid sub_type_code for this scholarship")
 
     # Prevent creating general sub-type configurations
     if config_data.sub_type_code == ScholarshipSubType.GENERAL.value:
@@ -1708,9 +1566,7 @@ async def create_sub_type_config(
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=409, detail="Sub-type configuration already exists"
-        )
+        raise HTTPException(status_code=409, detail="Sub-type configuration already exists")
 
     # Create new config
     config = ScholarshipSubTypeConfig(
@@ -1761,9 +1617,7 @@ async def update_sub_type_config(
     """Update sub-type configuration"""
 
     # Get config
-    stmt = select(ScholarshipSubTypeConfig).where(
-        ScholarshipSubTypeConfig.id == config_id
-    )
+    stmt = select(ScholarshipSubTypeConfig).where(ScholarshipSubTypeConfig.id == config_id)
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
 
@@ -1819,9 +1673,7 @@ async def delete_sub_type_config(
     """Delete sub-type configuration (soft delete by setting is_active=False)"""
 
     # Get config
-    stmt = select(ScholarshipSubTypeConfig).where(
-        ScholarshipSubTypeConfig.id == config_id
-    )
+    stmt = select(ScholarshipSubTypeConfig).where(ScholarshipSubTypeConfig.id == config_id)
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
 
@@ -1846,9 +1698,7 @@ async def delete_sub_type_config(
 # === 獎學金權限管理相關 API === #
 
 
-@router.get(
-    "/scholarship-permissions", response_model=ApiResponse[List[Dict[str, Any]]]
-)
+@router.get("/scholarship-permissions", response_model=ApiResponse[List[Dict[str, Any]]])
 async def get_scholarship_permissions(
     user_id: Optional[int] = Query(None, description="Filter by user ID"),
     current_user: User = Depends(require_admin),
@@ -1934,9 +1784,7 @@ async def get_scholarship_permissions(
             if scholarship.id not in existing_scholarship_ids:
                 permission_list.append(
                     {
-                        "id": -(
-                            idx + 1000
-                        ),  # Negative ID to indicate virtual permission
+                        "id": -(idx + 1000),  # Negative ID to indicate virtual permission
                         "user_id": current_user.id,
                         "scholarship_id": scholarship.id,
                         "scholarship_name": scholarship.name,
@@ -1977,9 +1825,7 @@ async def get_current_user_scholarship_permissions(
 
     # Super admin has access to all scholarships (no specific permissions needed)
     if current_user.is_super_admin():
-        return ApiResponse(
-            success=True, message="Super admin has access to all scholarships", data=[]
-        )
+        return ApiResponse(success=True, message="Super admin has access to all scholarships", data=[])
 
     # Get permissions for admin/college users
     stmt = (
@@ -2027,9 +1873,7 @@ async def create_scholarship_permission(
     comment = permission_data.get("comment", "")
 
     if not user_id or not scholarship_id:
-        raise HTTPException(
-            status_code=400, detail="user_id and scholarship_id are required"
-        )
+        raise HTTPException(status_code=400, detail="user_id and scholarship_id are required")
 
     # Check if admin is trying to modify their own permissions (not allowed)
     if current_user.role == UserRole.ADMIN and user_id == current_user.id:
@@ -2047,9 +1891,7 @@ async def create_scholarship_permission(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Check if scholarship exists
-    scholarship_stmt = select(ScholarshipType).where(
-        ScholarshipType.id == scholarship_id
-    )
+    scholarship_stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
     scholarship_result = await db.execute(scholarship_stmt)
     scholarship = scholarship_result.scalar_one_or_none()
 
@@ -2223,17 +2065,11 @@ async def get_all_scholarships_for_permissions(
     )
 
 
-@router.get(
-    "/scholarships/my-scholarships", response_model=ApiResponse[List[Dict[str, Any]]]
-)
-async def get_my_scholarships(
-    current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+@router.get("/scholarships/my-scholarships", response_model=ApiResponse[List[Dict[str, Any]]])
+async def get_my_scholarships(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get scholarships that the current user has permission to manage"""
 
-    logger.info(
-        f"get_my_scholarships called by user {current_user.id} role {current_user.role}"
-    )
+    logger.info(f"get_my_scholarships called by user {current_user.id} role {current_user.role}")
 
     if current_user.is_super_admin():
         # Super admins can see all scholarships
@@ -2251,9 +2087,7 @@ async def get_my_scholarships(
         # Regular admins can only see assigned scholarships
         stmt = (
             select(ScholarshipType)
-            .join(
-                AdminScholarship, ScholarshipType.id == AdminScholarship.scholarship_id
-            )
+            .join(AdminScholarship, ScholarshipType.id == AdminScholarship.scholarship_id)
             .where(
                 AdminScholarship.admin_id == current_user.id,
                 ScholarshipType.status == ScholarshipStatus.ACTIVE.value,
@@ -2274,9 +2108,7 @@ async def get_my_scholarships(
                 "name_en": scholarship.name_en,
                 "code": scholarship.code,
                 "category": scholarship.category,  # category is already a string, not an enum
-                "application_cycle": scholarship.application_cycle.value
-                if scholarship.application_cycle
-                else None,
+                "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else None,
                 "status": scholarship.status,  # status is also a string, not an enum in this model
             }
         )
@@ -2293,13 +2125,9 @@ async def get_my_scholarships(
 # ============================
 
 
-@router.get(
-    "/scholarship-rules", response_model=ApiResponse[List[ScholarshipRuleResponse]]
-)
+@router.get("/scholarship-rules", response_model=ApiResponse[List[ScholarshipRuleResponse]])
 async def get_scholarship_rules(
-    scholarship_type_id: Optional[int] = Query(
-        None, description="Filter by scholarship type"
-    ),
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
     sub_type: Optional[str] = Query(None, description="Filter by sub type"),
@@ -2330,30 +2158,19 @@ async def get_scholarship_rules(
         # If no specific scholarship type requested and user is not super admin,
         # only show rules for scholarships they have permission to manage
         admin_scholarship_ids = [
-            admin_scholarship.scholarship_id
-            for admin_scholarship in current_user.admin_scholarships
+            admin_scholarship.scholarship_id for admin_scholarship in current_user.admin_scholarships
         ]
         if admin_scholarship_ids:
-            stmt = stmt.where(
-                ScholarshipRule.scholarship_type_id.in_(admin_scholarship_ids)
-            )
+            stmt = stmt.where(ScholarshipRule.scholarship_type_id.in_(admin_scholarship_ids))
         else:
             # Admin has no scholarship permissions, return empty result
-            return ApiResponse(
-                success=True, message="No scholarship rules found", data=[]
-            )
+            return ApiResponse(success=True, message="No scholarship rules found", data=[])
 
     if academic_year:
         stmt = stmt.where(ScholarshipRule.academic_year == academic_year)
 
     if semester:
-        semester_enum = (
-            Semester.FIRST
-            if semester == "first"
-            else Semester.SECOND
-            if semester == "second"
-            else None
-        )
+        semester_enum = Semester.FIRST if semester == "first" else Semester.SECOND if semester == "second" else None
         if semester_enum:
             stmt = stmt.where(ScholarshipRule.semester == semester_enum)
 
@@ -2373,9 +2190,7 @@ async def get_scholarship_rules(
         stmt = stmt.where(ScholarshipRule.tag.icontains(tag))
 
     # Order by priority and created date
-    stmt = stmt.order_by(
-        ScholarshipRule.priority.desc(), ScholarshipRule.created_at.desc()
-    )
+    stmt = stmt.order_by(ScholarshipRule.priority.desc(), ScholarshipRule.created_at.desc())
 
     result = await db.execute(stmt)
     rules = result.scalars().all()
@@ -2409,21 +2224,15 @@ async def create_scholarship_rule(
     check_scholarship_permission(current_user, rule_data.scholarship_type_id)
 
     # Verify scholarship type exists
-    stmt = select(ScholarshipType).where(
-        ScholarshipType.id == rule_data.scholarship_type_id
-    )
+    stmt = select(ScholarshipType).where(ScholarshipType.id == rule_data.scholarship_type_id)
     result = await db.execute(stmt)
     scholarship_type = result.scalar_one_or_none()
 
     if not scholarship_type:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship type not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship type not found")
 
     # Create new rule
-    new_rule = ScholarshipRule(
-        **rule_data.dict(), created_by=current_user.id, updated_by=current_user.id
-    )
+    new_rule = ScholarshipRule(**rule_data.dict(), created_by=current_user.id, updated_by=current_user.id)
 
     db.add(new_rule)
     await db.commit()
@@ -2451,9 +2260,7 @@ async def create_scholarship_rule(
     )
 
 
-@router.get(
-    "/scholarship-rules/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse]
-)
+@router.get("/scholarship-rules/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse])
 async def get_scholarship_rule(
     rule_id: int,
     current_user: User = Depends(require_admin),
@@ -2475,9 +2282,7 @@ async def get_scholarship_rule(
     rule = result.scalar_one_or_none()
 
     if not rule:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship rule not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship rule not found")
 
     # Check permission to manage this scholarship
     check_scholarship_permission(current_user, rule.scholarship_type_id)
@@ -2495,9 +2300,7 @@ async def get_scholarship_rule(
     )
 
 
-@router.put(
-    "/scholarship-rules/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse]
-)
+@router.put("/scholarship-rules/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse])
 async def update_scholarship_rule(
     rule_id: int,
     rule_data: ScholarshipRuleUpdate,
@@ -2512,9 +2315,7 @@ async def update_scholarship_rule(
     rule = result.scalar_one_or_none()
 
     if not rule:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship rule not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship rule not found")
 
     # Check permission to manage this scholarship
     check_scholarship_permission(current_user, rule.scholarship_type_id)
@@ -2557,9 +2358,7 @@ async def update_scholarship_rule(
     )
 
 
-@router.delete(
-    "/scholarship-rules/{rule_id}", response_model=ApiResponse[Dict[str, str]]
-)
+@router.delete("/scholarship-rules/{rule_id}", response_model=ApiResponse[Dict[str, str]])
 async def delete_scholarship_rule(
     rule_id: int,
     current_user: User = Depends(require_admin),
@@ -2573,9 +2372,7 @@ async def delete_scholarship_rule(
     rule = result.scalar_one_or_none()
 
     if not rule:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship rule not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship rule not found")
 
     # Check permission to manage this scholarship
     check_scholarship_permission(current_user, rule.scholarship_type_id)
@@ -2655,9 +2452,7 @@ async def _copy_rules_in_batches(
                     continue
 
             # Create copy
-            new_rule = source_rule.create_copy_for_period(
-                copy_request.target_academic_year, target_semester_enum
-            )
+            new_rule = source_rule.create_copy_for_period(copy_request.target_academic_year, target_semester_enum)
             new_rule.created_by = current_user.id
             new_rule.updated_by = current_user.id
             batch_new_rules.append(new_rule)
@@ -2705,9 +2500,7 @@ async def _copy_rules_in_batches(
     return ApiResponse(success=True, message=message, data=rule_responses)
 
 
-@router.post(
-    "/scholarship-rules/copy", response_model=ApiResponse[List[ScholarshipRuleResponse]]
-)
+@router.post("/scholarship-rules/copy", response_model=ApiResponse[List[ScholarshipRuleResponse]])
 async def copy_rules_between_periods(
     copy_request: RuleCopyRequest,
     current_user: User = Depends(require_admin),
@@ -2720,9 +2513,7 @@ async def copy_rules_between_periods(
 
     # Filter by source period
     if copy_request.source_academic_year:
-        stmt = stmt.where(
-            ScholarshipRule.academic_year == copy_request.source_academic_year
-        )
+        stmt = stmt.where(ScholarshipRule.academic_year == copy_request.source_academic_year)
 
     if copy_request.source_semester:
         # source_semester is already a Semester enum from the schema
@@ -2730,9 +2521,7 @@ async def copy_rules_between_periods(
 
     # Filter by scholarship types if specified
     if copy_request.scholarship_type_ids:
-        stmt = stmt.where(
-            ScholarshipRule.scholarship_type_id.in_(copy_request.scholarship_type_ids)
-        )
+        stmt = stmt.where(ScholarshipRule.scholarship_type_id.in_(copy_request.scholarship_type_ids))
 
     # Filter by specific rules if specified
     if copy_request.rule_ids:
@@ -2747,14 +2536,11 @@ async def copy_rules_between_periods(
         count_stmt = count_stmt.where(ScholarshipRule.id.in_(copy_request.rule_ids))
     else:
         count_stmt = count_stmt.where(
-            ScholarshipRule.scholarship_type_id
-            == copy_request.source_scholarship_type_id,
+            ScholarshipRule.scholarship_type_id == copy_request.source_scholarship_type_id,
             ScholarshipRule.academic_year == copy_request.source_academic_year,
         )
         if copy_request.source_semester:
-            count_stmt = count_stmt.where(
-                ScholarshipRule.semester == copy_request.source_semester
-            )
+            count_stmt = count_stmt.where(ScholarshipRule.semester == copy_request.source_semester)
 
     count_stmt = count_stmt.where(ScholarshipRule.is_template == False)
     count_result = await db.execute(count_stmt)
@@ -2829,9 +2615,7 @@ async def copy_rules_between_periods(
                 continue
 
         # Create new rule
-        new_rule = source_rule.create_copy_for_period(
-            copy_request.target_academic_year, target_semester_enum
-        )
+        new_rule = source_rule.create_copy_for_period(copy_request.target_academic_year, target_semester_enum)
         new_rule.created_by = current_user.id
         new_rule.updated_by = current_user.id
         new_rules.append(new_rule)
@@ -2867,16 +2651,16 @@ async def copy_rules_between_periods(
 
     # Build response message
     if skipped_rules > 0:
-        message = f"Successfully copied {len(new_rules)} rules to target period. Skipped {skipped_rules} duplicate rules."
+        message = (
+            f"Successfully copied {len(new_rules)} rules to target period. Skipped {skipped_rules} duplicate rules."
+        )
     else:
         message = f"Successfully copied {len(new_rules)} rules to target period."
 
     return ApiResponse(success=True, message=message, data=rule_responses)
 
 
-@router.post(
-    "/scholarship-rules/bulk-operation", response_model=ApiResponse[Dict[str, Any]]
-)
+@router.post("/scholarship-rules/bulk-operation", response_model=ApiResponse[Dict[str, Any]])
 async def bulk_rule_operation(
     operation_request: BulkRuleOperation,
     current_user: User = Depends(require_admin),
@@ -2885,14 +2669,10 @@ async def bulk_rule_operation(
     """Perform bulk operations on scholarship rules"""
 
     if not operation_request.rule_ids:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="No rule IDs provided"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No rule IDs provided")
 
     # Get rules
-    stmt = select(ScholarshipRule).where(
-        ScholarshipRule.id.in_(operation_request.rule_ids)
-    )
+    stmt = select(ScholarshipRule).where(ScholarshipRule.id.in_(operation_request.rule_ids))
     result = await db.execute(stmt)
     rules = result.scalars().all()
 
@@ -2956,9 +2736,7 @@ async def bulk_rule_operation(
     response_model=ApiResponse[List[ScholarshipRuleResponse]],
 )
 async def get_rule_templates(
-    scholarship_type_id: Optional[int] = Query(
-        None, description="Filter by scholarship type"
-    ),
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -2983,13 +2761,10 @@ async def get_rule_templates(
         # If no specific scholarship type requested and user is not super admin,
         # only show templates for scholarships they have permission to manage
         admin_scholarship_ids = [
-            admin_scholarship.scholarship_id
-            for admin_scholarship in current_user.admin_scholarships
+            admin_scholarship.scholarship_id for admin_scholarship in current_user.admin_scholarships
         ]
         if admin_scholarship_ids:
-            stmt = stmt.where(
-                ScholarshipRule.scholarship_type_id.in_(admin_scholarship_ids)
-            )
+            stmt = stmt.where(ScholarshipRule.scholarship_type_id.in_(admin_scholarship_ids))
         else:
             # Admin has no scholarship permissions, return empty result
             return ApiResponse(success=True, message="No rule templates found", data=[])
@@ -3027,9 +2802,7 @@ async def create_rule_template(
     """Create a rule template from existing rules"""
 
     # Get the source rules
-    stmt = select(ScholarshipRule).where(
-        ScholarshipRule.id.in_(template_request.rule_ids)
-    )
+    stmt = select(ScholarshipRule).where(ScholarshipRule.id.in_(template_request.rule_ids))
     result = await db.execute(stmt)
     source_rules = result.scalars().all()
 
@@ -3045,10 +2818,7 @@ async def create_rule_template(
         check_scholarship_permission(current_user, scholarship_type_id)
 
     # Verify all rules belong to the same scholarship type
-    if not all(
-        rule.scholarship_type_id == template_request.scholarship_type_id
-        for rule in source_rules
-    ):
+    if not all(rule.scholarship_type_id == template_request.scholarship_type_id for rule in source_rules):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="All rules must belong to the same scholarship type",
@@ -3139,9 +2909,7 @@ async def apply_rule_template(
     template_rule = result.scalar_one_or_none()
 
     if not template_rule:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
 
     # Check permission to manage the target scholarship
     check_scholarship_permission(current_user, template_request.scholarship_type_id)
@@ -3159,11 +2927,7 @@ async def apply_rule_template(
     if not template_request.overwrite_existing:
         target_semester_enum = None
         if template_request.semester:
-            target_semester_enum = (
-                Semester.FIRST
-                if template_request.semester == "first"
-                else Semester.SECOND
-            )
+            target_semester_enum = Semester.FIRST if template_request.semester == "first" else Semester.SECOND
 
         existing_stmt = select(ScholarshipRule).where(
             ScholarshipRule.scholarship_type_id == template_request.scholarship_type_id,
@@ -3185,9 +2949,7 @@ async def apply_rule_template(
     new_rules = []
     target_semester_enum = None
     if template_request.semester:
-        target_semester_enum = (
-            Semester.FIRST if template_request.semester == "first" else Semester.SECOND
-        )
+        target_semester_enum = Semester.FIRST if template_request.semester == "first" else Semester.SECOND
 
     for template_rule in template_rules:
         new_rule = ScholarshipRule(
@@ -3275,9 +3037,7 @@ async def delete_rule_template(
     template_rules = result.scalars().all()
 
     if not template_rules:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Template not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
 
     # Delete all template rules
     for rule in template_rules:
@@ -3293,9 +3053,7 @@ async def delete_rule_template(
 
 
 @router.get("/scholarships/available-years", response_model=ApiResponse[List[int]])
-async def get_available_years(
-    current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+async def get_available_years(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get available academic years from scholarship rules"""
 
     # Query distinct academic years from scholarship rules
@@ -3373,11 +3131,7 @@ async def assign_professor_to_application(
         # Create a safe response that doesn't trigger lazy loading
         # Extract student info from student_data JSON field
         student_data = application.student_data or {}
-        student_id = (
-            student_data.get("std_stdcode")
-            or student_data.get("student_id")
-            or student_data.get("stdNo")
-        )
+        student_id = student_data.get("std_stdcode") or student_data.get("student_id") or student_data.get("stdNo")
 
         response_data = {
             "id": application.id,
@@ -3400,15 +3154,9 @@ async def assign_professor_to_application(
             "review_score": application.review_score,
             "review_comments": application.review_comments,
             "rejection_reason": application.rejection_reason,
-            "submitted_at": application.submitted_at.isoformat()
-            if application.submitted_at
-            else None,
-            "reviewed_at": application.reviewed_at.isoformat()
-            if application.reviewed_at
-            else None,
-            "approved_at": application.approved_at.isoformat()
-            if application.approved_at
-            else None,
+            "submitted_at": application.submitted_at.isoformat() if application.submitted_at else None,
+            "reviewed_at": application.reviewed_at.isoformat() if application.reviewed_at else None,
+            "approved_at": application.approved_at.isoformat() if application.approved_at else None,
             "created_at": application.created_at.isoformat(),
             "updated_at": application.updated_at.isoformat(),
             "meta_data": application.meta_data,

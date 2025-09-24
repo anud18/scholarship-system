@@ -57,9 +57,7 @@ class TestDeveloperProfileService:
         service = DeveloperProfileService(db_session)
 
         # Create initial user
-        profile1 = DeveloperProfile(
-            developer_id="testdev", full_name="Initial Name", role=UserRole.STUDENT
-        )
+        profile1 = DeveloperProfile(developer_id="testdev", full_name="Initial Name", role=UserRole.STUDENT)
         user1 = await service.create_developer_user("testdev", profile1)
         initial_id = user1.id
 
@@ -83,15 +81,9 @@ class TestDeveloperProfileService:
 
         # Create multiple profiles for same developer
         profiles = [
-            DeveloperProfile(
-                developer_id="testdev", full_name="Student", role=UserRole.STUDENT
-            ),
-            DeveloperProfile(
-                developer_id="testdev", full_name="Professor", role=UserRole.PROFESSOR
-            ),
-            DeveloperProfile(
-                developer_id="testdev", full_name="Admin", role=UserRole.ADMIN
-            ),
+            DeveloperProfile(developer_id="testdev", full_name="Student", role=UserRole.STUDENT),
+            DeveloperProfile(developer_id="testdev", full_name="Professor", role=UserRole.PROFESSOR),
+            DeveloperProfile(developer_id="testdev", full_name="Admin", role=UserRole.ADMIN),
         ]
 
         for profile in profiles:
@@ -109,9 +101,7 @@ class TestDeveloperProfileService:
         service = DeveloperProfileService(db_session)
 
         # Create user
-        profile = DeveloperProfile(
-            developer_id="testdev", full_name="Test User", role=UserRole.STUDENT
-        )
+        profile = DeveloperProfile(developer_id="testdev", full_name="Test User", role=UserRole.STUDENT)
         await service.create_developer_user("testdev", profile)
 
         # Delete user
@@ -129,12 +119,8 @@ class TestDeveloperProfileService:
 
         # Create multiple users
         profiles = [
-            DeveloperProfile(
-                developer_id="testdev", full_name="User1", role=UserRole.STUDENT
-            ),
-            DeveloperProfile(
-                developer_id="testdev", full_name="User2", role=UserRole.PROFESSOR
-            ),
+            DeveloperProfile(developer_id="testdev", full_name="User1", role=UserRole.STUDENT),
+            DeveloperProfile(developer_id="testdev", full_name="User2", role=UserRole.PROFESSOR),
         ]
 
         for profile in profiles:
@@ -154,15 +140,9 @@ class TestDeveloperProfileService:
         service = DeveloperProfileService(db_session)
 
         profiles = [
-            DeveloperProfile(
-                developer_id="testdev", full_name="Student", role=UserRole.STUDENT
-            ),
-            DeveloperProfile(
-                developer_id="testdev", full_name="Professor", role=UserRole.PROFESSOR
-            ),
-            DeveloperProfile(
-                developer_id="testdev", full_name="Admin", role=UserRole.ADMIN
-            ),
+            DeveloperProfile(developer_id="testdev", full_name="Student", role=UserRole.STUDENT),
+            DeveloperProfile(developer_id="testdev", full_name="Professor", role=UserRole.PROFESSOR),
+            DeveloperProfile(developer_id="testdev", full_name="Admin", role=UserRole.ADMIN),
         ]
 
         users = await service.create_developer_test_suite("testdev", profiles)
@@ -185,9 +165,7 @@ class TestDeveloperProfileService:
         ]
 
         for dev_id, role in profiles:
-            profile = DeveloperProfile(
-                developer_id=dev_id, full_name=f"{dev_id} user", role=role
-            )
+            profile = DeveloperProfile(developer_id=dev_id, full_name=f"{dev_id} user", role=role)
             await service.create_developer_user(dev_id, profile)
 
         developer_ids = await service.get_all_developer_ids()
@@ -301,9 +279,7 @@ class TestDeveloperProfileAPI:
             "custom_attributes": {"test_attribute": "test_value"},
         }
 
-        response = client.post(
-            "/api/v1/auth/dev-profiles/apitest/create-custom", json=custom_data
-        )
+        response = client.post("/api/v1/auth/dev-profiles/apitest/create-custom", json=custom_data)
 
         assert response.status_code == 200
         data = response.json()
@@ -380,9 +356,7 @@ class TestDeveloperProfileAPI:
         """Test creating custom profile with invalid role"""
         custom_data = {"full_name": "Test User", "role": "invalid_role"}
 
-        response = client.post(
-            "/api/v1/auth/dev-profiles/errortest/create-custom", json=custom_data
-        )
+        response = client.post("/api/v1/auth/dev-profiles/errortest/create-custom", json=custom_data)
 
         assert response.status_code == 400
         data = response.json()
@@ -396,9 +370,7 @@ class TestDeveloperProfileAPI:
             # Missing full_name
         }
 
-        response = client.post(
-            "/api/v1/auth/dev-profiles/errortest/create-custom", json=custom_data
-        )
+        response = client.post("/api/v1/auth/dev-profiles/errortest/create-custom", json=custom_data)
 
         assert response.status_code == 400
 
@@ -414,9 +386,7 @@ class TestDeveloperProfileAPI:
         # Test login with the first profile
         test_username = profiles[0]["username"]
 
-        login_response = client.post(
-            "/api/v1/auth/mock-sso/login", json={"username": test_username}
-        )
+        login_response = client.post("/api/v1/auth/mock-sso/login", json={"username": test_username})
 
         assert login_response.status_code == 200
         login_data = login_response.json()
@@ -425,9 +395,7 @@ class TestDeveloperProfileAPI:
 
         # Test authenticated endpoint
         token = login_data["data"]["access_token"]
-        auth_response = client.get(
-            "/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}
-        )
+        auth_response = client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {token}"})
 
         assert auth_response.status_code == 200
         user_data = auth_response.json()
@@ -456,15 +424,9 @@ class TestProductionSafety:
 
             for endpoint in endpoints:
                 if "create-custom" in endpoint:
-                    response = client.post(
-                        endpoint, json={"full_name": "Test", "role": "student"}
-                    )
+                    response = client.post(endpoint, json={"full_name": "Test", "role": "student"})
                 else:
-                    response = (
-                        client.get(endpoint)
-                        if endpoint.count("/") == 6
-                        else client.post(endpoint)
-                    )
+                    response = client.get(endpoint) if endpoint.count("/") == 6 else client.post(endpoint)
 
                 assert response.status_code == 404
                 data = response.json()

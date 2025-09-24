@@ -42,9 +42,7 @@ class MinIOService:
             logger.error(f"Error ensuring bucket exists: {e}")
             raise HTTPException(status_code=500, detail="Storage service unavailable")
 
-    async def upload_file(
-        self, file: UploadFile, application_id: int, file_type: str
-    ) -> Tuple[str, int]:
+    async def upload_file(self, file: UploadFile, application_id: int, file_type: str) -> Tuple[str, int]:
         """
         Upload file to MinIO
 
@@ -68,9 +66,7 @@ class MinIOService:
                 )
 
             # Validate file type
-            file_extension = (
-                file.filename.split(".")[-1].lower() if file.filename else ""
-            )
+            file_extension = file.filename.split(".")[-1].lower() if file.filename else ""
             if file_extension not in settings.allowed_file_types_list:
                 raise HTTPException(
                     status_code=400,
@@ -79,16 +75,14 @@ class MinIOService:
 
             # Generate unique object name using timestamp + hash + UUID for maximum uniqueness
             timestamp = int(time.time() * 1000000)  # Microsecond precision
-            file_content_hash = hashlib.sha256(file_content).hexdigest()[
-                :16
-            ]  # First 16 chars of hash
+            file_content_hash = hashlib.sha256(file_content).hexdigest()[:16]  # First 16 chars of hash
             unique_id = str(uuid.uuid4())[:8]  # First 8 chars of UUID
-            file_extension = (
-                file.filename.split(".")[-1].lower() if file.filename else ""
-            )
+            file_extension = file.filename.split(".")[-1].lower() if file.filename else ""
 
             # Format: 統一存放在 documents 資料夾，所有文件（固定和動態）都在同一位置
-            object_name = f"applications/{application_id}/documents/{timestamp}_{file_content_hash}_{unique_id}.{file_extension}"
+            object_name = (
+                f"applications/{application_id}/documents/{timestamp}_{file_content_hash}_{unique_id}.{file_extension}"
+            )
 
             # Upload to MinIO
             self.client.put_object(
@@ -106,9 +100,7 @@ class MinIOService:
             logger.error(f"MinIO upload error: {e}")
             raise HTTPException(status_code=500, detail="File upload failed")
         except Exception as e:
-            logger.error(
-                f"Unexpected error during file upload: {str(e)}", exc_info=True
-            )
+            logger.error(f"Unexpected error during file upload: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
     def get_file_stream(self, object_name: str):
@@ -166,11 +158,7 @@ class MinIOService:
         """
         try:
             # Extract file extension from source
-            file_extension = (
-                source_object_name.split(".")[-1]
-                if "." in source_object_name
-                else "jpg"
-            )
+            file_extension = source_object_name.split(".")[-1] if "." in source_object_name else "jpg"
 
             # Generate new object name in application path - 統一存放在 documents 資料夾
             # 所有文件（固定或動態）都存放在相同路徑，統一管理
@@ -188,15 +176,11 @@ class MinIOService:
                     source=copy_source,
                 )
 
-                logger.info(
-                    f"Successfully cloned file from {source_object_name} to {new_object_name}"
-                )
+                logger.info(f"Successfully cloned file from {source_object_name} to {new_object_name}")
                 return new_object_name
 
             except Exception as copy_error:
-                logger.warning(
-                    f"Source file {source_object_name} not found, creating placeholder: {copy_error}"
-                )
+                logger.warning(f"Source file {source_object_name} not found, creating placeholder: {copy_error}")
                 # For testing purposes, create a placeholder file
                 import io
 
@@ -213,14 +197,10 @@ class MinIOService:
 
         except S3Error as e:
             logger.error(f"Error cloning file from {source_object_name}: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to clone file: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Failed to clone file: {str(e)}")
         except Exception as e:
             logger.error(f"Unexpected error cloning file: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to clone file: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Failed to clone file: {str(e)}")
 
     def extract_object_name_from_url(self, file_url: str) -> Optional[str]:
         """

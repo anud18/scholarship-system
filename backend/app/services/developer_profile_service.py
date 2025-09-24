@@ -32,9 +32,7 @@ class DeveloperProfileService:
         self.db = db
         self.auth_service = AuthService(db)
 
-    async def create_developer_user(
-        self, developer_id: str, profile: DeveloperProfile
-    ) -> User:
+    async def create_developer_user(self, developer_id: str, profile: DeveloperProfile) -> User:
         """Create a test user for a specific developer"""
         nycu_id = f"dev_{developer_id}_{profile.role.value}"
         email = f"{nycu_id}@{profile.email_domain}"
@@ -59,12 +57,8 @@ class DeveloperProfileService:
             nycu_id=nycu_id,
             name=profile.name,
             email=email,
-            user_type=UserType.STUDENT
-            if profile.role == UserRole.STUDENT
-            else UserType.EMPLOYEE,
-            status=EmployeeStatus.在學
-            if profile.role == UserRole.STUDENT
-            else EmployeeStatus.在職,
+            user_type=UserType.STUDENT if profile.role == UserRole.STUDENT else UserType.EMPLOYEE,
+            status=EmployeeStatus.在學 if profile.role == UserRole.STUDENT else EmployeeStatus.在職,
             dept_code="5802",  # Default department code
             dept_name="校務資訊組",  # Default department name
             role=profile.role,
@@ -103,9 +97,7 @@ class DeveloperProfileService:
         await self.db.commit()
         return result.rowcount
 
-    async def create_developer_test_suite(
-        self, developer_id: str, profiles: List[DeveloperProfile]
-    ) -> List[User]:
+    async def create_developer_test_suite(self, developer_id: str, profiles: List[DeveloperProfile]) -> List[User]:
         """Create a complete test suite for a developer"""
         created_users = []
 

@@ -62,13 +62,9 @@ async def get_email_history(
     # Convert ORM objects to Pydantic models
     email_items = [EmailHistoryRead.from_orm_with_relations(email) for email in emails]
 
-    response_data = EmailHistoryListResponse(
-        items=email_items, total=total, skip=skip, limit=limit
-    )
+    response_data = EmailHistoryListResponse(items=email_items, total=total, skip=skip, limit=limit)
 
-    return ApiResponse(
-        success=True, message="Email history retrieved successfully", data=response_data
-    )
+    return ApiResponse(success=True, message="Email history retrieved successfully", data=response_data)
 
 
 @router.get("/scheduled", response_model=ApiResponse[ScheduledEmailListResponse])
@@ -104,13 +100,9 @@ async def get_scheduled_emails(
     )
 
     # Convert ORM objects to Pydantic models
-    email_items = [
-        ScheduledEmailRead.from_orm_with_relations(email) for email in emails
-    ]
+    email_items = [ScheduledEmailRead.from_orm_with_relations(email) for email in emails]
 
-    response_data = ScheduledEmailListResponse(
-        items=email_items, total=total, skip=skip, limit=limit
-    )
+    response_data = ScheduledEmailListResponse(items=email_items, total=total, skip=skip, limit=limit)
 
     return ApiResponse(
         success=True,
@@ -131,9 +123,7 @@ async def get_due_scheduled_emails(
     Only superadmins can access this endpoint for system processing.
     """
     if not current_user.is_super_admin():
-        raise HTTPException(
-            status_code=403, detail="Only superadmins can access due emails"
-        )
+        raise HTTPException(status_code=403, detail="Only superadmins can access due emails")
 
     emails = await email_service.get_due_scheduled_emails(db=db, limit=limit)
     return emails
@@ -181,9 +171,7 @@ async def cancel_scheduled_email(
     try:
         # Check if user has permission to cancel this email
         # This is handled within the service method for permission checking
-        scheduled_email = await email_service.cancel_scheduled_email(
-            db=db, email_id=email_id
-        )
+        scheduled_email = await email_service.cancel_scheduled_email(db=db, email_id=email_id)
         return scheduled_email
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -229,17 +217,13 @@ async def process_due_emails(
     Only superadmins can trigger email processing.
     """
     if not current_user.is_super_admin():
-        raise HTTPException(
-            status_code=403, detail="Only superadmins can process emails"
-        )
+        raise HTTPException(status_code=403, detail="Only superadmins can process emails")
 
     try:
         stats = await email_service.process_due_emails(db=db, batch_size=batch_size)
         return EmailProcessingStats(**stats)
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to process emails: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to process emails: {str(e)}")
 
 
 @router.get("/categories", response_model=List[str])

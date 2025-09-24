@@ -75,27 +75,17 @@ class EmailHistory(Base):
     email_category = Column(Enum(EmailCategory), nullable=True, index=True)
 
     # Related entities (for permission filtering)
-    application_id = Column(
-        Integer, ForeignKey("applications.id"), nullable=True, index=True
-    )
-    scholarship_type_id = Column(
-        Integer, ForeignKey("scholarship_types.id"), nullable=True, index=True
-    )
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True, index=True)
 
     # Sender information
     sent_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    sent_by_system = Column(
-        Boolean, default=True, nullable=False
-    )  # True for system auto, False for manual
+    sent_by_system = Column(Boolean, default=True, nullable=False)  # True for system auto, False for manual
 
     # Status tracking
-    status = Column(
-        Enum(EmailStatus), default=EmailStatus.SENT, nullable=False, index=True
-    )
+    status = Column(Enum(EmailStatus), default=EmailStatus.SENT, nullable=False, index=True)
     error_message = Column(Text)
-    sent_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
-    )
+    sent_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
     # Additional metadata
     retry_count = Column(Integer, default=0)
@@ -105,9 +95,7 @@ class EmailHistory(Base):
     template = relationship("EmailTemplate", backref="email_history")
     application = relationship("Application", backref="email_history")
     scholarship_type = relationship("ScholarshipType", backref="email_history")
-    sent_by = relationship(
-        "User", foreign_keys=[sent_by_user_id], backref="sent_emails"
-    )
+    sent_by = relationship("User", foreign_keys=[sent_by_user_id], backref="sent_emails")
 
     # Indexes for performance
     __table_args__ = (
@@ -141,17 +129,11 @@ class ScheduledEmail(Base):
 
     # Scheduling information
     scheduled_for = Column(DateTime(timezone=True), nullable=False, index=True)
-    status = Column(
-        Enum(ScheduleStatus), default=ScheduleStatus.PENDING, nullable=False, index=True
-    )
+    status = Column(Enum(ScheduleStatus), default=ScheduleStatus.PENDING, nullable=False, index=True)
 
     # Related entities (for permission filtering)
-    application_id = Column(
-        Integer, ForeignKey("applications.id"), nullable=True, index=True
-    )
-    scholarship_type_id = Column(
-        Integer, ForeignKey("scholarship_types.id"), nullable=True, index=True
-    )
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True, index=True)
 
     # Approval workflow
     requires_approval = Column(Boolean, default=False, nullable=False)
@@ -161,12 +143,8 @@ class ScheduledEmail(Base):
 
     # Creation tracking
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Error handling
     retry_count = Column(Integer, default=0)
@@ -179,19 +157,13 @@ class ScheduledEmail(Base):
     template = relationship("EmailTemplate", backref="scheduled_emails")
     application = relationship("Application", backref="scheduled_emails")
     scholarship_type = relationship("ScholarshipType", backref="scheduled_emails")
-    created_by = relationship(
-        "User", foreign_keys=[created_by_user_id], backref="created_scheduled_emails"
-    )
-    approved_by = relationship(
-        "User", foreign_keys=[approved_by_user_id], backref="approved_scheduled_emails"
-    )
+    created_by = relationship("User", foreign_keys=[created_by_user_id], backref="created_scheduled_emails")
+    approved_by = relationship("User", foreign_keys=[approved_by_user_id], backref="approved_scheduled_emails")
 
     # Indexes for performance
     __table_args__ = (
         Index("idx_scheduled_email_due", "scheduled_for", "status"),
-        Index(
-            "idx_scheduled_email_approval", "requires_approval", "approved_by_user_id"
-        ),
+        Index("idx_scheduled_email_approval", "requires_approval", "approved_by_user_id"),
         Index("idx_scheduled_email_scholarship", "scholarship_type_id", "status"),
         Index("idx_scheduled_email_priority", "priority", "scheduled_for"),
     )

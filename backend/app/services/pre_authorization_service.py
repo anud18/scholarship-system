@@ -42,9 +42,7 @@ class PreAuthorizationService:
             nycu_id=nycu_id,
             name=f"Pre-authorized {role.value.title()}",  # Placeholder name
             email=f"{nycu_id}@nycu.edu.tw",  # Placeholder email
-            user_type=UserType.EMPLOYEE
-            if role != UserRole.STUDENT
-            else UserType.STUDENT,
+            user_type=UserType.EMPLOYEE if role != UserRole.STUDENT else UserType.STUDENT,
             status=EmployeeStatus.ACTIVE,
             role=role,
             comment=comment or f"Pre-authorized by {assigned_by}",
@@ -77,16 +75,12 @@ class PreAuthorizationService:
 
         # Validate assignment permissions
         if not await self._can_assign_scholarship(assigned_by, admin):
-            raise ValidationError(
-                f"User {assigned_by} cannot assign scholarship to {admin_nycu_id}"
-            )
+            raise ValidationError(f"User {assigned_by} cannot assign scholarship to {admin_nycu_id}")
 
         # Check if assignment already exists
         existing = await self._get_admin_scholarship(admin.id, scholarship_id)
         if existing:
-            raise ValidationError(
-                f"Admin {admin_nycu_id} is already assigned to scholarship {scholarship_id}"
-            )
+            raise ValidationError(f"Admin {admin_nycu_id} is already assigned to scholarship {scholarship_id}")
 
         # Create assignment
         assignment = AdminScholarship(admin_id=admin.id, scholarship_id=scholarship_id)
@@ -236,9 +230,7 @@ class PreAuthorizationService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def _get_admin_scholarship(
-        self, admin_id: int, scholarship_id: int
-    ) -> Optional[AdminScholarship]:
+    async def _get_admin_scholarship(self, admin_id: int, scholarship_id: int) -> Optional[AdminScholarship]:
         """Get admin scholarship assignment"""
         stmt = select(AdminScholarship).where(
             and_(
@@ -249,9 +241,7 @@ class PreAuthorizationService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_admin_scholarships(
-        self, admin_nycu_id: str
-    ) -> List[AdminScholarship]:
+    async def get_admin_scholarships(self, admin_nycu_id: str) -> List[AdminScholarship]:
         """Get all scholarship assignments for an admin"""
         admin = await self.get_user_by_nycu_id(admin_nycu_id)
         if not admin:
@@ -261,9 +251,7 @@ class PreAuthorizationService:
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
-    async def remove_admin_from_scholarship(
-        self, admin_nycu_id: str, scholarship_id: int, removed_by: str
-    ) -> bool:
+    async def remove_admin_from_scholarship(self, admin_nycu_id: str, scholarship_id: int, removed_by: str) -> bool:
         """Remove admin from scholarship assignment"""
 
         admin = await self.get_user_by_nycu_id(admin_nycu_id)
@@ -272,16 +260,12 @@ class PreAuthorizationService:
 
         assignment = await self._get_admin_scholarship(admin.id, scholarship_id)
         if not assignment:
-            raise NotFoundError(
-                f"Assignment not found for admin {admin_nycu_id} and scholarship {scholarship_id}"
-            )
+            raise NotFoundError(f"Assignment not found for admin {admin_nycu_id} and scholarship {scholarship_id}")
 
         # Check permissions
         assigner = await self.get_user_by_nycu_id(removed_by)
         if not assigner or not assigner.can_assign_roles():
-            raise ValidationError(
-                f"User {removed_by} cannot remove scholarship assignments"
-            )
+            raise ValidationError(f"User {removed_by} cannot remove scholarship assignments")
 
         await self.db.delete(assignment)
         await self.db.commit()

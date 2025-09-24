@@ -48,9 +48,7 @@ class TestMinIOService:
         }
 
     @pytest.mark.asyncio
-    async def test_upload_file_success(
-        self, minio_service_instance, mock_minio_client, sample_file_data
-    ):
+    async def test_upload_file_success(self, minio_service_instance, mock_minio_client, sample_file_data):
         """Test successful file upload"""
         # Arrange
         bucket_name = "test-bucket"
@@ -60,9 +58,7 @@ class TestMinIOService:
         mock_minio_client.bucket_exists.return_value = True
         mock_minio_client.put_object.return_value = Mock(etag="test-etag")
 
-        with patch.object(
-            minio_service_instance, "get_file_url", return_value=expected_url
-        ):
+        with patch.object(minio_service_instance, "get_file_url", return_value=expected_url):
             # Act
             result = await minio_service_instance.upload_file(
                 bucket_name=bucket_name,
@@ -92,9 +88,7 @@ class TestMinIOService:
         mock_minio_client.make_bucket.return_value = None
         mock_minio_client.put_object.return_value = Mock(etag="test-etag")
 
-        with patch.object(
-            minio_service_instance, "get_file_url", return_value="test-url"
-        ):
+        with patch.object(minio_service_instance, "get_file_url", return_value="test-url"):
             # Act
             await minio_service_instance.upload_file(
                 bucket_name=bucket_name,
@@ -108,9 +102,7 @@ class TestMinIOService:
             mock_minio_client.put_object.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_upload_file_s3_error(
-        self, minio_service_instance, mock_minio_client, sample_file_data
-    ):
+    async def test_upload_file_s3_error(self, minio_service_instance, mock_minio_client, sample_file_data):
         """Test file upload with S3 error"""
         # Arrange
         bucket_name = "test-bucket"
@@ -136,9 +128,7 @@ class TestMinIOService:
             )
 
     @pytest.mark.asyncio
-    async def test_download_file_success(
-        self, minio_service_instance, mock_minio_client
-    ):
+    async def test_download_file_success(self, minio_service_instance, mock_minio_client):
         """Test successful file download"""
         # Arrange
         bucket_name = "test-bucket"
@@ -150,9 +140,7 @@ class TestMinIOService:
         mock_minio_client.get_object.return_value = mock_response
 
         # Act
-        result = await minio_service_instance.download_file(
-            bucket_name=bucket_name, object_name=object_name
-        )
+        result = await minio_service_instance.download_file(bucket_name=bucket_name, object_name=object_name)
 
         # Assert
         assert result == expected_content
@@ -160,9 +148,7 @@ class TestMinIOService:
         mock_response.read.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_download_file_not_found(
-        self, minio_service_instance, mock_minio_client
-    ):
+    async def test_download_file_not_found(self, minio_service_instance, mock_minio_client):
         """Test download of non-existent file"""
         # Arrange
         bucket_name = "test-bucket"
@@ -179,9 +165,7 @@ class TestMinIOService:
 
         # Act & Assert
         with pytest.raises(FileStorageError, match="File not found"):
-            await minio_service_instance.download_file(
-                bucket_name=bucket_name, object_name=object_name
-            )
+            await minio_service_instance.download_file(bucket_name=bucket_name, object_name=object_name)
 
     @pytest.mark.asyncio
     async def test_delete_file_success(self, minio_service_instance, mock_minio_client):
@@ -193,20 +177,14 @@ class TestMinIOService:
         mock_minio_client.remove_object.return_value = None
 
         # Act
-        result = await minio_service_instance.delete_file(
-            bucket_name=bucket_name, object_name=object_name
-        )
+        result = await minio_service_instance.delete_file(bucket_name=bucket_name, object_name=object_name)
 
         # Assert
         assert result is True
-        mock_minio_client.remove_object.assert_called_once_with(
-            bucket_name, object_name
-        )
+        mock_minio_client.remove_object.assert_called_once_with(bucket_name, object_name)
 
     @pytest.mark.asyncio
-    async def test_delete_file_not_found_returns_true(
-        self, minio_service_instance, mock_minio_client
-    ):
+    async def test_delete_file_not_found_returns_true(self, minio_service_instance, mock_minio_client):
         """Test deletion of non-existent file returns True (idempotent)"""
         # Arrange
         bucket_name = "test-bucket"
@@ -222,17 +200,13 @@ class TestMinIOService:
         )
 
         # Act
-        result = await minio_service_instance.delete_file(
-            bucket_name=bucket_name, object_name=object_name
-        )
+        result = await minio_service_instance.delete_file(bucket_name=bucket_name, object_name=object_name)
 
         # Assert
         assert result is True  # Idempotent operation
 
     @pytest.mark.asyncio
-    async def test_get_presigned_url_success(
-        self, minio_service_instance, mock_minio_client
-    ):
+    async def test_get_presigned_url_success(self, minio_service_instance, mock_minio_client):
         """Test successful presigned URL generation"""
         # Arrange
         bucket_name = "test-bucket"
@@ -258,9 +232,7 @@ class TestMinIOService:
         assert kwargs["expires"] == timedelta(seconds=expiry_seconds)
 
     @pytest.mark.asyncio
-    async def test_get_presigned_url_invalid_expiry(
-        self, minio_service_instance, mock_minio_client
-    ):
+    async def test_get_presigned_url_invalid_expiry(self, minio_service_instance, mock_minio_client):
         """Test presigned URL generation with invalid expiry time"""
         # Arrange
         bucket_name = "test-bucket"
@@ -303,9 +275,7 @@ class TestMinIOService:
         mock_minio_client.list_objects.return_value = mock_objects
 
         # Act
-        result = await minio_service_instance.list_files(
-            bucket_name=bucket_name, prefix=prefix
-        )
+        result = await minio_service_instance.list_files(bucket_name=bucket_name, prefix=prefix)
 
         # Assert
         assert len(result) == 3
@@ -315,9 +285,7 @@ class TestMinIOService:
         assert kwargs["prefix"] == prefix
 
     @pytest.mark.asyncio
-    async def test_list_files_empty_bucket(
-        self, minio_service_instance, mock_minio_client
-    ):
+    async def test_list_files_empty_bucket(self, minio_service_instance, mock_minio_client):
         """Test file listing from empty bucket"""
         # Arrange
         bucket_name = "empty-bucket"
@@ -339,9 +307,7 @@ class TestMinIOService:
         mock_minio_client.stat_object.return_value = Mock(size=1024)
 
         # Act
-        result = await minio_service_instance.file_exists(
-            bucket_name=bucket_name, object_name=object_name
-        )
+        result = await minio_service_instance.file_exists(bucket_name=bucket_name, object_name=object_name)
 
         # Assert
         assert result is True
@@ -364,17 +330,13 @@ class TestMinIOService:
         )
 
         # Act
-        result = await minio_service_instance.file_exists(
-            bucket_name=bucket_name, object_name=object_name
-        )
+        result = await minio_service_instance.file_exists(bucket_name=bucket_name, object_name=object_name)
 
         # Assert
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_get_file_info_success(
-        self, minio_service_instance, mock_minio_client
-    ):
+    async def test_get_file_info_success(self, minio_service_instance, mock_minio_client):
         """Test successful file info retrieval"""
         # Arrange
         bucket_name = "test-bucket"
@@ -389,9 +351,7 @@ class TestMinIOService:
         mock_minio_client.stat_object.return_value = mock_stat
 
         # Act
-        result = await minio_service_instance.get_file_info(
-            bucket_name=bucket_name, object_name=object_name
-        )
+        result = await minio_service_instance.get_file_info(bucket_name=bucket_name, object_name=object_name)
 
         # Assert
         assert result["size"] == 1024
@@ -406,18 +366,8 @@ class TestMinIOService:
         allowed_types = ["application/pdf", "image/jpeg", "image/png"]
 
         # Act & Assert
-        assert (
-            minio_service_instance._validate_file_type(
-                "test.pdf", "application/pdf", allowed_types
-            )
-            is True
-        )
-        assert (
-            minio_service_instance._validate_file_type(
-                "image.jpg", "image/jpeg", allowed_types
-            )
-            is True
-        )
+        assert minio_service_instance._validate_file_type("test.pdf", "application/pdf", allowed_types) is True
+        assert minio_service_instance._validate_file_type("image.jpg", "image/jpeg", allowed_types) is True
 
     @pytest.mark.asyncio
     async def test_validate_file_type_disallowed(self, minio_service_instance):
@@ -426,18 +376,8 @@ class TestMinIOService:
         allowed_types = ["application/pdf", "image/jpeg"]
 
         # Act & Assert
-        assert (
-            minio_service_instance._validate_file_type(
-                "script.exe", "application/exe", allowed_types
-            )
-            is False
-        )
-        assert (
-            minio_service_instance._validate_file_type(
-                "doc.txt", "text/plain", allowed_types
-            )
-            is False
-        )
+        assert minio_service_instance._validate_file_type("script.exe", "application/exe", allowed_types) is False
+        assert minio_service_instance._validate_file_type("doc.txt", "text/plain", allowed_types) is False
 
     @pytest.mark.asyncio
     async def test_validate_file_size_within_limit(self, minio_service_instance):
@@ -447,10 +387,7 @@ class TestMinIOService:
 
         # Act & Assert
         assert minio_service_instance._validate_file_size(1024, max_size) is True
-        assert (
-            minio_service_instance._validate_file_size(5 * 1024 * 1024, max_size)
-            is True
-        )
+        assert minio_service_instance._validate_file_size(5 * 1024 * 1024, max_size) is True
 
     @pytest.mark.asyncio
     async def test_validate_file_size_exceeds_limit(self, minio_service_instance):
@@ -459,29 +396,16 @@ class TestMinIOService:
         max_size = 10 * 1024 * 1024  # 10MB
 
         # Act & Assert
-        assert (
-            minio_service_instance._validate_file_size(15 * 1024 * 1024, max_size)
-            is False
-        )
+        assert minio_service_instance._validate_file_size(15 * 1024 * 1024, max_size) is False
 
     @pytest.mark.asyncio
     async def test_sanitize_object_name(self, minio_service_instance):
         """Test object name sanitization"""
         # Act & Assert
-        assert (
-            minio_service_instance._sanitize_object_name("normal_file.pdf")
-            == "normal_file.pdf"
-        )
-        assert (
-            minio_service_instance._sanitize_object_name("file with spaces.pdf")
-            == "file_with_spaces.pdf"
-        )
-        assert (
-            minio_service_instance._sanitize_object_name("файл.pdf") == "файл.pdf"
-        )  # Should handle unicode
-        assert "/" not in minio_service_instance._sanitize_object_name(
-            "../../../etc/passwd"
-        )
+        assert minio_service_instance._sanitize_object_name("normal_file.pdf") == "normal_file.pdf"
+        assert minio_service_instance._sanitize_object_name("file with spaces.pdf") == "file_with_spaces.pdf"
+        assert minio_service_instance._sanitize_object_name("файл.pdf") == "файл.pdf"  # Should handle unicode
+        assert "/" not in minio_service_instance._sanitize_object_name("../../../etc/passwd")
 
     @pytest.mark.asyncio
     async def test_bulk_upload_success(self, minio_service_instance, mock_minio_client):
@@ -504,13 +428,9 @@ class TestMinIOService:
         mock_minio_client.bucket_exists.return_value = True
         mock_minio_client.put_object.return_value = Mock(etag="test-etag")
 
-        with patch.object(
-            minio_service_instance, "get_file_url", return_value="test-url"
-        ):
+        with patch.object(minio_service_instance, "get_file_url", return_value="test-url"):
             # Act
-            results = await minio_service_instance.bulk_upload(
-                bucket_name=bucket_name, files=files
-            )
+            results = await minio_service_instance.bulk_upload(bucket_name=bucket_name, files=files)
 
             # Assert
             assert len(results) == 2
@@ -518,9 +438,7 @@ class TestMinIOService:
             assert mock_minio_client.put_object.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_bulk_upload_partial_failure(
-        self, minio_service_instance, mock_minio_client
-    ):
+    async def test_bulk_upload_partial_failure(self, minio_service_instance, mock_minio_client):
         """Test bulk upload with partial failures"""
         # Arrange
         files = [
@@ -550,13 +468,9 @@ class TestMinIOService:
             ),  # Second fails
         ]
 
-        with patch.object(
-            minio_service_instance, "get_file_url", return_value="test-url"
-        ):
+        with patch.object(minio_service_instance, "get_file_url", return_value="test-url"):
             # Act
-            results = await minio_service_instance.bulk_upload(
-                bucket_name=bucket_name, files=files
-            )
+            results = await minio_service_instance.bulk_upload(bucket_name=bucket_name, files=files)
 
             # Assert
             assert len(results) == 2

@@ -14,12 +14,8 @@ class SystemSettingBase(BaseModel):
     key: str = Field(..., description="Setting key")
     value: str = Field(..., description="Setting value")
     description: Optional[str] = Field(None, description="Setting description")
-    is_public: bool = Field(
-        False, description="Whether this setting is publicly accessible"
-    )
-    category: str = Field(
-        ..., description="Setting category (e.g., 'general', 'email', 'scholarship')"
-    )
+    is_public: bool = Field(False, description="Whether this setting is publicly accessible")
+    category: str = Field(..., description="Setting category (e.g., 'general', 'email', 'scholarship')")
 
 
 class SystemSettingCreate(SystemSettingBase):
@@ -57,12 +53,8 @@ class EmailTemplateBase(BaseModel):
     cc: Optional[List[EmailStr]] = Field(None, description="CC recipients")
     bcc: Optional[List[EmailStr]] = Field(None, description="BCC recipients")
     description: Optional[str] = Field(None, description="Template description")
-    variables: Optional[List[str]] = Field(
-        None, description="List of template variables"
-    )
-    category: str = Field(
-        ..., description="Template category (e.g., 'application', 'notification')"
-    )
+    variables: Optional[List[str]] = Field(None, description="List of template variables")
+    category: str = Field(..., description="Template category (e.g., 'application', 'notification')")
 
 
 class EmailTemplateCreate(EmailTemplateBase):
@@ -104,9 +96,7 @@ class EmailConfig(BaseModel):
     use_tls: bool = Field(True, description="Use TLS for SMTP")
     default_from_email: EmailStr = Field(..., description="Default sender email")
     default_from_name: str = Field(..., description="Default sender name")
-    reply_to_email: Optional[EmailStr] = Field(
-        None, description="Reply-to email address"
-    )
+    reply_to_email: Optional[EmailStr] = Field(None, description="Reply-to email address")
     reply_to_name: Optional[str] = Field(None, description="Reply-to name")
 
 
@@ -118,6 +108,4 @@ class EmailSendRequest(BaseModel):
     cc: Optional[List[EmailStr]] = Field(None, description="CC recipients")
     bcc: Optional[List[EmailStr]] = Field(None, description="BCC recipients")
     variables: Optional[Dict[str, Any]] = Field(None, description="Template variables")
-    attachments: Optional[List[Dict[str, Any]]] = Field(
-        None, description="Email attachments"
-    )
+    attachments: Optional[List[Dict[str, Any]]] = Field(None, description="Email attachments")

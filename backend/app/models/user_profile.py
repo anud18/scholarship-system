@@ -17,19 +17,13 @@ class UserProfile(Base):
     __tablename__ = "user_profiles"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
-    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
 
     # Bank account information (simplified)
     bank_code = Column(String(20))
     account_number = Column(String(50))
-    bank_document_photo_url = Column(
-        String(500)
-    )  # URL or file path to bank document photo
-    bank_document_object_name = Column(
-        String(500)
-    )  # MinIO object name for the bank document
+    bank_document_photo_url = Column(String(500))  # URL or file path to bank document photo
+    bank_document_object_name = Column(String(500))  # MinIO object name for the bank document
 
     # Advisor information (simplified)
     advisor_name = Column(String(100))  # Professor name
@@ -92,9 +86,7 @@ class UserProfileHistory(Base):
     __tablename__ = "user_profile_history"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     field_name = Column(String(100), nullable=False)
     old_value = Column(Text)
     new_value = Column(Text)

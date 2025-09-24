@@ -96,9 +96,7 @@ async def assign_scholarship_to_admin(
 
 
 @router.get("/pre-authorized-users", response_model=PreAuthorizedUserList)
-async def get_pre_authorized_users(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+async def get_pre_authorized_users(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get all pre-authorized users"""
 
     # Check permissions
@@ -234,9 +232,7 @@ async def get_user_by_nycu_id(
             "status": user.status.value if user.status else None,
             "dept_code": user.dept_code,
             "dept_name": user.dept_name,
-            "last_login_at": user.last_login_at.isoformat()
-            if user.last_login_at
-            else None,
+            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
             "comment": user.comment,
         },
     }

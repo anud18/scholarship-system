@@ -350,9 +350,7 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
 
     for user_data in test_users_data:
         # Check if user exists
-        result = await session.execute(
-            select(User).where(User.nycu_id == user_data["nycu_id"])
-        )
+        result = await session.execute(select(User).where(User.nycu_id == user_data["nycu_id"]))
         existing = result.scalar_one_or_none()
 
         if not existing:
@@ -433,11 +431,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
 
     for scholarship_data in scholarships_data:
         # Check if scholarship already exists
-        result = await session.execute(
-            select(ScholarshipType).where(
-                ScholarshipType.code == scholarship_data["code"]
-            )
-        )
+        result = await session.execute(select(ScholarshipType).where(ScholarshipType.code == scholarship_data["code"]))
         existing = result.scalar_one_or_none()
 
         if not existing:
@@ -1072,8 +1066,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
         # 檢查是否已存在
         result = await session.execute(
             select(ScholarshipSubTypeConfig).where(
-                ScholarshipSubTypeConfig.scholarship_type_id
-                == config_data["scholarship_type_id"],
+                ScholarshipSubTypeConfig.scholarship_type_id == config_data["scholarship_type_id"],
                 ScholarshipSubTypeConfig.sub_type_code == config_data["sub_type_code"],
             )
         )
@@ -1117,18 +1110,10 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     current_year = now.year
 
     # 申請時間設定 - 使用台灣時間，更實際的時間安排
-    base_start = datetime(
-        current_year, 9, 1, 0, 0, 0, tzinfo=taiwan_tz
-    )  # 9月1日 00:00 台灣時間
-    base_end = datetime(
-        current_year, 10, 31, 23, 59, 59, tzinfo=taiwan_tz
-    )  # 10月31日 23:59:59 台灣時間
-    renewal_start = datetime(
-        current_year, 8, 1, 0, 0, 0, tzinfo=taiwan_tz
-    )  # 續領8月1日 00:00 台灣時間
-    renewal_end = datetime(
-        current_year, 9, 15, 23, 59, 59, tzinfo=taiwan_tz
-    )  # 續領9月15日 23:59:59 台灣時間
+    base_start = datetime(current_year, 9, 1, 0, 0, 0, tzinfo=taiwan_tz)  # 9月1日 00:00 台灣時間
+    base_end = datetime(current_year, 10, 31, 23, 59, 59, tzinfo=taiwan_tz)  # 10月31日 23:59:59 台灣時間
+    renewal_start = datetime(current_year, 8, 1, 0, 0, 0, tzinfo=taiwan_tz)  # 續領8月1日 00:00 台灣時間
+    renewal_end = datetime(current_year, 9, 15, 23, 59, 59, tzinfo=taiwan_tz)  # 續領9月15日 23:59:59 台灣時間
 
     # 博士生獎學金子類型配額配置 - 統一且清晰的配額分配
     PHD_QUOTA_CONFIG = {
@@ -1182,12 +1167,8 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     def create_base_config(scholarship, academic_year, **overrides):
         """創建基礎配置模板"""
         # 設定有效期間 - 學年度的完整期間，使用台灣時間
-        academic_start = datetime(
-            current_year, 8, 1, 0, 0, 0, tzinfo=taiwan_tz
-        )  # 8月1日 00:00 台灣時間
-        academic_end = datetime(
-            current_year + 1, 7, 31, 23, 59, 59, tzinfo=taiwan_tz
-        )  # 隔年7月31日 23:59:59 台灣時間
+        academic_start = datetime(current_year, 8, 1, 0, 0, 0, tzinfo=taiwan_tz)  # 8月1日 00:00 台灣時間
+        academic_end = datetime(current_year + 1, 7, 31, 23, 59, 59, tzinfo=taiwan_tz)  # 隔年7月31日 23:59:59 台灣時間
 
         base_config = {
             "scholarship_type_id": scholarship.id,
@@ -1250,10 +1231,8 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
             renewal_start_offset = 11 if professor_required else 1
             schedule.update(
                 {
-                    "renewal_college_review_start": renewal_end
-                    + timedelta(days=renewal_start_offset),
-                    "renewal_college_review_end": renewal_end
-                    + timedelta(days=renewal_start_offset + 10),
+                    "renewal_college_review_start": renewal_end + timedelta(days=renewal_start_offset),
+                    "renewal_college_review_end": renewal_end + timedelta(days=renewal_start_offset + 10),
                 }
             )
 
@@ -1289,25 +1268,13 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                         total_quota=None,
                         quotas=None,
                         # 113年的申請時間 (已過期)
-                        application_start_date=datetime(
-                            current_year - 1, 9, 1, 0, 0, 0, tzinfo=taiwan_tz
-                        ),
-                        application_end_date=datetime(
-                            current_year - 1, 10, 31, 23, 59, 59, tzinfo=taiwan_tz
-                        ),
-                        renewal_application_start_date=datetime(
-                            current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz
-                        ),
-                        renewal_application_end_date=datetime(
-                            current_year - 1, 9, 15, 23, 59, 59, tzinfo=taiwan_tz
-                        ),
+                        application_start_date=datetime(current_year - 1, 9, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                        application_end_date=datetime(current_year - 1, 10, 31, 23, 59, 59, tzinfo=taiwan_tz),
+                        renewal_application_start_date=datetime(current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                        renewal_application_end_date=datetime(current_year - 1, 9, 15, 23, 59, 59, tzinfo=taiwan_tz),
                         # 113年的有效期間 (已過期)
-                        effective_start_date=datetime(
-                            current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz
-                        ),
-                        effective_end_date=datetime(
-                            current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz
-                        ),
+                        effective_start_date=datetime(current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                        effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
                         is_active=True,
                     )
                     config.update(
@@ -1372,9 +1339,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                     },
                 }
 
-                total_old_quota = sum(
-                    sum(quotas.values()) for quotas in old_phd_config.values()
-                )
+                total_old_quota = sum(sum(quotas.values()) for quotas in old_phd_config.values())
 
                 config = create_base_config(
                     scholarship,
@@ -1391,25 +1356,13 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                     total_quota=total_old_quota,
                     quotas=old_phd_config,
                     # 113年的申請時間 (已過期)
-                    application_start_date=datetime(
-                        current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz
-                    ),
-                    application_end_date=datetime(
-                        current_year - 1, 9, 30, 23, 59, 59, tzinfo=taiwan_tz
-                    ),
-                    renewal_application_start_date=datetime(
-                        current_year - 1, 7, 1, 0, 0, 0, tzinfo=taiwan_tz
-                    ),
-                    renewal_application_end_date=datetime(
-                        current_year - 1, 8, 15, 23, 59, 59, tzinfo=taiwan_tz
-                    ),
+                    application_start_date=datetime(current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    application_end_date=datetime(current_year - 1, 9, 30, 23, 59, 59, tzinfo=taiwan_tz),
+                    renewal_application_start_date=datetime(current_year - 1, 7, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    renewal_application_end_date=datetime(current_year - 1, 8, 15, 23, 59, 59, tzinfo=taiwan_tz),
                     # 113年的有效期間 (已過期)
-                    effective_start_date=datetime(
-                        current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz
-                    ),
-                    effective_end_date=datetime(
-                        current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz
-                    ),
+                    effective_start_date=datetime(current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
                     is_active=True,
                 )
                 config.update(
@@ -1441,25 +1394,13 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                     total_quota=None,
                     quotas=None,
                     # 113年的申請時間 (已過期)
-                    application_start_date=datetime(
-                        current_year - 1, 9, 1, 0, 0, 0, tzinfo=taiwan_tz
-                    ),
-                    application_end_date=datetime(
-                        current_year - 1, 10, 31, 23, 59, 59, tzinfo=taiwan_tz
-                    ),
-                    renewal_application_start_date=datetime(
-                        current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz
-                    ),
-                    renewal_application_end_date=datetime(
-                        current_year - 1, 9, 15, 23, 59, 59, tzinfo=taiwan_tz
-                    ),
+                    application_start_date=datetime(current_year - 1, 9, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    application_end_date=datetime(current_year - 1, 10, 31, 23, 59, 59, tzinfo=taiwan_tz),
+                    renewal_application_start_date=datetime(current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    renewal_application_end_date=datetime(current_year - 1, 9, 15, 23, 59, 59, tzinfo=taiwan_tz),
                     # 113年的有效期間 (已過期)
-                    effective_start_date=datetime(
-                        current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz
-                    ),
-                    effective_end_date=datetime(
-                        current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz
-                    ),
+                    effective_start_date=datetime(current_year - 1, 8, 1, 0, 0, 0, tzinfo=taiwan_tz),
+                    effective_end_date=datetime(current_year, 7, 31, 23, 59, 59, tzinfo=taiwan_tz),
                     is_active=True,
                 )
                 config.update(
@@ -1497,18 +1438,10 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
                         ren_start = renewal_start
                         ren_end = renewal_end
                     else:
-                        app_start = datetime(
-                            current_year + 1, 2, 1, 0, 0, 0, tzinfo=taiwan_tz
-                        )
-                        app_end = datetime(
-                            current_year + 1, 3, 31, 23, 59, 59, tzinfo=taiwan_tz
-                        )
-                        ren_start = datetime(
-                            current_year + 1, 1, 1, 0, 0, 0, tzinfo=taiwan_tz
-                        )
-                        ren_end = datetime(
-                            current_year + 1, 1, 31, 23, 59, 59, tzinfo=taiwan_tz
-                        )
+                        app_start = datetime(current_year + 1, 2, 1, 0, 0, 0, tzinfo=taiwan_tz)
+                        app_end = datetime(current_year + 1, 3, 31, 23, 59, 59, tzinfo=taiwan_tz)
+                        ren_start = datetime(current_year + 1, 1, 1, 0, 0, 0, tzinfo=taiwan_tz)
+                        ren_end = datetime(current_year + 1, 1, 31, 23, 59, 59, tzinfo=taiwan_tz)
 
                     config = create_base_config(
                         scholarship,
@@ -1543,9 +1476,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
 
             elif scholarship.code == "phd":
                 # 博士生獎學金 - 學年制，矩陣配額管理
-                total_quota = sum(
-                    sum(quotas.values()) for quotas in PHD_QUOTA_CONFIG.values()
-                )
+                total_quota = sum(sum(quotas.values()) for quotas in PHD_QUOTA_CONFIG.values())
 
                 config = create_base_config(
                     scholarship,
@@ -1622,9 +1553,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     created_count = 0
     for config_data in quota_configs_data:
         result = await session.execute(
-            select(ScholarshipConfiguration).where(
-                ScholarshipConfiguration.config_code == config_data["config_code"]
-            )
+            select(ScholarshipConfiguration).where(ScholarshipConfiguration.config_code == config_data["config_code"])
         )
         existing = result.scalar_one_or_none()
 
@@ -1642,12 +1571,8 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
 
     # 輸出配置摘要
     print("✅ Scholarship configurations created/updated successfully!")
-    print(
-        f"📋 Total configurations: {created_count} new, {len(quota_configs_data) - created_count} updated"
-    )
-    print(
-        f"📊 Total configurations generated: {len(quota_configs_data)} (covering 2 academic years)"
-    )
+    print(f"📋 Total configurations: {created_count} new, {len(quota_configs_data) - created_count} updated")
+    print(f"📊 Total configurations generated: {len(quota_configs_data)} (covering 2 academic years)")
 
     # 分別統計113和114年配置
     configs_113 = [c for c in quota_configs_data if c["academic_year"] == 113]
@@ -1722,9 +1647,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
             "K": 2,
         },
     }
-    old_phd_totals = {
-        subtype: sum(quotas.values()) for subtype, quotas in old_phd_config.items()
-    }
+    old_phd_totals = {subtype: sum(quotas.values()) for subtype, quotas in old_phd_config.items()}
     total_old_phd = sum(old_phd_totals.values())
     print(
         f"     總配額: {total_old_phd}名 (國科會:{old_phd_totals['nstc']}, 教育部一萬:{old_phd_totals['moe_1w']}, 教育部二萬:{old_phd_totals['moe_2w']}) [ACTIVE]"
@@ -1736,9 +1659,7 @@ async def createQuotaManagementConfigurations(session: AsyncSession) -> None:
     print("   - 博士生獎學金: 學年制，新矩陣配額管理，金額 50,000元 [ACTIVE]")
 
     # 計算並顯示114年博士生獎學金配額摘要
-    phd_totals = {
-        subtype: sum(quotas.values()) for subtype, quotas in PHD_QUOTA_CONFIG.items()
-    }
+    phd_totals = {subtype: sum(quotas.values()) for subtype, quotas in PHD_QUOTA_CONFIG.items()}
     total_phd = sum(phd_totals.values())
     print(f"     總配額: {total_phd}名")
     print(f"     • 國科會: {phd_totals['nstc']}名")
@@ -1759,11 +1680,7 @@ async def createTestApplicationsAndQuotaUsage(session: AsyncSession) -> None:
     print("📊 Setting up quota management data...")
 
     # Verify quota configurations exist
-    result = await session.execute(
-        select(ScholarshipConfiguration).where(
-            ScholarshipConfiguration.is_active == True
-        )
-    )
+    result = await session.execute(select(ScholarshipConfiguration).where(ScholarshipConfiguration.is_active == True))
     configs = result.scalars().all()
 
     print(f"✅ Found {len(configs)} active scholarship configurations:")
@@ -1827,18 +1744,12 @@ async def createSampleHistoricalApplications(session: AsyncSession) -> None:
 
     # Filter users by type
     students = [u for u in users if u.user_type == UserType.STUDENT]
-    professors = [
-        u
-        for u in users
-        if u.user_type == UserType.EMPLOYEE and u.role == UserRole.PROFESSOR
-    ]
+    professors = [u for u in users if u.user_type == UserType.EMPLOYEE and u.role == UserRole.PROFESSOR]
     admins = [u for u in users if u.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]]
 
     if not students or not professors or not admins:
         print("⚠️ Not enough test users to create applications")
-        print(
-            f"   Students: {len(students)}, Professors: {len(professors)}, Admins: {len(admins)}"
-        )
+        print(f"   Students: {len(students)}, Professors: {len(professors)}, Admins: {len(admins)}")
         print("   Available users:")
         for u in users[:5]:  # Show first 5 users for debugging
             print(f"     - {u.nycu_id} ({u.user_type}, role: {u.role})")
@@ -1892,12 +1803,8 @@ async def createSampleHistoricalApplications(session: AsyncSession) -> None:
                 "reviewer_id": admin.id,
                 "review_score": round(80 + (i * 2.5), 2),
                 "submitted_at": datetime.now(timezone.utc) - timedelta(days=30 + i),
-                "reviewed_at": datetime.now(timezone.utc) - timedelta(days=20 + i)
-                if i % 2 == 0
-                else None,
-                "approved_at": datetime.now(timezone.utc) - timedelta(days=10 + i)
-                if i < 4
-                else None,
+                "reviewed_at": datetime.now(timezone.utc) - timedelta(days=20 + i) if i % 2 == 0 else None,
+                "approved_at": datetime.now(timezone.utc) - timedelta(days=10 + i) if i < 4 else None,
                 "created_at": datetime.now(timezone.utc) - timedelta(days=35 + i),
                 "updated_at": datetime.now(timezone.utc) - timedelta(days=5 + i),
             }
@@ -1952,12 +1859,8 @@ async def createSampleHistoricalApplications(session: AsyncSession) -> None:
                 "reviewer_id": admin.id,
                 "review_score": round(85 + (i * 1.5), 2),
                 "submitted_at": datetime.now(timezone.utc) - timedelta(days=45 + i),
-                "reviewed_at": datetime.now(timezone.utc) - timedelta(days=25 + i)
-                if i % 3 == 0
-                else None,
-                "approved_at": datetime.now(timezone.utc) - timedelta(days=15 + i)
-                if i < 6
-                else None,
+                "reviewed_at": datetime.now(timezone.utc) - timedelta(days=25 + i) if i % 3 == 0 else None,
+                "approved_at": datetime.now(timezone.utc) - timedelta(days=15 + i) if i < 6 else None,
                 "created_at": datetime.now(timezone.utc) - timedelta(days=50 + i),
                 "updated_at": datetime.now(timezone.utc) - timedelta(days=10 + i),
             }
@@ -2009,12 +1912,8 @@ async def createSampleHistoricalApplications(session: AsyncSession) -> None:
                 "reviewer_id": admin.id,
                 "review_score": round(90 + (i * 1.0), 2),
                 "submitted_at": datetime.now(timezone.utc) - timedelta(days=25 + i),
-                "reviewed_at": datetime.now(timezone.utc) - timedelta(days=15 + i)
-                if i % 2 == 0
-                else None,
-                "approved_at": datetime.now(timezone.utc) - timedelta(days=5 + i)
-                if i < 3
-                else None,
+                "reviewed_at": datetime.now(timezone.utc) - timedelta(days=15 + i) if i % 2 == 0 else None,
+                "approved_at": datetime.now(timezone.utc) - timedelta(days=5 + i) if i < 3 else None,
                 "created_at": datetime.now(timezone.utc) - timedelta(days=30 + i),
                 "updated_at": datetime.now(timezone.utc) - timedelta(days=2 + i),
             }
@@ -2138,9 +2037,7 @@ async def createTestEmailHistory(session: AsyncSession) -> None:
     print("📧 Creating test email history records...")
 
     # Get test users for sending emails
-    result = await session.execute(
-        select(User).where(User.nycu_id.in_(["admin", "super_admin", "professor"]))
-    )
+    result = await session.execute(select(User).where(User.nycu_id.in_(["admin", "super_admin", "professor"])))
     users = {user.nycu_id: user for user in result.scalars().all()}
 
     # Get scholarship types for categorization
@@ -2154,9 +2051,7 @@ async def createTestEmailHistory(session: AsyncSession) -> None:
             "subject": "博士生獎學金申請開放通知",
             "body": "親愛的同學您好，\n\n113學年度第一學期博士生獎學金申請已開放，請於期限內完成申請。\n\n獎學金管理系統",
             "email_category": EmailCategory.APPLICATION_STUDENT,
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,  # PhD scholarship
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,  # PhD scholarship
             "sent_by_user_id": users.get("admin").id if users.get("admin") else None,
             "sent_by_system": False,
             "status": EmailStatus.SENT,
@@ -2168,9 +2063,7 @@ async def createTestEmailHistory(session: AsyncSession) -> None:
             "subject": "學生推薦信請求通知",
             "body": "親愛的教授您好，\n\n您的指導學生 王博士研究生 申請博士生獎學金，需要您的推薦信。請登入系統查看詳情。\n\n獎學金管理系統",
             "email_category": EmailCategory.RECOMMENDATION_PROFESSOR,
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "sent_by_user_id": None,
             "sent_by_system": True,
             "status": EmailStatus.SENT,
@@ -2182,9 +2075,7 @@ async def createTestEmailHistory(session: AsyncSession) -> None:
             "subject": "資訊學院獎學金審核通知",
             "body": "親愛的審核員您好，\n\n有新的獎學金申請案件需要您的審核。請登入系統進行審核作業。\n\n申請件數：5件\n待審核期限：2天\n\n獎學金管理系統",
             "email_category": EmailCategory.REVIEW_COLLEGE,
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "sent_by_user_id": None,
             "sent_by_system": True,
             "status": EmailStatus.SENT,
@@ -2196,12 +2087,8 @@ async def createTestEmailHistory(session: AsyncSession) -> None:
             "subject": "申請文件補件通知",
             "body": "親愛的同學您好，\n\n您的獎學金申請文件需要補件：\n- 成績單正本\n- 推薦信\n\n請於3天內完成補件，逾期將影響審核結果。\n\n獎學金管理系統",
             "email_category": EmailCategory.SUPPLEMENT_STUDENT,
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
-            "sent_by_user_id": users.get("professor").id
-            if users.get("professor")
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "sent_by_user_id": users.get("professor").id if users.get("professor") else None,
             "sent_by_system": False,
             "status": EmailStatus.SENT,
             "sent_at": datetime.now(timezone.utc) - timedelta(days=15),
@@ -2212,9 +2099,7 @@ async def createTestEmailHistory(session: AsyncSession) -> None:
             "subject": "獎學金審核結果通知",
             "body": "親愛的同學您好，\n\n恭喜您！您的博士生獎學金申請已通過審核。\n\n獎學金金額：NT$ 40,000\n發放日期：113年10月31日\n\n請注意相關權利義務事項。\n\n獎學金管理系統",
             "email_category": EmailCategory.RESULT_STUDENT,
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "sent_by_user_id": None,
             "sent_by_system": True,
             "status": EmailStatus.SENT,
@@ -2226,9 +2111,7 @@ async def createTestEmailHistory(session: AsyncSession) -> None:
             "subject": "學生獲獎通知（指導教授）",
             "body": "親愛的教授您好，\n\n您的指導學生 劉通訊博士 已獲得博士生獎學金。\n\n獲獎學生資訊：\n- 姓名：劉通訊博士\n- 學號：ee_phd002\n- 獎學金：博士生獎學金\n- 金額：NT$ 40,000\n\n感謝您的指導。\n\n獎學金管理系統",
             "email_category": EmailCategory.RESULT_PROFESSOR,
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "sent_by_user_id": None,
             "sent_by_system": True,
             "status": EmailStatus.SENT,
@@ -2240,9 +2123,7 @@ async def createTestEmailHistory(session: AsyncSession) -> None:
             "subject": "學院獎學金分配結果通知",
             "body": "親愛的學院審核員您好，\n\n電機學院本期獎學金分配已完成：\n\n獲獎名單：\n- 劉通訊博士（博士生獎學金）\n- 蔡半導體博士（博士生獎學金）\n\n總計金額：NT$ 80,000\n剩餘名額：0名\n\n獎學金管理系統",
             "email_category": EmailCategory.RESULT_COLLEGE,
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "sent_by_user_id": None,
             "sent_by_system": True,
             "status": EmailStatus.SENT,
@@ -2254,12 +2135,8 @@ async def createTestEmailHistory(session: AsyncSession) -> None:
             "subject": "獎學金造冊確認通知",
             "body": "Dear International Student,\n\n您的獎學金已列入本期造冊名單。請確認以下資訊：\n\n- 獎學金：International PhD Scholarship\n- 金額：NT$ 40,000\n- 銀行帳戶：請確認您的銀行帳戶資訊正確\n\n如有疑問請聯繫國際事務處。\n\nScholarship Management System",
             "email_category": EmailCategory.ROSTER_STUDENT,
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
-            "sent_by_user_id": users.get("super_admin").id
-            if users.get("super_admin")
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
+            "sent_by_user_id": users.get("super_admin").id if users.get("super_admin") else None,
             "sent_by_system": False,
             "status": EmailStatus.SENT,
             "sent_at": datetime.now(timezone.utc) - timedelta(days=3),
@@ -2317,9 +2194,7 @@ async def createTestScheduledEmails(session: AsyncSession) -> None:
     print("📅 Creating test scheduled email records...")
 
     # Get test users for creating scheduled emails
-    result = await session.execute(
-        select(User).where(User.nycu_id.in_(["admin", "super_admin", "professor"]))
-    )
+    result = await session.execute(select(User).where(User.nycu_id.in_(["admin", "super_admin", "professor"])))
     users = {user.nycu_id: user for user in result.scalars().all()}
 
     # Get scholarship types for categorization
@@ -2334,9 +2209,7 @@ async def createTestScheduledEmails(session: AsyncSession) -> None:
             "body": "親愛的同學您好，\n\n提醒您博士生獎學金申請即將截止，請把握最後機會。\n\n截止日期：2025年9月25日 23:59\n注意事項：\n- 請確認所有必填欄位已完成\n- 上傳文件需為PDF格式\n- 推薦信需由指導教授提供\n\n如有問題請聯繫獎學金辦公室。\n\n獎學金管理系統",
             "email_category": EmailCategory.APPLICATION_STUDENT,
             "scheduled_for": datetime.now(timezone.utc) + timedelta(hours=2),
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "requires_approval": False,
             "created_by_user_id": users.get("admin").id if users.get("admin") else 1,
             "status": ScheduleStatus.PENDING,
@@ -2348,16 +2221,10 @@ async def createTestScheduledEmails(session: AsyncSession) -> None:
             "body": "親愛的教授您好，\n\n您有學生的推薦信即將截止，請盡快完成：\n\n學生姓名：張電機博士\n申請獎學金：博士生獎學金\n截止時間：2025年9月23日 18:00\n\n請登入系統完成推薦信撰寫。\n\n感謝您的配合。\n\n獎學金管理系統",
             "email_category": EmailCategory.RECOMMENDATION_PROFESSOR,
             "scheduled_for": datetime.now(timezone.utc) + timedelta(hours=6),
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "requires_approval": True,
-            "created_by_user_id": users.get("super_admin").id
-            if users.get("super_admin")
-            else 2,
-            "approved_by_user_id": users.get("super_admin").id
-            if users.get("super_admin")
-            else 2,
+            "created_by_user_id": users.get("super_admin").id if users.get("super_admin") else 2,
+            "approved_by_user_id": users.get("super_admin").id if users.get("super_admin") else 2,
             "approved_at": datetime.now(timezone.utc),
             "approval_notes": "例行性推薦信提醒，可自動發送",
             "status": ScheduleStatus.PENDING,
@@ -2369,9 +2236,7 @@ async def createTestScheduledEmails(session: AsyncSession) -> None:
             "body": "親愛的審核員您好，\n\n您有獎學金申請案件即將到期，請盡快完成審核：\n\n待審核案件：3件\n申請人：\n- 王資訊博士（申請編號：CS2025001）\n- 李演算法碩士（申請編號：CS2025002）\n- 陳人工智慧博士（申請編號：CS2025003）\n\n審核截止：2025年9月24日 17:00\n\n請登入系統進行審核作業。\n\n獎學金管理系統",
             "email_category": EmailCategory.REVIEW_COLLEGE,
             "scheduled_for": datetime.now(timezone.utc) + timedelta(days=1),
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "requires_approval": False,
             "created_by_user_id": users.get("admin").id if users.get("admin") else 1,
             "status": ScheduleStatus.PENDING,
@@ -2383,13 +2248,9 @@ async def createTestScheduledEmails(session: AsyncSession) -> None:
             "body": "親愛的同學您好，\n\n您的獎學金申請需要補件，請在期限內完成：\n\n缺件項目：\n- 在學證明書（須為最新版本）\n- 指導教授同意書\n\n補件期限：2025年9月26日 23:59\n逾期將視為放棄申請。\n\n請儘早完成補件程序。\n\n獎學金管理系統",
             "email_category": EmailCategory.SUPPLEMENT_STUDENT,
             "scheduled_for": datetime.now(timezone.utc) + timedelta(days=2),
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "requires_approval": True,
-            "created_by_user_id": users.get("professor").id
-            if users.get("professor")
-            else 3,
+            "created_by_user_id": users.get("professor").id if users.get("professor") else 3,
             "status": ScheduleStatus.PENDING,
             "priority": 4,
         },
@@ -2402,9 +2263,7 @@ async def createTestScheduledEmails(session: AsyncSession) -> None:
             "scheduled_for": datetime.now(timezone.utc) + timedelta(days=3),
             "scholarship_type_id": None,
             "requires_approval": True,
-            "created_by_user_id": users.get("super_admin").id
-            if users.get("super_admin")
-            else 2,
+            "created_by_user_id": users.get("super_admin").id if users.get("super_admin") else 2,
             "status": ScheduleStatus.PENDING,
             "priority": 5,
         },
@@ -2414,9 +2273,7 @@ async def createTestScheduledEmails(session: AsyncSession) -> None:
             "body": "親愛的同學您好，\n\n恭喜您獲得博士生獎學金！\n\n獎學金詳情：\n- 獎學金名稱：博士生獎學金\n- 金額：NT$ 40,000\n- 核發學期：113學年度第一學期\n- 預計發放日期：2025年10月31日\n\n權利義務：\n- 需維持良好學業成績\n- 協助系上教學或研究工作\n- 按時參與獎學金受獎生活動\n\n詳細條款請參閱獎學金規定。\n\n再次恭喜您的獲獎！\n\n獎學金管理系統",
             "email_category": EmailCategory.RESULT_STUDENT,
             "scheduled_for": datetime.now(timezone.utc) + timedelta(hours=12),
-            "scholarship_type_id": scholarship_types[1].id
-            if len(scholarship_types) > 1
-            else None,
+            "scholarship_type_id": scholarship_types[1].id if len(scholarship_types) > 1 else None,
             "requires_approval": False,
             "created_by_user_id": users.get("admin").id if users.get("admin") else 1,
             "status": ScheduleStatus.PENDING,
@@ -2452,9 +2309,7 @@ async def initializeSystemEmailTemplates(session: AsyncSession) -> None:
     existing_templates = list(result.scalars().all())
 
     if existing_templates:
-        print(
-            f"   📊 Found {len(existing_templates)} existing templates, skipping initialization"
-        )
+        print(f"   📊 Found {len(existing_templates)} existing templates, skipping initialization")
         return
 
     # Define default email templates
@@ -2593,9 +2448,7 @@ async def initializeSystemEmailTemplates(session: AsyncSession) -> None:
     for template_data in default_templates:
         template = EmailTemplate(**template_data)
         session.add(template)
-        print(
-            f"      ✅ Created template: {template_data['key']} ({template_data['sending_type'].value})"
-        )
+        print(f"      ✅ Created template: {template_data['key']} ({template_data['sending_type'].value})")
 
     await session.commit()
 

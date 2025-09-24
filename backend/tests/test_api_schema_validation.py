@@ -67,9 +67,7 @@ class TestAPISchemaValidation:
         ]
 
     @pytest.mark.asyncio
-    async def test_eligible_scholarships_schema(
-        self, test_client, auth_headers, monkeypatch
-    ):
+    async def test_eligible_scholarships_schema(self, test_client, auth_headers, monkeypatch):
         """Test that /api/v1/scholarships/eligible returns valid EligibleScholarshipResponse"""
 
         # Mock the database and services
@@ -77,9 +75,7 @@ class TestAPISchemaValidation:
             return None
 
         def mock_get_current_user():
-            return User(
-                id=1, nycu_id="test", email="test@test.com", role=UserRole.STUDENT
-            )
+            return User(id=1, nycu_id="test", email="test@test.com", role=UserRole.STUDENT)
 
         async def mock_get_eligible_scholarships(student):
             from app.models.enums import (
@@ -110,9 +106,7 @@ class TestAPISchemaValidation:
 
         # Apply mocks
         monkeypatch.setattr("app.core.deps.get_db", mock_get_db)
-        monkeypatch.setattr(
-            "app.core.security.get_current_user", lambda: mock_get_current_user()
-        )
+        monkeypatch.setattr("app.core.security.get_current_user", lambda: mock_get_current_user())
 
         # Mock the ScholarshipService.get_eligible_scholarships method
         def mock_scholarship_service_init(self, db):
@@ -125,14 +119,10 @@ class TestAPISchemaValidation:
         )
 
         # Make the API call
-        response = test_client.get(
-            "/api/v1/scholarships/eligible", headers=auth_headers
-        )
+        response = test_client.get("/api/v1/scholarships/eligible", headers=auth_headers)
 
         # Check that the response is successful (no validation error)
-        assert (
-            response.status_code == 200
-        ), f"Expected 200, got {response.status_code}: {response.text}"
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
 
         # Check that the response can be parsed as JSON
         data = response.json()
@@ -162,22 +152,14 @@ class TestAPISchemaValidation:
             ]
 
             for field in required_fields:
-                assert (
-                    field in scholarship
-                ), f"Required field '{field}' missing from response"
+                assert field in scholarship, f"Required field '{field}' missing from response"
 
             # Verify field types
             assert isinstance(scholarship["id"], int), "id should be integer"
-            assert isinstance(
-                scholarship["eligible_sub_types"], list
-            ), "eligible_sub_types should be list"
+            assert isinstance(scholarship["eligible_sub_types"], list), "eligible_sub_types should be list"
             assert isinstance(scholarship["semester"], str), "semester should be string"
-            assert isinstance(
-                scholarship["application_cycle"], str
-            ), "application_cycle should be string"
-            assert isinstance(
-                scholarship["sub_type_selection_mode"], str
-            ), "sub_type_selection_mode should be string"
+            assert isinstance(scholarship["application_cycle"], str), "application_cycle should be string"
+            assert isinstance(scholarship["sub_type_selection_mode"], str), "sub_type_selection_mode should be string"
             assert isinstance(scholarship["passed"], list), "passed should be list"
             assert isinstance(scholarship["warnings"], list), "warnings should be list"
             assert isinstance(scholarship["errors"], list), "errors should be list"

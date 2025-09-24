@@ -69,12 +69,8 @@ async def test_document_cloning():
                 db.add(profile)
             else:
                 # 更新現有個人資料
-                profile.bank_document_photo_url = (
-                    "/api/v1/user-profiles/files/bank_documents/test_bank.jpg"
-                )
-                profile.bank_document_object_name = (
-                    f"user-profiles/{user.id}/bank-documents/test_bank.jpg"
-                )
+                profile.bank_document_photo_url = "/api/v1/user-profiles/files/bank_documents/test_bank.jpg"
+                profile.bank_document_object_name = f"user-profiles/{user.id}/bank-documents/test_bank.jpg"
 
             await db.commit()
             print("✅ 個人資料已設定，包含銀行文件")
@@ -114,9 +110,7 @@ async def test_document_cloning():
             print("\n🔍 檢查複製結果...")
 
             # 查詢申請的文件
-            stmt = select(ApplicationFile).where(
-                ApplicationFile.application_id == application.id
-            )
+            stmt = select(ApplicationFile).where(ApplicationFile.application_id == application.id)
             result = await db.execute(stmt)
             files = result.scalars().all()
 

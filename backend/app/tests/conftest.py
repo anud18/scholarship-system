@@ -58,15 +58,11 @@ except ImportError:
     settings.database_url = TEST_DATABASE_URL
 
 # Create session factories
-TestingSessionLocalSync = sessionmaker(
-    test_engine_sync, class_=Session, expire_on_commit=False
-)
+TestingSessionLocalSync = sessionmaker(test_engine_sync, class_=Session, expire_on_commit=False)
 
 # Only create async session if async engine is available
 if test_engine:
-    TestingSessionLocal = async_sessionmaker(
-        test_engine, class_=AsyncSession, expire_on_commit=False
-    )
+    TestingSessionLocal = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 else:
     TestingSessionLocal = None
 
@@ -190,9 +186,7 @@ async def test_scholarship(db: AsyncSession) -> ScholarshipType:
 
 
 @pytest_asyncio.fixture
-async def test_application(
-    db: AsyncSession, test_user: User, test_scholarship: ScholarshipType
-) -> Application:
+async def test_application(db: AsyncSession, test_user: User, test_scholarship: ScholarshipType) -> Application:
     """Create a test application."""
     application = Application(
         user_id=test_user.id,
@@ -202,9 +196,7 @@ async def test_application(
         academic_year=2024,
         semester="first",
         student_data={"name": "Test Student"},
-        submitted_form_data={
-            "personal_statement": "This is my test personal statement."
-        },
+        submitted_form_data={"personal_statement": "This is my test personal statement."},
         agree_terms=True,
     )
     db.add(application)
@@ -399,12 +391,8 @@ def performance_monitor():
 
         def assert_performance(self, max_duration: float):
             """Assert that operation completed within max_duration seconds."""
-            assert (
-                self.duration is not None
-            ), "Performance monitoring not started/stopped"
-            assert (
-                self.duration < max_duration
-            ), f"Operation took {self.duration:.2f}s, expected < {max_duration}s"
+            assert self.duration is not None, "Performance monitoring not started/stopped"
+            assert self.duration < max_duration, f"Operation took {self.duration:.2f}s, expected < {max_duration}s"
 
     return PerformanceMonitor()
 

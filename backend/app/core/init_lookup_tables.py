@@ -40,9 +40,7 @@ async def initLookupTables(session: AsyncSession) -> None:
     ]
 
     for degree_data in degrees_data:
-        result = await session.execute(
-            select(Degree).where(Degree.id == degree_data["id"])
-        )
+        result = await session.execute(select(Degree).where(Degree.id == degree_data["id"]))
         existing = result.scalar_one_or_none()
 
         if not existing:
@@ -71,9 +69,7 @@ async def initLookupTables(session: AsyncSession) -> None:
     ]
 
     for identity_data in identities_data:
-        result = await session.execute(
-            select(Identity).where(Identity.id == identity_data["id"])
-        )
+        result = await session.execute(select(Identity).where(Identity.id == identity_data["id"]))
         existing = result.scalar_one_or_none()
 
         if not existing:
@@ -97,9 +93,7 @@ async def initLookupTables(session: AsyncSession) -> None:
     ]
 
     for status_data in studying_statuses_data:
-        result = await session.execute(
-            select(StudyingStatus).where(StudyingStatus.id == status_data["id"])
-        )
+        result = await session.execute(select(StudyingStatus).where(StudyingStatus.id == status_data["id"]))
         existing = result.scalar_one_or_none()
 
         if not existing:
@@ -120,11 +114,7 @@ async def initLookupTables(session: AsyncSession) -> None:
     ]
 
     for school_identity_data in school_identities_data:
-        result = await session.execute(
-            select(SchoolIdentity).where(
-                SchoolIdentity.id == school_identity_data["id"]
-            )
-        )
+        result = await session.execute(select(SchoolIdentity).where(SchoolIdentity.id == school_identity_data["id"]))
         existing = result.scalar_one_or_none()
 
         if not existing:
@@ -167,9 +157,7 @@ async def initLookupTables(session: AsyncSession) -> None:
     ]
 
     for academy_data in academies_data:
-        result = await session.execute(
-            select(Academy).where(Academy.id == academy_data["id"])
-        )
+        result = await session.execute(select(Academy).where(Academy.id == academy_data["id"]))
         existing = result.scalar_one_or_none()
 
         if not existing:
@@ -198,9 +186,7 @@ async def initLookupTables(session: AsyncSession) -> None:
     ]
 
     for dept_data in departments_data:
-        result = await session.execute(
-            select(Department).where(Department.id == dept_data["id"])
-        )
+        result = await session.execute(select(Department).where(Department.id == dept_data["id"]))
         existing = result.scalar_one_or_none()
 
         if not existing:

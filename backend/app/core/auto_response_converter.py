@@ -163,15 +163,11 @@ def serialize_value(value: Any) -> Any:
     return value
 
 
-def create_response_instance(
-    data: Dict[str, Any], target_model: Type[BaseModel]
-) -> BaseModel:
+def create_response_instance(data: Dict[str, Any], target_model: Type[BaseModel]) -> BaseModel:
     """Create response model instance with smart field mapping"""
 
     # Get the model's fields
-    model_fields = (
-        target_model.model_fields if hasattr(target_model, "model_fields") else {}
-    )
+    model_fields = target_model.model_fields if hasattr(target_model, "model_fields") else {}
 
     # Prepare the data for the model
     model_data = {}
@@ -182,9 +178,7 @@ def create_response_instance(
             model_data[field_name] = data[field_name]
         else:
             # Try to infer or provide defaults
-            model_data[field_name] = get_default_value_for_field(
-                field_name, field_info, data
-            )
+            model_data[field_name] = get_default_value_for_field(field_name, field_info, data)
 
     # Add any extra fields that might be needed
     for key, value in data.items():
@@ -199,9 +193,7 @@ def create_response_instance(
         raise
 
 
-def get_default_value_for_field(
-    field_name: str, field_info: Any, source_data: Dict[str, Any]
-) -> Any:
+def get_default_value_for_field(field_name: str, field_info: Any, source_data: Dict[str, Any]) -> Any:
     """Get default value for a field that's not in source data"""
 
     # Common patterns for missing fields
@@ -236,9 +228,7 @@ def get_default_value_for_field(
 
 
 # Enhanced decorator with validation
-def auto_convert_and_validate(
-    response_model: Type[BaseModel], validate_in_dev: bool = True
-):
+def auto_convert_and_validate(response_model: Type[BaseModel], validate_in_dev: bool = True):
     """
     Enhanced decorator that converts AND validates responses
 
@@ -268,23 +258,17 @@ def auto_convert_and_validate(
                         if isinstance(converted_result, list):
                             for item in converted_result:
                                 if not isinstance(item, response_model):
-                                    raise ValueError(
-                                        f"Conversion failed: expected {response_model}, got {type(item)}"
-                                    )
+                                    raise ValueError(f"Conversion failed: expected {response_model}, got {type(item)}")
                         else:
                             if not isinstance(converted_result, response_model):
                                 raise ValueError(
                                     f"Conversion failed: expected {response_model}, got {type(converted_result)}"
                                 )
 
-                        logger.debug(
-                            f"✅ Auto-conversion and validation passed for {func.__name__}"
-                        )
+                        logger.debug(f"✅ Auto-conversion and validation passed for {func.__name__}")
 
                     except Exception as e:
-                        logger.error(
-                            f"❌ Auto-conversion validation failed for {func.__name__}: {e}"
-                        )
+                        logger.error(f"❌ Auto-conversion validation failed for {func.__name__}: {e}")
                         logger.error(f"Original result type: {type(result)}")
                         logger.error(f"Converted result type: {type(converted_result)}")
                         if settings.environment == "development":

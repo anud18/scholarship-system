@@ -75,9 +75,7 @@ class User(Base):
     raw_data = Column(JSON)  # 儲存整包 Portal 回傳資料（可選）
 
     # Relationships
-    applications = relationship(
-        "Application", foreign_keys="[Application.user_id]", back_populates="student"
-    )
+    applications = relationship("Application", foreign_keys="[Application.user_id]", back_populates="student")
     reviews = relationship("ApplicationReview", back_populates="reviewer")
     # college_reviews = relationship("CollegeReview", foreign_keys="[CollegeReview.reviewer_id]", back_populates="reviewer")  # Temporarily commented for testing
     notifications = relationship("Notification", back_populates="user")
@@ -143,8 +141,7 @@ class User(Base):
         # Check if this admin has been assigned to this scholarship
         if self.is_admin():
             return any(
-                admin_scholarship.scholarship_id == scholarship_type_id
-                for admin_scholarship in self.admin_scholarships
+                admin_scholarship.scholarship_id == scholarship_type_id for admin_scholarship in self.admin_scholarships
             )
 
         # Other roles don't have scholarship management permissions
@@ -157,17 +154,11 @@ class AdminScholarship(Base):
     __tablename__ = "admin_scholarships"
 
     id = Column(Integer, primary_key=True)
-    admin_id = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
-    scholarship_id = Column(
-        Integer, ForeignKey("scholarship_types.id", ondelete="CASCADE"), nullable=False
-    )
+    admin_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    scholarship_id = Column(Integer, ForeignKey("scholarship_types.id", ondelete="CASCADE"), nullable=False)
     assigned_at = Column(DateTime, default=datetime.utcnow)
 
     admin = relationship("User", back_populates="admin_scholarships")
     scholarship = relationship("ScholarshipType", back_populates="admins")
 
-    __table_args__ = (
-        UniqueConstraint("admin_id", "scholarship_id", name="uq_admin_scholarship"),
-    )
+    __table_args__ = (UniqueConstraint("admin_id", "scholarship_id", name="uq_admin_scholarship"),)

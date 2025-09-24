@@ -37,9 +37,7 @@ class AuditLog(Base):
 
     # 活動資訊
     action = Column(String(50), nullable=False)
-    resource_type = Column(
-        String(50), nullable=False
-    )  # user, application, review, etc.
+    resource_type = Column(String(50), nullable=False)  # user, application, review, etc.
     resource_id = Column(String(50))  # 資源ID
     resource_name = Column(String(200))  # 資源名稱
 

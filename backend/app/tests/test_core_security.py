@@ -155,16 +155,12 @@ class TestUserAuthentication:
     async def test_get_current_user_success(self):
         """Test successful user authentication"""
         # Mock dependencies
-        credentials = HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials="valid_token"
-        )
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="valid_token")
         mock_db = Mock(spec=AsyncSession)
         mock_user = Mock(spec=User)
         mock_user.id = 123
 
-        with patch("app.core.security.verify_token") as mock_verify, patch.object(
-            mock_db, "get"
-        ) as mock_get:
+        with patch("app.core.security.verify_token") as mock_verify, patch.object(mock_db, "get") as mock_get:
             # Mock token verification
             mock_verify.return_value = {"sub": "123", "role": "student"}
             mock_get.return_value = mock_user
@@ -190,9 +186,7 @@ class TestUserAuthentication:
     @pytest.mark.asyncio
     async def test_get_current_user_invalid_token(self):
         """Test user authentication with invalid token"""
-        credentials = HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials="invalid_token"
-        )
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="invalid_token")
         mock_db = Mock(spec=AsyncSession)
 
         with patch("app.core.security.verify_token") as mock_verify:
@@ -204,9 +198,7 @@ class TestUserAuthentication:
     @pytest.mark.asyncio
     async def test_get_current_user_no_sub_in_token(self):
         """Test user authentication when token has no 'sub' claim"""
-        credentials = HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials="token_without_sub"
-        )
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="token_without_sub")
         mock_db = Mock(spec=AsyncSession)
 
         with patch("app.core.security.verify_token") as mock_verify:
@@ -218,30 +210,22 @@ class TestUserAuthentication:
     @pytest.mark.asyncio
     async def test_get_current_user_invalid_user_id(self):
         """Test user authentication with invalid user ID format"""
-        credentials = HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials="token_invalid_sub"
-        )
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="token_invalid_sub")
         mock_db = Mock(spec=AsyncSession)
 
         with patch("app.core.security.verify_token") as mock_verify:
             mock_verify.return_value = {"sub": "not_a_number"}
 
-            with pytest.raises(
-                AuthenticationError, match="Could not validate credentials"
-            ):
+            with pytest.raises(AuthenticationError, match="Could not validate credentials"):
                 await get_current_user(credentials, mock_db)
 
     @pytest.mark.asyncio
     async def test_get_current_user_user_not_found(self):
         """Test user authentication when user not found in database"""
-        credentials = HTTPAuthorizationCredentials(
-            scheme="Bearer", credentials="valid_token"
-        )
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="valid_token")
         mock_db = Mock(spec=AsyncSession)
 
-        with patch("app.core.security.verify_token") as mock_verify, patch.object(
-            mock_db, "get"
-        ) as mock_get:
+        with patch("app.core.security.verify_token") as mock_verify, patch.object(mock_db, "get") as mock_get:
             mock_verify.return_value = {"sub": "999"}
             mock_get.return_value = None  # User not found
 
@@ -270,9 +254,7 @@ class TestRoleBasedAccess:
 
         role_checker = require_role(UserRole.ADMIN)
 
-        with pytest.raises(
-            AuthorizationError, match="Access denied. Required role: admin"
-        ):
+        with pytest.raises(AuthorizationError, match="Access denied. Required role: admin"):
             role_checker(mock_user)
 
     def test_require_roles_success_first_role(self):
@@ -302,9 +284,7 @@ class TestRoleBasedAccess:
 
         roles_checker = require_roles(UserRole.ADMIN, UserRole.PROFESSOR)
 
-        with pytest.raises(
-            AuthorizationError, match="Access denied. Required roles: admin, professor"
-        ):
+        with pytest.raises(AuthorizationError, match="Access denied. Required roles: admin, professor"):
             roles_checker(mock_user)
 
     def test_require_admin_success_admin(self):

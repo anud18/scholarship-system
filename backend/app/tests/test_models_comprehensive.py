@@ -224,9 +224,7 @@ class TestApplicationModel:
         assert application.created_at is not None
 
     @pytest.mark.asyncio
-    async def test_application_unique_app_id_constraint(
-        self, db, test_user, test_scholarship
-    ):
+    async def test_application_unique_app_id_constraint(self, db, test_user, test_scholarship):
         """Test that app_id must be unique"""
         # Arrange
         app_id = "APP-2024-DUPLICATE"
@@ -254,9 +252,7 @@ class TestApplicationModel:
             await db.commit()
 
     @pytest.mark.asyncio
-    async def test_application_status_transitions(
-        self, db, test_user, test_scholarship
-    ):
+    async def test_application_status_transitions(self, db, test_user, test_scholarship):
         """Test application status transitions"""
         # Arrange
         application = Application(
@@ -349,10 +345,7 @@ class TestApplicationModel:
         # Assert
         assert application.student_data["name"] == "Test Student"
         assert application.student_data["gpa"] == 3.85
-        assert (
-            application.submitted_form_data["personal_statement"]
-            == "I am passionate about computer science..."
-        )
+        assert application.submitted_form_data["personal_statement"] == "I am passionate about computer science..."
         assert len(application.submitted_form_data["extracurricular"]) == 2
 
 
@@ -461,9 +454,7 @@ class TestScholarshipTypeModel:
     async def test_scholarship_application_count_property(self, db, test_user):
         """Test application_count property"""
         # Arrange
-        scholarship = ScholarshipType(
-            code="count_test", name="Count Test Scholarship", is_active=True
-        )
+        scholarship = ScholarshipType(code="count_test", name="Count Test Scholarship", is_active=True)
         db.add(scholarship)
         await db.commit()
         await db.refresh(scholarship)
@@ -481,9 +472,7 @@ class TestScholarshipTypeModel:
         await db.commit()
 
         # Act - Query with application count
-        result = await db.execute(
-            select(ScholarshipType).where(ScholarshipType.id == scholarship.id)
-        )
+        result = await db.execute(select(ScholarshipType).where(ScholarshipType.id == scholarship.id))
         scholarship_from_db = result.scalar_one()
 
         # Assert
@@ -649,9 +638,7 @@ class TestModelTimestamps:
     async def test_updated_at_auto_update(self, db):
         """Test that updated_at is automatically updated"""
         # Arrange
-        user = User(
-            email="update@university.edu", name="Update User", role=UserRole.STUDENT
-        )
+        user = User(email="update@university.edu", name="Update User", role=UserRole.STUDENT)
         db.add(user)
         await db.commit()
         await db.refresh(user)

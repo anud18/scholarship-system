@@ -63,9 +63,7 @@ SessionLocal = sessionmaker(
 
 
 # Database connection error handling utilities
-async def handle_cached_statement_error(
-    session: AsyncSession, operation_func, *args, **kwargs
-):
+async def handle_cached_statement_error(session: AsyncSession, operation_func, *args, **kwargs):
     """
     Handle InvalidCachedStatementError by retrying the operation with a fresh connection
 
@@ -91,9 +89,7 @@ async def handle_cached_statement_error(
         try:
             return await operation_func(*args, **kwargs)
         except Exception as retry_error:
-            logger.error(
-                f"Operation failed even after connection refresh: {retry_error}"
-            )
+            logger.error(f"Operation failed even after connection refresh: {retry_error}")
             raise
     except Exception as e:
         # Handle other database errors

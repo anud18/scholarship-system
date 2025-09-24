@@ -73,9 +73,7 @@ class TestScholarshipConfigurationServiceCRUD:
             "version": "1.0",
         }
 
-    def test_create_configuration_success(
-        self, service, test_scholarship_type, test_user, valid_config_data
-    ):
+    def test_create_configuration_success(self, service, test_scholarship_type, test_user, valid_config_data):
         """Test successful configuration creation"""
         config = service.create_configuration(
             scholarship_type_id=test_scholarship_type.id,
@@ -94,9 +92,7 @@ class TestScholarshipConfigurationServiceCRUD:
         assert config.is_active is True
         assert config.created_by == test_user.id
 
-    def test_create_configuration_duplicate_fails(
-        self, service, test_scholarship_type, test_user, valid_config_data
-    ):
+    def test_create_configuration_duplicate_fails(self, service, test_scholarship_type, test_user, valid_config_data):
         """Test that creating duplicate configuration fails"""
         # Create first configuration
         service.create_configuration(
@@ -106,18 +102,14 @@ class TestScholarshipConfigurationServiceCRUD:
         )
 
         # Attempt to create duplicate should fail
-        with pytest.raises(
-            ValueError, match="Configuration already exists for this academic period"
-        ):
+        with pytest.raises(ValueError, match="Configuration already exists for this academic period"):
             service.create_configuration(
                 scholarship_type_id=test_scholarship_type.id,
                 config_data=valid_config_data,
                 created_by_user_id=test_user.id,
             )
 
-    def test_create_configuration_missing_required_fields(
-        self, service, test_scholarship_type, test_user
-    ):
+    def test_create_configuration_missing_required_fields(self, service, test_scholarship_type, test_user):
         """Test that missing required fields causes failure"""
         invalid_data = {"description": "Missing required fields"}
 
@@ -128,9 +120,7 @@ class TestScholarshipConfigurationServiceCRUD:
                 created_by_user_id=test_user.id,
             )
 
-    def test_update_configuration_success(
-        self, service, test_scholarship_type, test_user, valid_config_data
-    ):
+    def test_update_configuration_success(self, service, test_scholarship_type, test_user, valid_config_data):
         """Test successful configuration update"""
         # Create initial configuration
         config = service.create_configuration(
@@ -166,9 +156,7 @@ class TestScholarshipConfigurationServiceCRUD:
                 updated_by_user_id=test_user.id,
             )
 
-    def test_deactivate_configuration_success(
-        self, service, test_scholarship_type, test_user, valid_config_data
-    ):
+    def test_deactivate_configuration_success(self, service, test_scholarship_type, test_user, valid_config_data):
         """Test successful configuration deactivation"""
         # Create configuration
         config = service.create_configuration(
@@ -180,9 +168,7 @@ class TestScholarshipConfigurationServiceCRUD:
         assert config.is_active is True
 
         # Deactivate configuration
-        deactivated_config = service.deactivate_configuration(
-            config_id=config.id, updated_by_user_id=test_user.id
-        )
+        deactivated_config = service.deactivate_configuration(config_id=config.id, updated_by_user_id=test_user.id)
 
         assert deactivated_config.is_active is False
         assert deactivated_config.updated_by == test_user.id
@@ -190,13 +176,9 @@ class TestScholarshipConfigurationServiceCRUD:
     def test_deactivate_nonexistent_configuration_fails(self, service, test_user):
         """Test that deactivating non-existent configuration fails"""
         with pytest.raises(ValueError, match="Configuration not found"):
-            service.deactivate_configuration(
-                config_id=999, updated_by_user_id=test_user.id
-            )
+            service.deactivate_configuration(config_id=999, updated_by_user_id=test_user.id)
 
-    def test_duplicate_configuration_success(
-        self, service, test_scholarship_type, test_user, valid_config_data
-    ):
+    def test_duplicate_configuration_success(self, service, test_scholarship_type, test_user, valid_config_data):
         """Test successful configuration duplication"""
         # Create source configuration
         source_config = service.create_configuration(
@@ -221,14 +203,10 @@ class TestScholarshipConfigurationServiceCRUD:
         assert duplicate_config.config_code == "PHD-114-1"
         assert duplicate_config.config_name == "114學年度第一學期博士生配置"
         assert duplicate_config.amount == source_config.amount  # Should copy amount
-        assert (
-            duplicate_config.description == source_config.description
-        )  # Should copy description
+        assert duplicate_config.description == source_config.description  # Should copy description
         assert duplicate_config.created_by == test_user.id
 
-    def test_duplicate_to_existing_period_fails(
-        self, service, test_scholarship_type, test_user, valid_config_data
-    ):
+    def test_duplicate_to_existing_period_fails(self, service, test_scholarship_type, test_user, valid_config_data):
         """Test that duplicating to existing period fails"""
         # Create source configuration
         source_config = service.create_configuration(
@@ -263,9 +241,7 @@ class TestScholarshipConfigurationServiceCRUD:
                 created_by_user_id=test_user.id,
             )
 
-    def test_get_configurations_by_filter(
-        self, service, test_scholarship_type, test_user, valid_config_data
-    ):
+    def test_get_configurations_by_filter(self, service, test_scholarship_type, test_user, valid_config_data):
         """Test filtering configurations"""
         # Create multiple configurations
         config1 = service.create_configuration(
@@ -291,15 +267,11 @@ class TestScholarshipConfigurationServiceCRUD:
         )
 
         # Test filtering by scholarship type
-        configs = service.get_configurations_by_filter(
-            scholarship_type_id=test_scholarship_type.id
-        )
+        configs = service.get_configurations_by_filter(scholarship_type_id=test_scholarship_type.id)
         assert len(configs) == 3
 
         # Test filtering by academic year
-        configs = service.get_configurations_by_filter(
-            scholarship_type_id=test_scholarship_type.id, academic_year=113
-        )
+        configs = service.get_configurations_by_filter(scholarship_type_id=test_scholarship_type.id, academic_year=113)
         assert len(configs) == 2
 
         # Test filtering by semester
@@ -337,10 +309,7 @@ class TestScholarshipConfigurationServiceCRUD:
         }
 
         errors = service.validate_configuration_data(invalid_data)
-        assert any(
-            "Academic year should be in Taiwan calendar format" in error
-            for error in errors
-        )
+        assert any("Academic year should be in Taiwan calendar format" in error for error in errors)
 
     def test_validate_configuration_data_invalid_amount(self, service):
         """Test validation with invalid amount"""
@@ -366,10 +335,7 @@ class TestScholarshipConfigurationServiceCRUD:
         }
 
         errors = service.validate_configuration_data(invalid_data)
-        assert any(
-            "application_end_date must be after application_start_date" in error
-            for error in errors
-        )
+        assert any("application_end_date must be after application_start_date" in error for error in errors)
 
 
 class TestScholarshipConfigurationServiceIntegration:
@@ -437,9 +403,7 @@ class TestScholarshipConfigurationServiceIntegration:
         )
 
         # Deactivate original configuration
-        deactivated_config = service.deactivate_configuration(
-            config_id=config.id, updated_by_user_id=user.id
-        )
+        deactivated_config = service.deactivate_configuration(config_id=config.id, updated_by_user_id=user.id)
 
         # Verify final states
         assert updated_config.amount == 30000
@@ -447,8 +411,6 @@ class TestScholarshipConfigurationServiceIntegration:
         assert deactivated_config.is_active is False
 
         # Verify filtering
-        active_configs = service.get_configurations_by_filter(
-            scholarship_type_id=scholarship_type.id, is_active=True
-        )
+        active_configs = service.get_configurations_by_filter(scholarship_type_id=scholarship_type.id, is_active=True)
         assert len(active_configs) == 1
         assert active_configs[0].id == duplicate_config.id

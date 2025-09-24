@@ -28,9 +28,7 @@ class ScholarshipNotificationService:
         self.email_service = EmailService()
         self.student_service = StudentService()
 
-    async def send_application_submitted_notification(
-        self, application: Application
-    ) -> bool:
+    async def send_application_submitted_notification(self, application: Application) -> bool:
         """Send notification when application is submitted"""
         try:
             # Get student data from external API and user information
@@ -111,9 +109,7 @@ class ScholarshipNotificationService:
                     f"Application submission notification sent to {user.email} for application {application.app_id}"
                 )
             else:
-                logger.error(
-                    f"Failed to send submission notification for application {application.app_id}"
-                )
+                logger.error(f"Failed to send submission notification for application {application.app_id}")
 
             return success
 
@@ -121,9 +117,7 @@ class ScholarshipNotificationService:
             logger.error(f"Error sending application submission notification: {str(e)}")
             return False
 
-    async def send_status_change_notification(
-        self, application: Application, old_status: str, new_status: str
-    ) -> bool:
+    async def send_status_change_notification(self, application: Application, old_status: str, new_status: str) -> bool:
         """Send notification when application status changes"""
         try:
             stmt = select(User).where(User.id == application.user_id)
@@ -218,9 +212,7 @@ class ScholarshipNotificationService:
             logger.error(f"Error sending status change notification: {str(e)}")
             return False
 
-    async def send_deadline_reminder_notifications(
-        self, days_before: int = 7
-    ) -> Dict[str, int]:
+    async def send_deadline_reminder_notifications(self, days_before: int = 7) -> Dict[str, int]:
         """Send reminder notifications for approaching deadlines"""
         try:
             cutoff_date = datetime.now(timezone.utc) + timedelta(days=days_before)
@@ -261,13 +253,9 @@ class ScholarshipNotificationService:
 
                     student_name = student_data.get("name", "N/A")
 
-                    days_remaining = (
-                        application.review_deadline - datetime.now(timezone.utc)
-                    ).days
+                    days_remaining = (application.review_deadline - datetime.now(timezone.utc)).days
 
-                    subject = (
-                        f"Scholarship Review Deadline Reminder - {application.app_id}"
-                    )
+                    subject = f"Scholarship Review Deadline Reminder - {application.app_id}"
 
                     html_content = f"""
                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -305,14 +293,10 @@ class ScholarshipNotificationService:
                         failed_count += 1
 
                 except Exception as e:
-                    logger.error(
-                        f"Error sending deadline reminder for application {application.id}: {str(e)}"
-                    )
+                    logger.error(f"Error sending deadline reminder for application {application.id}: {str(e)}")
                     failed_count += 1
 
-            logger.info(
-                f"Deadline reminders sent: {sent_count} successful, {failed_count} failed"
-            )
+            logger.info(f"Deadline reminders sent: {sent_count} successful, {failed_count} failed")
 
             return {
                 "sent": sent_count,
@@ -324,9 +308,7 @@ class ScholarshipNotificationService:
             logger.error(f"Error in deadline reminder batch process: {str(e)}")
             return {"sent": 0, "failed": 0, "total_applications": 0}
 
-    async def send_professor_review_request(
-        self, application: Application, professor_user: User
-    ) -> bool:
+    async def send_professor_review_request(self, application: Application, professor_user: User) -> bool:
         """Send email to professor requesting review"""
         try:
             # Get student data from snapshot
@@ -379,18 +361,14 @@ class ScholarshipNotificationService:
                 html_content=html_content,
             )
 
-            logger.info(
-                f"Professor review request sent to {professor_user.email} for application {application.app_id}"
-            )
+            logger.info(f"Professor review request sent to {professor_user.email} for application {application.app_id}")
             return success
 
         except Exception as e:
             logger.error(f"Error sending professor review request: {str(e)}")
             return False
 
-    async def send_batch_processing_notification(
-        self, admin_email: str, processing_results: Dict[str, Any]
-    ) -> bool:
+    async def send_batch_processing_notification(self, admin_email: str, processing_results: Dict[str, Any]) -> bool:
         """Send notification to admin about batch processing results"""
         try:
             subject = f"Scholarship Batch Processing Complete - {processing_results.get('semester', 'N/A')}"

@@ -53,9 +53,7 @@ class PortalSSOService:
                 # Post token to Portal JWT server for verification
                 # Portal expects form data, not JSON
                 # Try multiple parameter combinations that Portal might expect
-                logger.info(
-                    f"Attempting Portal JWT verification with token: {token[:50]}..."
-                )
+                logger.info(f"Attempting Portal JWT verification with token: {token[:50]}...")
 
                 # First attempt: just the token
                 response = await client.post(
@@ -86,12 +84,8 @@ class PortalSSOService:
                     )
 
                 if response.status_code != 200:
-                    logger.error(
-                        f"Portal JWT verification failed: {response.status_code} - {response.text}"
-                    )
-                    raise AuthenticationError(
-                        f"Portal token verification failed: {response.status_code}"
-                    )
+                    logger.error(f"Portal JWT verification failed: {response.status_code} - {response.text}")
+                    raise AuthenticationError(f"Portal token verification failed: {response.status_code}")
 
                 portal_data = response.json()
 
@@ -100,9 +94,7 @@ class PortalSSOService:
                     # Extract user data from nested structure
                     user_data = portal_data["data"]
                     if not self._validate_portal_response(user_data):
-                        logger.error(
-                            f"Invalid user data in portal response: {user_data}"
-                        )
+                        logger.error(f"Invalid user data in portal response: {user_data}")
                         raise AuthenticationError("Invalid user data format")
                     return user_data
                 else:
@@ -189,9 +181,7 @@ class PortalSSOService:
         email = portal_data.get("mail")
         dept_name = portal_data.get("dept")
         dept_code = portal_data.get("deptCode")
-        portal_user_type = portal_data.get(
-            "userType", "student"
-        )  # Portal's claimed user type
+        portal_user_type = portal_data.get("userType", "student")  # Portal's claimed user type
         status = portal_data.get("employeestatus", "在學")
 
         if not nycu_id or not name:
@@ -219,9 +209,7 @@ class PortalSSOService:
                 # Fallback to student if uncertain
                 user_role = UserRole.STUDENT
                 mapped_user_type = UserType.STUDENT
-            logger.info(
-                f"User {nycu_id} classified as {user_type} based on Portal data"
-            )
+            logger.info(f"User {nycu_id} classified as {user_type} based on Portal data")
 
         # Generate email if not provided
         if not email:
@@ -246,17 +234,13 @@ class PortalSSOService:
         await self.db.commit()
 
         # Generate system tokens with debug data
-        logger.info(
-            f"🔍 Creating tokens with debug data - Portal: {bool(portal_data)}, Student: {bool(student_data)}"
-        )
+        logger.info(f"🔍 Creating tokens with debug data - Portal: {bool(portal_data)}, Student: {bool(student_data)}")
         if portal_data:
             logger.debug(f"🔍 Portal data keys: {list(portal_data.keys())}")
         if student_data:
             logger.debug(f"🔍 Student data keys: {list(student_data.keys())}")
 
-        token_response = await self.auth_service.create_tokens(
-            user, portal_data=portal_data, student_data=student_data
-        )
+        token_response = await self.auth_service.create_tokens(user, portal_data=portal_data, student_data=student_data)
 
         return {
             "access_token": token_response.access_token,
@@ -329,9 +313,7 @@ class PortalSSOService:
         await self.db.commit()
         await self.db.refresh(new_user)
 
-        logger.info(
-            f"Created new user from Portal SSO: {nycu_id} ({name}) with role {user_role.value}"
-        )
+        logger.info(f"Created new user from Portal SSO: {nycu_id} ({name}) with role {user_role.value}")
         return new_user
 
     def _map_user_type_to_role(self, user_type: str) -> UserRole:

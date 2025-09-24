@@ -103,11 +103,7 @@ class ApplicationService:
             user = result.scalar_one_or_none()
 
         # Integrate file data from submitted_form_data.documents
-        integrated_form_data = (
-            application.submitted_form_data.copy()
-            if application.submitted_form_data
-            else {}
-        )
+        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
 
         return ApplicationResponse(
             id=application.id,
@@ -187,15 +183,11 @@ class ApplicationService:
         eligible_types: List[str] = scholarship.eligible_student_types or []
         student_type = self.student_service.get_student_type_from_data(student_data)
         if eligible_types and student_type not in eligible_types:
-            raise ValidationError(
-                f"Student type {student_type} is not eligible for this scholarship"
-            )
+            raise ValidationError(f"Student type {student_type} is not eligible for this scholarship")
 
         # Check whitelist eligibility using user ID instead of student ID
         # Since students are now external, whitelist should use user IDs
-        user_id = (
-            application_data.user_id if hasattr(application_data, "user_id") else None
-        )
+        user_id = application_data.user_id if hasattr(application_data, "user_id") else None
         if user_id and scholarship.whitelist_enabled:
             # Check if user is in whitelist (whitelist now contains user IDs)
             if not scholarship.is_user_in_whitelist(user_id):
@@ -231,13 +223,9 @@ class ApplicationService:
         )
         result = await self.db.execute(stmt)
         if result.scalar_one_or_none():
-            raise ConflictError(
-                "You already have an active application for this scholarship"
-            )
+            raise ConflictError("You already have an active application for this scholarship")
 
-    async def _get_user_and_student_data(
-        self, user_id: int, student_code: str
-    ) -> Tuple[User, Dict[str, Any]]:
+    async def _get_user_and_student_data(self, user_id: int, student_code: str) -> Tuple[User, Dict[str, Any]]:
         """Get user and fetch student data from external API"""
         # Get user
         stmt = select(User).where(User.id == user_id)
@@ -256,9 +244,7 @@ class ApplicationService:
     ) -> Tuple[ScholarshipType, "ScholarshipConfiguration"]:
         """Get and validate scholarship type and configuration"""
         # Get scholarship type
-        stmt = select(ScholarshipType).where(
-            ScholarshipType.code == application_data.scholarship_type
-        )
+        stmt = select(ScholarshipType).where(ScholarshipType.code == application_data.scholarship_type)
         result = await self.db.execute(stmt)
         scholarship = result.scalar_one()
 
@@ -272,9 +258,7 @@ class ApplicationService:
         config = config_result.scalar_one_or_none()
 
         if not config:
-            raise ValueError(
-                f"Configuration with id {application_data.configuration_id} not found"
-            )
+            raise ValueError(f"Configuration with id {application_data.configuration_id} not found")
 
         # Verify the configuration belongs to the scholarship type
         if config.scholarship_type_id != scholarship.id:
@@ -296,9 +280,7 @@ class ApplicationService:
         """Create the application instance with all data"""
         academic_year = config.academic_year
         semester = config.semester  # This can be None for yearly scholarships
-        logger.debug(
-            f"Using config {config.id}: academic_year={academic_year}, semester={semester}"
-        )
+        logger.debug(f"Using config {config.id}: academic_year={academic_year}, semester={semester}")
 
         # Generate unique application ID
         app_id = self._generate_app_id()
@@ -339,9 +321,7 @@ class ApplicationService:
             academic_year=academic_year,
             semester=semester,
             student_data=student_snapshot,
-            submitted_form_data=application_data.form_data.dict()
-            if application_data.form_data
-            else {},
+            submitted_form_data=application_data.form_data.dict() if application_data.form_data else {},
             agree_terms=application_data.agree_terms or False,
             status="draft" if is_draft else "submitted",
         )
@@ -362,14 +342,10 @@ class ApplicationService:
         logger.debug(
             f"Starting application creation for user_id={user_id}, student_code={student_code}, is_draft={is_draft}"
         )
-        logger.debug(
-            f"Application data received: {application_data.dict(exclude_none=True)}"
-        )
+        logger.debug(f"Application data received: {application_data.dict(exclude_none=True)}")
 
         # Get user and student data
-        user, student_snapshot = await self._get_user_and_student_data(
-            user_id, student_code
-        )
+        user, student_snapshot = await self._get_user_and_student_data(user_id, student_code)
 
         # Get and validate scholarship type and configuration
         scholarship, config = await self._get_scholarship_and_config(application_data)
@@ -411,20 +387,12 @@ class ApplicationService:
         result = await self.db.execute(stmt)
         application = result.scalar_one()
 
-        logger.debug(
-            f"Application created successfully: {application.app_id} with status: {application.status}"
-        )
+        logger.debug(f"Application created successfully: {application.app_id} with status: {application.status}")
         return await self._build_application_response(application, user)
 
-    def _integrate_application_file_data(
-        self, application: Application, user: User
-    ) -> Dict[str, Any]:
+    def _integrate_application_file_data(self, application: Application, user: User) -> Dict[str, Any]:
         """Integrate application file information into form data"""
-        integrated_form_data = (
-            application.submitted_form_data.copy()
-            if application.submitted_form_data
-            else {}
-        )
+        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
 
         if not application.files:
             return integrated_form_data
@@ -448,8 +416,7 @@ class ApplicationService:
                 (
                     doc
                     for doc in integrated_form_data["documents"]
-                    if doc.get("document_type") == file.file_type
-                    or doc.get("document_id") == file.file_type
+                    if doc.get("document_type") == file.file_type or doc.get("document_id") == file.file_type
                 ),
                 None,
             )
@@ -468,9 +435,7 @@ class ApplicationService:
                 "download_url": f"{base_url}/files/applications/{application.id}/files/{file.id}/download?token={access_token}",
                 "is_verified": file.is_verified,
                 "object_name": file.object_name,
-                "upload_time": file.uploaded_at.isoformat()
-                if file.uploaded_at
-                else None,
+                "upload_time": file.uploaded_at.isoformat() if file.uploaded_at else None,
             }
 
             if existing_doc:
@@ -491,9 +456,7 @@ class ApplicationService:
             app_id=application.app_id,
             user_id=application.user_id,
             student_id=user.nycu_id if user else None,
-            scholarship_type=application.scholarship.code
-            if application.scholarship
-            else None,
+            scholarship_type=application.scholarship.code if application.scholarship else None,
             scholarship_type_id=application.scholarship_type_id,
             scholarship_subtype_list=application.scholarship_subtype_list or [],
             status=application.status,
@@ -521,15 +484,11 @@ class ApplicationService:
         # Add Chinese scholarship type name
         return self._add_scholarship_type_zh(app_data)
 
-    async def get_user_applications(
-        self, user: User, status: Optional[str] = None
-    ) -> List[ApplicationListResponse]:
+    async def get_user_applications(self, user: User, status: Optional[str] = None) -> List[ApplicationListResponse]:
         """Get applications for a user"""
         stmt = (
             select(Application)
-            .options(
-                selectinload(Application.files), selectinload(Application.scholarship)
-            )
+            .options(selectinload(Application.files), selectinload(Application.scholarship))
             .where(Application.user_id == user.id)
         )
 
@@ -543,14 +502,10 @@ class ApplicationService:
         response_list = []
         for application in applications:
             # Integrate file information into submitted_form_data.documents
-            integrated_form_data = self._integrate_application_file_data(
-                application, user
-            )
+            integrated_form_data = self._integrate_application_file_data(application, user)
 
             # Create response data
-            app_data = self._create_application_list_response(
-                application, user, integrated_form_data
-            )
+            app_data = self._create_application_list_response(application, user, integrated_form_data)
             response_list.append(app_data)
 
         return response_list
@@ -576,9 +531,7 @@ class ApplicationService:
         # Get recent applications with files loaded
         stmt = (
             select(Application)
-            .options(
-                selectinload(Application.files), selectinload(Application.scholarship)
-            )
+            .options(selectinload(Application.files), selectinload(Application.scholarship))
             .where(Application.user_id == user.id)
             .order_by(desc(Application.created_at))
             .limit(5)
@@ -591,11 +544,7 @@ class ApplicationService:
         recent_applications_response = []
         for application in recent_applications:
             # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = (
-                application.submitted_form_data.copy()
-                if application.submitted_form_data
-                else {}
-            )
+            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
 
             if application.files:
                 # 生成文件訪問 token
@@ -611,11 +560,7 @@ class ApplicationService:
                     for existing_doc in existing_docs:
                         # 查找對應的文件記錄
                         matching_file = next(
-                            (
-                                f
-                                for f in application.files
-                                if f.file_type == existing_doc.get("document_id")
-                            ),
+                            (f for f in application.files if f.file_type == existing_doc.get("document_id")),
                             None,
                         )
                         if matching_file:
@@ -627,8 +572,7 @@ class ApplicationService:
                                     "filename": matching_file.filename,
                                     "original_filename": matching_file.original_filename,
                                     "file_size": matching_file.file_size,
-                                    "mime_type": matching_file.mime_type
-                                    or matching_file.content_type,
+                                    "mime_type": matching_file.mime_type or matching_file.content_type,
                                     "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
                                     "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
                                     "is_verified": matching_file.is_verified,
@@ -642,9 +586,7 @@ class ApplicationService:
                 app_id=application.app_id,
                 user_id=application.user_id,
                 student_id=user.nycu_id if user else None,
-                scholarship_type=application.scholarship.code
-                if application.scholarship
-                else None,
+                scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 status=application.status,
                 status_name=application.status_name,
@@ -733,11 +675,7 @@ class ApplicationService:
                 for existing_doc in existing_docs:
                     # 查找對應的文件記錄
                     matching_file = next(
-                        (
-                            f
-                            for f in application.files
-                            if f.file_type == existing_doc.get("document_id")
-                        ),
+                        (f for f in application.files if f.file_type == existing_doc.get("document_id")),
                         None,
                     )
                     if matching_file:
@@ -749,8 +687,7 @@ class ApplicationService:
                                 "filename": matching_file.filename,
                                 "original_filename": matching_file.original_filename,
                                 "file_size": matching_file.file_size,
-                                "mime_type": matching_file.mime_type
-                                or matching_file.content_type,
+                                "mime_type": matching_file.mime_type or matching_file.content_type,
                                 "file_path": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}?token={access_token}",
                                 "download_url": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}/download?token={access_token}",
                                 "is_verified": matching_file.is_verified,
@@ -771,16 +708,9 @@ class ApplicationService:
         amount = application.amount
         currency = "TWD"
 
-        if (
-            application.scholarship_configuration
-            and application.scholarship_configuration.scholarship_type
-        ):
-            scholarship_type_name = (
-                application.scholarship_configuration.scholarship_type.code
-            )
-            scholarship_type_zh = (
-                application.scholarship_configuration.scholarship_type.name
-            )
+        if application.scholarship_configuration and application.scholarship_configuration.scholarship_type:
+            scholarship_type_name = application.scholarship_configuration.scholarship_type.code
+            scholarship_type_zh = application.scholarship_configuration.scholarship_type.name
             scholarship_name = application.scholarship_configuration.config_name
             amount = application.scholarship_configuration.amount
             currency = application.scholarship_configuration.currency or "TWD"
@@ -858,18 +788,12 @@ class ApplicationService:
             raise ValidationError("Application cannot be edited in current status")
 
         # Store old subtype list for comparison
-        old_subtype_list = (
-            application.scholarship_subtype_list.copy()
-            if application.scholarship_subtype_list
-            else []
-        )
+        old_subtype_list = application.scholarship_subtype_list.copy() if application.scholarship_subtype_list else []
 
         # 更新表單資料
         if update_data.form_data:
             # Serialize form data to handle datetime objects properly
-            application.submitted_form_data = self._serialize_for_json(
-                update_data.form_data.dict()
-            )
+            application.submitted_form_data = self._serialize_for_json(update_data.form_data.dict())
 
         # 更新狀態
         if update_data.status:
@@ -888,25 +812,17 @@ class ApplicationService:
 
         # Clone bank account proof document when saving draft or updating application
         # This ensures the document is available in the application
-        logger.info(
-            f"Cloning bank account proof document for application {application.app_id}"
-        )
+        logger.info(f"Cloning bank account proof document for application {application.app_id}")
         try:
             await self._clone_user_profile_documents(application, current_user)
         except Exception as e:
-            logger.warning(
-                f"Failed to clone bank account proof document for application {application.app_id}: {e}"
-            )
+            logger.warning(f"Failed to clone bank account proof document for application {application.app_id}: {e}")
             import traceback
 
             traceback.print_exc()
 
         # Check if subtype list changed and re-clone fixed documents if necessary
-        new_subtype_list = (
-            application.scholarship_subtype_list.copy()
-            if application.scholarship_subtype_list
-            else []
-        )
+        new_subtype_list = application.scholarship_subtype_list.copy() if application.scholarship_subtype_list else []
         if old_subtype_list != new_subtype_list:
             logger.info(
                 f"Subtype list changed from {old_subtype_list} to {new_subtype_list}, re-cloning fixed documents"
@@ -948,27 +864,21 @@ class ApplicationService:
             UserRole.COLLEGE,
         ]:
             if application.user_id != current_user.id:
-                raise AuthorizationError(
-                    "You can only update your own application data"
-                )
+                raise AuthorizationError("You can only update your own application data")
 
         # 檢查是否可以編輯
         if application.status not in [
             ApplicationStatus.DRAFT.value,
             ApplicationStatus.RETURNED.value,
         ]:
-            raise ValidationError(
-                "Cannot update student data for submitted applications"
-            )
+            raise ValidationError("Cannot update student data for submitted applications")
 
         # 獲取當前學生資料
         current_student_data = application.student_data or {}
 
         # 如果需要，重新從外部API獲取基本學生資料
         if refresh_from_api and current_user.nycu_id:
-            fresh_api_data = await self.student_service.get_student_snapshot(
-                current_user.nycu_id
-            )
+            fresh_api_data = await self.student_service.get_student_snapshot(current_user.nycu_id)
             if fresh_api_data:
                 # 合併API資料，但保留用戶輸入的資料
                 current_student_data.update(fresh_api_data)
@@ -994,9 +904,7 @@ class ApplicationService:
 
         return application
 
-    async def submit_application(
-        self, application_id: int, user: User
-    ) -> ApplicationResponse:
+    async def submit_application(self, application_id: int, user: User) -> ApplicationResponse:
         """提交申請"""
         # Get application with relationships loaded
         stmt = (
@@ -1031,9 +939,7 @@ class ApplicationService:
         application.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
-        await self.db.refresh(
-            application, ["files", "reviews", "professor_reviews", "scholarship"]
-        )
+        await self.db.refresh(application, ["files", "reviews", "professor_reviews", "scholarship"])
 
         # 發送自動化通知
         try:
@@ -1045,28 +951,18 @@ class ApplicationService:
                 "student_email": getattr(application, "student_email", ""),
                 "professor_name": getattr(application, "professor_name", ""),
                 "professor_email": getattr(application, "professor_email", ""),
-                "scholarship_type": getattr(application.scholarship, "name", "")
-                if application.scholarship
-                else "",
+                "scholarship_type": getattr(application.scholarship, "name", "") if application.scholarship else "",
                 "scholarship_type_id": application.scholarship_type_id,
-                "submit_date": application.submitted_at.strftime("%Y-%m-%d")
-                if application.submitted_at
-                else "",
+                "submit_date": application.submitted_at.strftime("%Y-%m-%d") if application.submitted_at else "",
             }
 
             # Trigger email automation for application submission
-            await email_automation_service.trigger_application_submitted(
-                self.db, application.id, application_data
-            )
+            await email_automation_service.trigger_application_submitted(self.db, application.id, application_data)
         except Exception as e:
             logger.error(f"Failed to trigger automated submission emails: {e}")
 
         # 整合文件資訊到 submitted_form_data.documents
-        integrated_form_data = (
-            application.submitted_form_data.copy()
-            if application.submitted_form_data
-            else {}
-        )
+        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
 
         # 生成文件訪問 token
         from app.core.config import settings
@@ -1082,7 +978,9 @@ class ApplicationService:
                 # 生成文件 URL
                 base_url = f"{settings.base_url}{settings.api_v1_str}"
                 file_path = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
-                download_url = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
+                download_url = (
+                    f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
+                )
 
                 # 整合文件資訊
                 integrated_document = {
@@ -1095,9 +993,7 @@ class ApplicationService:
                     "mime_type": file.mime_type or file.content_type,
                     "file_path": file_path,
                     "download_url": download_url,
-                    "upload_time": file.uploaded_at.isoformat()
-                    if file.uploaded_at
-                    else None,
+                    "upload_time": file.uploaded_at.isoformat() if file.uploaded_at else None,
                     "is_verified": file.is_verified,
                     "object_name": file.object_name,
                 }
@@ -1110,11 +1006,7 @@ class ApplicationService:
                 for existing_doc in existing_docs:
                     # 查找對應的文件記錄
                     matching_file = next(
-                        (
-                            f
-                            for f in application.files
-                            if f.file_type == existing_doc.get("document_id")
-                        ),
+                        (f for f in application.files if f.file_type == existing_doc.get("document_id")),
                         None,
                     )
                     if matching_file:
@@ -1126,8 +1018,7 @@ class ApplicationService:
                                 "filename": matching_file.filename,
                                 "original_filename": matching_file.original_filename,
                                 "file_size": matching_file.file_size,
-                                "mime_type": matching_file.mime_type
-                                or matching_file.content_type,
+                                "mime_type": matching_file.mime_type or matching_file.content_type,
                                 "file_path": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}?token={access_token}",
                                 "download_url": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}/download?token={access_token}",
                                 "is_verified": matching_file.is_verified,
@@ -1205,9 +1096,7 @@ class ApplicationService:
         query = select(Application).options(
             selectinload(Application.files),
             selectinload(Application.scholarship),
-            selectinload(
-                Application.student
-            ),  # Eagerly load student to avoid N+1 queries
+            selectinload(Application.student),  # Eagerly load student to avoid N+1 queries
         )
 
         if current_user.role == UserRole.PROFESSOR:
@@ -1230,9 +1119,7 @@ class ApplicationService:
             query = query.where(Application.status == status)
         if scholarship_type:
             # Get scholarship type ID for filtering
-            stmt = select(ScholarshipType).where(
-                ScholarshipType.code == scholarship_type
-            )
+            stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
             result = await self.db.execute(stmt)
             scholarship = result.scalar_one_or_none()
             if scholarship:
@@ -1249,11 +1136,7 @@ class ApplicationService:
         response_applications = []
         for application in applications:
             # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = (
-                application.submitted_form_data.copy()
-                if application.submitted_form_data
-                else {}
-            )
+            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
 
             if application.files:
                 # 生成文件訪問 token
@@ -1269,11 +1152,7 @@ class ApplicationService:
                     for existing_doc in existing_docs:
                         # 查找對應的文件記錄
                         matching_file = next(
-                            (
-                                f
-                                for f in application.files
-                                if f.file_type == existing_doc.get("document_id")
-                            ),
+                            (f for f in application.files if f.file_type == existing_doc.get("document_id")),
                             None,
                         )
                         if matching_file:
@@ -1285,8 +1164,7 @@ class ApplicationService:
                                     "filename": matching_file.filename,
                                     "original_filename": matching_file.original_filename,
                                     "file_size": matching_file.file_size,
-                                    "mime_type": matching_file.mime_type
-                                    or matching_file.content_type,
+                                    "mime_type": matching_file.mime_type or matching_file.content_type,
                                     "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
                                     "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
                                     "is_verified": matching_file.is_verified,
@@ -1303,9 +1181,7 @@ class ApplicationService:
                 app_id=application.app_id,
                 user_id=application.user_id,
                 student_id=app_user.nycu_id if app_user else None,
-                scholarship_type=application.scholarship.code
-                if application.scholarship
-                else None,
+                scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 status=application.status,
                 status_name=application.status_name,
@@ -1362,10 +1238,7 @@ class ApplicationService:
             application.status_name = "已核准"
         elif status_update.status == ApplicationStatus.REJECTED.value:
             application.status_name = "已拒絕"
-            if (
-                hasattr(status_update, "rejection_reason")
-                and status_update.rejection_reason
-            ):
+            if hasattr(status_update, "rejection_reason") and status_update.rejection_reason:
                 application.rejection_reason = status_update.rejection_reason
 
         if hasattr(status_update, "comments") and status_update.comments:
@@ -1378,14 +1251,10 @@ class ApplicationService:
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id, user)
 
-    async def upload_application_file(
-        self, application_id: int, user: User, file, file_type: str
-    ) -> Dict[str, Any]:
+    async def upload_application_file(self, application_id: int, user: User, file, file_type: str) -> Dict[str, Any]:
         """Upload file for application"""
         # Get application
-        stmt = select(Application).where(
-            and_(Application.id == application_id, Application.user_id == user.id)
-        )
+        stmt = select(Application).where(and_(Application.id == application_id, Application.user_id == user.id))
         result = await self.db.execute(stmt)
         application = result.scalar_one_or_none()
 
@@ -1393,9 +1262,7 @@ class ApplicationService:
             raise NotFoundError("Application", str(application_id))
 
         if not application.is_editable:
-            raise BusinessLogicError(
-                "Cannot upload files to application in current status"
-            )
+            raise BusinessLogicError("Cannot upload files to application in current status")
 
         # For now, return a placeholder response
         # In a real implementation, this would handle file storage
@@ -1406,9 +1273,7 @@ class ApplicationService:
             "filename": getattr(file, "filename", "unknown"),
         }
 
-    async def submit_professor_review(
-        self, application_id: int, user: User, review_data
-    ) -> ApplicationResponse:
+    async def submit_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
         """Submit professor review for an application"""
         stmt = select(Application).where(Application.id == application_id)
         result = await self.db.execute(stmt)
@@ -1417,9 +1282,7 @@ class ApplicationService:
             raise NotFoundError("Application", str(application_id))
         # Only the assigned professor can submit
         if application.professor_id != user.id:
-            raise AuthorizationError(
-                "You are not the assigned professor for this application"
-            )
+            raise AuthorizationError("You are not the assigned professor for this application")
 
         # Create professor review record
         from app.models.application import ProfessorReview, ProfessorReviewItem
@@ -1455,9 +1318,7 @@ class ApplicationService:
                 "student_name": getattr(application, "student_name", ""),
                 "professor_name": getattr(user, "name", ""),
                 "professor_email": getattr(user, "email", ""),
-                "scholarship_type": getattr(application.scholarship, "name", "")
-                if application.scholarship
-                else "",
+                "scholarship_type": getattr(application.scholarship, "name", "") if application.scholarship else "",
                 "scholarship_type_id": application.scholarship_type_id,
                 "review_result": review_data.recommendation,
                 "review_date": datetime.utcnow().strftime("%Y-%m-%d"),
@@ -1467,18 +1328,14 @@ class ApplicationService:
             }
 
             # Trigger email automation for professor review submission
-            await email_automation_service.trigger_professor_review_submitted(
-                self.db, application.id, email_data
-            )
+            await email_automation_service.trigger_professor_review_submitted(self.db, application.id, email_data)
         except Exception as e:
             logger.error(f"Failed to trigger automated professor review emails: {e}")
 
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id)
 
-    async def create_professor_review(
-        self, application_id: int, user: User, review_data
-    ) -> ApplicationResponse:
+    async def create_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
         """Create a professor review record and notify college reviewers"""
         from app.models.application import ProfessorReview, ProfessorReviewItem
 
@@ -1489,9 +1346,7 @@ class ApplicationService:
             raise NotFoundError("Application", str(application_id))
         # Only the assigned professor can submit
         if application.professor_id != user.id:
-            raise AuthorizationError(
-                "You are not the assigned professor for this application"
-            )
+            raise AuthorizationError("You are not the assigned professor for this application")
 
         # Create review record
         review = ProfessorReview(
@@ -1541,9 +1396,7 @@ class ApplicationService:
         if user.role == UserRole.STUDENT:
             # Students can only upload to their own applications
             if application.user_id != user.id:
-                raise AuthorizationError(
-                    "Cannot upload files to other students' applications"
-                )
+                raise AuthorizationError("Cannot upload files to other students' applications")
         elif user.role == UserRole.PROFESSOR:
             # Professors can upload files to their students' applications
             # TODO: Add professor-student relationship check when implemented
@@ -1557,9 +1410,7 @@ class ApplicationService:
             raise AuthorizationError("Upload access denied")
 
         # Upload file to MinIO
-        object_name, file_size = await minio_service.upload_file(
-            file, application_id, file_type
-        )
+        object_name, file_size = await minio_service.upload_file(file, application_id, file_type)
 
         # Import ApplicationFile here to avoid circular imports
         from app.models.application import ApplicationFile
@@ -1593,9 +1444,7 @@ class ApplicationService:
             },
         }
 
-    def _add_scholarship_type_zh(
-        self, app_data: ApplicationListResponse
-    ) -> ApplicationListResponse:
+    def _add_scholarship_type_zh(self, app_data: ApplicationListResponse) -> ApplicationListResponse:
         """Add Chinese scholarship type name to application response"""
         scholarship_type_zh = {
             "undergraduate_freshman": "學士班新生獎學金",
@@ -1603,14 +1452,10 @@ class ApplicationService:
             "phd_moe": "教育部博士生獎學金",
             "direct_phd": "逕博獎學金",
         }
-        app_data.scholarship_type_zh = scholarship_type_zh.get(
-            app_data.scholarship_type, app_data.scholarship_type
-        )
+        app_data.scholarship_type_zh = scholarship_type_zh.get(app_data.scholarship_type, app_data.scholarship_type)
         return app_data
 
-    async def search_applications(
-        self, search_criteria: Dict[str, Any]
-    ) -> List[Application]:
+    async def search_applications(self, search_criteria: Dict[str, Any]) -> List[Application]:
         """搜尋申請"""
         query = select(Application)
 
@@ -1619,15 +1464,11 @@ class ApplicationService:
             if field.startswith("student."):
                 # 搜尋學生資料
                 json_path = field.replace("student.", "")
-                query = query.filter(
-                    Application.student_data[json_path].astext == str(value)
-                )
+                query = query.filter(Application.student_data[json_path].astext == str(value))
             elif field.startswith("form."):
                 # 搜尋表單資料
                 json_path = field.replace("form.", "")
-                query = query.filter(
-                    Application.submitted_form_data[json_path].astext == str(value)
-                )
+                query = query.filter(Application.submitted_form_data[json_path].astext == str(value))
             else:
                 # 一般欄位搜尋
                 query = query.filter(getattr(Application, field) == value)
@@ -1648,9 +1489,7 @@ class ApplicationService:
         query = select(Application).options(
             selectinload(Application.files),
             selectinload(Application.scholarship),
-            selectinload(
-                Application.student
-            ),  # Eagerly load student to avoid N+1 queries
+            selectinload(Application.student),  # Eagerly load student to avoid N+1 queries
         )
 
         if current_user.role == UserRole.STUDENT:
@@ -1688,11 +1527,7 @@ class ApplicationService:
         response_applications = []
         for application in applications:
             # 整合文件資訊到 submitted_form_data.documents
-            integrated_form_data = (
-                application.submitted_form_data.copy()
-                if application.submitted_form_data
-                else {}
-            )
+            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
 
             if application.files:
                 # 生成文件訪問 token
@@ -1708,11 +1543,7 @@ class ApplicationService:
                     for existing_doc in existing_docs:
                         # 查找對應的文件記錄
                         matching_file = next(
-                            (
-                                f
-                                for f in application.files
-                                if f.file_type == existing_doc.get("document_id")
-                            ),
+                            (f for f in application.files if f.file_type == existing_doc.get("document_id")),
                             None,
                         )
                         if matching_file:
@@ -1724,8 +1555,7 @@ class ApplicationService:
                                     "filename": matching_file.filename,
                                     "original_filename": matching_file.original_filename,
                                     "file_size": matching_file.file_size,
-                                    "mime_type": matching_file.mime_type
-                                    or matching_file.content_type,
+                                    "mime_type": matching_file.mime_type or matching_file.content_type,
                                     "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
                                     "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
                                     "is_verified": matching_file.is_verified,
@@ -1742,9 +1572,7 @@ class ApplicationService:
                 app_id=application.app_id,
                 user_id=application.user_id,
                 student_id=app_user.nycu_id if app_user else None,
-                scholarship_type=application.scholarship.code
-                if application.scholarship
-                else None,
+                scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
                 status=application.status,
                 status_name=application.status_name,
@@ -1795,10 +1623,7 @@ class ApplicationService:
             raise ValidationError("Only draft applications can be deleted")
 
         # Delete associated files from MinIO if they exist
-        if (
-            application.submitted_form_data
-            and "documents" in application.submitted_form_data
-        ):
+        if application.submitted_form_data and "documents" in application.submitted_form_data:
             for doc in application.submitted_form_data["documents"]:
                 if "file_path" in doc and doc["file_path"]:
                     try:
@@ -1860,9 +1685,7 @@ class ApplicationService:
                 # 獲取文件 URL
                 doc_url = getattr(user_profile, doc_config["profile_field"], None)
                 if not doc_url:
-                    logger.debug(
-                        f"No {doc_config['file_type']} found for user {user.id}"
-                    )
+                    logger.debug(f"No {doc_config['file_type']} found for user {user.id}")
                     continue
 
                 # Check if the document is already cloned to avoid duplication
@@ -1879,38 +1702,24 @@ class ApplicationService:
                     )
                     continue
 
-                logger.info(
-                    f"Cloning {doc_config['document_name']} for application {application.app_id}"
-                )
+                logger.info(f"Cloning {doc_config['document_name']} for application {application.app_id}")
 
                 # 使用儲存的 object_name，如果沒有則從 URL 提取
                 if hasattr(user_profile, doc_config["object_name_field"]):
-                    source_object_name = getattr(
-                        user_profile, doc_config["object_name_field"], None
-                    )
+                    source_object_name = getattr(user_profile, doc_config["object_name_field"], None)
                     if source_object_name:
                         filename = source_object_name.split("/")[-1]
-                        file_extension = (
-                            filename.split(".")[-1] if "." in filename else "jpg"
-                        )
+                        file_extension = filename.split(".")[-1] if "." in filename else "jpg"
                     else:
                         # 從 URL 提取
                         filename = doc_url.split("/")[-1].split("?")[0]
-                        file_extension = (
-                            filename.split(".")[-1] if "." in filename else "jpg"
-                        )
-                        source_object_name = (
-                            f"user-profiles/{user.id}/bank-documents/{filename}"
-                        )
+                        file_extension = filename.split(".")[-1] if "." in filename else "jpg"
+                        source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
                 else:
                     # 從 URL 提取（舊的邏輯作為備用）
                     filename = doc_url.split("/")[-1].split("?")[0]
-                    file_extension = (
-                        filename.split(".")[-1] if "." in filename else "jpg"
-                    )
-                    source_object_name = (
-                        f"user-profiles/{user.id}/bank-documents/{filename}"
-                    )
+                    file_extension = filename.split(".")[-1] if "." in filename else "jpg"
+                    source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
 
                 # 使用 MinIO 服務複製文件到申請路徑
                 new_object_name = minio_service.clone_file_to_application(
@@ -1919,9 +1728,7 @@ class ApplicationService:
                     file_type=doc_config["file_type"],
                 )
 
-                logger.debug(
-                    f"File cloned from {source_object_name} to {new_object_name}"
-                )
+                logger.debug(f"File cloned from {source_object_name} to {new_object_name}")
 
                 # 創建 ApplicationFile 記錄 - 與動態上傳文件相同處理
                 application_file = ApplicationFile(
@@ -2003,9 +1810,7 @@ class ApplicationService:
                 )
 
         except Exception as e:
-            logger.error(
-                f"Failed to clone user profile documents for application {application.app_id}: {e}"
-            )
+            logger.error(f"Failed to clone user profile documents for application {application.app_id}: {e}")
             # 不拋出異常，避免影響申請提交流程
             import traceback
 
@@ -2057,9 +1862,7 @@ class ApplicationService:
                 .where(
                     # Only applications that require professor recommendation
                     Application.scholarship_configuration.has(
-                        ScholarshipConfiguration.requires_professor_recommendation.is_(
-                            True
-                        )
+                        ScholarshipConfiguration.requires_professor_recommendation.is_(True)
                     ),
                     # Only applications assigned to this specific professor
                     Application.professor_id == professor_id,
@@ -2107,11 +1910,7 @@ class ApplicationService:
 
             # Apply pagination and get results
             offset = (page - 1) * size
-            paginated_query = (
-                base_query.offset(offset)
-                .limit(size)
-                .order_by(desc(Application.created_at))
-            )
+            paginated_query = base_query.offset(offset).limit(size).order_by(desc(Application.created_at))
 
             result = await self.db.execute(paginated_query)
             applications = result.unique().scalars().all()
@@ -2122,17 +1921,10 @@ class ApplicationService:
                 # Get scholarship type information for display
                 scholarship_type_name = None
                 scholarship_type_zh = None
-                if (
-                    app.scholarship_configuration
-                    and app.scholarship_configuration.scholarship_type
-                ):
-                    scholarship_type_name = (
-                        app.scholarship_configuration.scholarship_type.name
-                    )
+                if app.scholarship_configuration and app.scholarship_configuration.scholarship_type:
+                    scholarship_type_name = app.scholarship_configuration.scholarship_type.name
                     # Use name for Chinese display since name_zh doesn't exist
-                    scholarship_type_zh = (
-                        app.scholarship_configuration.scholarship_type.name
-                    )
+                    scholarship_type_zh = app.scholarship_configuration.scholarship_type.name
 
                 # Create response with all required fields
                 responses.append(
@@ -2141,16 +1933,12 @@ class ApplicationService:
                         app_id=app.app_id,
                         user_id=app.user_id,
                         student_id=app.student.nycu_id if app.student else None,
-                        scholarship_type=app.main_scholarship_type.lower()
-                        if app.main_scholarship_type
-                        else "",
+                        scholarship_type=app.main_scholarship_type.lower() if app.main_scholarship_type else "",
                         scholarship_type_id=app.scholarship_type_id,
                         scholarship_type_zh=scholarship_type_zh or "未設定",
                         scholarship_name=app.scholarship_name or "",
                         amount=app.amount or 0,
-                        currency=app.scholarship_configuration.currency
-                        if app.scholarship_configuration
-                        else "TWD",
+                        currency=app.scholarship_configuration.currency if app.scholarship_configuration else "TWD",
                         scholarship_subtype_list=app.scholarship_subtype_list or [],
                         status=app.status,
                         status_name=app.status,  # Using status as status_name for now
@@ -2173,12 +1961,8 @@ class ApplicationService:
                         updated_at=app.updated_at,
                         meta_data=app.meta_data,
                         # Display fields
-                        student_name=app.student_data.get("cname", "")
-                        if app.student_data
-                        else "",
-                        student_no=app.student_data.get("stdNo", "")
-                        if app.student_data
-                        else "",
+                        student_name=app.student_data.get("cname", "") if app.student_data else "",
+                        student_no=app.student_data.get("stdNo", "") if app.student_data else "",
                         days_waiting=None,  # Calculate if needed
                         professor=None,  # Professor info not needed in professor view
                         scholarship_configuration={
@@ -2203,9 +1987,7 @@ class ApplicationService:
             logger.error(f"Error fetching paginated professor applications: {e}")
             raise
 
-    async def can_professor_review_application(
-        self, application_id: int, professor_id: int
-    ) -> bool:
+    async def can_professor_review_application(self, application_id: int, professor_id: int) -> bool:
         """Check if professor can view this application (no time restrictions for viewing)"""
         try:
             # Get the application
@@ -2221,9 +2003,7 @@ class ApplicationService:
                 return False
 
             # Check if scholarship requires professor recommendation
-            if (
-                not application.scholarship_configuration.requires_professor_recommendation
-            ):
+            if not application.scholarship_configuration.requires_professor_recommendation:
                 return False
 
             # Check if application is assigned to this specific professor
@@ -2247,9 +2027,7 @@ class ApplicationService:
             logger.error(f"Error checking professor review authorization: {e}")
             return False
 
-    async def can_professor_submit_review(
-        self, application_id: int, professor_id: int
-    ) -> bool:
+    async def can_professor_submit_review(self, application_id: int, professor_id: int) -> bool:
         """Check if professor can submit a review (with time restrictions)"""
         try:
             # Get the application with scholarship configuration
@@ -2302,9 +2080,7 @@ class ApplicationService:
             else:
                 # Check regular review period - from application start to professor review end
                 # Professor can review from when student submits application until professor review deadline
-                review_start = (
-                    config.application_start_date
-                )  # Changed from professor_review_start
+                review_start = config.application_start_date  # Changed from professor_review_start
                 review_end = config.professor_review_end
 
                 if review_start and review_end:
@@ -2323,9 +2099,7 @@ class ApplicationService:
             return True
 
         except Exception as e:
-            logger.error(
-                f"Error checking professor review submission authorization: {e}"
-            )
+            logger.error(f"Error checking professor review submission authorization: {e}")
             return False
 
     async def get_professor_review(self, application_id: int, professor_id: int):
@@ -2426,22 +2200,14 @@ class ApplicationService:
             logger.error(f"Error fetching professor review by ID {review_id}: {e}")
             raise
 
-    async def submit_professor_review(
-        self, application_id: int, professor_id: int, review_data: dict
-    ) -> dict:
+    async def submit_professor_review(self, application_id: int, professor_id: int, review_data: dict) -> dict:
         """Submit professor review for an application"""
         try:
             # Check if review already exists
-            existing_review = await self.get_professor_review(
-                application_id, professor_id
-            )
-            if (
-                existing_review and existing_review.id > 0
-            ):  # ID > 0 means it's saved (not a new review template)
+            existing_review = await self.get_professor_review(application_id, professor_id)
+            if existing_review and existing_review.id > 0:  # ID > 0 means it's saved (not a new review template)
                 # Update existing review
-                return await self.update_professor_review(
-                    existing_review.id, review_data
-                )
+                return await self.update_professor_review(existing_review.id, review_data)
 
             # Create new professor review
             professor_review = ProfessorReview(
@@ -2502,9 +2268,7 @@ class ApplicationService:
                 raise NotFoundError("Professor review not found")
 
             # Update review fields
-            review.recommendation = review_data.get(
-                "recommendation", review.recommendation
-            )
+            review.recommendation = review_data.get("recommendation", review.recommendation)
             review.review_status = "completed"
             review.reviewed_at = datetime.now(timezone.utc)
 
@@ -2517,9 +2281,7 @@ class ApplicationService:
                 if sub_type_code in existing_items:
                     # Update existing item
                     existing_item = existing_items[sub_type_code]
-                    existing_item.is_recommended = item_data.get(
-                        "is_recommended", False
-                    )
+                    existing_item.is_recommended = item_data.get("is_recommended", False)
                     existing_item.comments = item_data.get("comments")
                 else:
                     # Create new item
@@ -2534,18 +2296,14 @@ class ApplicationService:
             await self.db.commit()
 
             # Return updated review
-            return await self.get_professor_review(
-                review.application_id, review.professor_id
-            )
+            return await self.get_professor_review(review.application_id, review.professor_id)
 
         except Exception as e:
             await self.db.rollback()
             logger.error(f"Error updating professor review: {e}")
             raise
 
-    async def get_application_available_sub_types(
-        self, application_id: int
-    ) -> List[dict]:
+    async def get_application_available_sub_types(self, application_id: int) -> List[dict]:
         """Get sub-types that the student actually applied for (not all possible sub-types)"""
         try:
             # Get application with scholarship type - use explicit join to avoid lazy loading
@@ -2565,11 +2323,7 @@ class ApplicationService:
             applied_sub_types = application.scholarship_subtype_list or []
 
             # If no specific sub-types or contains general, only show main scholarship (no sub-type selection)
-            if (
-                not applied_sub_types
-                or "general" in applied_sub_types
-                or len(applied_sub_types) == 0
-            ):
+            if not applied_sub_types or "general" in applied_sub_types or len(applied_sub_types) == 0:
                 return []  # No sub-types to review for general applications
 
             # Get scholarship type with sub_type_configs relationship loaded properly
@@ -2590,11 +2344,7 @@ class ApplicationService:
             translations = {"zh": {}, "en": {}}
 
             # Get active sub-type configs that are already loaded
-            active_configs = [
-                config
-                for config in scholarship_type.sub_type_configs
-                if config.is_active
-            ]
+            active_configs = [config for config in scholarship_type.sub_type_configs if config.is_active]
             active_configs.sort(key=lambda x: x.display_order)
 
             for config in active_configs:
@@ -2610,9 +2360,7 @@ class ApplicationService:
                         {
                             "value": sub_type,
                             "label": translations.get("zh", {}).get(sub_type, sub_type),
-                            "label_en": translations.get("en", {}).get(
-                                sub_type, sub_type
-                            ),
+                            "label_en": translations.get("en", {}).get(sub_type, sub_type),
                             "is_default": False,
                         }
                     )
@@ -2666,9 +2414,7 @@ class ApplicationService:
             logger.error(f"Error fetching professor stats: {e}")
             return {"pending_reviews": 0, "completed_reviews": 0, "overdue_reviews": 0}
 
-    async def get_available_professors(
-        self, user: User, search: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    async def get_available_professors(self, user: User, search: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get professors based on user role:
         - College admin: only same dept_code
@@ -2713,9 +2459,7 @@ class ApplicationService:
             logger.error(f"Error fetching available professors: {e}")
             raise
 
-    async def assign_professor(
-        self, application_id: int, professor_nycu_id: str, assigned_by: User
-    ) -> Application:
+    async def assign_professor(self, application_id: int, professor_nycu_id: str, assigned_by: User) -> Application:
         """Assign professor to application with notification"""
         try:
             from app.core.exceptions import NotFoundError, ValidationError
@@ -2734,15 +2478,9 @@ class ApplicationService:
                 select(Application)
                 .options(
                     selectinload(Application.scholarship_configuration),
-                    selectinload(Application.reviews).selectinload(
-                        ApplicationReview.reviewer
-                    ),
-                    selectinload(Application.professor_reviews).selectinload(
-                        ProfessorReview.professor
-                    ),
-                    selectinload(Application.professor_reviews).selectinload(
-                        ProfessorReview.items
-                    ),
+                    selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
+                    selectinload(Application.professor_reviews).selectinload(ProfessorReview.professor),
+                    selectinload(Application.professor_reviews).selectinload(ProfessorReview.items),
                     selectinload(Application.student),
                     selectinload(Application.professor),
                     selectinload(Application.reviewer),
@@ -2762,30 +2500,22 @@ class ApplicationService:
                     raise ValidationError("Access denied")
 
             # Get professor
-            stmt = select(User).where(
-                User.nycu_id == professor_nycu_id, User.role == UserRole.PROFESSOR
-            )
+            stmt = select(User).where(User.nycu_id == professor_nycu_id, User.role == UserRole.PROFESSOR)
             result = await self.db.execute(stmt)
             professor = result.scalar_one_or_none()
 
             if not professor:
-                raise NotFoundError(
-                    f"Professor with NYCU ID {professor_nycu_id} not found"
-                )
+                raise NotFoundError(f"Professor with NYCU ID {professor_nycu_id} not found")
 
             # Check if scholarship requires professor review
             config = application.scholarship_configuration
             if not config or not config.requires_professor_recommendation:
-                raise ValidationError(
-                    "This scholarship does not require professor review"
-                )
+                raise ValidationError("This scholarship does not require professor review")
 
             # Check permission for college admins
             if assigned_by.role == UserRole.COLLEGE:
                 if assigned_by.dept_code != professor.dept_code:
-                    raise ValidationError(
-                        "College admins can only assign professors from their own college"
-                    )
+                    raise ValidationError("College admins can only assign professors from their own college")
 
             # Update application
             old_professor_id = application.professor_id
@@ -2800,13 +2530,9 @@ class ApplicationService:
                 try:
                     email_service = EmailService()
                     await email_service.send_to_professor(application, self.db)
-                    logger.info(
-                        f"Email notification sent to professor {professor.nycu_id}"
-                    )
+                    logger.info(f"Email notification sent to professor {professor.nycu_id}")
                 except Exception as e:
-                    logger.error(
-                        f"Failed to send email to professor {professor.nycu_id}: {e}"
-                    )
+                    logger.error(f"Failed to send email to professor {professor.nycu_id}: {e}")
 
             # Create in-app notification
             try:
@@ -2819,9 +2545,7 @@ class ApplicationService:
                         "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
                         "application_id": application.id,
                         "app_id": application.app_id,
-                        "student_name": application.student_data.get("name")
-                        if application.student_data
-                        else "Unknown",
+                        "student_name": application.student_data.get("name") if application.student_data else "Unknown",
                         "scholarship_name": application.scholarship_name,
                         "assigned_by": assigned_by.name,
                     },
@@ -2829,13 +2553,9 @@ class ApplicationService:
                     priority=NotificationPriority.HIGH,
                     channels=[NotificationChannel.IN_APP, NotificationChannel.EMAIL],
                 )
-                logger.info(
-                    f"In-app notification created for professor {professor.nycu_id}"
-                )
+                logger.info(f"In-app notification created for professor {professor.nycu_id}")
             except Exception as e:
-                logger.error(
-                    f"Failed to create notification for professor {professor.nycu_id}: {e}"
-                )
+                logger.error(f"Failed to create notification for professor {professor.nycu_id}: {e}")
 
             # Log the assignment change
             if old_professor_id != professor.id:

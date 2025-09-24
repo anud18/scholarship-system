@@ -258,7 +258,9 @@ class TestSpecificBusinessLogicExceptions:
 
         exc = InsufficientGpaError(current_gpa, required_gpa, scholarship_type)
 
-        expected_message = f"GPA {current_gpa} does not meet requirement of {required_gpa} for {scholarship_type} scholarship"
+        expected_message = (
+            f"GPA {current_gpa} does not meet requirement of {required_gpa} for {scholarship_type} scholarship"
+        )
         assert exc.message == expected_message
         assert exc.status_code == 422
         assert exc.error_code == "BUSINESS_LOGIC_ERROR"
@@ -280,9 +282,7 @@ class TestSpecificBusinessLogicExceptions:
 
         exc = DuplicateApplicationError(scholarship_name)
 
-        expected_message = (
-            f"Student has already applied for {scholarship_name} scholarship"
-        )
+        expected_message = f"Student has already applied for {scholarship_name} scholarship"
         assert exc.message == expected_message
         assert exc.status_code == 409
         assert exc.error_code == "CONFLICT"
@@ -294,9 +294,7 @@ class TestSpecificBusinessLogicExceptions:
 
         exc = InvalidApplicationStatusError(current_status, target_status)
 
-        expected_message = (
-            f"Cannot change application status from {current_status} to {target_status}"
-        )
+        expected_message = f"Cannot change application status from {current_status} to {target_status}"
         assert exc.message == expected_message
         assert exc.status_code == 422
 
@@ -306,9 +304,7 @@ class TestSpecificBusinessLogicExceptions:
 
         exc = MaxFilesExceededError(max_files)
 
-        expected_message = (
-            f"Maximum number of files ({max_files}) exceeded for application"
-        )
+        expected_message = f"Maximum number of files ({max_files}) exceeded for application"
         assert exc.message == expected_message
         assert exc.status_code == 400
         assert exc.error_code == "FILE_UPLOAD_ERROR"
@@ -320,9 +316,7 @@ class TestSpecificBusinessLogicExceptions:
 
         exc = InvalidFileTypeError(file_type, allowed_types)
 
-        expected_message = (
-            f"File type '{file_type}' not allowed. Allowed types: pdf, doc, jpg"
-        )
+        expected_message = f"File type '{file_type}' not allowed. Allowed types: pdf, doc, jpg"
         assert exc.message == expected_message
         assert exc.status_code == 400
 
@@ -333,9 +327,7 @@ class TestSpecificBusinessLogicExceptions:
 
         exc = FileSizeExceededError(file_size, max_size)
 
-        expected_message = (
-            f"File size {file_size} bytes exceeds maximum size of {max_size} bytes"
-        )
+        expected_message = f"File size {file_size} bytes exceeds maximum size of {max_size} bytes"
         assert exc.message == expected_message
         assert exc.status_code == 400
 

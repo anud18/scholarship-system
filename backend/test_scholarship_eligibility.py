@@ -74,14 +74,10 @@ class MockScholarshipService:
         return self.settings.debug or self.settings.environment == "development"
 
     def _should_bypass_application_period(self):
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get(
-            "ALWAYS_OPEN_APPLICATION", False
-        )
+        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("ALWAYS_OPEN_APPLICATION", False)
 
     def _should_bypass_whitelist(self):
-        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get(
-            "BYPASS_WHITELIST", False
-        )
+        return self._is_dev_mode() and DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False)
 
     def check_scholarship_eligibility(self, student, term_record, scholarship):
         """檢查學生獎學金資格"""
@@ -92,18 +88,13 @@ class MockScholarshipService:
         print(f"開發模式: {self._is_dev_mode()}")
 
         # 檢查申請期間
-        if (
-            not self._should_bypass_application_period()
-            and not scholarship.is_application_period
-        ):
+        if not self._should_bypass_application_period() and not scholarship.is_application_period:
             print("❌ 不符合: 申請期間已過")
             return False
         elif self._should_bypass_application_period():
             print("🔧 DEV MODE: 跳過申請期間檢查")
         else:
-            print(
-                f"✅ 申請期間: {scholarship.application_start_date} 到 {scholarship.application_end_date}"
-            )
+            print(f"✅ 申請期間: {scholarship.application_start_date} 到 {scholarship.application_end_date}")
 
         # 檢查 GPA
         if scholarship.min_gpa and term_record.gpa < scholarship.min_gpa:
@@ -113,24 +104,14 @@ class MockScholarshipService:
             print(f"✅ GPA 符合: {term_record.gpa} >= {scholarship.min_gpa}")
 
         # 檢查修習學期數
-        if (
-            scholarship.max_completed_terms
-            and term_record.completedTerms > scholarship.max_completed_terms
-        ):
-            print(
-                f"❌ 不符合: 修習學期數 {term_record.completedTerms} 超過最大限制 {scholarship.max_completed_terms}"
-            )
+        if scholarship.max_completed_terms and term_record.completedTerms > scholarship.max_completed_terms:
+            print(f"❌ 不符合: 修習學期數 {term_record.completedTerms} 超過最大限制 {scholarship.max_completed_terms}")
             return False
         else:
-            print(
-                f"✅ 修習學期數符合: {term_record.completedTerms} <= {scholarship.max_completed_terms}"
-            )
+            print(f"✅ 修習學期數符合: {term_record.completedTerms} <= {scholarship.max_completed_terms}")
 
         # 檢查白名單
-        if (
-            not self._should_bypass_whitelist()
-            and not scholarship.is_student_in_whitelist(student.id)
-        ):
+        if not self._should_bypass_whitelist() and not scholarship.is_student_in_whitelist(student.id):
             print(f"❌ 不符合: 學生 {student.stdNo} 不在白名單中")
             return False
         elif self._should_bypass_whitelist() and scholarship.whitelist_enabled:
@@ -157,14 +138,10 @@ def test_stu_under_eligibility():
     service = MockScholarshipService()
 
     # 檢查資格
-    is_eligible = service.check_scholarship_eligibility(
-        student, term_record, scholarship
-    )
+    is_eligible = service.check_scholarship_eligibility(student, term_record, scholarship)
 
     print("\n📋 最終結果:")
-    print(
-        f"學生 {student.stdNo} {'符合' if is_eligible else '不符合'} {scholarship.name} 申請資格"
-    )
+    print(f"學生 {student.stdNo} {'符合' if is_eligible else '不符合'} {scholarship.name} 申請資格")
 
     return is_eligible
 
@@ -207,9 +184,7 @@ def test_different_scenarios():
         student = MockStudent(scenario["std_no"], scenario["gpa"], scenario["terms"])
         term_record = MockTermRecord(scenario["gpa"], scenario["terms"])
 
-        result = service.check_scholarship_eligibility(
-            student, term_record, scholarship
-        )
+        result = service.check_scholarship_eligibility(student, term_record, scholarship)
         status = "✅ 符合預期" if result == scenario["expected"] else "❌ 不符合預期"
         print(f"結果: {'符合' if result else '不符合'} 資格 {status}")
 

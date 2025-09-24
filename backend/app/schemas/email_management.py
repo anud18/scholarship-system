@@ -68,9 +68,7 @@ class EmailHistoryRead(EmailHistoryBase):
             "email_size_bytes": obj.email_size_bytes,
             # Related data
             "application_app_id": obj.application.app_id if obj.application else None,
-            "scholarship_type_name": obj.scholarship_type.name
-            if obj.scholarship_type
-            else None,
+            "scholarship_type_name": obj.scholarship_type.name if obj.scholarship_type else None,
             "sent_by_username": obj.sent_by.nycu_id if obj.sent_by else None,
             "template_description": obj.template.key if obj.template else None,
         }
@@ -173,13 +171,9 @@ class ScheduledEmailRead(ScheduledEmailBase):
             "priority": obj.priority,
             # Related data
             "application_app_id": obj.application.app_id if obj.application else None,
-            "scholarship_type_name": obj.scholarship_type.name
-            if obj.scholarship_type
-            else None,
+            "scholarship_type_name": obj.scholarship_type.name if obj.scholarship_type else None,
             "created_by_username": obj.created_by.nycu_id if obj.created_by else None,
-            "approved_by_username": obj.approved_by.nycu_id
-            if obj.approved_by
-            else None,
+            "approved_by_username": obj.approved_by.nycu_id if obj.approved_by else None,
             "template_description": obj.template.key if obj.template else None,
             # Computed properties
             "is_due": obj.is_due,

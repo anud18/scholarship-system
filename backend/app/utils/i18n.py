@@ -219,16 +219,12 @@ class ScholarshipI18n:
             return key.replace("_", " ").title()
 
     @classmethod
-    def get_application_status_text(
-        cls, status: str, language: str = Language.TRADITIONAL_CHINESE.value
-    ) -> str:
+    def get_application_status_text(cls, status: str, language: str = Language.TRADITIONAL_CHINESE.value) -> str:
         """Get translated application status text"""
         return cls.get_text(status, "application_status", language)
 
     @classmethod
-    def get_scholarship_type_text(
-        cls, type_value: str, language: str = Language.TRADITIONAL_CHINESE.value
-    ) -> str:
+    def get_scholarship_type_text(cls, type_value: str, language: str = Language.TRADITIONAL_CHINESE.value) -> str:
         """Get translated scholarship type text"""
         # Try main types first
         text = cls.get_text(type_value, "scholarship_main_types", language)
@@ -238,30 +234,22 @@ class ScholarshipI18n:
         return text
 
     @classmethod
-    def get_error_message(
-        cls, error_key: str, language: str = Language.TRADITIONAL_CHINESE.value
-    ) -> str:
+    def get_error_message(cls, error_key: str, language: str = Language.TRADITIONAL_CHINESE.value) -> str:
         """Get translated error message"""
         return cls.get_text(error_key, "errors", language)
 
     @classmethod
-    def get_form_label(
-        cls, label_key: str, language: str = Language.TRADITIONAL_CHINESE.value
-    ) -> str:
+    def get_form_label(cls, label_key: str, language: str = Language.TRADITIONAL_CHINESE.value) -> str:
         """Get translated form label"""
         return cls.get_text(label_key, "form_labels", language)
 
     @classmethod
-    def get_dashboard_label(
-        cls, label_key: str, language: str = Language.TRADITIONAL_CHINESE.value
-    ) -> str:
+    def get_dashboard_label(cls, label_key: str, language: str = Language.TRADITIONAL_CHINESE.value) -> str:
         """Get translated dashboard label"""
         return cls.get_text(label_key, "dashboard", language)
 
     @classmethod
-    def get_email_content(
-        cls, content_key: str, language: str = Language.TRADITIONAL_CHINESE.value
-    ) -> str:
+    def get_email_content(cls, content_key: str, language: str = Language.TRADITIONAL_CHINESE.value) -> str:
         """Get translated email content"""
         return cls.get_text(content_key, "email", language)
 
@@ -277,9 +265,7 @@ class ScholarshipI18n:
 
         # Translate status
         if "status" in localized_data:
-            localized_data["status_text"] = cls.get_application_status_text(
-                localized_data["status"], language
-            )
+            localized_data["status_text"] = cls.get_application_status_text(localized_data["status"], language)
 
         # Translate scholarship types
         if "main_scholarship_type" in localized_data:
@@ -317,9 +303,7 @@ class ScholarshipI18n:
         ]
 
     @classmethod
-    def detect_language_from_request(
-        cls, accept_language_header: Optional[str] = None
-    ) -> str:
+    def detect_language_from_request(cls, accept_language_header: Optional[str] = None) -> str:
         """Detect preferred language from request headers"""
 
         if not accept_language_header:
@@ -335,18 +319,13 @@ class ScholarshipI18n:
 
     @classmethod
     def get_localized_email_template(
-        cls,
-        template_type: str,
-        language: str = Language.TRADITIONAL_CHINESE.value,
-        **kwargs
+        cls, template_type: str, language: str = Language.TRADITIONAL_CHINESE.value, **kwargs
     ) -> Dict[str, str]:
         """Get localized email template"""
 
         templates = {
             "application_submitted": {
-                "subject": cls.get_email_content(
-                    "subject_application_submitted", language
-                ),
+                "subject": cls.get_email_content("subject_application_submitted", language),
                 "greeting": cls.get_email_content("greeting", language),
                 "message": cls.get_text("application_submitted", "messages", language),
                 "closing": cls.get_email_content("closing", language),
@@ -391,9 +370,7 @@ def get_user_language(
 
     # Try to detect from request headers
     if request_headers and "accept-language" in request_headers:
-        return ScholarshipI18n.detect_language_from_request(
-            request_headers["accept-language"]
-        )
+        return ScholarshipI18n.detect_language_from_request(request_headers["accept-language"])
 
     # Default to Traditional Chinese
     return Language.TRADITIONAL_CHINESE.value

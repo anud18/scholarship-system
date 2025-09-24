@@ -74,9 +74,7 @@ class TestBulkApprovalServiceApprove:
         mock_result.scalars.return_value.all.return_value = []
         service.db.execute = AsyncMock(return_value=mock_result)
 
-        results = await service.bulk_approve_applications(
-            application_ids=[1, 2, 3], approver_user_id=2
-        )
+        results = await service.bulk_approve_applications(application_ids=[1, 2, 3], approver_user_id=2)
 
         assert results["total_requested"] == 3
         assert len(results["successful_approvals"]) == 0
@@ -206,9 +204,7 @@ class TestBulkApprovalServiceAutoApprove:
         service.db.execute = AsyncMock(return_value=mock_result)
         service.db.commit = AsyncMock()
 
-        results = await service.auto_approve_by_criteria(
-            approval_criteria={"min_gpa": 3.5}
-        )
+        results = await service.auto_approve_by_criteria(approval_criteria={"min_gpa": 3.5})
 
         assert results["total_eligible"] <= 3
 
@@ -250,9 +246,7 @@ class TestBulkApprovalServiceStatusUpdate:
     async def test_bulk_status_update_invalid_status(self, service):
         """Test bulk status update with invalid status"""
         with pytest.raises(ValueError, match="Invalid status"):
-            await service.bulk_status_update(
-                application_ids=[1], new_status="INVALID_STATUS", updater_user_id=2
-            )
+            await service.bulk_status_update(application_ids=[1], new_status="INVALID_STATUS", updater_user_id=2)
 
 
 @pytest.mark.asyncio
@@ -266,9 +260,7 @@ class TestBulkApprovalServiceBatchProcess:
 
     async def test_batch_process_approve(self, service):
         """Test batch processing approve operation"""
-        with patch.object(
-            service, "bulk_approve_applications", new_callable=AsyncMock
-        ) as mock_approve:
+        with patch.object(service, "bulk_approve_applications", new_callable=AsyncMock) as mock_approve:
             mock_approve.return_value = {
                 "success_count": 5,
                 "failure_count": 0,
@@ -287,9 +279,7 @@ class TestBulkApprovalServiceBatchProcess:
 
     async def test_batch_process_reject(self, service):
         """Test batch processing reject operation"""
-        with patch.object(
-            service, "bulk_reject_applications", new_callable=AsyncMock
-        ) as mock_reject:
+        with patch.object(service, "bulk_reject_applications", new_callable=AsyncMock) as mock_reject:
             mock_reject.return_value = {
                 "success_count": 3,
                 "failure_count": 0,

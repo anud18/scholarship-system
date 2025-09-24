@@ -33,9 +33,7 @@ async def get_all_scholarships(
     scholarship_list = []
     for scholarship in scholarships:
         # 使用篩選參數或預設值
-        display_academic_year = (
-            academic_year if academic_year is not None else 113
-        )  # 預設 113 學年
+        display_academic_year = academic_year if academic_year is not None else 113  # 預設 113 學年
         display_semester = semester if semester is not None else "first"  # 預設第一學期
 
         # Convert semester string to enum for configuration lookup
@@ -55,10 +53,7 @@ async def get_all_scholarships(
         ]
 
         # Add semester condition based on scholarship's application cycle
-        if (
-            scholarship.application_cycle
-            and scholarship.application_cycle.value == "yearly"
-        ):
+        if scholarship.application_cycle and scholarship.application_cycle.value == "yearly":
             # For yearly scholarships, look for configurations with semester = None
             config_conditions.append(ScholarshipConfiguration.semester.is_(None))
         else:
@@ -85,17 +80,11 @@ async def get_all_scholarships(
             # 使用篩選的學年學期或預設值
             "academic_year": display_academic_year,
             "semester": display_semester,
-            "application_cycle": scholarship.application_cycle.value
-            if scholarship.application_cycle
-            else "semester",
+            "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
             "whitelist_enabled": scholarship.whitelist_enabled,
             "status": scholarship.status,
-            "created_at": scholarship.created_at.isoformat()
-            if scholarship.created_at
-            else None,
-            "updated_at": scholarship.updated_at.isoformat()
-            if scholarship.updated_at
-            else None,
+            "created_at": scholarship.created_at.isoformat() if scholarship.created_at else None,
+            "updated_at": scholarship.updated_at.isoformat() if scholarship.updated_at else None,
             "created_by": scholarship.created_by,
             "updated_by": scholarship.updated_by,
         }
@@ -142,12 +131,8 @@ async def get_all_scholarships(
                     "college_review_start": config.college_review_start.isoformat()
                     if config.college_review_start
                     else None,
-                    "college_review_end": config.college_review_end.isoformat()
-                    if config.college_review_end
-                    else None,
-                    "review_deadline": config.review_deadline.isoformat()
-                    if config.review_deadline
-                    else None,
+                    "college_review_end": config.college_review_end.isoformat() if config.college_review_end else None,
+                    "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
                 }
             )
         else:
@@ -201,18 +186,14 @@ async def get_scholarship_eligibility(
         )
 
     scholarship_service = ScholarshipService(db)
-    eligible_scholarships = await scholarship_service.get_eligible_scholarships(
-        student, current_user.id
-    )
+    eligible_scholarships = await scholarship_service.get_eligible_scholarships(student, current_user.id)
 
     # Convert scholarship dictionaries to EligibleScholarshipResponse with rule details
     response_data = []
     for scholarship in eligible_scholarships:
         response_item = EligibleScholarshipResponse(
             id=scholarship["id"],
-            configuration_id=scholarship[
-                "configuration_id"
-            ],  # Pass through configuration ID
+            configuration_id=scholarship["configuration_id"],  # Pass through configuration ID
             code=scholarship["code"],
             name=scholarship["name"],
             name_en=scholarship.get("name_en") or scholarship["name"],
@@ -231,14 +212,10 @@ async def get_scholarship_eligibility(
             professor_review_end=scholarship.get("professor_review_end"),
             college_review_start=scholarship.get("college_review_start"),
             college_review_end=scholarship.get("college_review_end"),
-            sub_type_selection_mode=scholarship.get(
-                "sub_type_selection_mode", "single"
-            ),
+            sub_type_selection_mode=scholarship.get("sub_type_selection_mode", "single"),
             passed=scholarship.get("passed", []),  # Rules passed from eligibility check
             warnings=[],  # Hide warnings from student view - they don't need to see these
-            errors=scholarship.get(
-                "errors", []
-            ),  # Error messages from eligibility check
+            errors=scholarship.get("errors", []),  # Error messages from eligibility check
             created_at=scholarship.get("created_at"),
         )
         response_data.append(response_item)
@@ -247,14 +224,10 @@ async def get_scholarship_eligibility(
 
 
 @router.get("/{scholarship_id}", response_model=ScholarshipTypeResponse)
-async def get_scholarship_detail(
-    scholarship_id: int, db: AsyncSession = Depends(get_db)
-):
+async def get_scholarship_detail(scholarship_id: int, db: AsyncSession = Depends(get_db)):
     """Get scholarship details"""
     stmt = (
-        select(ScholarshipType)
-        .options(joinedload(ScholarshipType.rules))
-        .where(ScholarshipType.id == scholarship_id)
+        select(ScholarshipType).options(joinedload(ScholarshipType.rules)).where(ScholarshipType.id == scholarship_id)
     )
     result = await db.execute(stmt)
     scholarship = result.unique().scalar_one_or_none()
@@ -287,19 +260,11 @@ async def get_scholarship_detail(
         "description": scholarship.description,
         "description_en": scholarship.description_en,
         "category": scholarship.category if hasattr(scholarship, "category") else None,
-        "application_cycle": scholarship.application_cycle.value
-        if scholarship.application_cycle
-        else "semester",
+        "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
         "sub_type_list": scholarship.sub_type_list or [],
-        "amount": active_config.amount
-        if active_config
-        else 0,  # Get amount from active configuration
-        "currency": active_config.currency
-        if active_config
-        else "TWD",  # Get currency from active configuration
-        "whitelist_enabled": scholarship.whitelist_enabled
-        if hasattr(scholarship, "whitelist_enabled")
-        else False,
+        "amount": active_config.amount if active_config else 0,  # Get amount from active configuration
+        "currency": active_config.currency if active_config else "TWD",  # Get currency from active configuration
+        "whitelist_enabled": scholarship.whitelist_enabled if hasattr(scholarship, "whitelist_enabled") else False,
         "whitelist_student_ids": [
             student_id
             for subtype_list in (
@@ -309,25 +274,13 @@ async def get_scholarship_detail(
             )
             for student_id in subtype_list
         ],
-        "application_start_date": active_config.application_start_date
-        if active_config
-        else None,
-        "application_end_date": active_config.application_end_date
-        if active_config
-        else None,
+        "application_start_date": active_config.application_start_date if active_config else None,
+        "application_end_date": active_config.application_end_date if active_config else None,
         "review_deadline": active_config.review_deadline if active_config else None,
-        "professor_review_start": active_config.professor_review_start
-        if active_config
-        else None,
-        "professor_review_end": active_config.professor_review_end
-        if active_config
-        else None,
-        "college_review_start": active_config.college_review_start
-        if active_config
-        else None,
-        "college_review_end": active_config.college_review_end
-        if active_config
-        else None,
+        "professor_review_start": active_config.professor_review_start if active_config else None,
+        "professor_review_end": active_config.professor_review_end if active_config else None,
+        "college_review_start": active_config.college_review_start if active_config else None,
+        "college_review_end": active_config.college_review_end if active_config else None,
         "sub_type_selection_mode": scholarship.sub_type_selection_mode.value
         if scholarship.sub_type_selection_mode
         else "single",
@@ -335,15 +288,9 @@ async def get_scholarship_detail(
         "requires_professor_recommendation": active_config.requires_professor_recommendation
         if active_config
         else False,
-        "requires_college_review": active_config.requires_college_review
-        if active_config
-        else False,
-        "review_workflow": scholarship.review_workflow
-        if hasattr(scholarship, "review_workflow")
-        else None,
-        "auto_approval_rules": scholarship.auto_approval_rules
-        if hasattr(scholarship, "auto_approval_rules")
-        else None,
+        "requires_college_review": active_config.requires_college_review if active_config else False,
+        "review_workflow": scholarship.review_workflow if hasattr(scholarship, "review_workflow") else None,
+        "auto_approval_rules": scholarship.auto_approval_rules if hasattr(scholarship, "auto_approval_rules") else None,
         "created_at": scholarship.created_at,
         "updated_at": scholarship.updated_at,
         "created_by": scholarship.created_by,
@@ -354,14 +301,10 @@ async def get_scholarship_detail(
 
 
 @router.post("/dev/reset-application-periods")
-async def reset_application_periods(
-    current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+async def reset_application_periods(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Reset all scholarship application periods for testing (dev only)"""
     if not settings.debug:
-        raise HTTPException(
-            status_code=403, detail="Only available in development mode"
-        )
+        raise HTTPException(status_code=403, detail="Only available in development mode")
     now = datetime.now(timezone.utc)
     start_date = now - timedelta(days=30)
     end_date = now + timedelta(days=30)
@@ -392,9 +335,7 @@ async def toggle_scholarship_whitelist(
 ):
     """Toggle scholarship whitelist for testing (dev only)"""
     if not settings.debug:
-        raise HTTPException(
-            status_code=403, detail="Only available in development mode"
-        )
+        raise HTTPException(status_code=403, detail="Only available in development mode")
     stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
     result = await db.execute(stmt)
     scholarship = result.scalar_one_or_none()
@@ -424,9 +365,7 @@ async def add_student_to_whitelist(
 ):
     """Add student to scholarship whitelist (dev only)"""
     if not settings.debug:
-        raise HTTPException(
-            status_code=403, detail="Only available in development mode"
-        )
+        raise HTTPException(status_code=403, detail="Only available in development mode")
     stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
     result = await db.execute(stmt)
     scholarship = result.scalar_one_or_none()

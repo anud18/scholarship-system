@@ -101,9 +101,7 @@ class Application(Base):
     __tablename__ = "applications"
 
     id = Column(Integer, primary_key=True, index=True)
-    app_id = Column(
-        String(20), unique=True, index=True, nullable=False
-    )  # APP-2025-000001
+    app_id = Column(String(20), unique=True, index=True, nullable=False)  # APP-2025-000001
 
     # 申請人資訊
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -122,12 +120,8 @@ class Application(Base):
     sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), nullable=False)
 
     # New fields for comprehensive scholarship system (Issue #10)
-    main_scholarship_type = Column(
-        String(50)
-    )  # UNDERGRADUATE_FRESHMAN, PHD, DIRECT_PHD
-    sub_scholarship_type = Column(
-        String(50), default="GENERAL"
-    )  # GENERAL, NSTC, MOE_1W, MOE_2W
+    main_scholarship_type = Column(String(50))  # UNDERGRADUATE_FRESHMAN, PHD, DIRECT_PHD
+    sub_scholarship_type = Column(String(50), default="GENERAL")  # GENERAL, NSTC, MOE_1W, MOE_2W
     is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
     previous_application_id = Column(Integer, ForeignKey("applications.id"))
     priority_score = Column(Integer, default=0)
@@ -140,9 +134,7 @@ class Application(Base):
 
     # 學期資訊 (申請當時的學期)
     academic_year = Column(Integer, nullable=False)  # 民國年，例如 113
-    semester = Column(
-        Enum(Semester), nullable=True
-    )  # Can be NULL for yearly scholarships
+    semester = Column(Enum(Semester), nullable=True)  # Can be NULL for yearly scholarships
 
     # 申請資料 (申請當時)
     student_data = Column(JSON)  # Student 資料
@@ -164,26 +156,20 @@ class Application(Base):
     # 學院審查相關 (College Review)
     college_ranking_score = Column(Numeric(8, 2))  # 學院排名分數
     final_ranking_position = Column(Integer)  # 最終排名位置
-    quota_allocation_status = Column(
-        String(20)
-    )  # 'allocated', 'rejected', 'waitlisted'
+    quota_allocation_status = Column(String(20))  # 'allocated', 'rejected', 'waitlisted'
 
     # 時間戳記
     submitted_at = Column(DateTime(timezone=True))
     reviewed_at = Column(DateTime(timezone=True))
     approved_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # 其他資訊
     meta_data = Column(JSON)  # 額外的元資料
 
     # 關聯
-    student = relationship(
-        "User", foreign_keys=[user_id], back_populates="applications"
-    )
+    student = relationship("User", foreign_keys=[user_id], back_populates="applications")
     # studentProfile relationship removed - student data accessed via external API
     professor = relationship("User", foreign_keys=[professor_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])
@@ -200,20 +186,12 @@ class Application(Base):
         foreign_keys=[scholarship_type_id],
         overlaps="applications,scholarship_type_ref",
     )
-    scholarship_configuration = relationship(
-        "ScholarshipConfiguration", foreign_keys=[scholarship_configuration_id]
-    )
+    scholarship_configuration = relationship("ScholarshipConfiguration", foreign_keys=[scholarship_configuration_id])
     previous_application = relationship("Application", remote_side=[id])
 
-    files = relationship(
-        "ApplicationFile", back_populates="application", cascade="all, delete-orphan"
-    )
-    reviews = relationship(
-        "ApplicationReview", back_populates="application", cascade="all, delete-orphan"
-    )
-    professor_reviews = relationship(
-        "ProfessorReview", back_populates="application", cascade="all, delete-orphan"
-    )
+    files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
+    reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
+    professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
     # college_review = relationship("CollegeReview", back_populates="application", uselist=False, cascade="all, delete-orphan")  # Temporarily commented for testing
 
     # 唯一約束：確保每個用戶在每個學年、學期、獎學金組合下只能有一個申請
@@ -229,17 +207,12 @@ class Application(Base):
     )
 
     def __repr__(self):
-        return (
-            f"<Application(id={self.id}, app_id={self.app_id}, status={self.status})>"
-        )
+        return f"<Application(id={self.id}, app_id={self.app_id}, status={self.status})>"
 
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(
-            self.status
-            in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value]
-        )
+        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
 
     @property
     def is_submitted(self) -> bool:
@@ -263,10 +236,7 @@ class Application(Base):
         """Check if application review is overdue"""
         if not self.review_deadline:
             return False
-        return bool(
-            datetime.now().replace(tzinfo=None)
-            > self.review_deadline.replace(tzinfo=None)
-        )
+        return bool(datetime.now().replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
 
     def calculate_priority_score(self) -> int:
         """Calculate priority score based on business rules for issue #10"""
@@ -280,9 +250,7 @@ class Application(Base):
         if self.submitted_at:
             from datetime import datetime, timezone
 
-            days_since_submission = (
-                datetime.now(timezone.utc) - self.submitted_at
-            ).days
+            days_since_submission = (datetime.now(timezone.utc) - self.submitted_at).days
             score += max(0, 30 - days_since_submission)
 
         return score
@@ -375,9 +343,7 @@ class ApplicationFile(Base):
 
     # 時間戳記
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
-    upload_date = Column(
-        DateTime(timezone=True), server_default=func.now()
-    )  # Alias for MinIO service
+    upload_date = Column(DateTime(timezone=True), server_default=func.now())  # Alias for MinIO service
     processed_at = Column(DateTime(timezone=True))
 
     # 關聯
@@ -417,9 +383,7 @@ class ApplicationReview(Base):
     reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # 審核資訊
-    review_stage = Column(
-        String(50)
-    )  # professor_recommendation, department_review, final_approval
+    review_stage = Column(String(50))  # professor_recommendation, department_review, final_approval
     review_status = Column(String(20), default=ReviewStatus.PENDING.value)
 
     # 審核結果
@@ -441,7 +405,9 @@ class ApplicationReview(Base):
     reviewer = relationship("User", back_populates="reviews")
 
     def __repr__(self):
-        return f"<ApplicationReview(id={self.id}, application_id={self.application_id}, reviewer_id={self.reviewer_id})>"
+        return (
+            f"<ApplicationReview(id={self.id}, application_id={self.application_id}, reviewer_id={self.reviewer_id})>"
+        )
 
 
 class ProfessorReview(Base):
@@ -464,12 +430,12 @@ class ProfessorReview(Base):
     # 關聯
     application = relationship("Application", back_populates="professor_reviews")
     professor = relationship("User")
-    items = relationship(
-        "ProfessorReviewItem", back_populates="review", cascade="all, delete-orphan"
-    )
+    items = relationship("ProfessorReviewItem", back_populates="review", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<ProfessorReview(id={self.id}, application_id={self.application_id}, professor_id={self.professor_id})>"
+        return (
+            f"<ProfessorReview(id={self.id}, application_id={self.application_id}, professor_id={self.professor_id})>"
+        )
 
 
 class ProfessorReviewItem(Base):

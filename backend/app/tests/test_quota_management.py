@@ -27,9 +27,7 @@ class TestQuotaManagementPermissions:
     ):
         """Super admin should have full access to quota management"""
         # Create PhD scholarship configuration
-        phd_scholarship = ScholarshipType(
-            code="phd", name="博士生獎學金", category="doctoral", status="active"
-        )
+        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", category="doctoral", status="active")
         db_session.add(phd_scholarship)
         await db_session.commit()
 
@@ -60,16 +58,12 @@ class TestQuotaManagementPermissions:
     ):
         """Regular admin with scholarship permissions should have access"""
         # Create PhD scholarship
-        phd_scholarship = ScholarshipType(
-            code="phd", name="博士生獎學金", category="doctoral", status="active"
-        )
+        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", category="doctoral", status="active")
         db_session.add(phd_scholarship)
         await db_session.commit()
 
         # Grant permission to admin
-        permission = AdminScholarship(
-            admin_id=admin_user.id, scholarship_id=phd_scholarship.id
-        )
+        permission = AdminScholarship(admin_id=admin_user.id, scholarship_id=phd_scholarship.id)
         db_session.add(permission)
         await db_session.commit()
 
@@ -80,9 +74,7 @@ class TestQuotaManagementPermissions:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_regular_admin_without_permission_denied(
-        self, async_client: AsyncClient, admin_user: User
-    ):
+    async def test_regular_admin_without_permission_denied(self, async_client: AsyncClient, admin_user: User):
         """Regular admin without permissions should be denied"""
         response = await async_client.get(
             "/api/v1/scholarship-configurations/available-semesters",
@@ -254,12 +246,8 @@ class TestQuotaUsageCalculation:
         await db_session.commit()
 
         # Create students in different colleges
-        student_e = Student(
-            student_id="110001001", name="Test Student E", dept_code="E", year=3
-        )
-        student_c = Student(
-            student_id="110001002", name="Test Student C", dept_code="C", year=3
-        )
+        student_e = Student(student_id="110001001", name="Test Student E", dept_code="E", year=3)
+        student_c = Student(student_id="110001002", name="Test Student C", dept_code="C", year=3)
         db_session.add_all([student_e, student_c])
         await db_session.commit()
 
@@ -296,12 +284,8 @@ class TestQuotaUsageCalculation:
         quota_data = data["data"]
 
         # Check usage calculation
-        assert (
-            quota_data["phd_quotas"]["nstc"]["E"]["used"] == 2
-        )  # 2 approved apps for college E
-        assert (
-            quota_data["phd_quotas"]["nstc"]["C"]["used"] == 1
-        )  # 1 approved app for college C
+        assert quota_data["phd_quotas"]["nstc"]["E"]["used"] == 2  # 2 approved apps for college E
+        assert quota_data["phd_quotas"]["nstc"]["C"]["used"] == 1  # 1 approved app for college C
         assert quota_data["phd_quotas"]["nstc"]["E"]["available"] == 3  # 5 - 2 = 3
         assert quota_data["phd_quotas"]["nstc"]["C"]["available"] == 2  # 3 - 1 = 2
 
@@ -319,9 +303,7 @@ class TestPeriodFiltering:
         """Test that matrix-based scholarships only show academic years, not semesters"""
 
         # Create PhD scholarship (yearly, matrix-based)
-        phd_scholarship = ScholarshipType(
-            code="phd", name="博士生獎學金", category="doctoral", status="active"
-        )
+        phd_scholarship = ScholarshipType(code="phd", name="博士生獎學金", category="doctoral", status="active")
         db_session.add(phd_scholarship)
 
         # Create undergraduate scholarship (semester-based, not matrix)
@@ -414,9 +396,7 @@ class TestAPIResponseFormat:
     """Test API response format consistency"""
 
     @pytest.mark.asyncio
-    async def test_api_response_format_consistency(
-        self, async_client: AsyncClient, super_admin_user: User
-    ):
+    async def test_api_response_format_consistency(self, async_client: AsyncClient, super_admin_user: User):
         """Test that all quota API endpoints return consistent response format"""
 
         endpoints_to_test = [
@@ -426,9 +406,7 @@ class TestAPIResponseFormat:
         ]
 
         for endpoint in endpoints_to_test:
-            response = await async_client.get(
-                endpoint, headers={"Authorization": f"Bearer {super_admin_user.token}"}
-            )
+            response = await async_client.get(endpoint, headers={"Authorization": f"Bearer {super_admin_user.token}"})
 
             assert response.status_code == 200
             data = response.json()

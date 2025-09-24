@@ -32,9 +32,7 @@ class EndpointTester:
             "Content-Type": "application/json",
         }
 
-    def test_endpoint(
-        self, method: str, path: str, data: Dict = None
-    ) -> Dict[str, Any]:
+    def test_endpoint(self, method: str, path: str, data: Dict = None) -> Dict[str, Any]:
         """
         Test a single endpoint
 
@@ -79,9 +77,7 @@ class EndpointTester:
                 if isinstance(response_data, dict):
                     result["response_fields"] = list(response_data.keys())
                 elif isinstance(response_data, list) and response_data:
-                    result["response_fields"] = (
-                        list(response_data[0].keys()) if response_data else []
-                    )
+                    result["response_fields"] = list(response_data[0].keys()) if response_data else []
                     result["response_count"] = len(response_data)
 
             except json.JSONDecodeError:
@@ -91,9 +87,7 @@ class EndpointTester:
             # Check for specific validation errors
             if "ResponseValidationError" in response.text:
                 result["has_validation_error"] = True
-                result["validation_error_details"] = self.extract_validation_errors(
-                    response.text
-                )
+                result["validation_error_details"] = self.extract_validation_errors(response.text)
             else:
                 result["has_validation_error"] = False
 
@@ -164,9 +158,7 @@ class EndpointTester:
         """Generate a summary report"""
         total = len(results)
         passed = len([r for r in results if r.get("success", False)])
-        validation_errors = len(
-            [r for r in results if r.get("has_validation_error", False)]
-        )
+        validation_errors = len([r for r in results if r.get("has_validation_error", False)])
 
         report = f"""
 === API Schema Validation Report ===
@@ -215,16 +207,12 @@ Found {validation_errors} schema validation error(s). To fix:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Test API endpoints for schema validation"
-    )
+    parser = argparse.ArgumentParser(description="Test API endpoints for schema validation")
     parser.add_argument(
         "--endpoint",
         help="Test specific endpoint (e.g., /api/v1/scholarships/eligible)",
     )
-    parser.add_argument(
-        "--base-url", default="http://localhost:8000", help="Base URL for API"
-    )
+    parser.add_argument("--base-url", default="http://localhost:8000", help="Base URL for API")
     parser.add_argument("--output", help="Output file for report")
 
     args = parser.parse_args()

@@ -53,17 +53,13 @@ def parse_date_field(date_input: Optional[Union[str, datetime]]) -> Optional[dat
             try:
                 return dateutil.parser.parse(date_input)
             except Exception as e2:
-                logger.error(
-                    f"Could not parse date '{date_input}' with any method: {e2}"
-                )
+                logger.error(f"Could not parse date '{date_input}' with any method: {e2}")
                 raise ValueError(f"Invalid date format: {date_input}")
 
     return None
 
 
-def format_date_for_display(
-    date_obj: Optional[datetime], format_string: str = "%Y-%m-%d", default: str = "N/A"
-) -> str:
+def format_date_for_display(date_obj: Optional[datetime], format_string: str = "%Y-%m-%d", default: str = "N/A") -> str:
     """
     Format a datetime object for display.
 

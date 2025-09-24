@@ -40,9 +40,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post(
-    "/", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 async def create_application(
     application_data: ApplicationCreate,
     is_draft: bool = Query(False, description="Save as draft"),
@@ -50,9 +48,7 @@ async def create_application(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new scholarship application (draft or submitted)"""
-    logger.debug(
-        f"Received application creation request from user: {current_user.id}, is_draft: {is_draft}"
-    )
+    logger.debug(f"Received application creation request from user: {current_user.id}, is_draft: {is_draft}")
     # Do not log raw request data as it may contain sensitive information
 
     try:
@@ -134,9 +130,7 @@ async def create_application(
     except ValidationError as e:
         logger.error(f"Validation error: {str(e)}")
         if hasattr(e, "errors"):
-            logger.debug(
-                f"Validation error details: {[error.get('loc', []) for error in e.errors()]}"
-            )
+            logger.debug(f"Validation error details: {[error.get('loc', []) for error in e.errors()]}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
@@ -175,9 +169,7 @@ async def get_my_applications(
 
 
 @router.get("/dashboard/stats", response_model=DashboardStats)
-async def get_dashboard_stats(
-    current_user: User = Depends(require_student), db: AsyncSession = Depends(get_db)
-):
+async def get_dashboard_stats(current_user: User = Depends(require_student), db: AsyncSession = Depends(get_db)):
     """Get dashboard statistics for student"""
     service = ApplicationService(db)
     return await service.get_student_dashboard_stats(current_user)
@@ -253,10 +245,7 @@ async def get_application_files(
 
     # 從 submitted_form_data.documents 中獲取文件資訊
     files_with_urls = []
-    if (
-        application.submitted_form_data
-        and "documents" in application.submitted_form_data
-    ):
+    if application.submitted_form_data and "documents" in application.submitted_form_data:
         for doc in application.submitted_form_data["documents"]:
             if "file_id" in doc and doc["file_id"]:
                 file_dict = {
@@ -326,26 +315,20 @@ async def upload_file(
 ):
     """Upload file for application using MinIO"""
     service = ApplicationService(db)
-    return await service.upload_application_file_minio(
-        application_id, current_user, file, file_type
-    )
+    return await service.upload_application_file_minio(application_id, current_user, file, file_type)
 
 
 # Staff/Admin endpoints
 @router.get("/review/list", response_model=List[ApplicationListResponse])
 async def get_applications_for_review(
     status: Optional[str] = Query(None, description="Filter by status"),
-    scholarship_type_id: Optional[int] = Query(
-        None, description="Filter by scholarship type ID"
-    ),
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
     """Get applications for review (staff only)"""
     service = ApplicationService(db)
-    return await service.get_applications_for_review(
-        current_user, status, scholarship_type_id
-    )
+    return await service.get_applications_for_review(current_user, status, scholarship_type_id)
 
 
 @router.put("/{application_id}/status", response_model=ApplicationResponse)
@@ -357,9 +340,7 @@ async def update_application_status(
 ):
     """Update application status (staff only)"""
     service = ApplicationService(db)
-    return await service.update_application_status(
-        application_id, current_user, status_update
-    )
+    return await service.update_application_status(application_id, current_user, status_update)
 
 
 @router.post("/{application_id}/review", response_model=ApplicationResponse)
@@ -373,23 +354,15 @@ async def submit_professor_review(
     if not current_user.is_professor():
         from fastapi import HTTPException
 
-        raise HTTPException(
-            status_code=403, detail="Only professors can submit this review."
-        )
+        raise HTTPException(status_code=403, detail="Only professors can submit this review.")
     service = ApplicationService(db)
-    return await service.create_professor_review(
-        application_id, current_user, review_data
-    )
+    return await service.create_professor_review(application_id, current_user, review_data)
 
 
 @router.get("/college/review", response_model=List[ApplicationListResponse])
 async def get_college_applications_for_review(
-    status_filter: Optional[str] = Query(
-        None, alias="status", description="Filter by status"
-    ),
-    scholarship_type: Optional[str] = Query(
-        None, description="Filter by scholarship type"
-    ),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
@@ -398,9 +371,7 @@ async def get_college_applications_for_review(
 
     # Ensure user has college role
     if not current_user.is_college():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="College access required"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="College access required")
 
     service = ApplicationService(db)
     # Get applications that are in submitted or under_review status for college review
@@ -460,18 +431,11 @@ async def get_student_data(
     application = result.scalar_one_or_none()
 
     if not application:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Application not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
     # 檢查權限 (學生只能看自己的，管理員可以看所有)
-    if (
-        current_user.role not in ["admin", "super_admin", "college"]
-        and application.user_id != current_user.id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+    if current_user.role not in ["admin", "super_admin", "college"] and application.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     # 回傳學生資料
     student_data = application.student_data or {}

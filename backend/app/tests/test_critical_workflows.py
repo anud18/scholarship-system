@@ -24,9 +24,7 @@ from app.services.college_review_service import CollegeReviewService
 class TestCriticalApplicationWorkflow:
     """Test critical application creation and submission workflows"""
 
-    async def test_create_application_with_eligibility_validation(
-        self, db, test_user, test_scholarship
-    ):
+    async def test_create_application_with_eligibility_validation(self, db, test_user, test_scholarship):
         """CRITICAL: Test application creation with eligibility checks"""
         # Create configuration
         config = ScholarshipConfiguration(
@@ -80,9 +78,7 @@ class TestCriticalApplicationWorkflow:
             assert result.status == ApplicationStatus.DRAFT.value
             assert result.user_id == test_user.id
 
-    async def test_prevent_duplicate_applications(
-        self, db, test_user, test_scholarship
-    ):
+    async def test_prevent_duplicate_applications(self, db, test_user, test_scholarship):
         """CRITICAL: Prevent duplicate applications for same scholarship"""
         # Create first application
         app1 = Application(
@@ -111,9 +107,7 @@ class TestCriticalApplicationWorkflow:
             }
 
             # Try to create duplicate - should fail
-            with pytest.raises(
-                ConflictError, match="already have an active application"
-            ):
+            with pytest.raises(ConflictError, match="already have an active application"):
                 app_data = ApplicationCreate(
                     scholarship_type="test_scholarship",
                     configuration_id=1,
@@ -200,9 +194,7 @@ class TestCriticalAuthorizationPaths:
         with pytest.raises(AuthorizationError):
             await service.get_application_by_id(app.id, test_user)
 
-    async def test_cannot_edit_submitted_application(
-        self, db, test_user, test_application
-    ):
+    async def test_cannot_edit_submitted_application(self, db, test_user, test_application):
         """CRITICAL: Cannot edit application after submission"""
         # Change status to submitted
         test_application.status = ApplicationStatus.SUBMITTED.value
@@ -216,13 +208,9 @@ class TestCriticalAuthorizationPaths:
 
         # Try to update - should fail
         with pytest.raises(ValidationError, match="cannot be edited"):
-            await service.update_application(
-                test_application.id, update_data, test_user
-            )
+            await service.update_application(test_application.id, update_data, test_user)
 
-    async def test_admin_can_approve_but_student_cannot(
-        self, db, test_user, test_admin
-    ):
+    async def test_admin_can_approve_but_student_cannot(self, db, test_user, test_admin):
         """CRITICAL: Only admins can approve applications"""
         # Create submitted application
         app = Application(
@@ -370,9 +358,7 @@ class TestCriticalBusinessLogic:
 class TestCriticalDataIntegrity:
     """Test data integrity and constraint enforcement"""
 
-    async def test_foreign_key_constraint_on_delete(
-        self, db, test_user, test_scholarship
-    ):
+    async def test_foreign_key_constraint_on_delete(self, db, test_user, test_scholarship):
         """CRITICAL: Ensure foreign key constraints work"""
         # Create application
         app = Application(

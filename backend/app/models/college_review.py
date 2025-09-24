@@ -55,23 +55,15 @@ class CollegeReview(Base):
     __tablename__ = "college_reviews"
 
     id = Column(Integer, primary_key=True, index=True)
-    application_id = Column(
-        Integer, ForeignKey("applications.id"), nullable=False, unique=True
-    )
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False, unique=True)
     reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # Ranking and scoring
     ranking_score = Column(Numeric(8, 2))  # Overall ranking score (0-100)
     academic_score = Column(Numeric(5, 2))  # Academic performance score (0-100)
-    professor_review_score = Column(
-        Numeric(5, 2)
-    )  # Weighted professor review score (0-100)
-    college_criteria_score = Column(
-        Numeric(5, 2)
-    )  # College-specific criteria score (0-100)
-    special_circumstances_score = Column(
-        Numeric(5, 2)
-    )  # Special circumstances score (0-100)
+    professor_review_score = Column(Numeric(5, 2))  # Weighted professor review score (0-100)
+    college_criteria_score = Column(Numeric(5, 2))  # College-specific criteria score (0-100)
+    special_circumstances_score = Column(Numeric(5, 2))  # Special circumstances score (0-100)
 
     # Review details
     review_comments = Column(Text)  # Detailed review comments
@@ -84,9 +76,7 @@ class CollegeReview(Base):
     sub_type_group = Column(String(50))  # Sub-type group for ranking
 
     # Review metadata
-    review_status = Column(
-        String(20), default="pending"
-    )  # 'pending', 'completed', 'revised'
+    review_status = Column(String(20), default="pending")  # 'pending', 'completed', 'revised'
     is_priority = Column(Boolean, default=False)  # Priority application flag
     needs_special_attention = Column(Boolean, default=False)  # Flag for special review
 
@@ -97,9 +87,7 @@ class CollegeReview(Base):
     review_started_at = Column(DateTime(timezone=True))
     reviewed_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Database-level constraints for data integrity
     __table_args__ = (
@@ -126,13 +114,13 @@ class CollegeReview(Base):
     )
 
     # Relationships using string references to avoid circular dependencies
-    application = relationship(
-        "Application", lazy="select", foreign_keys=[application_id]
-    )
+    application = relationship("Application", lazy="select", foreign_keys=[application_id])
     reviewer = relationship("User", lazy="select", foreign_keys=[reviewer_id])
 
     def __repr__(self):
-        return f"<CollegeReview(id={self.id}, application_id={self.application_id}, ranking_score={self.ranking_score})>"
+        return (
+            f"<CollegeReview(id={self.id}, application_id={self.application_id}, ranking_score={self.ranking_score})>"
+        )
 
     @property
     def is_completed(self) -> bool:
@@ -144,9 +132,7 @@ class CollegeReview(Base):
         """Check if the application is recommended for approval"""
         return self.recommendation == "approve"
 
-    def calculate_total_score(
-        self, weights: Optional[Dict[str, float]] = None
-    ) -> float:
+    def calculate_total_score(self, weights: Optional[Dict[str, float]] = None) -> float:
         """
         Calculate total weighted score based on individual component scores
 
@@ -186,9 +172,7 @@ class CollegeRanking(Base):
     __tablename__ = "college_rankings"
 
     id = Column(Integer, primary_key=True, index=True)
-    scholarship_type_id = Column(
-        Integer, ForeignKey("scholarship_types.id"), nullable=False
-    )
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
     sub_type_code = Column(String(50), nullable=False)
     academic_year = Column(Integer, nullable=False)
     semester = Column(String(20))  # Can be null for yearly scholarships
@@ -201,9 +185,7 @@ class CollegeRanking(Base):
 
     # Ranking status
     is_finalized = Column(Boolean, default=False)
-    ranking_status = Column(
-        String(20), default="draft"
-    )  # 'draft', 'review', 'finalized'
+    ranking_status = Column(String(20), default="draft")  # 'draft', 'review', 'finalized'
 
     # Distribution information
     distribution_executed = Column(Boolean, default=False)
@@ -212,18 +194,14 @@ class CollegeRanking(Base):
 
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     finalized_at = Column(DateTime(timezone=True))
     created_by = Column(Integer, ForeignKey("users.id"))
     finalized_by = Column(Integer, ForeignKey("users.id"))
 
     # Relationships using string references to avoid circular imports
     scholarship_type = relationship("ScholarshipType", lazy="select")
-    items = relationship(
-        "CollegeRankingItem", back_populates="ranking", cascade="all, delete-orphan"
-    )
+    items = relationship("CollegeRankingItem", back_populates="ranking", cascade="all, delete-orphan")
     creator = relationship("User", foreign_keys=[created_by], lazy="select")
     finalizer = relationship("User", foreign_keys=[finalized_by], lazy="select")
 
@@ -262,9 +240,7 @@ class CollegeRankingItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     ranking_id = Column(Integer, ForeignKey("college_rankings.id"), nullable=False)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
-    college_review_id = Column(
-        Integer, ForeignKey("college_reviews.id"), nullable=False
-    )
+    college_review_id = Column(Integer, ForeignKey("college_reviews.id"), nullable=False)
 
     # Ranking position
     rank_position = Column(Integer, nullable=False)  # 1-based ranking position
@@ -277,24 +253,16 @@ class CollegeRankingItem(Base):
     tie_breaker_reason = Column(Text)
 
     # Status tracking
-    status = Column(
-        String(20), default="ranked"
-    )  # 'ranked', 'allocated', 'rejected', 'waitlisted'
+    status = Column(String(20), default="ranked")  # 'ranked', 'allocated', 'rejected', 'waitlisted'
 
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships using string references to avoid circular imports
     ranking = relationship("CollegeRanking", back_populates="items")
-    application = relationship(
-        "Application", lazy="select", foreign_keys=[application_id]
-    )
-    college_review = relationship(
-        "CollegeReview", lazy="select", foreign_keys=[college_review_id]
-    )
+    application = relationship("Application", lazy="select", foreign_keys=[application_id])
+    college_review = relationship("CollegeReview", lazy="select", foreign_keys=[college_review_id])
 
     def __repr__(self):
         return f"<CollegeRankingItem(id={self.id}, rank={self.rank_position}, allocated={self.is_allocated})>"
@@ -373,9 +341,7 @@ Index(
     CollegeReview.application_id,
     CollegeReview.reviewer_id,
 )
-Index(
-    "ix_college_reviews_ranking_score", CollegeReview.ranking_score.desc()
-)  # For ranking queries
+Index("ix_college_reviews_ranking_score", CollegeReview.ranking_score.desc())  # For ranking queries
 Index(
     "ix_college_reviews_recommendation_status",
     CollegeReview.recommendation,

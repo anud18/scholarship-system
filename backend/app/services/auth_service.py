@@ -55,9 +55,7 @@ class AuthService:
     async def authenticate_user(self, login_data: UserLogin) -> User:
         """Authenticate user with nycu_id/email"""
         # Try to find user by nycu_id or email
-        stmt = select(User).where(
-            (User.nycu_id == login_data.username) | (User.email == login_data.username)
-        )
+        stmt = select(User).where((User.nycu_id == login_data.username) | (User.email == login_data.username))
         result = await self.db.execute(stmt)
         user = result.scalar_one_or_none()
 
@@ -70,9 +68,7 @@ class AuthService:
 
         return user
 
-    async def create_tokens(
-        self, user: User, portal_data: dict = None, student_data: dict = None
-    ) -> TokenResponse:
+    async def create_tokens(self, user: User, portal_data: dict = None, student_data: dict = None) -> TokenResponse:
         """Create access and refresh tokens for user"""
         token_data = {
             "sub": str(user.id),
@@ -89,10 +85,7 @@ class AuthService:
             or settings.debug
             or
             # Also include for test deployments (when host contains test indicators)
-            any(
-                indicator in settings.base_url.lower()
-                for indicator in ["test", "140.113.7.148", "localhost"]
-            )
+            any(indicator in settings.base_url.lower() for indicator in ["test", "140.113.7.148", "localhost"])
         )
 
         if is_debug_mode:

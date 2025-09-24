@@ -76,9 +76,7 @@ class APIEndpointAnalyzer(ast.NodeVisitor):
                         # Extract response_model from decorator
                         for keyword in decorator.keywords:
                             if keyword.arg == "response_model":
-                                response_model = self._extract_response_model(
-                                    keyword.value
-                                )
+                                response_model = self._extract_response_model(keyword.value)
 
         if router_decorators:
             endpoint_info = {
@@ -183,9 +181,7 @@ class APIEndpointAnalyzer(ast.NodeVisitor):
             )
 
         # Check for response model naming consistency
-        if endpoint["response_model"] and not endpoint["response_model"].endswith(
-            "Response"
-        ):
+        if endpoint["response_model"] and not endpoint["response_model"].endswith("Response"):
             issues.append(
                 {
                     "type": "response_model_naming",
@@ -278,9 +274,7 @@ def main():
         print("Fix the errors above and try again.")
         sys.exit(1)
     else:
-        print(
-            f"\n✅ No blocking errors found. {len(warnings)} warnings, {len(info)} info messages."
-        )
+        print(f"\n✅ No blocking errors found. {len(warnings)} warnings, {len(info)} info messages.")
         sys.exit(0)
 
 

@@ -30,9 +30,7 @@ class StudentService:
         self.api_enabled = getattr(settings, "student_api_enabled", False)
 
         # Validate configuration
-        if self.api_enabled and not all(
-            [self.api_base_url, self.api_account, self.hmac_key_hex]
-        ):
+        if self.api_enabled and not all([self.api_base_url, self.api_account, self.hmac_key_hex]):
             logger.warning(
                 "Student API is enabled but not properly configured. "
                 "Please set STUDENT_API_BASE_URL, STUDENT_API_ACCOUNT, and STUDENT_API_HMAC_KEY"
@@ -43,26 +41,18 @@ class StudentService:
             try:
                 self.hmac_key = bytes.fromhex(self.hmac_key_hex)
             except ValueError:
-                logger.error(
-                    "Invalid STUDENT_API_HMAC_KEY format. Must be a valid hex string."
-                )
+                logger.error("Invalid STUDENT_API_HMAC_KEY format. Must be a valid hex string.")
                 self.api_enabled = False
 
     def _generate_hmac_auth_header(self, request_body: str) -> str:
         """Generate HMAC-SHA256 authorization header"""
         time_str = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
         message = time_str + request_body
-        signature = (
-            hmac.new(self.hmac_key, message.encode("utf-8"), hashlib.sha256)
-            .hexdigest()
-            .lower()
-        )
+        signature = hmac.new(self.hmac_key, message.encode("utf-8"), hashlib.sha256).hexdigest().lower()
 
         return f"HMAC-SHA256:{time_str}:{self.api_account}:{signature}"
 
-    async def get_student_basic_info(
-        self, student_code: str
-    ) -> Optional[Dict[str, Any]]:
+    async def get_student_basic_info(self, student_code: str) -> Optional[Dict[str, Any]]:
         """
         Get student basic information from external API
 
@@ -110,9 +100,7 @@ class StudentService:
                         logger.info(f"Student {student_code} not found in API")
                         return None
                     else:
-                        logger.warning(
-                            f"Student API returned error: {result.get('msg')}"
-                        )
+                        logger.warning(f"Student API returned error: {result.get('msg')}")
                         return None
                 else:
                     logger.error(f"Student API request failed: {response.status_code}")
@@ -125,14 +113,10 @@ class StudentService:
             logger.error(f"Student API request error: {str(e)}")
             raise ServiceUnavailableError(f"Student API request failed: {str(e)}")
         except Exception as e:
-            logger.error(
-                f"Unexpected error fetching student data for {student_code}: {str(e)}"
-            )
+            logger.error(f"Unexpected error fetching student data for {student_code}: {str(e)}")
             raise ServiceUnavailableError(f"Failed to fetch student data: {str(e)}")
 
-    async def get_student_term_info(
-        self, student_code: str, academic_year: str, term: str
-    ) -> Optional[Dict[str, Any]]:
+    async def get_student_term_info(self, student_code: str, academic_year: str, term: str) -> Optional[Dict[str, Any]]:
         """
         Get student term information from external API
 
@@ -184,14 +168,10 @@ class StudentService:
                         logger.info(f"Student term data not found for {student_code}")
                         return None
                     else:
-                        logger.warning(
-                            f"Student term API returned error: {result.get('msg')}"
-                        )
+                        logger.warning(f"Student term API returned error: {result.get('msg')}")
                         return None
                 else:
-                    logger.error(
-                        f"Student term API request failed: {response.status_code}"
-                    )
+                    logger.error(f"Student term API request failed: {response.status_code}")
                     raise ServiceUnavailableError("Student API is unavailable")
 
         except httpx.TimeoutException:
@@ -201,12 +181,8 @@ class StudentService:
             logger.error(f"Student term API request error: {str(e)}")
             raise ServiceUnavailableError(f"Student API request failed: {str(e)}")
         except Exception as e:
-            logger.error(
-                f"Unexpected error fetching student term data for {student_code}: {str(e)}"
-            )
-            raise ServiceUnavailableError(
-                f"Failed to fetch student term data: {str(e)}"
-            )
+            logger.error(f"Unexpected error fetching student term data for {student_code}: {str(e)}")
+            raise ServiceUnavailableError(f"Failed to fetch student term data: {str(e)}")
 
     async def get_student_snapshot(self, student_code: str) -> Dict[str, Any]:
         """

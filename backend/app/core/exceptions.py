@@ -28,9 +28,7 @@ class ScholarshipException(Exception):
 class ValidationError(ScholarshipException):
     """Validation error exception"""
 
-    def __init__(
-        self, message: str, field: Optional[str] = None, details: Optional[Dict] = None
-    ):
+    def __init__(self, message: str, field: Optional[str] = None, details: Optional[Dict] = None):
         super().__init__(
             message=message,
             status_code=422,
@@ -44,18 +42,14 @@ class AuthenticationError(ScholarshipException):
     """Authentication error exception"""
 
     def __init__(self, message: str = "Authentication failed"):
-        super().__init__(
-            message=message, status_code=401, error_code="AUTHENTICATION_ERROR"
-        )
+        super().__init__(message=message, status_code=401, error_code="AUTHENTICATION_ERROR")
 
 
 class AuthorizationError(ScholarshipException):
     """Authorization error exception"""
 
     def __init__(self, message: str = "Access denied"):
-        super().__init__(
-            message=message, status_code=403, error_code="AUTHORIZATION_ERROR"
-        )
+        super().__init__(message=message, status_code=403, error_code="AUTHORIZATION_ERROR")
 
 
 class NotFoundError(ScholarshipException):
@@ -91,9 +85,7 @@ class FileUploadError(ScholarshipException):
     """File upload error exception"""
 
     def __init__(self, message: str):
-        super().__init__(
-            message=message, status_code=400, error_code="FILE_UPLOAD_ERROR"
-        )
+        super().__init__(message=message, status_code=400, error_code="FILE_UPLOAD_ERROR")
 
 
 class OCRError(ScholarshipException):
@@ -114,15 +106,11 @@ class ServiceUnavailableError(ScholarshipException):
     """Service unavailable error exception"""
 
     def __init__(self, message: str = "Service temporarily unavailable"):
-        super().__init__(
-            message=message, status_code=503, error_code="SERVICE_UNAVAILABLE"
-        )
+        super().__init__(message=message, status_code=503, error_code="SERVICE_UNAVAILABLE")
 
 
 # Exception handler for custom exceptions
-async def scholarship_exception_handler(
-    request: Request, exc: ScholarshipException
-) -> JSONResponse:
+async def scholarship_exception_handler(request: Request, exc: ScholarshipException) -> JSONResponse:
     """Handle custom scholarship exceptions"""
     content = {
         "success": False,
@@ -164,9 +152,7 @@ class InvalidApplicationStatusError(BusinessLogicError):
     """Raised when trying to perform invalid status transition"""
 
     def __init__(self, current_status: str, target_status: str):
-        message = (
-            f"Cannot change application status from {current_status} to {target_status}"
-        )
+        message = f"Cannot change application status from {current_status} to {target_status}"
         super().__init__(message)
 
 
@@ -190,7 +176,5 @@ class FileSizeExceededError(FileUploadError):
     """Raised when uploaded file size exceeds limit"""
 
     def __init__(self, file_size: int, max_size: int):
-        message = (
-            f"File size {file_size} bytes exceeds maximum size of {max_size} bytes"
-        )
+        message = f"File size {file_size} bytes exceeds maximum size of {max_size} bytes"
         super().__init__(message)

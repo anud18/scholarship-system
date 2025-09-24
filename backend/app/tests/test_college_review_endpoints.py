@@ -78,9 +78,7 @@ class TestCollegeReviewEndpoints:
 
     @patch("app.api.v1.endpoints.college_review.get_db")
     @patch("app.api.v1.endpoints.college_review.require_college")
-    async def test_create_college_review_success(
-        self, mock_auth, mock_db, college_user, sample_review_data
-    ):
+    async def test_create_college_review_success(self, mock_auth, mock_db, college_user, sample_review_data):
         """Test successful college review creation"""
         # Mock authentication
         mock_auth.return_value = college_user
@@ -90,15 +88,8 @@ class TestCollegeReviewEndpoints:
         mock_db.return_value = mock_session
 
         # Mock service
-        with patch.object(
-            CollegeReviewService, "create_or_update_review"
-        ) as mock_create:
-            mock_review = CollegeReview(
-                id=1,
-                application_id=1,
-                reviewer_id=college_user.id,
-                **sample_review_data
-            )
+        with patch.object(CollegeReviewService, "create_or_update_review") as mock_create:
+            mock_review = CollegeReview(id=1, application_id=1, reviewer_id=college_user.id, **sample_review_data)
             mock_create.return_value = mock_review
 
             # Mock permission check
@@ -112,9 +103,7 @@ class TestCollegeReviewEndpoints:
 
     @patch("app.api.v1.endpoints.college_review.get_db")
     @patch("app.api.v1.endpoints.college_review.require_college")
-    async def test_create_review_unauthorized_user(
-        self, mock_auth, mock_db, student_user
-    ):
+    async def test_create_review_unauthorized_user(self, mock_auth, mock_db, student_user):
         """Test college review creation with unauthorized user"""
         # Mock authentication with student user (should fail)
         mock_auth.return_value = student_user
@@ -125,18 +114,14 @@ class TestCollegeReviewEndpoints:
 
     @patch("app.api.v1.endpoints.college_review.get_db")
     @patch("app.api.v1.endpoints.college_review.require_college")
-    async def test_create_review_application_not_found(
-        self, mock_auth, mock_db, college_user
-    ):
+    async def test_create_review_application_not_found(self, mock_auth, mock_db, college_user):
         """Test review creation for non-existent application"""
         mock_auth.return_value = college_user
         mock_session = AsyncMock()
         mock_db.return_value = mock_session
 
         # Mock service to raise NotFoundError
-        with patch.object(
-            CollegeReviewService, "create_or_update_review"
-        ) as mock_create:
+        with patch.object(CollegeReviewService, "create_or_update_review") as mock_create:
             mock_create.side_effect = NotFoundError("Application", "999")
 
             # This should return 404 status
@@ -145,9 +130,7 @@ class TestCollegeReviewEndpoints:
 
     @patch("app.api.v1.endpoints.college_review.get_db")
     @patch("app.api.v1.endpoints.college_review.require_college")
-    async def test_create_review_permission_denied(
-        self, mock_auth, mock_db, college_user
-    ):
+    async def test_create_review_permission_denied(self, mock_auth, mock_db, college_user):
         """Test review creation when user lacks permission for specific application"""
         mock_auth.return_value = college_user
         mock_session = AsyncMock()
@@ -188,9 +171,7 @@ class TestCollegeReviewEndpoints:
         mock_db.return_value = mock_session
 
         # Mock service method
-        with patch.object(
-            CollegeReviewService, "get_applications_for_review"
-        ) as mock_get:
+        with patch.object(CollegeReviewService, "get_applications_for_review") as mock_get:
             mock_applications = [
                 {
                     "id": 1,

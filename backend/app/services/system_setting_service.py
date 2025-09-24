@@ -28,9 +28,7 @@ class SystemSettingService:
         return setting
 
     @staticmethod
-    async def get_or_create_setting(
-        db: AsyncSession, key: str, default_value: str
-    ) -> SystemSetting:
+    async def get_or_create_setting(db: AsyncSession, key: str, default_value: str) -> SystemSetting:
         setting = await SystemSettingService.get_setting(db, key)
         if setting:
             return setting
@@ -81,6 +79,4 @@ class EmailTemplateService:
         template = await EmailTemplateService.get_template(db, key)
         if template:
             return template
-        return await EmailTemplateService.set_template(
-            db, key, default_subject, default_body
-        )
+        return await EmailTemplateService.set_template(db, key, default_subject, default_body)

@@ -74,9 +74,7 @@ class EmailManagementService:
             admin_scholarships_query = select(AdminScholarship.scholarship_id).where(
                 AdminScholarship.admin_id == user.id
             )
-            admin_scholarship_ids = (
-                (await db.execute(admin_scholarships_query)).scalars().all()
-            )
+            admin_scholarship_ids = (await db.execute(admin_scholarships_query)).scalars().all()
 
             if not admin_scholarship_ids:
                 # Admin has no scholarship assignments, return empty result
@@ -102,9 +100,7 @@ class EmailManagementService:
             conditions.append(EmailHistory.scholarship_type_id == scholarship_type_id)
 
         if recipient_email:
-            conditions.append(
-                EmailHistory.recipient_email.ilike(f"%{recipient_email}%")
-            )
+            conditions.append(EmailHistory.recipient_email.ilike(f"%{recipient_email}%"))
 
         if date_from:
             conditions.append(EmailHistory.sent_at >= date_from)
@@ -126,9 +122,7 @@ class EmailManagementService:
                     )
                 )
             else:
-                count_query = count_query.where(
-                    False
-                )  # No results for admin with no assignments
+                count_query = count_query.where(False)  # No results for admin with no assignments
 
         if conditions:
             count_query = count_query.where(and_(*conditions))
@@ -189,9 +183,7 @@ class EmailManagementService:
             admin_scholarships_query = select(AdminScholarship.scholarship_id).where(
                 AdminScholarship.admin_id == user.id
             )
-            admin_scholarship_ids = (
-                (await db.execute(admin_scholarships_query)).scalars().all()
-            )
+            admin_scholarship_ids = (await db.execute(admin_scholarships_query)).scalars().all()
 
             if not admin_scholarship_ids:
                 # Admin has no scholarship assignments, return empty result
@@ -200,11 +192,8 @@ class EmailManagementService:
             query = query.where(
                 or_(
                     ScheduledEmail.scholarship_type_id.in_(admin_scholarship_ids),
-                    ScheduledEmail.scholarship_type_id.is_(
-                        None
-                    ),  # Include system emails
-                    ScheduledEmail.created_by_user_id
-                    == user.id,  # Include emails created by this admin
+                    ScheduledEmail.scholarship_type_id.is_(None),  # Include system emails
+                    ScheduledEmail.created_by_user_id == user.id,  # Include emails created by this admin
                 )
             )
 
@@ -244,9 +233,7 @@ class EmailManagementService:
                     )
                 )
             else:
-                count_query = count_query.where(
-                    ScheduledEmail.created_by_user_id == user.id
-                )
+                count_query = count_query.where(ScheduledEmail.created_by_user_id == user.id)
 
         if conditions:
             count_query = count_query.where(and_(*conditions))
@@ -254,18 +241,14 @@ class EmailManagementService:
         total_count = len((await db.execute(count_query)).scalars().all())
 
         # Apply pagination and ordering
-        query = (
-            query.order_by(asc(ScheduledEmail.scheduled_for)).offset(skip).limit(limit)
-        )
+        query = query.order_by(asc(ScheduledEmail.scheduled_for)).offset(skip).limit(limit)
 
         result = await db.execute(query)
         scheduled_emails = result.scalars().all()
 
         return list(scheduled_emails), total_count
 
-    async def get_due_scheduled_emails(
-        self, db: AsyncSession, limit: int = 50
-    ) -> List[ScheduledEmail]:
+    async def get_due_scheduled_emails(self, db: AsyncSession, limit: int = 50) -> List[ScheduledEmail]:
         """
         Get scheduled emails that are due to be sent
 
@@ -335,9 +318,7 @@ class EmailManagementService:
             raise ValueError(f"Scheduled email with ID {email_id} not found")
 
         if scheduled_email.status != ScheduleStatus.PENDING:
-            raise ValueError(
-                f"Cannot approve email with status {scheduled_email.status}"
-            )
+            raise ValueError(f"Cannot approve email with status {scheduled_email.status}")
 
         if not scheduled_email.requires_approval:
             raise ValueError("Email does not require approval")
@@ -349,14 +330,10 @@ class EmailManagementService:
         await db.commit()
         await db.refresh(scheduled_email)
 
-        logger.info(
-            f"Scheduled email {email_id} approved by user {approved_by_user_id}"
-        )
+        logger.info(f"Scheduled email {email_id} approved by user {approved_by_user_id}")
         return scheduled_email
 
-    async def cancel_scheduled_email(
-        self, db: AsyncSession, email_id: int
-    ) -> ScheduledEmail:
+    async def cancel_scheduled_email(self, db: AsyncSession, email_id: int) -> ScheduledEmail:
         """
         Cancel a scheduled email
 
@@ -378,9 +355,7 @@ class EmailManagementService:
             raise ValueError(f"Scheduled email with ID {email_id} not found")
 
         if scheduled_email.status != ScheduleStatus.PENDING:
-            raise ValueError(
-                f"Cannot cancel email with status {scheduled_email.status}"
-            )
+            raise ValueError(f"Cannot cancel email with status {scheduled_email.status}")
 
         scheduled_email.cancel()
         await db.commit()
@@ -419,9 +394,7 @@ class EmailManagementService:
             raise ValueError(f"Scheduled email with ID {email_id} not found")
 
         if scheduled_email.status != ScheduleStatus.PENDING:
-            raise ValueError(
-                f"Cannot update email with status {scheduled_email.status}"
-            )
+            raise ValueError(f"Cannot update email with status {scheduled_email.status}")
 
         # Update fields if provided
         if subject is not None:
@@ -435,9 +408,7 @@ class EmailManagementService:
         logger.info(f"Scheduled email {email_id} updated")
         return scheduled_email
 
-    async def process_due_emails(
-        self, db: AsyncSession, batch_size: int = 10
-    ) -> Dict[str, int]:
+    async def process_due_emails(self, db: AsyncSession, batch_size: int = 10) -> Dict[str, int]:
         """
         Process due scheduled emails by sending them
 
@@ -503,14 +474,10 @@ class EmailManagementService:
                 scheduled_email.mark_as_failed(str(e))
                 stats["failed"] += 1
 
-                logger.error(
-                    f"Failed to send scheduled email {scheduled_email.id}: {e}"
-                )
+                logger.error(f"Failed to send scheduled email {scheduled_email.id}: {e}")
 
             # Commit changes for this email
             await db.commit()
 
-        logger.info(
-            f"Processed {stats['processed']} emails: {stats['sent']} sent, {stats['failed']} failed"
-        )
+        logger.info(f"Processed {stats['processed']} emails: {stats['sent']} sent, {stats['failed']} failed")
         return stats

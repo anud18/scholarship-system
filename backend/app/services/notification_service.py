@@ -28,9 +28,7 @@ class NotificationService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._websocket_connections: Dict[int, List] = defaultdict(
-            list
-        )  # user_id -> [websocket_connections]
+        self._websocket_connections: Dict[int, List] = defaultdict(list)  # user_id -> [websocket_connections]
         self._notification_cache: Dict[str, Any] = {}  # Redis-like cache simulation
 
     # === Facebook-style Enhanced Methods === #
@@ -75,9 +73,7 @@ class NotificationService:
 
         # Set default channels based on user preferences
         if channels is None:
-            channels = await self._get_user_preferred_channels(
-                user_id, notification_type
-            )
+            channels = await self._get_user_preferred_channels(user_id, notification_type)
 
         # Create notification with enhanced fields
         notification = Notification(
@@ -86,9 +82,7 @@ class NotificationService:
             message=message,
             notification_type=notification_type,
             priority=priority,
-            channel=channels[0]
-            if channels
-            else NotificationChannel.IN_APP,  # Primary channel
+            channel=channels[0] if channels else NotificationChannel.IN_APP,  # Primary channel
             data=data,
             href=href,
             group_key=group_key,
@@ -141,8 +135,7 @@ class NotificationService:
                 batch_id=batch_id,
                 notification_type=notification_type,
                 notifications_data={"user_ids": batch_users, "data": data},
-                scheduled_for=scheduled_time
-                + timedelta(minutes=delay_minutes * (i // batch_size)),
+                scheduled_for=scheduled_time + timedelta(minutes=delay_minutes * (i // batch_size)),
             )
 
             self.db.add(queue_entry)
@@ -160,9 +153,7 @@ class NotificationService:
             if websocket in self._websocket_connections[user_id]:
                 self._websocket_connections[user_id].remove(websocket)
 
-    async def aggregate_notifications(
-        self, user_id: int, group_key: str, max_age_hours: int = 24
-    ) -> Dict[str, Any]:
+    async def aggregate_notifications(self, user_id: int, group_key: str, max_age_hours: int = 24) -> Dict[str, Any]:
         """
         Aggregate notifications by group key (Facebook-style)
 
@@ -246,9 +237,7 @@ class NotificationService:
             existing_pref.updated_at = datetime.now(timezone.utc)
         else:
             # Create new preference
-            existing_pref = NotificationPreference(
-                user_id=user_id, notification_type=notification_type, **preferences
-            )
+            existing_pref = NotificationPreference(user_id=user_id, notification_type=notification_type, **preferences)
             self.db.add(existing_pref)
 
         await self.db.commit()
@@ -318,23 +307,17 @@ class NotificationService:
                 # Retry logic
                 if item.attempts < item.max_attempts:
                     item.status = "pending"
-                    item.scheduled_for = current_time + timedelta(
-                        minutes=5 * item.attempts
-                    )
+                    item.scheduled_for = current_time + timedelta(minutes=5 * item.attempts)
 
         await self.db.commit()
 
         return {"processed": processed, "failed": failed}
 
-    async def _deliver_notification(
-        self, notification: Notification, channels: List[NotificationChannel]
-    ):
+    async def _deliver_notification(self, notification: Notification, channels: List[NotificationChannel]):
         """Deliver notification through specified channels"""
         # Real-time WebSocket delivery
         if NotificationChannel.IN_APP in channels and notification.user_id:
-            await self._send_websocket_notification(
-                notification.user_id, notification.to_dict()
-            )
+            await self._send_websocket_notification(notification.user_id, notification.to_dict())
 
         # Email delivery (placeholder)
         if NotificationChannel.EMAIL in channels:
@@ -348,17 +331,13 @@ class NotificationService:
         if NotificationChannel.PUSH in channels:
             await self._send_push_notification(notification)
 
-    async def _send_websocket_notification(
-        self, user_id: int, notification_data: Dict[str, Any]
-    ):
+    async def _send_websocket_notification(self, user_id: int, notification_data: Dict[str, Any]):
         """Send notification via WebSocket to connected clients"""
         if user_id in self._websocket_connections:
             disconnected = []
             for websocket in self._websocket_connections[user_id]:
                 try:
-                    await websocket.send_text(
-                        json.dumps({"type": "notification", "data": notification_data})
-                    )
+                    await websocket.send_text(json.dumps({"type": "notification", "data": notification_data}))
                 except Exception:
                     disconnected.append(websocket)
 
@@ -381,9 +360,7 @@ class NotificationService:
         # TODO: Implement push notification delivery
         pass
 
-    async def _get_notification_template(
-        self, notification_type: NotificationType
-    ) -> Optional[NotificationTemplate]:
+    async def _get_notification_template(self, notification_type: NotificationType) -> Optional[NotificationTemplate]:
         """Get notification template for type"""
         query = select(NotificationTemplate).where(
             and_(
@@ -399,9 +376,7 @@ class NotificationService:
     ) -> List[NotificationChannel]:
         """Get user's preferred delivery channels"""
         if not user_id:
-            return [
-                NotificationChannel.IN_APP
-            ]  # System announcements default to in-app
+            return [NotificationChannel.IN_APP]  # System announcements default to in-app
 
         # Check cache first
         cache_key = f"pref_{user_id}_{notification_type.value}"
@@ -584,16 +559,8 @@ class NotificationService:
             },
         )
 
-        notification_type = (
-            NotificationType.SUCCESS
-            if new_status == "approved"
-            else NotificationType.INFO
-        )
-        priority = (
-            NotificationPriority.HIGH
-            if new_status in ["approved", "rejected"]
-            else NotificationPriority.NORMAL
-        )
+        notification_type = NotificationType.SUCCESS if new_status == "approved" else NotificationType.INFO
+        priority = NotificationPriority.HIGH if new_status in ["approved", "rejected"] else NotificationPriority.NORMAL
 
         # Enhanced: Use new Facebook-style notification system
         return await self.create_notification(
@@ -693,11 +660,7 @@ class NotificationService:
             message = f"{title}的截止日期已到期"
             message_en = f"The deadline for {title_en or title} has passed"
 
-        priority = (
-            NotificationPriority.CRITICAL
-            if days_left <= 1
-            else NotificationPriority.HIGH
-        )
+        priority = NotificationPriority.CRITICAL if days_left <= 1 else NotificationPriority.HIGH
 
         return await self.createUserNotification(
             user_id=user_id,
@@ -802,9 +765,7 @@ class NotificationService:
 
         # 添加類型過濾
         if notification_type:
-            base_query = base_query.where(
-                Notification.notification_type == notification_type
-            )
+            base_query = base_query.where(Notification.notification_type == notification_type)
 
         # 添加過期過濾
         base_query = base_query.where(
@@ -817,9 +778,7 @@ class NotificationService:
         # 如果只要未讀通知，需要複雜的查詢
         if unread_only:
             # 子查詢：獲取已讀的通知ID
-            read_subquery = select(NotificationRead.notification_id).where(
-                NotificationRead.user_id == user_id
-            )
+            read_subquery = select(NotificationRead.notification_id).where(NotificationRead.user_id == user_id)
 
             base_query = base_query.where(
                 and_(
@@ -838,9 +797,7 @@ class NotificationService:
             )
 
         # 添加排序和分頁 - simplified to avoid enum comparison issues
-        query = (
-            base_query.order_by(desc(Notification.created_at)).offset(skip).limit(limit)
-        )
+        query = base_query.order_by(desc(Notification.created_at)).offset(skip).limit(limit)
 
         result = await self.db.execute(query)
         notifications = result.scalars().all()
@@ -922,9 +879,7 @@ class NotificationService:
         )
 
         # 系統公告未讀數量（未在NotificationRead中的）
-        read_subquery = select(NotificationRead.notification_id).where(
-            NotificationRead.user_id == user_id
-        )
+        read_subquery = select(NotificationRead.notification_id).where(NotificationRead.user_id == user_id)
 
         system_query = select(func.count(Notification.id)).where(
             and_(
@@ -981,9 +936,7 @@ class NotificationService:
 
             if not read_record:
                 # 創建新的已讀記錄
-                read_record = NotificationRead(
-                    notification_id=notification_id, user_id=user_id
-                )
+                read_record = NotificationRead(notification_id=notification_id, user_id=user_id)
                 self.db.add(read_record)
                 await self.db.commit()
 
@@ -1012,9 +965,7 @@ class NotificationService:
         personal_updated = personal_result.rowcount
 
         # 獲取用戶未讀的系統公告
-        read_subquery = select(NotificationRead.notification_id).where(
-            NotificationRead.user_id == user_id
-        )
+        read_subquery = select(NotificationRead.notification_id).where(NotificationRead.user_id == user_id)
 
         system_query = select(Notification.id).where(
             and_(
@@ -1033,10 +984,7 @@ class NotificationService:
         # 為系統公告創建已讀記錄
         system_updated = 0
         if system_notification_ids:
-            read_records = [
-                NotificationRead(notification_id=nid, user_id=user_id)
-                for nid in system_notification_ids
-            ]
+            read_records = [NotificationRead(notification_id=nid, user_id=user_id) for nid in system_notification_ids]
             self.db.add_all(read_records)
             system_updated = len(read_records)
 
@@ -1096,9 +1044,7 @@ class NotificationService:
                 notifications.append(notification)
             return notifications
 
-    async def notify_application_batch_updates(
-        self, application_updates: List[Dict[str, Any]]
-    ) -> Dict[str, int]:
+    async def notify_application_batch_updates(self, application_updates: List[Dict[str, Any]]) -> Dict[str, int]:
         """
         Send batched application status updates (Facebook-style aggregation)
 
@@ -1168,9 +1114,7 @@ class NotificationService:
             "total_users": len(user_updates),
         }
 
-    async def notify_deadline_reminders_batch(
-        self, deadline_data: List[Dict[str, Any]], days_before: int = 3
-    ) -> str:
+    async def notify_deadline_reminders_batch(self, deadline_data: List[Dict[str, Any]], days_before: int = 3) -> str:
         """
         Send batched deadline reminders (Facebook-style)
 
@@ -1181,9 +1125,7 @@ class NotificationService:
         Returns:
             batch_id for tracking
         """
-        reminder_time = datetime.now(timezone.utc) + timedelta(
-            hours=1
-        )  # Send in 1 hour
+        reminder_time = datetime.now(timezone.utc) + timedelta(hours=1)  # Send in 1 hour
         user_deadlines = defaultdict(list)
 
         # Group deadlines by user
@@ -1224,8 +1166,7 @@ class NotificationService:
                     "user_ids": [notif_data["user_id"]],
                     "data": notif_data["data"],
                 },
-                scheduled_for=reminder_time
-                + timedelta(seconds=30 * i),  # Stagger by 30 seconds
+                scheduled_for=reminder_time + timedelta(seconds=30 * i),  # Stagger by 30 seconds
                 priority=NotificationPriority.HIGH,
             )
             self.db.add(queue_entry)
@@ -1233,9 +1174,7 @@ class NotificationService:
         await self.db.commit()
         return batch_id
 
-    async def get_notification_analytics(
-        self, user_id: Optional[int] = None, days: int = 30
-    ) -> Dict[str, Any]:
+    async def get_notification_analytics(self, user_id: Optional[int] = None, days: int = 30) -> Dict[str, Any]:
         """
         Get Facebook-style notification analytics
 
@@ -1271,11 +1210,7 @@ class NotificationService:
             channel_counts[notif.channel.value] += 1
 
         # Calculate engagement rate
-        engagement_rate = (
-            (read_notifications / total_notifications * 100)
-            if total_notifications > 0
-            else 0
-        )
+        engagement_rate = (read_notifications / total_notifications * 100) if total_notifications > 0 else 0
 
         return {
             "period_days": days,

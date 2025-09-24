@@ -101,9 +101,7 @@ class EmailService:
                         body=body,
                         status=status,
                         error_message=error_message,
-                        email_size_bytes=email_size
-                        if status == EmailStatus.SENT
-                        else None,
+                        email_size_bytes=email_size if status == EmailStatus.SENT else None,
                         **metadata,
                     )
                 except Exception as log_error:
@@ -164,9 +162,7 @@ class EmailService:
     ):
         """Send email using template with history logging"""
         template = await EmailTemplateService.get_template(db, key)
-        subject = (template.subject_template if template else default_subject).format(
-            **context
-        )
+        subject = (template.subject_template if template else default_subject).format(**context)
         body = (template.body_template if template else default_body).format(**context)
         cc_list = cc
         bcc_list = bcc
@@ -179,9 +175,7 @@ class EmailService:
         # Add template key to metadata for logging
         metadata["template_key"] = key
 
-        await self.send_email(
-            to, subject, body, cc=cc_list, bcc=bcc_list, db=db, **metadata
-        )
+        await self.send_email(to, subject, body, cc=cc_list, bcc=bcc_list, db=db, **metadata)
 
     async def schedule_email(
         self,
@@ -251,9 +245,7 @@ class EmailService:
     ) -> ScheduledEmail:
         """Schedule an email using template"""
         template = await EmailTemplateService.get_template(db, key)
-        subject = (template.subject_template if template else default_subject).format(
-            **context
-        )
+        subject = (template.subject_template if template else default_subject).format(**context)
         body = (template.body_template if template else default_body).format(**context)
         cc_list = cc
         bcc_list = bcc
@@ -281,9 +273,7 @@ class EmailService:
 
     # New standardized email methods using the redesigned template system
 
-    async def send_application_submitted_notification(
-        self, db: AsyncSession, application_data: dict
-    ):
+    async def send_application_submitted_notification(self, db: AsyncSession, application_data: dict):
         """Send notification to student when application is submitted"""
         context = {
             "app_id": application_data.get("app_id", ""),
@@ -294,7 +284,9 @@ class EmailService:
             "system_url": "https://scholarship.nycu.edu.tw",
         }
 
-        default_subject = f"申請已成功送出 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        default_subject = (
+            f"申請已成功送出 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        )
         default_body = f"您的獎學金申請({application_data.get('app_id', '')})已成功送出，請等候後續通知。"
 
         metadata = {
@@ -314,9 +306,7 @@ class EmailService:
             **metadata,
         )
 
-    async def send_professor_review_notification(
-        self, db: AsyncSession, application_data: dict
-    ):
+    async def send_professor_review_notification(self, db: AsyncSession, application_data: dict):
         """Send notification to professor when new application needs review"""
         context = {
             "app_id": application_data.get("app_id", ""),
@@ -327,7 +317,9 @@ class EmailService:
             "system_url": "https://scholarship.nycu.edu.tw",
         }
 
-        default_subject = f"新學生申請待推薦 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        default_subject = (
+            f"新學生申請待推薦 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        )
         default_body = f"有一份新的學生申請案({application_data.get('app_id', '')})需要您推薦，請至系統審查。"
 
         metadata = {
@@ -347,9 +339,7 @@ class EmailService:
             **metadata,
         )
 
-    async def send_college_review_notification(
-        self, db: AsyncSession, application_data: dict
-    ):
+    async def send_college_review_notification(self, db: AsyncSession, application_data: dict):
         """Send notification to college when application needs review"""
         context = {
             "app_id": application_data.get("app_id", ""),
@@ -357,15 +347,15 @@ class EmailService:
             "scholarship_type": application_data.get("scholarship_type", ""),
             "professor_name": application_data.get("professor_name", ""),
             "submit_date": application_data.get("submit_date", ""),
-            "professor_recommendation": application_data.get(
-                "professor_recommendation", ""
-            ),
+            "professor_recommendation": application_data.get("professor_recommendation", ""),
             "college_name": application_data.get("college_name", ""),
             "review_deadline": application_data.get("review_deadline", ""),
             "system_url": "https://scholarship.nycu.edu.tw",
         }
 
-        default_subject = f"新申請案待審核 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        default_subject = (
+            f"新申請案待審核 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        )
         default_body = f"有一份新的申請案({application_data.get('app_id', '')})已由教授推薦，請至系統審查。"
 
         metadata = {
@@ -376,9 +366,7 @@ class EmailService:
         }
 
         # Send to college reviewers (can be multiple recipients)
-        college_emails = application_data.get(
-            "college_emails", ["mock_college@nycu.edu.tw"]
-        )
+        college_emails = application_data.get("college_emails", ["mock_college@nycu.edu.tw"])
         for email in college_emails:
             await self.send_with_template(
                 db,
@@ -390,9 +378,7 @@ class EmailService:
                 **metadata,
             )
 
-    async def send_whitelist_notification(
-        self, db: AsyncSession, scholarship_data: dict, student_emails: list
-    ):
+    async def send_whitelist_notification(self, db: AsyncSession, scholarship_data: dict, student_emails: list):
         """Send whitelist notification to eligible students"""
         context = {
             "scholarship_type": scholarship_data.get("scholarship_type", ""),
@@ -400,16 +386,12 @@ class EmailService:
             "semester": scholarship_data.get("semester", ""),
             "application_period": scholarship_data.get("application_period", ""),
             "deadline": scholarship_data.get("deadline", ""),
-            "eligibility_requirements": scholarship_data.get(
-                "eligibility_requirements", ""
-            ),
+            "eligibility_requirements": scholarship_data.get("eligibility_requirements", ""),
             "system_url": "https://scholarship.nycu.edu.tw",
         }
 
         default_subject = f"獎學金申請開放通知 - {scholarship_data.get('scholarship_type', '')} ({scholarship_data.get('academic_year', '')}學年度{scholarship_data.get('semester', '')}學期)"
-        default_body = (
-            f"{scholarship_data.get('scholarship_type', '')} 現已開放申請，請至系統進行線上申請。"
-        )
+        default_body = f"{scholarship_data.get('scholarship_type', '')} 現已開放申請，請至系統進行線上申請。"
 
         metadata = {
             "email_category": EmailCategory.APPLICATION_WHITELIST,
@@ -439,9 +421,7 @@ class EmailService:
             "system_url": "https://scholarship.nycu.edu.tw",
         }
 
-        default_subject = (
-            f"申請截止提醒 - {application_data.get('scholarship_type', '')} (剩餘 3 天)"
-        )
+        default_subject = f"申請截止提醒 - {application_data.get('scholarship_type', '')} (剩餘 3 天)"
         default_body = "您的獎學金申請草稿尚未送出，申請即將截止！請儘快完成申請。"
 
         metadata = {
@@ -461,9 +441,7 @@ class EmailService:
             **metadata,
         )
 
-    async def send_supplement_request(
-        self, db: AsyncSession, application_data: dict, supplement_data: dict
-    ):
+    async def send_supplement_request(self, db: AsyncSession, application_data: dict, supplement_data: dict):
         """Send supplement request to student"""
         context = {
             "student_name": application_data.get("student_name", ""),
@@ -475,7 +453,9 @@ class EmailService:
             "system_url": "https://scholarship.nycu.edu.tw",
         }
 
-        default_subject = f"補件通知 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        default_subject = (
+            f"補件通知 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        )
         default_body = f"您的獎學金申請({application_data.get('app_id', '')})需要補充資料，請儘快補齊。"
 
         metadata = {
@@ -495,9 +475,7 @@ class EmailService:
             **metadata,
         )
 
-    async def send_result_notifications(
-        self, db: AsyncSession, application_data: dict, result_data: dict
-    ):
+    async def send_result_notifications(self, db: AsyncSession, application_data: dict, result_data: dict):
         """Send result notifications to student, professor, and college"""
         base_context = {
             "app_id": application_data.get("app_id", ""),
@@ -543,9 +521,7 @@ class EmailService:
             )
 
         # Send to college
-        college_emails = application_data.get(
-            "college_emails", ["mock_college@nycu.edu.tw"]
-        )
+        college_emails = application_data.get("college_emails", ["mock_college@nycu.edu.tw"])
         for email in college_emails:
             await self.send_with_template(
                 db,
@@ -558,9 +534,7 @@ class EmailService:
                 **base_metadata,
             )
 
-    async def send_roster_notification(
-        self, db: AsyncSession, application_data: dict, roster_data: dict
-    ):
+    async def send_roster_notification(self, db: AsyncSession, application_data: dict, roster_data: dict):
         """Send roster notification to awarded students"""
         context = {
             "student_name": application_data.get("student_name", ""),
@@ -593,9 +567,7 @@ class EmailService:
         )
 
     # Legacy methods - kept for backward compatibility but deprecated
-    async def send_to_college_reviewers(
-        self, application, db: Optional[AsyncSession] = None
-    ):
+    async def send_to_college_reviewers(self, application, db: Optional[AsyncSession] = None):
         """DEPRECATED: Use send_college_review_notification instead"""
         if db:
             application_data = {
@@ -610,9 +582,7 @@ class EmailService:
                 "professor_recommendation": "",
                 "college_name": getattr(application, "college_name", ""),
                 "review_deadline": getattr(application, "review_deadline", ""),
-                "scholarship_type_id": getattr(
-                    application, "scholarship_type_id", None
-                ),
+                "scholarship_type_id": getattr(application, "scholarship_type_id", None),
                 "college_emails": ["mock_college@nycu.edu.tw"],
             }
             await self.send_college_review_notification(db, application_data)
@@ -631,9 +601,7 @@ class EmailService:
                 else "",
                 "professor_name": getattr(professor, "name", "") if professor else "",
                 "professor_email": getattr(professor, "email", "") if professor else "",
-                "scholarship_type_id": getattr(
-                    application, "scholarship_type_id", None
-                ),
+                "scholarship_type_id": getattr(application, "scholarship_type_id", None),
             }
             if application_data["professor_email"]:
                 await self.send_professor_review_notification(db, application_data)

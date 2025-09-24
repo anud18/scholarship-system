@@ -48,9 +48,7 @@ def get_client_info(request: Request) -> tuple[Optional[str], Optional[str]]:
 
 
 @router.get("/me")
-async def get_my_profile(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+async def get_my_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get current user's complete profile (read-only + editable data)"""
     service = UserProfileService(db)
     profile = await service.get_complete_user_profile(current_user)
@@ -124,9 +122,7 @@ async def update_my_bank_info(
     client_ip, user_agent = get_client_info(request)
 
     # Convert to UserProfileUpdate
-    update_data = UserProfileUpdate(
-        bank_code=bank_data.bank_code, account_number=bank_data.account_number
-    )
+    update_data = UserProfileUpdate(bank_code=bank_data.bank_code, account_number=bank_data.account_number)
 
     profile = await service.update_user_profile(
         user_id=current_user.id,
@@ -198,9 +194,7 @@ async def upload_bank_document(
     service = UserProfileService(db)
 
     try:
-        document_upload = BankDocumentPhotoUpload(
-            photo_data=photo_data, filename=filename, content_type=content_type
-        )
+        document_upload = BankDocumentPhotoUpload(photo_data=photo_data, filename=filename, content_type=content_type)
 
         document_url = await service.upload_bank_document_to_minio(
             user_id=current_user.id, document_upload=document_upload
@@ -230,9 +224,7 @@ async def upload_bank_document_file(
 
     # Validate file type - accept images and PDF
     accepted_types = ["image/", "application/pdf"]
-    if not file.content_type or not any(
-        file.content_type.startswith(t) for t in accepted_types
-    ):
+    if not file.content_type or not any(file.content_type.startswith(t) for t in accepted_types):
         logger.warning(f"File type rejected: {file.content_type}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -278,15 +270,11 @@ async def upload_bank_document_file(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error in upload: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"上傳失敗: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"上傳失敗: {str(e)}")
 
 
 @router.delete("/me/bank-document")
-async def delete_bank_document(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+async def delete_bank_document(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Delete bank document"""
     service = UserProfileService(db)
 
@@ -299,9 +287,7 @@ async def delete_bank_document(
 
 
 @router.get("/me/history")
-async def get_my_profile_history(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+async def get_my_profile_history(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get profile change history"""
     service = UserProfileService(db)
     history = await service.get_profile_history(current_user.id)
@@ -314,9 +300,7 @@ async def get_my_profile_history(
 
 
 @router.delete("/me")
-async def delete_my_profile(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+async def delete_my_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Delete current user's profile data"""
     service = UserProfileService(db)
 
@@ -340,9 +324,7 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
 
     # Additional validation: ensure filename only contains allowed characters
     if not re.match(r"^[a-zA-Z0-9_\-\.]+$", filename):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="檔案名稱包含無效字元"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="檔案名稱包含無效字元")
 
     try:
         # Try to serve from MinIO first (new approach)
@@ -354,9 +336,7 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
         from app.services.minio_service import minio_service
 
         # Search for the document in user profiles
-        stmt = select(UserProfile).where(
-            UserProfile.bank_document_photo_url.like(f"%{filename}%")
-        )
+        stmt = select(UserProfile).where(UserProfile.bank_document_photo_url.like(f"%{filename}%"))
         result = await db.execute(stmt)
         profile = result.scalar_one_or_none()
 
@@ -412,18 +392,14 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="檔案服務發生錯誤"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="檔案服務發生錯誤")
 
 
 # ==================== Admin endpoints ====================
 
 
 @router.get("/admin/incomplete", dependencies=[Depends(require_admin)])
-async def get_incomplete_profiles(
-    current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+async def get_incomplete_profiles(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get users with incomplete profiles (admin only)"""
     service = UserProfileService(db)
     incomplete_users = await service.get_users_with_incomplete_profiles()

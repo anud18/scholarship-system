@@ -78,12 +78,8 @@ class ScholarshipType(Base):
 
     # 類別設定
     category = Column(String(50), nullable=False)
-    sub_type_list = Column(
-        JSON, default=[ScholarshipSubType.GENERAL.value]
-    )  # ["nstc", "moe_1w", "moe_2w"]
-    sub_type_selection_mode = Column(
-        Enum(SubTypeSelectionMode), default=SubTypeSelectionMode.SINGLE, nullable=False
-    )
+    sub_type_list = Column(JSON, default=[ScholarshipSubType.GENERAL.value])  # ["nstc", "moe_1w", "moe_2w"]
+    sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), default=SubTypeSelectionMode.SINGLE, nullable=False)
 
     # 申請週期設定
     application_cycle = Column(
@@ -100,9 +96,7 @@ class ScholarshipType(Base):
 
     # 時間戳記
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, ForeignKey("users.id"))
     updated_by = Column(Integer, ForeignKey("users.id"))
 
@@ -139,9 +133,7 @@ class ScholarshipType(Base):
         now = datetime.now(timezone.utc)
         if not self.renewal_college_review_start or not self.renewal_college_review_end:
             return False
-        return bool(
-            self.renewal_college_review_start <= now <= self.renewal_college_review_end
-        )
+        return bool(self.renewal_college_review_start <= now <= self.renewal_college_review_end)
 
     def is_professor_review_period(self) -> bool:
         """Check if within professor review period (renewal or general)"""
@@ -180,15 +172,9 @@ class ScholarshipType(Base):
             return "renewal_college"
 
         # 一般申請階段
-        elif (
-            self.is_professor_review_period()
-            and not self.is_renewal_professor_review_period()
-        ):
+        elif self.is_professor_review_period() and not self.is_renewal_professor_review_period():
             return "general_professor"
-        elif (
-            self.is_college_review_period()
-            and not self.is_renewal_college_review_period()
-        ):
+        elif self.is_college_review_period() and not self.is_renewal_college_review_period():
             return "general_college"
 
         return None
@@ -288,9 +274,7 @@ class ScholarshipType(Base):
         valid_types = [e.value for e in ScholarshipSubType]
         return all(sub_type in valid_types for sub_type in self.sub_type_list)
 
-    def get_sub_type_config(
-        self, sub_type_code: str
-    ) -> Optional["ScholarshipSubTypeConfig"]:
+    def get_sub_type_config(self, sub_type_code: str) -> Optional["ScholarshipSubTypeConfig"]:
         """Get sub-type configuration by code"""
         # 如果是 general 且沒有配置，返回 None（使用預設值）
         if sub_type_code == ScholarshipSubType.GENERAL.value:
@@ -327,9 +311,7 @@ class ScholarshipType(Base):
             if not general_config:
                 # 使用預設翻譯
                 translations["zh"][ScholarshipSubType.GENERAL.value] = "一般獎學金"
-                translations["en"][
-                    ScholarshipSubType.GENERAL.value
-                ] = "General Scholarship"
+                translations["en"][ScholarshipSubType.GENERAL.value] = "General Scholarship"
 
         return translations
 
@@ -376,15 +358,11 @@ class ScholarshipType(Base):
 
         return True
 
-    def can_student_apply_renewal(
-        self, student_id: int, existing_applications: List["Application"]
-    ) -> bool:
+    def can_student_apply_renewal(self, student_id: int, existing_applications: List["Application"]) -> bool:
         """Check if student can apply for renewal"""
         return self.can_student_apply(student_id, existing_applications, True)
 
-    def can_student_apply_general(
-        self, student_id: int, existing_applications: List["Application"]
-    ) -> bool:
+    def can_student_apply_general(self, student_id: int, existing_applications: List["Application"]) -> bool:
         """Check if student can apply for general application"""
         return self.can_student_apply(student_id, existing_applications, False)
 
@@ -416,15 +394,9 @@ class ScholarshipType(Base):
         deadlines = []
 
         # Collect all deadlines
-        if (
-            self.renewal_application_end_date
-            and self.renewal_application_end_date > now
-        ):
+        if self.renewal_application_end_date and self.renewal_application_end_date > now:
             deadlines.append(("續領申請截止", self.renewal_application_end_date))
-        if (
-            self.renewal_professor_review_end
-            and self.renewal_professor_review_end > now
-        ):
+        if self.renewal_professor_review_end and self.renewal_professor_review_end > now:
             deadlines.append(("續領教授審查截止", self.renewal_professor_review_end))
         if self.renewal_college_review_end and self.renewal_college_review_end > now:
             deadlines.append(("續領學院審查截止", self.renewal_college_review_end))
@@ -455,9 +427,7 @@ class ScholarshipSubTypeConfig(Base):
     __tablename__ = "scholarship_sub_type_configs"
 
     id = Column(Integer, primary_key=True, index=True)
-    scholarship_type_id = Column(
-        Integer, ForeignKey("scholarship_types.id"), nullable=False
-    )
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
     sub_type_code = Column(String(50), nullable=False)  # "nstc", "moe_1w", "moe_2w"
 
     # 顯示名稱
@@ -478,16 +448,12 @@ class ScholarshipSubTypeConfig(Base):
 
     # 時間戳記
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, ForeignKey("users.id"))
     updated_by = Column(Integer, ForeignKey("users.id"))
 
     # 關聯
-    scholarship_type = relationship(
-        "ScholarshipType", back_populates="sub_type_configs"
-    )
+    scholarship_type = relationship("ScholarshipType", back_populates="sub_type_configs")
     creator = relationship("User", foreign_keys=[created_by])
     updater = relationship("User", foreign_keys=[updated_by])
 
@@ -521,9 +487,7 @@ class ScholarshipRule(Base):
     __tablename__ = "scholarship_rules"
 
     id = Column(Integer, primary_key=True, index=True)
-    scholarship_type_id = Column(
-        Integer, ForeignKey("scholarship_types.id"), nullable=False
-    )
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
     # 如果獎學金類型沒有子類型，則為 None，此規則為通用規則，適用於所有子類型
     sub_type = Column(String(50), nullable=True, default=None)
 
@@ -538,9 +502,7 @@ class ScholarshipRule(Base):
 
     # 規則基本資訊
     rule_name = Column(String(100), nullable=False)
-    rule_type = Column(
-        String(50), nullable=False
-    )  # gpa, ranking, term_count, nationality, etc.
+    rule_type = Column(String(50), nullable=False)  # gpa, ranking, term_count, nationality, etc.
     tag = Column(String(20))  # 博士生 非陸生 中華民國國籍 等等
     description = Column(Text)
 
@@ -563,9 +525,7 @@ class ScholarshipRule(Base):
 
     # 時間戳記
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, ForeignKey("users.id"))
     updated_by = Column(Integer, ForeignKey("users.id"))
 
@@ -603,9 +563,7 @@ class ScholarshipRule(Base):
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
 
-    def is_applicable_to_period(
-        self, academic_year: int, semester: Optional[Semester] = None
-    ) -> bool:
+    def is_applicable_to_period(self, academic_year: int, semester: Optional[Semester] = None) -> bool:
         """Check if this rule is applicable to the given academic period"""
         # Templates are not applicable to specific periods
         if self.is_template:
@@ -625,9 +583,7 @@ class ScholarshipRule(Base):
 
         return self.semester == semester
 
-    def create_copy_for_period(
-        self, academic_year: int, semester: Optional[Semester] = None
-    ) -> "ScholarshipRule":
+    def create_copy_for_period(self, academic_year: int, semester: Optional[Semester] = None) -> "ScholarshipRule":
         """Create a copy of this rule for a different academic period"""
         return ScholarshipRule(
             scholarship_type_id=self.scholarship_type_id,
@@ -664,9 +620,7 @@ class ScholarshipConfiguration(Base):
     __tablename__ = "scholarship_configurations"
 
     id = Column(Integer, primary_key=True, index=True)
-    scholarship_type_id = Column(
-        Integer, ForeignKey("scholarship_types.id"), nullable=False
-    )
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
 
     # 週期識別 - 作為唯一標識符
     academic_year = Column(Integer, nullable=False, index=True)  # 民國年，如 113 表示 113 學年度
@@ -681,23 +635,17 @@ class ScholarshipConfiguration(Base):
     # 配額限制配置
     has_quota_limit = Column(Boolean, default=False, nullable=False)  # 是否有配額限制
     has_college_quota = Column(Boolean, default=False, nullable=False)  # 是否有學院配額
-    quota_management_mode = Column(
-        Enum(QuotaManagementMode), default=QuotaManagementMode.NONE, nullable=False
-    )
+    quota_management_mode = Column(Enum(QuotaManagementMode), default=QuotaManagementMode.NONE, nullable=False)
 
     # 配額詳細設定
     total_quota = Column(Integer, nullable=True)  # 總配額數量
-    quotas = Column(
-        JSON, nullable=True
-    )  # 配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
+    quotas = Column(JSON, nullable=True)  # 配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
 
     # 金額設定 (從 ScholarshipType 移至此處)
     amount = Column(Integer, nullable=False)  # 獎學金金額（整數）
     currency = Column(String(10), default="TWD")
 
-    whitelist_student_ids = Column(
-        JSON, default={}
-    )  # 白名單學生ID列表，依子獎學金區分 {"general": [1, 2, 3]}
+    whitelist_student_ids = Column(JSON, default={})  # 白名單學生ID列表，依子獎學金區分 {"general": [1, 2, 3]}
 
     # 申請時間 (從 ScholarshipType 移至此處)
     # 續領申請期間（優先處理）
@@ -732,15 +680,11 @@ class ScholarshipConfiguration(Base):
 
     # 版本控制
     version = Column(String(20), default="1.0")  # 配置版本
-    previous_config_id = Column(
-        Integer, ForeignKey("scholarship_configurations.id"), nullable=True
-    )
+    previous_config_id = Column(Integer, ForeignKey("scholarship_configurations.id"), nullable=True)
 
     # 時間戳記
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, ForeignKey("users.id"))
     updated_by = Column(Integer, ForeignKey("users.id"))
 
@@ -929,19 +873,13 @@ class ScholarshipConfiguration(Base):
             "semester": self.semester.value if self.semester else None,
             "has_quota_limit": self.has_quota_limit,
             "has_college_quota": self.has_college_quota,
-            "quota_management_mode": self.quota_management_mode.value
-            if self.quota_management_mode
-            else None,
+            "quota_management_mode": self.quota_management_mode.value if self.quota_management_mode else None,
             "total_quota": self.total_quota,
             "quotas": self.quotas,
             "version": self.version,
             "is_active": self.is_active,
-            "effective_start_date": self.effective_start_date.isoformat()
-            if self.effective_start_date
-            else None,
-            "effective_end_date": self.effective_end_date.isoformat()
-            if self.effective_end_date
-            else None,
+            "effective_start_date": self.effective_start_date.isoformat() if self.effective_start_date else None,
+            "effective_end_date": self.effective_end_date.isoformat() if self.effective_end_date else None,
             "amount": self.amount,  # Already integer
             "currency": self.currency,
             "whitelist_student_ids": self.whitelist_student_ids,
@@ -976,10 +914,7 @@ class ScholarshipConfiguration(Base):
     def is_renewal_application_period(self) -> bool:
         """Check if within renewal application period"""
         now = datetime.now(timezone.utc)
-        if (
-            not self.renewal_application_start_date
-            or not self.renewal_application_end_date
-        ):
+        if not self.renewal_application_start_date or not self.renewal_application_end_date:
             return False
 
         # Handle timezone-aware and naive datetime comparison
@@ -1023,25 +958,16 @@ class ScholarshipConfiguration(Base):
     def is_renewal_professor_review_period(self) -> bool:
         """Check if within renewal professor review period"""
         now = datetime.now(timezone.utc)
-        if (
-            not self.renewal_professor_review_start
-            or not self.renewal_professor_review_end
-        ):
+        if not self.renewal_professor_review_start or not self.renewal_professor_review_end:
             return False
-        return bool(
-            self.renewal_professor_review_start
-            <= now
-            <= self.renewal_professor_review_end
-        )
+        return bool(self.renewal_professor_review_start <= now <= self.renewal_professor_review_end)
 
     def is_renewal_college_review_period(self) -> bool:
         """Check if within renewal college review period"""
         now = datetime.now(timezone.utc)
         if not self.renewal_college_review_start or not self.renewal_college_review_end:
             return False
-        return bool(
-            self.renewal_college_review_start <= now <= self.renewal_college_review_end
-        )
+        return bool(self.renewal_college_review_start <= now <= self.renewal_college_review_end)
 
     def is_professor_review_period(self) -> bool:
         """Check if within professor review period (renewal or general)"""
@@ -1080,15 +1006,9 @@ class ScholarshipConfiguration(Base):
             return "renewal_college"
 
         # 一般申請階段
-        elif (
-            self.is_professor_review_period()
-            and not self.is_renewal_professor_review_period()
-        ):
+        elif self.is_professor_review_period() and not self.is_renewal_professor_review_period():
             return "general_professor"
-        elif (
-            self.is_college_review_period()
-            and not self.is_renewal_college_review_period()
-        ):
+        elif self.is_college_review_period() and not self.is_renewal_college_review_period():
             return "general_college"
 
         return None
@@ -1096,10 +1016,7 @@ class ScholarshipConfiguration(Base):
     def is_student_in_whitelist(self, student_id: int, sub_type: str = None) -> bool:
         """Check if student is in whitelist for specific sub-scholarship type"""
         # 如果未啟用白名單，則不限制申請（返回True表示通過檢查）
-        if (
-            not hasattr(self.scholarship_type, "whitelist_enabled")
-            or not self.scholarship_type.whitelist_enabled
-        ):
+        if not hasattr(self.scholarship_type, "whitelist_enabled") or not self.scholarship_type.whitelist_enabled:
             return True  # 未啟用白名單時，所有學生都可申請
 
         # 如果啟用白名單但配置為空，則無人可申請
@@ -1128,9 +1045,7 @@ class ScholarshipConfiguration(Base):
         if student_id not in self.whitelist_student_ids[sub_type]:
             self.whitelist_student_ids[sub_type].append(student_id)
 
-    def remove_student_from_whitelist(
-        self, student_id: int, sub_type: str = None
-    ) -> bool:
+    def remove_student_from_whitelist(self, student_id: int, sub_type: str = None) -> bool:
         """Remove student from whitelist. If sub_type is None, remove from all sub-types"""
         if not self.whitelist_student_ids:
             return False
@@ -1144,10 +1059,7 @@ class ScholarshipConfiguration(Base):
                     removed = True
         else:
             # Remove from specific sub-type
-            if (
-                sub_type in self.whitelist_student_ids
-                and student_id in self.whitelist_student_ids[sub_type]
-            ):
+            if sub_type in self.whitelist_student_ids and student_id in self.whitelist_student_ids[sub_type]:
                 self.whitelist_student_ids[sub_type].remove(student_id)
                 removed = True
 
@@ -1189,15 +1101,9 @@ class ScholarshipConfiguration(Base):
         deadlines = []
 
         # Collect all deadlines
-        if (
-            self.renewal_application_end_date
-            and self.renewal_application_end_date > now
-        ):
+        if self.renewal_application_end_date and self.renewal_application_end_date > now:
             deadlines.append(("續領申請截止", self.renewal_application_end_date))
-        if (
-            self.renewal_professor_review_end
-            and self.renewal_professor_review_end > now
-        ):
+        if self.renewal_professor_review_end and self.renewal_professor_review_end > now:
             deadlines.append(("續領教授審查截止", self.renewal_professor_review_end))
         if self.renewal_college_review_end and self.renewal_college_review_end > now:
             deadlines.append(("續領學院審查截止", self.renewal_college_review_end))

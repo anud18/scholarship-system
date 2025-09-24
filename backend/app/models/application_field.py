@@ -40,9 +40,7 @@ class ApplicationField(Base):
     __tablename__ = "application_fields"
 
     id = Column(Integer, primary_key=True, index=True)
-    scholarship_type = Column(
-        String(50), nullable=False, index=True
-    )  # undergraduate, phd, direct_phd
+    scholarship_type = Column(String(50), nullable=False, index=True)  # undergraduate, phd, direct_phd
 
     # Field information
     field_name = Column(String(100), nullable=False)  # 欄位名稱 (英文)
@@ -60,9 +58,7 @@ class ApplicationField(Base):
     step_value = Column(Float)  # 步進值 (for number fields)
 
     # Options for select/radio fields
-    field_options = Column(
-        JSON
-    )  # 選項列表 [{"value": "option1", "label": "選項1", "label_en": "Option 1"}]
+    field_options = Column(JSON)  # 選項列表 [{"value": "option1", "label": "選項1", "label_en": "Option 1"}]
 
     # Display settings
     display_order = Column(Integer, default=0)  # 顯示順序
@@ -76,9 +72,7 @@ class ApplicationField(Base):
 
     # Meta data
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, ForeignKey("users.id"))
     updated_by = Column(Integer, ForeignKey("users.id"))
 
@@ -87,7 +81,9 @@ class ApplicationField(Base):
     updater = relationship("User", foreign_keys=[updated_by])
 
     def __repr__(self):
-        return f"<ApplicationField(id={self.id}, scholarship_type={self.scholarship_type}, field_name={self.field_name})>"
+        return (
+            f"<ApplicationField(id={self.id}, scholarship_type={self.scholarship_type}, field_name={self.field_name})>"
+        )
 
 
 class ApplicationDocument(Base):
@@ -96,9 +92,7 @@ class ApplicationDocument(Base):
     __tablename__ = "application_documents"
 
     id = Column(Integer, primary_key=True, index=True)
-    scholarship_type = Column(
-        String(50), nullable=False, index=True
-    )  # undergraduate, phd, direct_phd
+    scholarship_type = Column(String(50), nullable=False, index=True)  # undergraduate, phd, direct_phd
 
     # Document information
     document_name = Column(String(200), nullable=False)  # 文件名稱
@@ -123,9 +117,7 @@ class ApplicationDocument(Base):
 
     # Meta data
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(Integer, ForeignKey("users.id"))
     updated_by = Column(Integer, ForeignKey("users.id"))
 

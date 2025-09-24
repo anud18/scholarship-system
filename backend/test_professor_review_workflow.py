@@ -36,14 +36,10 @@ async def test_professor_assignment_workflow():
 
         print("\n📋 Test 1: Getting available professors")
         try:
-            professors = await app_service.get_available_professors(
-                admin_user, search=""
-            )
+            professors = await app_service.get_available_professors(admin_user, search="")
             print(f"✅ Found {len(professors)} professors")
             for prof in professors[:3]:  # Show first 3
-                print(
-                    f"   - {prof.get('name')} ({prof.get('nycu_id')}) - {prof.get('dept_name')}"
-                )
+                print(f"   - {prof.get('name')} ({prof.get('nycu_id')}) - {prof.get('dept_name')}")
         except Exception as e:
             print(f"❌ Error getting professors: {e}")
 
@@ -52,11 +48,7 @@ async def test_professor_assignment_workflow():
         try:
             stmt = (
                 select(Application)
-                .filter(
-                    Application.scholarship_configuration.has(
-                        requires_professor_recommendation=True
-                    )
-                )
+                .filter(Application.scholarship_configuration.has(requires_professor_recommendation=True))
                 .limit(1)
             )
             result = await db.execute(stmt)
@@ -73,12 +65,8 @@ async def test_professor_assignment_workflow():
                         updated_app = await app_service.assign_professor(
                             test_application.id, test_prof["nycu_id"], admin_user
                         )
-                        print(
-                            f"✅ Successfully assigned professor {test_prof['name']} to application"
-                        )
-                        print(
-                            f"   Application professor_id: {updated_app.professor_id}"
-                        )
+                        print(f"✅ Successfully assigned professor {test_prof['name']} to application")
+                        print(f"   Application professor_id: {updated_app.professor_id}")
                     except Exception as e:
                         print(f"❌ Error assigning professor: {e}")
                 else:

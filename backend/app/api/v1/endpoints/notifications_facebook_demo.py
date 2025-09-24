@@ -187,9 +187,7 @@ async def get_notification_analytics(
     """Get Facebook-style notification analytics"""
     service = NotificationService(db)
 
-    analytics = await service.get_notification_analytics(
-        user_id=current_user.id, days=days
-    )
+    analytics = await service.get_notification_analytics(user_id=current_user.id, days=days)
 
     return {"success": True, "analytics": analytics}
 

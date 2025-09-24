@@ -59,30 +59,22 @@ async def initialize_scholarship_email_templates():
 
             try:
                 # Check if templates already exist
-                existing_templates = (
-                    await ScholarshipEmailTemplateService.get_scholarship_templates(
-                        db, scholarship.id, admin_user
-                    )
+                existing_templates = await ScholarshipEmailTemplateService.get_scholarship_templates(
+                    db, scholarship.id, admin_user
                 )
 
                 if existing_templates:
-                    print(
-                        f"   ⚠️  Found {len(existing_templates)} existing templates, skipping..."
-                    )
+                    print(f"   ⚠️  Found {len(existing_templates)} existing templates, skipping...")
                     continue
 
                 # Create default templates based on scholarship configuration
-                created_templates = (
-                    await ScholarshipEmailTemplateService.bulk_create_default_templates(
-                        db, scholarship.id, admin_user
-                    )
+                created_templates = await ScholarshipEmailTemplateService.bulk_create_default_templates(
+                    db, scholarship.id, admin_user
                 )
 
                 print(f"   ✅ Created {len(created_templates)} email templates:")
                 for template in created_templates:
-                    print(
-                        f"      - {template.email_template_key} (priority: {template.priority})"
-                    )
+                    print(f"      - {template.email_template_key} (priority: {template.priority})")
 
                 total_created += len(created_templates)
 
@@ -117,10 +109,8 @@ async def show_template_summary():
 
         for scholarship in scholarships:
             try:
-                templates = (
-                    await ScholarshipEmailTemplateService.get_scholarship_templates(
-                        db, scholarship.id, admin_user
-                    )
+                templates = await ScholarshipEmailTemplateService.get_scholarship_templates(
+                    db, scholarship.id, admin_user
                 )
 
                 print(f"\n🎓 {scholarship.name} (ID: {scholarship.id})")
@@ -129,11 +119,7 @@ async def show_template_summary():
                 if templates:
                     for template in templates:
                         status = "✅ Enabled" if template.is_enabled else "❌ Disabled"
-                        custom = (
-                            "🎨 Custom"
-                            if (template.custom_subject or template.custom_body)
-                            else "📄 Default"
-                        )
+                        custom = "🎨 Custom" if (template.custom_subject or template.custom_body) else "📄 Default"
                         print(
                             f"      - {template.email_template_key}: {status} {custom} (Priority: {template.priority})"
                         )

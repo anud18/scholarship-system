@@ -53,9 +53,7 @@ class UserProfileService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_complete_user_profile(
-        self, user: User
-    ) -> CompleteUserProfileResponse:
+    async def get_complete_user_profile(self, user: User) -> CompleteUserProfileResponse:
         """Get complete user profile including read-only data"""
         # Get user profile
         profile = await self.get_user_profile(user.id)
@@ -83,9 +81,7 @@ class UserProfileService:
             "role": user.role.value,
             "comment": user.comment,
             "created_at": user.created_at.isoformat() if user.created_at else None,
-            "last_login_at": user.last_login_at.isoformat()
-            if user.last_login_at
-            else None,
+            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
         }
 
         # Build response
@@ -93,9 +89,7 @@ class UserProfileService:
         if profile:
             profile_response = UserProfileResponse.model_validate(profile)
 
-        return CompleteUserProfileResponse(
-            user_info=user_info, profile=profile_response, student_info=student_info
-        )
+        return CompleteUserProfileResponse(user_info=user_info, profile=profile_response, student_info=student_info)
 
     async def create_user_profile(
         self,
@@ -111,9 +105,7 @@ class UserProfileService:
             raise ValueError("User profile already exists")
 
         # Create profile
-        profile = UserProfile(
-            user_id=user_id, **profile_data.model_dump(exclude_unset=True)
-        )
+        profile = UserProfile(user_id=user_id, **profile_data.model_dump(exclude_unset=True))
 
         self.db.add(profile)
         await self.db.commit()
@@ -145,9 +137,7 @@ class UserProfileService:
         profile = await self.get_user_profile(user_id)
         if not profile:
             # Create new profile if it doesn't exist
-            create_data = UserProfileCreate(
-                **profile_data.model_dump(exclude_unset=True)
-            )
+            create_data = UserProfileCreate(**profile_data.model_dump(exclude_unset=True))
             return await self.create_user_profile(
                 user_id=user_id,
                 profile_data=create_data,
@@ -187,9 +177,7 @@ class UserProfileService:
 
         return profile
 
-    async def upload_bank_document_to_minio(
-        self, user_id: int, document_upload: BankDocumentPhotoUpload
-    ) -> str:
+    async def upload_bank_document_to_minio(self, user_id: int, document_upload: BankDocumentPhotoUpload) -> str:
         """Upload bank document to MinIO storage"""
         try:
             # More accurate base64 size estimation
@@ -210,9 +198,7 @@ class UserProfileService:
 
             # Verify actual size after decoding
             if len(image_data) > self.MAX_FILE_SIZE:
-                raise ValueError(
-                    f"File too large. Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB"
-                )
+                raise ValueError(f"File too large. Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB")
 
             # Validate image using PIL
             try:
@@ -232,28 +218,19 @@ class UserProfileService:
             # Validate MIME type
             allowed_types = list(self.ALLOWED_MIME_TYPES.keys()) + ["application/pdf"]
             if mime not in allowed_types:
-                raise ValueError(
-                    f"Invalid file type: {mime}. Allowed types: {', '.join(allowed_types)}"
-                )
+                raise ValueError(f"Invalid file type: {mime}. Allowed types: {', '.join(allowed_types)}")
 
             # Resize image if needed (only for images, not PDFs)
-            if image and (
-                image.size[0] > self.MAX_IMAGE_SIZE[0]
-                or image.size[1] > self.MAX_IMAGE_SIZE[1]
-            ):
+            if image and (image.size[0] > self.MAX_IMAGE_SIZE[0] or image.size[1] > self.MAX_IMAGE_SIZE[1]):
                 image.thumbnail(self.MAX_IMAGE_SIZE, Image.Resampling.LANCZOS)
                 # Re-encode image to bytes
                 output_buffer = io.BytesIO()
-                image.save(
-                    output_buffer, format=image.format, optimize=True, quality=90
-                )
+                image.save(output_buffer, format=image.format, optimize=True, quality=90)
                 image_data = output_buffer.getvalue()
 
             # Generate unique object name for MinIO
             file_extension = (
-                document_upload.filename.split(".")[-1].lower()
-                if "." in document_upload.filename
-                else "jpg"
+                document_upload.filename.split(".")[-1].lower() if "." in document_upload.filename else "jpg"
             )
             object_name = f"user-profiles/{user_id}/bank-documents/{uuid.uuid4().hex}.{file_extension}"
 
@@ -286,9 +263,7 @@ class UserProfileService:
             # Store the MinIO object name and preview URL
             old_document_url = profile.bank_document_photo_url
             profile.bank_document_photo_url = preview_url
-            profile.bank_document_object_name = (
-                object_name  # Store the object name for later use
-            )
+            profile.bank_document_object_name = object_name  # Store the object name for later use
             profile.updated_at = datetime.now(timezone.utc)
 
             await self.db.commit()
@@ -342,9 +317,7 @@ class UserProfileService:
 
             # Verify actual size after decoding (final check)
             if len(image_data) > self.MAX_FILE_SIZE:
-                raise ValueError(
-                    f"File too large. Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB"
-                )
+                raise ValueError(f"File too large. Maximum size is {self.MAX_FILE_SIZE / 1024 / 1024:.1f}MB")
 
             # Validate MIME type (try python-magic if available, fallback to content inspection)
             try:
@@ -360,9 +333,7 @@ class UserProfileService:
                         "PNG": "image/png",
                         "WEBP": "image/webp",
                     }
-                    mime = format_to_mime.get(
-                        temp_image.format, "application/octet-stream"
-                    )
+                    mime = format_to_mime.get(temp_image.format, "application/octet-stream")
                 except:
                     mime = "application/octet-stream"
 
@@ -390,16 +361,11 @@ class UserProfileService:
             }
             if image.format in format_to_mime:
                 expected_mime = format_to_mime[image.format]
-                if mime != expected_mime and not (
-                    mime == "image/jpeg" and expected_mime == "image/jpeg"
-                ):
+                if mime != expected_mime and not (mime == "image/jpeg" and expected_mime == "image/jpeg"):
                     raise ValueError("File content does not match declared type")
 
             # Resize image if needed (using configurable size)
-            if (
-                image.size[0] > self.MAX_IMAGE_SIZE[0]
-                or image.size[1] > self.MAX_IMAGE_SIZE[1]
-            ):
+            if image.size[0] > self.MAX_IMAGE_SIZE[0] or image.size[1] > self.MAX_IMAGE_SIZE[1]:
                 image.thumbnail(self.MAX_IMAGE_SIZE, Image.Resampling.LANCZOS)
 
             # Generate unique filename based on validated MIME type
@@ -421,17 +387,13 @@ class UserProfileService:
 
             # Store relative path for URL generation
             old_document_url = profile.bank_document_photo_url
-            profile.bank_document_photo_url = (
-                f"/api/v1/user-profiles/files/bank_documents/{unique_filename}"
-            )
+            profile.bank_document_photo_url = f"/api/v1/user-profiles/files/bank_documents/{unique_filename}"
             profile.updated_at = datetime.now(timezone.utc)
 
             await self.db.commit()
 
             # Remove old document if it exists
-            if old_document_url and old_document_url.startswith(
-                "/api/v1/user-profiles/files/bank_documents/"
-            ):
+            if old_document_url and old_document_url.startswith("/api/v1/user-profiles/files/bank_documents/"):
                 old_filename = old_document_url.split("/")[-1]
                 old_file_path = os.path.join(upload_dir, old_filename)
                 if os.path.exists(old_file_path):
@@ -458,9 +420,7 @@ class UserProfileService:
             return False
 
         # Delete file if it exists
-        if profile.bank_document_photo_url.startswith(
-            "/api/v1/user-profiles/files/bank_documents/"
-        ):
+        if profile.bank_document_photo_url.startswith("/api/v1/user-profiles/files/bank_documents/"):
             filename = profile.bank_document_photo_url.split("/")[-1]
             file_path = os.path.join(self.upload_path, filename)
             if os.path.exists(file_path):
@@ -550,9 +510,7 @@ class UserProfileService:
             logger.error(f"Virus scanning failed: {str(e)}")
             return {"is_safe": True, "warning": f"Scanner exception: {str(e)}"}
 
-    async def get_profile_history(
-        self, user_id: int, limit: int = 50
-    ) -> List[UserProfileHistory]:
+    async def get_profile_history(self, user_id: int, limit: int = 50) -> List[UserProfileHistory]:
         """Get profile change history"""
         stmt = (
             select(UserProfileHistory)
@@ -569,14 +527,10 @@ class UserProfileService:
         await self.delete_bank_document(user_id)
 
         # Delete profile history
-        await self.db.execute(
-            delete(UserProfileHistory).where(UserProfileHistory.user_id == user_id)
-        )
+        await self.db.execute(delete(UserProfileHistory).where(UserProfileHistory.user_id == user_id))
 
         # Delete profile
-        result = await self.db.execute(
-            delete(UserProfile).where(UserProfile.user_id == user_id)
-        )
+        result = await self.db.execute(delete(UserProfile).where(UserProfile.user_id == user_id))
 
         await self.db.commit()
 
@@ -608,11 +562,7 @@ class UserProfileService:
 
     async def get_users_with_incomplete_profiles(self) -> List[Dict[str, Any]]:
         """Get users with incomplete profiles for admin dashboard"""
-        stmt = (
-            select(User, UserProfile)
-            .outerjoin(UserProfile)
-            .where(User.role == "STUDENT")
-        )
+        stmt = select(User, UserProfile).outerjoin(UserProfile).where(User.role == "STUDENT")
 
         result = await self.db.execute(stmt)
         users_profiles = result.all()
@@ -650,9 +600,7 @@ class UserProfileService:
 
         return incomplete_users
 
-    async def bulk_update_privacy_settings(
-        self, user_id: int, privacy_settings: Dict[str, Any]
-    ) -> UserProfile:
+    async def bulk_update_privacy_settings(self, user_id: int, privacy_settings: Dict[str, Any]) -> UserProfile:
         """Update privacy settings for user profile"""
         profile = await self.get_user_profile(user_id)
         if not profile:

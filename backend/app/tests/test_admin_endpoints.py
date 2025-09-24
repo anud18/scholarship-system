@@ -136,9 +136,7 @@ class TestAdminEndpoints:
         return apps
 
     @pytest.mark.asyncio
-    async def test_get_all_applications_success(
-        self, admin_client, sample_applications
-    ):
+    async def test_get_all_applications_success(self, admin_client, sample_applications):
         """Test successful retrieval of all applications"""
         # Act
         response = await admin_client.get("/api/v1/admin/applications")
@@ -160,9 +158,7 @@ class TestAdminEndpoints:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_get_all_applications_with_filters(
-        self, admin_client, sample_applications
-    ):
+    async def test_get_all_applications_with_filters(self, admin_client, sample_applications):
         """Test applications endpoint with query filters"""
         # Act - Use real DB with filters
         response = await admin_client.get(
@@ -237,9 +233,7 @@ class TestAdminEndpoints:
             assert "avg_processing_time" in data["data"]
 
     @pytest.mark.asyncio
-    async def test_assign_professor_to_application_success(
-        self, admin_client, client, sample_applications
-    ):
+    async def test_assign_professor_to_application_success(self, admin_client, client, sample_applications):
         """Test successful professor assignment"""
         # Arrange - Create a professor in the DB
         from app.db.deps import get_db
@@ -297,9 +291,7 @@ class TestAdminEndpoints:
     async def test_get_recent_applications(self, admin_client, sample_applications):
         """Test recent applications endpoint"""
         # Act - Use real DB
-        response = await admin_client.get(
-            "/api/v1/admin/recent-applications"
-        )  # Fixed URL
+        response = await admin_client.get("/api/v1/admin/recent-applications")  # Fixed URL
 
         # Assert
         assert response.status_code == 200
@@ -310,9 +302,7 @@ class TestAdminEndpoints:
         assert len(data["data"]) >= 0
 
     @pytest.mark.asyncio
-    async def test_get_applications_by_scholarship(
-        self, admin_client, scholarship_type
-    ):
+    async def test_get_applications_by_scholarship(self, admin_client, scholarship_type):
         """Test applications by scholarship type endpoint"""
         # Arrange
         with patch("app.api.v1.endpoints.admin.get_db") as mock_get_db:
@@ -337,9 +327,7 @@ class TestAdminEndpoints:
             ]
 
             # Act
-            response = await admin_client.get(
-                f"/api/v1/admin/scholarships/{scholarship_type.id}/applications"
-            )
+            response = await admin_client.get(f"/api/v1/admin/scholarships/{scholarship_type.id}/applications")
 
             # Assert
             assert response.status_code == 200
@@ -422,18 +410,12 @@ class TestAdminEndpoints:
             "comments": "Bulk approval for qualified candidates",
         }
 
-        with patch(
-            "app.services.bulk_approval_service.BulkApprovalService"
-        ) as mock_service_class:
+        with patch("app.services.bulk_approval_service.BulkApprovalService") as mock_service_class:
             mock_service = mock_service_class.return_value
-            mock_service.bulk_approve_applications = AsyncMock(
-                return_value={"approved": 3, "failed": 0, "details": []}
-            )
+            mock_service.bulk_approve_applications = AsyncMock(return_value={"approved": 3, "failed": 0, "details": []})
 
             # Act
-            response = await admin_client.post(
-                "/api/v1/admin/applications/bulk-approve", json=bulk_data
-            )
+            response = await admin_client.post("/api/v1/admin/applications/bulk-approve", json=bulk_data)
 
             # Assert
             assert response.status_code == 200
@@ -451,9 +433,7 @@ class TestAdminEndpoints:
         }
 
         # Act
-        response = await admin_client.post(
-            "/api/v1/admin/applications/bulk-approve", json=bulk_data
-        )
+        response = await admin_client.post("/api/v1/admin/applications/bulk-approve", json=bulk_data)
 
         # Assert
         assert response.status_code == 422  # Validation error
@@ -467,18 +447,12 @@ class TestAdminEndpoints:
             mock_get_db.return_value.__aenter__.return_value = mock_db
 
             # Mock export service
-            with patch(
-                "app.services.export_service.ExportService"
-            ) as mock_export_class:
+            with patch("app.services.export_service.ExportService") as mock_export_class:
                 mock_export = mock_export_class.return_value
-                mock_export.export_applications_csv = AsyncMock(
-                    return_value="csv_content"
-                )
+                mock_export.export_applications_csv = AsyncMock(return_value="csv_content")
 
                 # Act
-                response = await admin_client.get(
-                    "/api/v1/admin/applications/export?format=csv"
-                )
+                response = await admin_client.get("/api/v1/admin/applications/export?format=csv")
 
                 # Assert
                 assert response.status_code == 200
@@ -529,16 +503,12 @@ class TestAdminEndpoints:
             "email_notifications_enabled": True,
         }
 
-        with patch(
-            "app.services.system_setting_service.SystemSettingService"
-        ) as mock_service_class:
+        with patch("app.services.system_setting_service.SystemSettingService") as mock_service_class:
             mock_service = mock_service_class.return_value
             mock_service.update_settings = AsyncMock(return_value=settings_data)
 
             # Act
-            response = await admin_client.put(
-                "/api/v1/admin/system/settings", json=settings_data
-            )
+            response = await admin_client.put("/api/v1/admin/system/settings", json=settings_data)
 
             # Assert
             assert response.status_code == 200

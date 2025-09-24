@@ -33,9 +33,7 @@ class ScholarshipConfigurationBase(BaseModel):
     amount: int = Field(..., gt=0, description="獎學金金額（整數）")
     currency: str = Field(default="TWD", max_length=10)
 
-    whitelist_student_ids: Dict[str, List[int]] = Field(
-        default={}, description="白名單學生ID列表，依子獎學金區分"
-    )
+    whitelist_student_ids: Dict[str, List[int]] = Field(default={}, description="白名單學生ID列表，依子獎學金區分")
 
     # 申請時間 (從 ScholarshipType 移至此處)
     # 續領申請期間（優先處理）
@@ -90,9 +88,7 @@ class ScholarshipConfigurationBase(BaseModel):
             if total_quota and v:
                 # For matrix structure: {sub_type: {college: quota}}
                 college_total = sum(
-                    sum(college_quotas.values())
-                    for college_quotas in v.values()
-                    if isinstance(college_quotas, dict)
+                    sum(college_quotas.values()) for college_quotas in v.values() if isinstance(college_quotas, dict)
                 )
                 if college_total > total_quota:
                     raise ValueError(f"配額總和 ({college_total}) 超過總配額 ({total_quota})")
@@ -151,9 +147,7 @@ class ScholarshipConfigurationUpdate(BaseModel):
     amount: Optional[int] = Field(None, gt=0, description="獎學金金額（整數）")
     currency: Optional[str] = Field(None, max_length=10)
 
-    whitelist_student_ids: Optional[Dict[str, List[int]]] = Field(
-        None, description="白名單學生ID列表，依子獎學金區分"
-    )
+    whitelist_student_ids: Optional[Dict[str, List[int]]] = Field(None, description="白名單學生ID列表，依子獎學金區分")
 
     # 申請時間 (從 ScholarshipType 移至此處)
     # 續領申請期間（優先處理）

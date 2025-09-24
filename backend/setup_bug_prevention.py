@@ -15,9 +15,7 @@ from pathlib import Path
 def run_command(command: str, cwd: str = None) -> bool:
     """Run a shell command and return success status"""
     try:
-        result = subprocess.run(
-            command, shell=True, cwd=cwd, check=True, capture_output=True, text=True
-        )
+        result = subprocess.run(command, shell=True, cwd=cwd, check=True, capture_output=True, text=True)
         print(f"✅ {command}")
         return True
     except subprocess.CalledProcessError as e:

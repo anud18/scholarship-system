@@ -41,38 +41,24 @@ logger = logging.getLogger(__name__)
 class CollegeReviewCreate(BaseModel):
     """Schema for creating a college review"""
 
-    academic_score: Optional[float] = Field(
-        None, ge=0, le=100, description="Academic performance score (0-100)"
-    )
-    professor_review_score: Optional[float] = Field(
-        None, ge=0, le=100, description="Professor review score (0-100)"
-    )
+    academic_score: Optional[float] = Field(None, ge=0, le=100, description="Academic performance score (0-100)")
+    professor_review_score: Optional[float] = Field(None, ge=0, le=100, description="Professor review score (0-100)")
     college_criteria_score: Optional[float] = Field(
         None, ge=0, le=100, description="College-specific criteria score (0-100)"
     )
     special_circumstances_score: Optional[float] = Field(
         None, ge=0, le=100, description="Special circumstances score (0-100)"
     )
-    review_comments: Optional[str] = Field(
-        None, max_length=2000, description="Detailed review comments"
-    )
+    review_comments: Optional[str] = Field(None, max_length=2000, description="Detailed review comments")
     recommendation: str = Field(
         ...,
         description="Review recommendation",
         pattern="^(approve|reject|conditional)$",
     )
-    decision_reason: Optional[str] = Field(
-        None, max_length=1000, description="Reason for the recommendation"
-    )
-    is_priority: Optional[bool] = Field(
-        False, description="Mark as priority application"
-    )
-    needs_special_attention: Optional[bool] = Field(
-        False, description="Flag for special review"
-    )
-    scoring_weights: Optional[Dict[str, float]] = Field(
-        None, description="Custom scoring weights"
-    )
+    decision_reason: Optional[str] = Field(None, max_length=1000, description="Reason for the recommendation")
+    is_priority: Optional[bool] = Field(False, description="Mark as priority application")
+    needs_special_attention: Optional[bool] = Field(False, description="Flag for special review")
+    scoring_weights: Optional[Dict[str, float]] = Field(None, description="Custom scoring weights")
 
     @validator(
         "academic_score",
@@ -107,9 +93,7 @@ class CollegeReviewUpdate(BaseModel):
     college_criteria_score: Optional[float] = Field(None, ge=0, le=100)
     special_circumstances_score: Optional[float] = Field(None, ge=0, le=100)
     review_comments: Optional[str] = Field(None, max_length=2000)
-    recommendation: Optional[str] = Field(
-        None, pattern="^(approve|reject|conditional)$"
-    )
+    recommendation: Optional[str] = Field(None, pattern="^(approve|reject|conditional)$")
     decision_reason: Optional[str] = Field(None, max_length=1000)
     is_priority: Optional[bool] = None
     needs_special_attention: Optional[bool] = None
@@ -162,18 +146,14 @@ class RankingOrderUpdate(BaseModel):
 class QuotaDistributionRequest(BaseModel):
     """Schema for quota distribution request"""
 
-    distribution_rules: Optional[Dict[str, Any]] = Field(
-        None, description="Custom distribution rules"
-    )
+    distribution_rules: Optional[Dict[str, Any]] = Field(None, description="Custom distribution rules")
 
 
 router = APIRouter()
 
 
 # Helper functions for granular authorization checks
-async def _check_scholarship_permission(
-    user: User, scholarship_type_id: int, db: AsyncSession
-) -> bool:
+async def _check_scholarship_permission(user: User, scholarship_type_id: int, db: AsyncSession) -> bool:
     """Check if user has permission for specific scholarship type"""
     if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
         return True
@@ -191,9 +171,7 @@ async def _check_scholarship_permission(
     return result.scalar_one_or_none() is not None
 
 
-async def _check_academic_year_permission(
-    user: User, academic_year: int, db: AsyncSession
-) -> bool:
+async def _check_academic_year_permission(user: User, academic_year: int, db: AsyncSession) -> bool:
     """Check if user has permission for specific academic year"""
     if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
         return True
@@ -204,9 +182,7 @@ async def _check_academic_year_permission(
     return academic_year in allowed_years
 
 
-async def _check_application_review_permission(
-    user: User, application_id: int, db: AsyncSession
-) -> bool:
+async def _check_application_review_permission(user: User, application_id: int, db: AsyncSession) -> bool:
     """Check if user can review specific application"""
     if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
         return True
@@ -221,15 +197,11 @@ async def _check_application_review_permission(
 
     # Check scholarship type permission
     if application.scholarship_type_id:
-        return await _check_scholarship_permission(
-            user, application.scholarship_type_id, db
-        )
+        return await _check_scholarship_permission(user, application.scholarship_type_id, db)
 
     # Check academic year permission
     if application.academic_year:
-        return await _check_academic_year_permission(
-            user, application.academic_year, db
-        )
+        return await _check_academic_year_permission(user, application.academic_year, db)
 
     return True  # Default allow if no specific restrictions
 
@@ -238,12 +210,8 @@ async def _check_application_review_permission(
 @professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_applications_for_review(
     request: Request,
-    scholarship_type_id: Optional[int] = Query(
-        None, description="Filter by scholarship type ID"
-    ),
-    scholarship_type: Optional[str] = Query(
-        None, description="Filter by scholarship type code"
-    ),
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type code"),
     sub_type: Optional[str] = Query(None, description="Filter by sub-type"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
@@ -253,29 +221,15 @@ async def get_applications_for_review(
     """Get applications that are ready for college review"""
 
     # Granular authorization checks
-    if (
-        not current_user.is_college()
-        and not current_user.is_admin()
-        and not current_user.is_super_admin()
-    ):
-        raise ReviewPermissionError(
-            "College role required for application review access"
-        )
+    if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
+        raise ReviewPermissionError("College role required for application review access")
 
     # Additional checks for specific operations
-    if scholarship_type_id and not await _check_scholarship_permission(
-        current_user, scholarship_type_id, db
-    ):
-        raise ReviewPermissionError(
-            f"User {current_user.id} not authorized for scholarship type {scholarship_type_id}"
-        )
+    if scholarship_type_id and not await _check_scholarship_permission(current_user, scholarship_type_id, db):
+        raise ReviewPermissionError(f"User {current_user.id} not authorized for scholarship type {scholarship_type_id}")
 
-    if academic_year and not await _check_academic_year_permission(
-        current_user, academic_year, db
-    ):
-        raise ReviewPermissionError(
-            f"User {current_user.id} not authorized for academic year {academic_year}"
-        )
+    if academic_year and not await _check_academic_year_permission(current_user, academic_year, db):
+        raise ReviewPermissionError(f"User {current_user.id} not authorized for academic year {academic_year}")
 
     try:
         service = CollegeReviewService(db)
@@ -292,11 +246,7 @@ async def get_applications_for_review(
         filtered_applications = []
         for app in applications:
             # Extract only necessary fields to minimize data exposure
-            student_data = (
-                app.get("student_data", {})
-                if isinstance(app.get("student_data"), dict)
-                else {}
-            )
+            student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
 
             filtered_app = {
                 "id": app.get("id"),
@@ -309,15 +259,9 @@ async def get_applications_for_review(
                 "created_at": app.get("created_at"),
                 "submitted_at": app.get("submitted_at"),
                 # Student info in flat format for frontend compatibility
-                "student_id": student_data.get("std_stdcode", "未提供學號")
-                if student_data
-                else "N/A",
-                "student_name": student_data.get("std_cname", "未提供姓名")
-                if student_data
-                else "未提供學生資料",
-                "department_code": student_data.get("std_depno", "N/A")
-                if student_data
-                else "N/A",
+                "student_id": student_data.get("std_stdcode", "未提供學號") if student_data else "N/A",
+                "student_name": student_data.get("std_cname", "未提供姓名") if student_data else "未提供學生資料",
+                "department_code": student_data.get("std_depno", "N/A") if student_data else "N/A",
                 # Add review status for UI purposes
                 "review_status": {
                     "has_professor_review": len(app.get("professor_reviews", [])) > 0,
@@ -368,9 +312,7 @@ async def get_applications_for_review(
     "/applications/{application_id}/review",
     response_model=ApiResponse[CollegeReviewResponse],
 )
-@professor_rate_limit(
-    requests=50, window_seconds=600
-)  # 50 review submissions per 10 minutes
+@professor_rate_limit(requests=50, window_seconds=600)  # 50 review submissions per 10 minutes
 async def create_college_review(
     request: Request,
     application_id: int,
@@ -381,24 +323,16 @@ async def create_college_review(
     """Create or update a college review for an application"""
 
     # Granular authorization checks for review creation
-    if (
-        not current_user.is_college()
-        and not current_user.is_admin()
-        and not current_user.is_super_admin()
-    ):
+    if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
         raise ReviewPermissionError("College role required for application review")
 
     # Check if user can review this specific application
     if not await _check_application_review_permission(current_user, application_id, db):
-        raise ReviewPermissionError(
-            f"User {current_user.id} not authorized to review application {application_id}"
-        )
+        raise ReviewPermissionError(f"User {current_user.id} not authorized to review application {application_id}")
 
     # Validate application_id
     if application_id <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid application ID"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid application ID")
 
     try:
         service = CollegeReviewService(db)
@@ -415,17 +349,13 @@ async def create_college_review(
         )
 
     except ValueError as e:
-        logger.warning(
-            f"Invalid review data for application {application_id}: {str(e)}"
-        )
+        logger.warning(f"Invalid review data for application {application_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid review data: {str(e)}",
         )
     except PermissionError as e:
-        logger.warning(
-            f"Permission denied for college review creation by user {current_user.id}: {str(e)}"
-        )
+        logger.warning(f"Permission denied for college review creation by user {current_user.id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to review this application",
@@ -437,25 +367,19 @@ async def create_college_review(
             detail=f"Invalid review data: {str(e)}",
         )
     except IntegrityError as e:
-        logger.error(
-            f"Database integrity error creating review for application {application_id}: {str(e)}"
-        )
+        logger.error(f"Database integrity error creating review for application {application_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Review creation conflicts with existing data",
         )
     except DatabaseError as e:
-        logger.error(
-            f"Database error creating review for application {application_id}: {str(e)}"
-        )
+        logger.error(f"Database error creating review for application {application_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database service temporarily unavailable",
         )
     except Exception as e:
-        logger.error(
-            f"Unexpected error creating college review for application {application_id}: {str(e)}"
-        )
+        logger.error(f"Unexpected error creating college review for application {application_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while creating the review",
@@ -478,9 +402,7 @@ async def update_college_review(
         college_review = result.scalar_one_or_none()
 
         if not college_review:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="College review not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="College review not found")
 
         # Check permissions
         if college_review.reviewer_id != current_user.id and current_user.role not in [
@@ -515,9 +437,7 @@ async def update_college_review(
             detail=f"Invalid review data: {str(e)}",
         )
     except PermissionError as e:
-        logger.warning(
-            f"Permission denied for review update by user {current_user.id}: {str(e)}"
-        )
+        logger.warning(f"Permission denied for review update by user {current_user.id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this review",
@@ -600,9 +520,7 @@ async def get_rankings(
                     "ranking_status": ranking.ranking_status,
                     "distribution_executed": ranking.distribution_executed,
                     "created_at": ranking.created_at.isoformat(),
-                    "finalized_at": ranking.finalized_at.isoformat()
-                    if ranking.finalized_at
-                    else None,
+                    "finalized_at": ranking.finalized_at.isoformat() if ranking.finalized_at else None,
                 }
             )
 
@@ -620,9 +538,7 @@ async def get_rankings(
         )
     except CollegeReviewError as e:
         logger.error(f"College review error retrieving rankings: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error retrieving rankings: {str(e)}")
         raise HTTPException(
@@ -688,9 +604,7 @@ async def create_ranking(
         )
     except CollegeReviewError as e:
         logger.error(f"College review error creating ranking: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error creating ranking: {str(e)}")
         raise HTTPException(
@@ -714,9 +628,7 @@ async def get_ranking(
         ranking = await service.get_ranking(ranking_id)
 
         if not ranking:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
 
         # Format ranking items
         items = []
@@ -727,9 +639,7 @@ async def get_ranking(
                     "rank_position": item.rank_position,
                     "is_allocated": item.is_allocated,
                     "status": item.status,
-                    "total_score": float(item.total_score)
-                    if item.total_score
-                    else None,
+                    "total_score": float(item.total_score) if item.total_score else None,
                     # Lightweight DTO with minimal student exposure
                     "application": {
                         "id": item.application.id,
@@ -741,8 +651,7 @@ async def get_ranking(
                         "student_info": {
                             "display_name": (
                                 item.application.student_data.get("cname", "學生")
-                                if item.application.student_data
-                                and isinstance(item.application.student_data, dict)
+                                if item.application.student_data and isinstance(item.application.student_data, dict)
                                 else "學生"
                             ),
                             "student_id_masked": (
@@ -754,8 +663,7 @@ async def get_ranking(
                             ),  # Partially mask student ID for privacy
                             "dept_code": (
                                 item.application.student_data.get("deptCode", "N/A")[:3]
-                                if item.application.student_data
-                                and isinstance(item.application.student_data, dict)
+                                if item.application.student_data and isinstance(item.application.student_data, dict)
                                 else "N/A"
                             ),  # Use department code instead of full name
                         },
@@ -790,9 +698,7 @@ async def get_ranking(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except CollegeReviewError as e:
         logger.error(f"College review error retrieving ranking: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error retrieving ranking: {str(e)}")
         raise HTTPException(
@@ -802,9 +708,7 @@ async def get_ranking(
 
 
 @router.put("/rankings/{ranking_id}/order", response_model=ApiResponse[Dict[str, Any]])
-@professor_rate_limit(
-    requests=30, window_seconds=600
-)  # 30 ranking updates per 10 minutes
+@professor_rate_limit(requests=30, window_seconds=600)  # 30 ranking updates per 10 minutes
 async def update_ranking_order(
     request: Request,
     ranking_id: int,
@@ -837,9 +741,7 @@ async def update_ranking_order(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except CollegeReviewError as e:
         logger.error(f"College review error during ranking update: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error updating ranking order: {str(e)}")
         raise HTTPException(
@@ -848,9 +750,7 @@ async def update_ranking_order(
         )
 
 
-@router.post(
-    "/rankings/{ranking_id}/distribute", response_model=ApiResponse[Dict[str, Any]]
-)
+@router.post("/rankings/{ranking_id}/distribute", response_model=ApiResponse[Dict[str, Any]])
 async def execute_quota_distribution(
     ranking_id: int,
     distribution_request: QuotaDistributionRequest,
@@ -890,9 +790,7 @@ async def execute_quota_distribution(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except CollegeReviewError as e:
         logger.error(f"College review error during distribution: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error executing distribution: {str(e)}")
         raise HTTPException(
@@ -901,9 +799,7 @@ async def execute_quota_distribution(
         )
 
 
-@router.post(
-    "/rankings/{ranking_id}/finalize", response_model=ApiResponse[Dict[str, Any]]
-)
+@router.post("/rankings/{ranking_id}/finalize", response_model=ApiResponse[Dict[str, Any]])
 async def finalize_ranking(
     ranking_id: int,
     current_user: User = Depends(require_admin),  # Only admin can finalize rankings
@@ -913,9 +809,7 @@ async def finalize_ranking(
 
     try:
         service = CollegeReviewService(db)
-        ranking = await service.finalize_ranking(
-            ranking_id=ranking_id, finalizer_id=current_user.id
-        )
+        ranking = await service.finalize_ranking(ranking_id=ranking_id, finalizer_id=current_user.id)
 
         return ApiResponse(
             success=True,
@@ -936,9 +830,7 @@ async def finalize_ranking(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except CollegeReviewError as e:
         logger.error(f"College review error during finalization: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error finalizing ranking: {str(e)}")
         raise HTTPException(
@@ -979,9 +871,7 @@ async def get_quota_status(
         )
     except CollegeReviewError as e:
         logger.error(f"College review error retrieving quota status: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error retrieving quota status: {str(e)}")
         raise HTTPException(
@@ -1020,9 +910,7 @@ async def get_college_review_statistics(
             )
 
             if academic_year:
-                base_query = base_query.where(
-                    Application.academic_year == academic_year
-                )
+                base_query = base_query.where(Application.academic_year == academic_year)
             if semester:
                 base_query = base_query.where(Application.semester == semester)
 
@@ -1033,13 +921,10 @@ async def get_college_review_statistics(
         total_reviews = len(reviews)
         approved_count = len([r for r in reviews if r.recommendation == "approve"])
         rejected_count = len([r for r in reviews if r.recommendation == "reject"])
-        conditional_count = len(
-            [r for r in reviews if r.recommendation == "conditional"]
-        )
+        conditional_count = len([r for r in reviews if r.recommendation == "conditional"])
 
         avg_ranking_score = (
-            sum(r.ranking_score for r in reviews if r.ranking_score)
-            / len([r for r in reviews if r.ranking_score])
+            sum(r.ranking_score for r in reviews if r.ranking_score) / len([r for r in reviews if r.ranking_score])
             if reviews
             else 0
         )
@@ -1049,9 +934,7 @@ async def get_college_review_statistics(
             "approved_count": approved_count,
             "rejected_count": rejected_count,
             "conditional_count": conditional_count,
-            "approval_rate": (approved_count / total_reviews * 100)
-            if total_reviews > 0
-            else 0,
+            "approval_rate": (approved_count / total_reviews * 100) if total_reviews > 0 else 0,
             "average_ranking_score": round(avg_ranking_score, 2),
             "breakdown_by_recommendation": {
                 "approve": approved_count,
@@ -1074,9 +957,7 @@ async def get_college_review_statistics(
         )
     except CollegeReviewError as e:
         logger.error(f"College review error retrieving statistics: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error retrieving statistics: {str(e)}")
         raise HTTPException(
@@ -1086,9 +967,7 @@ async def get_college_review_statistics(
 
 
 @router.get("/available-combinations", response_model=ApiResponse[Dict[str, Any]])
-async def get_available_combinations(
-    current_user: User = Depends(require_college), db: AsyncSession = Depends(get_db)
-):
+async def get_available_combinations(current_user: User = Depends(require_college), db: AsyncSession = Depends(get_db)):
     """Get available combinations of scholarship types, academic years, and semesters from database"""
 
     try:
@@ -1106,9 +985,7 @@ async def get_available_combinations(
         for st in scholarship_types_raw:
             if st:  # Only include non-None values
                 # Query the ScholarshipType table for the full name (case insensitive)
-                type_query = select(ScholarshipType).where(
-                    ScholarshipType.code.ilike(st)
-                )
+                type_query = select(ScholarshipType).where(ScholarshipType.code.ilike(st))
                 type_result = await db.execute(type_query)
                 type_obj = type_result.scalar_one_or_none()
 
@@ -1121,15 +998,9 @@ async def get_available_combinations(
                 )
 
         # Query distinct academic years from applications
-        year_query = (
-            select(Application.academic_year)
-            .distinct()
-            .where(Application.academic_year.isnot(None))
-        )
+        year_query = select(Application.academic_year).distinct().where(Application.academic_year.isnot(None))
         year_result = await db.execute(year_query)
-        academic_years = sorted(
-            [y for y in year_result.scalars().all() if y is not None]
-        )
+        academic_years = sorted([y for y in year_result.scalars().all() if y is not None])
 
         # Query distinct semesters from applications (including NULL for yearly scholarships)
         semester_query = select(Application.semester).distinct()
@@ -1155,9 +1026,7 @@ async def get_available_combinations(
         response_data = {
             "scholarship_types": scholarship_types,
             "academic_years": academic_years,
-            "semesters": sorted(
-                list(set(semester_strings))
-            ),  # Remove duplicates and sort
+            "semesters": sorted(list(set(semester_strings))),  # Remove duplicates and sort
         }
 
         logger.info(

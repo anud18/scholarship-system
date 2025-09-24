@@ -21,9 +21,7 @@ class AdvisorInfoBase(BaseModel):
 
     advisor_name: Optional[str] = Field(None, max_length=100, description="指導教授姓名")
     advisor_email: Optional[str] = Field(None, description="指導教授Email")
-    advisor_nycu_id: Optional[str] = Field(
-        None, max_length=20, description="指導教授NYCU ID"
-    )
+    advisor_nycu_id: Optional[str] = Field(None, max_length=20, description="指導教授NYCU ID")
 
     @field_validator("advisor_email", mode="before")
     @classmethod

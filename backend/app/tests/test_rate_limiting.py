@@ -59,9 +59,7 @@ class TestRateLimiter:
         assert remaining == 0
 
     @pytest.mark.asyncio
-    async def test_is_rate_limited_redis_error_fails_open(
-        self, rate_limiter, mock_redis
-    ):
+    async def test_is_rate_limited_redis_error_fails_open(self, rate_limiter, mock_redis):
         """Test that Redis errors fail open (don't block requests)"""
         # Mock Redis to raise an exception
         mock_redis.pipeline.side_effect = Exception("Redis connection failed")
@@ -210,9 +208,7 @@ class TestRateLimitIntegration:
             return False
 
     @pytest.mark.asyncio
-    @pytest.mark.skipif(
-        True, reason="Requires Redis server - enable for integration testing"
-    )
+    @pytest.mark.skipif(True, reason="Requires Redis server - enable for integration testing")
     async def test_real_redis_rate_limiting(self, redis_available):
         """Integration test with real Redis (skipped by default)"""
         if not redis_available:
@@ -222,17 +218,13 @@ class TestRateLimitIntegration:
 
         # Test multiple requests within limit
         for i in range(5):
-            is_limited, remaining = await limiter.is_rate_limited(
-                "test_integration", 10, 60
-            )
+            is_limited, remaining = await limiter.is_rate_limited("test_integration", 10, 60)
             assert is_limited is False
             assert remaining >= 0
 
         # Test exceeding limit
         for i in range(10):  # This should exceed the limit
-            is_limited, remaining = await limiter.is_rate_limited(
-                "test_integration_limit", 3, 60
-            )
+            is_limited, remaining = await limiter.is_rate_limited("test_integration_limit", 3, 60)
             if i >= 3:
                 assert is_limited is True
 

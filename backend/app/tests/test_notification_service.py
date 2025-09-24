@@ -64,9 +64,7 @@ class TestNotificationService:
                 "app.models.notification.Notification",
                 return_value=created_notification,
             ):
-                result = await service.createUserNotification(
-                    user_id=user_id, title=title, message=message
-                )
+                result = await service.createUserNotification(user_id=user_id, title=title, message=message)
 
                 # Verify database operations
                 mock_add.assert_called_once_with(created_notification)
@@ -92,14 +90,10 @@ class TestNotificationService:
         expires_at = datetime.now() + timedelta(days=7)
         metadata = {"key": "value"}
 
-        with patch.object(service.db, "add"), patch.object(
-            service.db, "commit"
-        ), patch.object(service.db, "refresh"):
+        with patch.object(service.db, "add"), patch.object(service.db, "commit"), patch.object(service.db, "refresh"):
             created_notification = Mock(spec=Notification)
 
-            with patch(
-                "app.models.notification.Notification"
-            ) as mock_notification_class:
+            with patch("app.models.notification.Notification") as mock_notification_class:
                 mock_notification_class.return_value = created_notification
 
                 result = await service.createUserNotification(
@@ -154,9 +148,7 @@ class TestNotificationService:
                 "app.models.notification.Notification",
                 return_value=created_notification,
             ):
-                result = await service.createSystemAnnouncement(
-                    title=title, message=message
-                )
+                result = await service.createSystemAnnouncement(title=title, message=message)
 
                 # Verify database operations
                 mock_add.assert_called_once_with(created_notification)
@@ -192,9 +184,7 @@ class TestNotificationService:
             assert call_args["user_id"] == user_id
             assert call_args["title"] == f"{application_title}狀態更新"
             assert call_args["title_en"] == f"{application_title} Status Update"
-            assert (
-                "恭喜" in call_args["message"]
-            )  # Approved message should contain congratulations
+            assert "恭喜" in call_args["message"]  # Approved message should contain congratulations
             assert call_args["notification_type"] == NotificationType.SUCCESS.value
             assert call_args["priority"] == NotificationPriority.HIGH.value
             assert call_args["related_resource_type"] == "application"
@@ -221,9 +211,7 @@ class TestNotificationService:
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
 
-            assert (
-                "很抱歉" in call_args["message"]
-            )  # Rejected message should contain apology
+            assert "很抱歉" in call_args["message"]  # Rejected message should contain apology
             assert call_args["notification_type"] == NotificationType.INFO.value
             assert call_args["priority"] == NotificationPriority.HIGH.value
 
@@ -353,9 +341,7 @@ class TestNotificationService:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
 
-            result = await service.notifyDeadlineReminder(
-                user_id=user_id, title=title, deadline=deadline
-            )
+            result = await service.notifyDeadlineReminder(user_id=user_id, title=title, deadline=deadline)
 
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
@@ -376,9 +362,7 @@ class TestNotificationService:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
 
-            result = await service.notifyDeadlineReminder(
-                user_id=user_id, title=title, deadline=deadline
-            )
+            result = await service.notifyDeadlineReminder(user_id=user_id, title=title, deadline=deadline)
 
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
@@ -444,9 +428,7 @@ class TestNotificationService:
 
         with patch.object(service.db, "execute") as mock_execute:
             # Mock notification query result
-            mock_execute.return_value.scalars.return_value.all.return_value = (
-                mock_notifications
-            )
+            mock_execute.return_value.scalars.return_value.all.return_value = mock_notifications
 
             # Mock read records query (empty)
             mock_execute.return_value.scalars.return_value.all.side_effect = [
@@ -494,12 +476,8 @@ class TestNotificationService:
         mock_notification.user_id = user_id
         mock_notification.mark_as_read = Mock()
 
-        with patch.object(service.db, "execute") as mock_execute, patch.object(
-            service.db, "commit"
-        ) as mock_commit:
-            mock_execute.return_value.scalar_one_or_none.return_value = (
-                mock_notification
-            )
+        with patch.object(service.db, "execute") as mock_execute, patch.object(service.db, "commit") as mock_commit:
+            mock_execute.return_value.scalar_one_or_none.return_value = mock_notification
 
             result = await service.markNotificationAsRead(notification_id, user_id)
 

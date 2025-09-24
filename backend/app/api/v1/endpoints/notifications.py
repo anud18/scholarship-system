@@ -83,9 +83,7 @@ async def markNotificationAsRead(
         if not success:
             raise HTTPException(status_code=404, detail="通知不存在")
 
-        return ApiResponse(
-            success=True, message="通知已標記為已讀", data={"notification_id": notification_id}
-        )
+        return ApiResponse(success=True, message="通知已標記為已讀", data={"notification_id": notification_id})
 
     except HTTPException:
         raise
@@ -148,9 +146,7 @@ async def dismissNotification(
         notification.dismiss()
         await db.commit()
 
-        return ApiResponse(
-            success=True, message="通知已關閉", data={"notification_id": notification_id}
-        )
+        return ApiResponse(success=True, message="通知已關閉", data={"notification_id": notification_id})
 
     except HTTPException:
         raise
@@ -280,9 +276,7 @@ async def createSystemAnnouncement(
 
 
 @router.post("/admin/create-test-notifications", response_model=ApiResponse[dict])
-async def createTestNotifications(
-    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+async def createTestNotifications(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """
     創建測試通知（僅管理員可用，用於演示）
     """
@@ -638,9 +632,7 @@ async def updateAnnouncement(
         raise HTTPException(status_code=500, detail=f"更新系統公告失敗: {str(e)}")
 
 
-@router.delete(
-    "/admin/announcements/{announcement_id}", response_model=ApiResponse[dict]
-)
+@router.delete("/admin/announcements/{announcement_id}", response_model=ApiResponse[dict])
 async def deleteAnnouncement(
     announcement_id: int,
     current_user: User = Depends(get_current_user),
@@ -670,9 +662,7 @@ async def deleteAnnouncement(
         # 同時刪除相關的已讀記錄
         from app.models.notification import NotificationRead
 
-        read_stmt = delete(NotificationRead).where(
-            NotificationRead.notification_id == announcement_id
-        )
+        read_stmt = delete(NotificationRead).where(NotificationRead.notification_id == announcement_id)
         await db.execute(read_stmt)
 
         # 刪除公告
@@ -681,9 +671,7 @@ async def deleteAnnouncement(
 
         await db.commit()
 
-        return ApiResponse(
-            success=True, message="系統公告刪除成功", data={"message": "系統公告已成功刪除"}
-        )
+        return ApiResponse(success=True, message="系統公告刪除成功", data={"message": "系統公告已成功刪除"})
 
     except HTTPException:
         raise

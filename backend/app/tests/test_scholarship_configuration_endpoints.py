@@ -31,9 +31,7 @@ class TestScholarshipConfigurationEndpoints:
         return scholarship_type
 
     @pytest.fixture
-    async def test_admin_with_scholarship_access(
-        self, db: AsyncSession, test_scholarship_type
-    ):
+    async def test_admin_with_scholarship_access(self, db: AsyncSession, test_scholarship_type):
         """Create admin user with scholarship access"""
         admin = User(
             email="config_admin@university.edu",
@@ -58,9 +56,7 @@ class TestScholarshipConfigurationEndpoints:
         return admin
 
     @pytest.fixture
-    async def authenticated_admin_client(
-        self, client: AsyncClient, test_admin_with_scholarship_access
-    ):
+    async def authenticated_admin_client(self, client: AsyncClient, test_admin_with_scholarship_access):
         """Create authenticated admin client"""
         # Mock authentication for testing - in real scenario would use proper auth
         # For now, we'll assume the client has proper authorization headers
@@ -111,9 +107,7 @@ class TestScholarshipConfigurationEndpoints:
         assert config_data["amount"] == valid_config_payload["amount"]
 
     @pytest.mark.asyncio
-    async def test_create_configuration_invalid_data(
-        self, authenticated_admin_client: AsyncClient
-    ):
+    async def test_create_configuration_invalid_data(self, authenticated_admin_client: AsyncClient):
         """Test configuration creation with invalid data"""
         invalid_payload = {
             "config_name": "",  # Empty name
@@ -155,9 +149,7 @@ class TestScholarshipConfigurationEndpoints:
         await db.commit()
         await db.refresh(config)
 
-        response = await authenticated_admin_client.get(
-            f"/api/v1/admin/scholarship-configurations/{config.id}"
-        )
+        response = await authenticated_admin_client.get(f"/api/v1/admin/scholarship-configurations/{config.id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -166,13 +158,9 @@ class TestScholarshipConfigurationEndpoints:
         assert data["data"]["config_name"] == "Test Get Configuration"
 
     @pytest.mark.asyncio
-    async def test_get_nonexistent_configuration(
-        self, authenticated_admin_client: AsyncClient
-    ):
+    async def test_get_nonexistent_configuration(self, authenticated_admin_client: AsyncClient):
         """Test retrieving non-existent configuration"""
-        response = await authenticated_admin_client.get(
-            "/api/v1/admin/scholarship-configurations/99999"
-        )
+        response = await authenticated_admin_client.get("/api/v1/admin/scholarship-configurations/99999")
 
         assert response.status_code == 404
         data = response.json()
@@ -244,9 +232,7 @@ class TestScholarshipConfigurationEndpoints:
         await db.commit()
         await db.refresh(config)
 
-        response = await authenticated_admin_client.delete(
-            f"/api/v1/admin/scholarship-configurations/{config.id}"
-        )
+        response = await authenticated_admin_client.delete(f"/api/v1/admin/scholarship-configurations/{config.id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -387,9 +373,7 @@ class TestScholarshipConfigurationEndpoints:
         assert response.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_insufficient_permissions(
-        self, client: AsyncClient, db: AsyncSession, test_scholarship_type
-    ):
+    async def test_insufficient_permissions(self, client: AsyncClient, db: AsyncSession, test_scholarship_type):
         """Test that users without proper permissions cannot access"""
         # Create user without admin privileges
         regular_user = User(
@@ -495,9 +479,7 @@ class TestScholarshipConfigurationEndpointsIntegration:
         config_id = create_response.json()["data"]["id"]
 
         # Read configuration
-        get_response = await authenticated_admin_client.get(
-            f"/api/v1/admin/scholarship-configurations/{config_id}"
-        )
+        get_response = await authenticated_admin_client.get(f"/api/v1/admin/scholarship-configurations/{config_id}")
         assert get_response.status_code == 200
 
         # Update configuration

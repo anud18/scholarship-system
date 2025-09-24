@@ -115,9 +115,7 @@ class TestScholarshipConfigurationServiceValidation:
         config = Mock(spec=ScholarshipConfiguration)
         application_data = {"gpa": 3.5}
 
-        is_valid, errors = service.validate_configuration_requirements(
-            config, application_data
-        )
+        is_valid, errors = service.validate_configuration_requirements(config, application_data)
 
         assert is_valid is True
         assert len(errors) == 0
@@ -253,9 +251,7 @@ class TestScholarshipConfigurationServiceCRUD:
         mock_config_result = Mock()
         mock_config_result.scalar_one_or_none.return_value = None
 
-        service.db.execute = AsyncMock(
-            side_effect=[mock_type_result, mock_config_result]
-        )
+        service.db.execute = AsyncMock(side_effect=[mock_type_result, mock_config_result])
         service.db.add = Mock()
         service.db.commit = AsyncMock()
         service.db.refresh = AsyncMock()
@@ -278,9 +274,7 @@ class TestScholarshipConfigurationServiceCRUD:
         service.db.commit = AsyncMock()
         service.db.refresh = AsyncMock()
 
-        config = await service.update_configuration(
-            config_id, update_data, updated_by=1
-        )
+        config = await service.update_configuration(config_id, update_data, updated_by=1)
 
         assert service.db.commit.called
 
@@ -324,9 +318,7 @@ class TestScholarshipConfigurationServiceDuplicate:
         mock_dup_check_result = Mock()
         mock_dup_check_result.scalar_one_or_none.return_value = None
 
-        service.db.execute = AsyncMock(
-            side_effect=[mock_source_result, mock_dup_check_result]
-        )
+        service.db.execute = AsyncMock(side_effect=[mock_source_result, mock_dup_check_result])
         service.db.add = Mock()
         service.db.commit = AsyncMock()
         service.db.refresh = AsyncMock()
@@ -426,9 +418,7 @@ class TestScholarshipConfigurationServiceAutoScreening:
         mock_app_result = Mock()
         mock_app_result.scalars.return_value.all.return_value = []
 
-        service.db.execute = AsyncMock(
-            side_effect=[mock_config_result, mock_app_result]
-        )
+        service.db.execute = AsyncMock(side_effect=[mock_config_result, mock_app_result])
         service.db.commit = AsyncMock()
 
         result = await service.apply_auto_screening(1)

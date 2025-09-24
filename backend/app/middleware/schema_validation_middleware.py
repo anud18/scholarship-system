@@ -44,9 +44,7 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
 
             # Only validate JSON responses
-            if response.headers.get("content-type", "").startswith(
-                "application/json"
-            ) and hasattr(response, "body"):
+            if response.headers.get("content-type", "").startswith("application/json") and hasattr(response, "body"):
                 await self._validate_response(request, response)
 
             return response
@@ -61,17 +59,13 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
                     "InvalidCachedStatementError" in error_message
                     or "cached statement plan is invalid" in error_message
                 ):
-                    logger.warning(
-                        f"Database cached statement error in middleware: {error_message}"
-                    )
+                    logger.warning(f"Database cached statement error in middleware: {error_message}")
                     # Try to invalidate connection pools to resolve the issue
                     try:
                         from app.db.session import invalidate_connection_pools_sync
 
                         invalidate_connection_pools_sync()
-                        logger.info(
-                            "Connection pools invalidated due to cached statement error"
-                        )
+                        logger.info("Connection pools invalidated due to cached statement error")
                     except ImportError:
                         pass
                 else:
@@ -87,9 +81,7 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
 
         finally:
             process_time = time.time() - start_time
-            logger.debug(
-                f"Schema validation took {process_time:.4f}s for {request.url.path}"
-            )
+            logger.debug(f"Schema validation took {process_time:.4f}s for {request.url.path}")
 
     def _should_skip_validation(self, path: str) -> bool:
         """Check if we should skip validation for this path"""
@@ -128,9 +120,7 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
 
             # Validate against schema
             response_model = route_info["response_model"]
-            self._perform_validation(
-                response_data, response_model, request.url.path, request.method
-            )
+            self._perform_validation(response_data, response_model, request.url.path, request.method)
 
         except Exception as e:
             logger.error(f"Response validation error: {e}")
@@ -152,9 +142,7 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
 
         return {}
 
-    def _perform_validation(
-        self, data: Any, response_model: type, path: str, method: str
-    ):
+    def _perform_validation(self, data: Any, response_model: type, path: str, method: str):
         """Perform actual validation and log issues"""
         try:
             if isinstance(data, list):
@@ -163,9 +151,9 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
                         response_model, "model_validate"
                     ) else response_model(**item)
             else:
-                response_model.model_validate(data) if hasattr(
-                    response_model, "model_validate"
-                ) else response_model(**data)
+                response_model.model_validate(data) if hasattr(response_model, "model_validate") else response_model(
+                    **data
+                )
 
             logger.debug(f"✅ Schema validation passed for {method} {path}")
 

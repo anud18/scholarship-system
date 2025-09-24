@@ -160,9 +160,7 @@ async def test_unified_document_handling():
             print("\n🔍 檢查固定文件複製結果...")
 
             # 查詢申請的文件
-            stmt = select(ApplicationFile).where(
-                ApplicationFile.application_id == created_app.id
-            )
+            stmt = select(ApplicationFile).where(ApplicationFile.application_id == created_app.id)
             result = await db.execute(stmt)
             files = result.scalars().all()
 
@@ -174,10 +172,7 @@ async def test_unified_document_handling():
                 print(f"    已驗證: {file.is_verified}")
 
                 # 檢查路徑是否統一
-                if (
-                    "applications/" in file.object_name
-                    and "/documents/" in file.object_name
-                ):
+                if "applications/" in file.object_name and "/documents/" in file.object_name:
                     print("    ✅ 文件存放在統一路徑")
                 else:
                     print("    ❌ 文件路徑不正確")
@@ -220,9 +215,7 @@ async def test_unified_document_handling():
             # 7. 最終檢查：所有文件是否在同一路徑
             print("\n🎯 最終檢查：統一文件管理")
 
-            stmt = select(ApplicationFile).where(
-                ApplicationFile.application_id == application.id
-            )
+            stmt = select(ApplicationFile).where(ApplicationFile.application_id == application.id)
             result = await db.execute(stmt)
             all_files = result.scalars().all()
 

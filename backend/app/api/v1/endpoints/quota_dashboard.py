@@ -69,9 +69,7 @@ async def get_quota_overview(
             base_query = base_query.filter(Application.semester == semester)
 
         total_applications = base_query.count()
-        approved_applications = base_query.filter(
-            Application.status == ApplicationStatus.APPROVED.value
-        ).count()
+        approved_applications = base_query.filter(Application.status == ApplicationStatus.APPROVED.value).count()
         pending_applications = base_query.filter(
             Application.status.in_(
                 [
@@ -102,9 +100,7 @@ async def get_quota_overview(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get quota overview: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get quota overview: {str(e)}")
     finally:
         sync_session.close()
 
@@ -125,9 +121,7 @@ async def get_detailed_quota_status(
         main_type_enum = ScholarshipMainType(main_type)
         sub_type_enum = ScholarshipSubType(sub_type)
     except ValueError as e:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid scholarship type: {str(e)}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid scholarship type: {str(e)}")
 
     sync_session = sessionmaker(bind=db.bind)()
 
@@ -154,25 +148,15 @@ async def get_detailed_quota_status(
 
         # Priority distribution
         priority_ranges = {
-            "high_priority": len(
-                [app for app in applications if (app.priority_score or 0) >= 100]
-            ),
-            "medium_priority": len(
-                [app for app in applications if 50 <= (app.priority_score or 0) < 100]
-            ),
-            "low_priority": len(
-                [app for app in applications if (app.priority_score or 0) < 50]
-            ),
+            "high_priority": len([app for app in applications if (app.priority_score or 0) >= 100]),
+            "medium_priority": len([app for app in applications if 50 <= (app.priority_score or 0) < 100]),
+            "low_priority": len([app for app in applications if (app.priority_score or 0) < 50]),
         }
 
         # Renewal vs new applications
         renewal_breakdown = {
-            "renewal_applications": len(
-                [app for app in applications if app.is_renewal]
-            ),
-            "new_applications": len(
-                [app for app in applications if not app.is_renewal]
-            ),
+            "renewal_applications": len([app for app in applications if app.is_renewal]),
+            "new_applications": len([app for app in applications if not app.is_renewal]),
         }
 
         # Time-based analysis
@@ -185,20 +169,8 @@ async def get_detailed_quota_status(
         last_30_days = now - timedelta(days=30)
 
         recent_submissions = {
-            "last_7_days": len(
-                [
-                    app
-                    for app in applications
-                    if app.submitted_at and app.submitted_at >= last_7_days
-                ]
-            ),
-            "last_30_days": len(
-                [
-                    app
-                    for app in applications
-                    if app.submitted_at and app.submitted_at >= last_30_days
-                ]
-            ),
+            "last_7_days": len([app for app in applications if app.submitted_at and app.submitted_at >= last_7_days]),
+            "last_30_days": len([app for app in applications if app.submitted_at and app.submitted_at >= last_30_days]),
             "total": len([app for app in applications if app.submitted_at]),
         }
 
@@ -207,23 +179,18 @@ async def get_detailed_quota_status(
             {
                 "app_id": app.app_id,
                 "student_id": app.student_id,
-                "days_overdue": (now - app.review_deadline).days
-                if app.review_deadline
-                else 0,
+                "days_overdue": (now - app.review_deadline).days if app.review_deadline else 0,
                 "status": app.status,
             }
             for app in applications
             if app.review_deadline
             and app.review_deadline < now
-            and app.status
-            in [ApplicationStatus.SUBMITTED.value, ApplicationStatus.UNDER_REVIEW.value]
+            and app.status in [ApplicationStatus.SUBMITTED.value, ApplicationStatus.UNDER_REVIEW.value]
         ]
 
         # Get quota information
         quota_service = ScholarshipQuotaService(sync_session)
-        quota_status = quota_service.get_quota_status_by_type(
-            main_type, sub_type, semester or "all"
-        )
+        quota_status = quota_service.get_quota_status_by_type(main_type, sub_type, semester or "all")
 
         return ApiResponse(
             success=True,
@@ -245,9 +212,7 @@ async def get_detailed_quota_status(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get detailed quota status: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get detailed quota status: {str(e)}")
     finally:
         sync_session.close()
 
@@ -273,9 +238,7 @@ async def get_quota_trends(
         start_date = end_date - timedelta(days=months_back * 30)
 
         # Base query
-        query = sync_session.query(Application).filter(
-            Application.created_at >= start_date
-        )
+        query = sync_session.query(Application).filter(Application.created_at >= start_date)
 
         if main_type:
             query = query.filter(Application.main_scholarship_type == main_type)
@@ -329,17 +292,13 @@ async def get_quota_trends(
                     "month": month_key,
                     "month_name": current_month.strftime("%B %Y"),
                     **data,
-                    "approval_rate": (data["approved"] / data["total"] * 100)
-                    if data["total"] > 0
-                    else 0,
+                    "approval_rate": (data["approved"] / data["total"] * 100) if data["total"] > 0 else 0,
                 }
             )
 
             # Move to next month
             if current_month.month == 12:
-                current_month = current_month.replace(
-                    year=current_month.year + 1, month=1
-                )
+                current_month = current_month.replace(year=current_month.year + 1, month=1)
             else:
                 current_month = current_month.replace(month=current_month.month + 1)
 
@@ -361,9 +320,7 @@ async def get_quota_trends(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get quota trends: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get quota trends: {str(e)}")
     finally:
         sync_session.close()
 
@@ -425,18 +382,14 @@ async def adjust_quota_limits(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to adjust quotas: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to adjust quotas: {str(e)}")
     finally:
         sync_session.close()
 
 
 @router.get("/alerts")
 async def get_quota_alerts(
-    severity: Optional[str] = Query(
-        None, description="Filter by severity: low, medium, high, critical"
-    ),
+    severity: Optional[str] = Query(None, description="Filter by severity: low, medium, high, critical"),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
@@ -456,13 +409,9 @@ async def get_quota_alerts(
 
         for main_type in ScholarshipMainType:
             for sub_type in ScholarshipSubType:
-                quota_status = quota_service.get_quota_status_by_type(
-                    main_type.value, sub_type.value, "current"
-                )
+                quota_status = quota_service.get_quota_status_by_type(main_type.value, sub_type.value, "current")
 
-                if (
-                    quota_status.get("total_used", 0) > 0
-                ):  # Only check active combinations
+                if quota_status.get("total_used", 0) > 0:  # Only check active combinations
                     usage_percent = quota_status.get("usage_percent", 0)
 
                     if usage_percent >= 100:
@@ -521,13 +470,7 @@ async def get_quota_alerts(
         )
 
         if overdue_count > 0:
-            severity = (
-                "critical"
-                if overdue_count > 50
-                else "high"
-                if overdue_count > 20
-                else "medium"
-            )
+            severity = "critical" if overdue_count > 50 else "high" if overdue_count > 20 else "medium"
             alerts.append(
                 {
                     "id": "overdue_applications",
@@ -565,9 +508,7 @@ async def get_quota_alerts(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get quota alerts: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get quota alerts: {str(e)}")
     finally:
         sync_session.close()
 
@@ -599,9 +540,7 @@ async def export_quota_data(
                     main_type.value, sub_type.value, semester or "all"
                 )
 
-                if (
-                    quota_status.get("total_used", 0) > 0
-                ):  # Only include active combinations
+                if quota_status.get("total_used", 0) > 0:  # Only include active combinations
                     export_record = {
                         "main_type": main_type.value,
                         "sub_type": sub_type.value,
@@ -651,8 +590,6 @@ async def export_quota_data(
             )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to export quota data: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to export quota data: {str(e)}")
     finally:
         sync_session.close()

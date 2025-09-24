@@ -23,9 +23,7 @@ class ScholarshipRulesService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_rule(
-        self, rule_data: ScholarshipRuleCreate, created_by: int
-    ) -> ScholarshipRule:
+    async def create_rule(self, rule_data: ScholarshipRuleCreate, created_by: int) -> ScholarshipRule:
         """Create a new scholarship rule"""
 
         # Validate scholarship type exists
@@ -33,14 +31,10 @@ class ScholarshipRulesService:
 
         # Validate sub_type if provided
         if rule_data.sub_type:
-            await self._validate_sub_type(
-                rule_data.scholarship_type_id, rule_data.sub_type
-            )
+            await self._validate_sub_type(rule_data.scholarship_type_id, rule_data.sub_type)
 
         # Create rule
-        rule = ScholarshipRule(
-            **rule_data.model_dump(), created_by=created_by, updated_by=created_by
-        )
+        rule = ScholarshipRule(**rule_data.model_dump(), created_by=created_by, updated_by=created_by)
 
         self.db.add(rule)
         await self.db.commit()
@@ -48,9 +42,7 @@ class ScholarshipRulesService:
 
         return rule
 
-    async def update_rule(
-        self, rule_id: int, rule_update: ScholarshipRuleUpdate, updated_by: int
-    ) -> ScholarshipRule:
+    async def update_rule(self, rule_id: int, rule_update: ScholarshipRuleUpdate, updated_by: int) -> ScholarshipRule:
         """Update an existing scholarship rule"""
 
         # Get existing rule
@@ -58,9 +50,7 @@ class ScholarshipRulesService:
 
         # Validate sub_type if being updated
         if rule_update.sub_type:
-            await self._validate_sub_type(
-                rule.scholarship_type_id, rule_update.sub_type
-            )
+            await self._validate_sub_type(rule.scholarship_type_id, rule_update.sub_type)
 
         # Update only fields defined in the Pydantic schema to prevent mass assignment
         # This automatically stays in sync with schema changes
@@ -109,9 +99,7 @@ class ScholarshipRulesService:
 
         # Apply filters
         if scholarship_type_id:
-            stmt = stmt.filter(
-                ScholarshipRule.scholarship_type_id == scholarship_type_id
-            )
+            stmt = stmt.filter(ScholarshipRule.scholarship_type_id == scholarship_type_id)
 
         if academic_year:
             if include_generic:
@@ -159,9 +147,7 @@ class ScholarshipRulesService:
             stmt = stmt.filter(ScholarshipRule.tag.ilike(f"%{tag}%"))
 
         # Order by priority then created_at
-        stmt = stmt.order_by(
-            desc(ScholarshipRule.priority), desc(ScholarshipRule.created_at)
-        )
+        stmt = stmt.order_by(desc(ScholarshipRule.priority), desc(ScholarshipRule.created_at))
 
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -180,24 +166,16 @@ class ScholarshipRulesService:
         """Copy rules from one period to another"""
 
         # Build source query
-        source_stmt = select(ScholarshipRule).filter(
-            ScholarshipRule.is_template == False
-        )
+        source_stmt = select(ScholarshipRule).filter(ScholarshipRule.is_template == False)
 
         if source_academic_year:
-            source_stmt = source_stmt.filter(
-                ScholarshipRule.academic_year == source_academic_year
-            )
+            source_stmt = source_stmt.filter(ScholarshipRule.academic_year == source_academic_year)
 
         if source_semester:
-            source_stmt = source_stmt.filter(
-                ScholarshipRule.semester == source_semester
-            )
+            source_stmt = source_stmt.filter(ScholarshipRule.semester == source_semester)
 
         if scholarship_type_ids:
-            source_stmt = source_stmt.filter(
-                ScholarshipRule.scholarship_type_id.in_(scholarship_type_ids)
-            )
+            source_stmt = source_stmt.filter(ScholarshipRule.scholarship_type_id.in_(scholarship_type_ids))
 
         if rule_ids:
             source_stmt = source_stmt.filter(ScholarshipRule.id.in_(rule_ids))
@@ -226,15 +204,11 @@ class ScholarshipRulesService:
 
             if existing_rule and overwrite_existing:
                 # Update existing rule
-                await self._update_rule_from_source(
-                    existing_rule, source_rule, created_by
-                )
+                await self._update_rule_from_source(existing_rule, source_rule, created_by)
                 copied_count += 1
             else:
                 # Create new rule
-                await self._create_rule_from_source(
-                    source_rule, target_academic_year, target_semester, created_by
-                )
+                await self._create_rule_from_source(source_rule, target_academic_year, target_semester, created_by)
                 copied_count += 1
 
         await self.db.commit()
@@ -316,8 +290,7 @@ class ScholarshipRulesService:
             and_(
                 ScholarshipRule.is_template == True,
                 ScholarshipRule.template_name == template_rule.template_name,
-                ScholarshipRule.scholarship_type_id
-                == template_rule.scholarship_type_id,
+                ScholarshipRule.scholarship_type_id == template_rule.scholarship_type_id,
             )
         )
 
@@ -342,9 +315,7 @@ class ScholarshipRulesService:
 
             if existing_rule and overwrite_existing:
                 # Update existing rule
-                await self._update_rule_from_source(
-                    existing_rule, template_rule, created_by
-                )
+                await self._update_rule_from_source(existing_rule, template_rule, created_by)
                 applied_count += 1
             else:
                 # Create new rule
@@ -405,9 +376,7 @@ class ScholarshipRulesService:
         if test_data:
             try:
                 field_value = self._get_nested_field_value(test_data, condition_field)
-                result = self._evaluate_rule_condition(
-                    field_value, operator, expected_value
-                )
+                result = self._evaluate_rule_condition(field_value, operator, expected_value)
                 return (
                     True,
                     f"Test passed: field_value='{field_value}' {operator} '{expected_value}' = {result}",
@@ -434,13 +403,8 @@ class ScholarshipRulesService:
         """Validate that sub_type is valid for the scholarship type"""
         scholarship_type = await self._validate_scholarship_type(scholarship_type_id)
 
-        if (
-            not scholarship_type.sub_type_list
-            or sub_type not in scholarship_type.sub_type_list
-        ):
-            raise ValueError(
-                f"Sub-type '{sub_type}' is not valid for scholarship type '{scholarship_type.name}'"
-            )
+        if not scholarship_type.sub_type_list or sub_type not in scholarship_type.sub_type_list:
+            raise ValueError(f"Sub-type '{sub_type}' is not valid for scholarship type '{scholarship_type.name}'")
 
     async def _get_rule_by_id(self, rule_id: int) -> ScholarshipRule:
         """Get rule by ID with error handling"""
@@ -514,8 +478,7 @@ class ScholarshipRulesService:
     ):
         """Create new rule from source rule"""
         new_rule = ScholarshipRule(
-            scholarship_type_id=target_scholarship_type_id
-            or source_rule.scholarship_type_id,
+            scholarship_type_id=target_scholarship_type_id or source_rule.scholarship_type_id,
             sub_type=source_rule.sub_type,
             academic_year=target_academic_year,
             semester=target_semester,
@@ -559,9 +522,7 @@ class ScholarshipRulesService:
 
         return current_data
 
-    def _evaluate_rule_condition(
-        self, field_value: Any, operator: str, expected_value: str
-    ) -> bool:
+    def _evaluate_rule_condition(self, field_value: Any, operator: str, expected_value: str) -> bool:
         """Evaluate rule condition - same logic as in EligibilityService"""
         try:
             if operator == ">=":

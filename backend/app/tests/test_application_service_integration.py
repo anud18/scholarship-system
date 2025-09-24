@@ -121,9 +121,7 @@ class TestGetStudentDataFromUser:
         with patch("app.services.application_service.StudentService") as mock_service:
             mock_instance = AsyncMock()
             mock_service.return_value = mock_instance
-            mock_instance.get_student_basic_info.return_value = {
-                "student_id": "112550001"
-            }
+            mock_instance.get_student_basic_info.return_value = {"student_id": "112550001"}
 
             result = await get_student_data_from_user(user)
             assert result == {"student_id": "112550001"}
@@ -241,9 +239,7 @@ class TestApplicationServiceListResponse:
 
         integrated_data = {"name": "Test"}
 
-        response = service._create_application_list_response(
-            application, user, integrated_data
-        )
+        response = service._create_application_list_response(application, user, integrated_data)
 
         assert response.app_id == "APP001"
         assert response.status == ApplicationStatus.DRAFT.value
