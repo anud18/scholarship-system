@@ -259,7 +259,7 @@ async def seed_admin_user(session: AsyncSession):
         text(
             """
         INSERT INTO users (nycu_id, name, email, user_type, status, role)
-        VALUES (:nycu_id, :name, :email, 'EMPLOYEE', '在職', 'admin')
+        VALUES (:nycu_id, :name, :email, 'employee', '在職', 'admin')
         ON CONFLICT (nycu_id) DO UPDATE
         SET role = 'admin',
             email = EXCLUDED.email,

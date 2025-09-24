@@ -31,7 +31,7 @@ def upgrade() -> None:
         # Create all enum types (PostgreSQL only)
         op.execute("""
             DO $$ BEGIN
-                CREATE TYPE usertype AS ENUM ('student', 'admin', 'reviewer', 'system');
+                CREATE TYPE usertype AS ENUM ('student', 'employee');
                 CREATE TYPE userrole AS ENUM ('student', 'admin', 'department_admin', 'college_admin', 'scholarship_committee', 'professor');
                 CREATE TYPE notificationtype AS ENUM ('INFO', 'WARNING', 'ERROR', 'SUCCESS', 'REMINDER');
                 CREATE TYPE notificationpriority AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT');
