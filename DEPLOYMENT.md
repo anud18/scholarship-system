@@ -265,7 +265,7 @@ curl http://localhost:3000
 
 ## Environment URLs
 
-- **Staging**: https://staging.scholarship.nycu.edu.tw
+- **Staging**: https://ss.test.nycu.edu.tw
 
 ## Support
 

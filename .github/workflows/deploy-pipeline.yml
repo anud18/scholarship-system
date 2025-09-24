@@ -138,7 +138,7 @@ jobs:
     if: needs.pre-deployment.outputs.deploy-staging == 'true'
     environment:
       name: staging
-      url: https://staging.scholarship.nycu.edu.tw
+      url: https://ss.test.nycu.edu.tw
 
     steps:
       - name: Checkout
@@ -322,7 +322,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version**: ${{ needs.pre-deployment.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Environment**: Staging" >> $GITHUB_STEP_SUMMARY
-          echo "**URL**: https://staging.scholarship.nycu.edu.tw" >> $GITHUB_STEP_SUMMARY
+          echo "**URL**: https://ss.test.nycu.edu.tw" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Services Status" >> $GITHUB_STEP_SUMMARY
           echo "- Backend: ✅ Running" >> $GITHUB_STEP_SUMMARY
