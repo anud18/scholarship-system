@@ -431,7 +431,8 @@ jobs:
     - name: Run k6 smoke
       uses: grafana/run-k6-action@v1
       with:
-        file: perf/smoke.js
+        path: |
+          perf/smoke.js
       env:
         BASE_URL: ${{ vars.K6_BASE_URL_STAGING }}
       continue-on-error: true
