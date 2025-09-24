@@ -13,15 +13,7 @@ from app.core.deps import get_db
 from app.models.application import Application
 from app.models.enums import ApplicationCycle, Semester
 from app.models.scholarship import ScholarshipType
-from app.models.student import (
-    Academy,
-    Degree,
-    Department,
-    EnrollType,
-    Identity,
-    SchoolIdentity,
-    StudyingStatus,
-)
+from app.models.student import Academy, Degree, Department, EnrollType, Identity, SchoolIdentity, StudyingStatus
 
 router = APIRouter()
 

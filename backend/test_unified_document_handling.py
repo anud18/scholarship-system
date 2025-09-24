@@ -76,11 +76,7 @@ async def test_unified_document_handling():
             print("\n📄 創建申請，測試固定文件自動複製...")
 
             # 模擬申請資料
-            from app.schemas.application import (
-                ApplicationCreate,
-                ApplicationFormData,
-                DynamicFormField,
-            )
+            from app.schemas.application import ApplicationCreate, ApplicationFormData, DynamicFormField
 
             form_data = ApplicationFormData(
                 fields={

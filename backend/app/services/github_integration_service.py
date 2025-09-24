@@ -13,11 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.models.college_review import (
-    CollegeRanking,
-    CollegeRankingItem,
-    QuotaDistribution,
-)
+from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
 
 
 class GitHubIntegrationService:

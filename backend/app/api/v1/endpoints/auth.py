@@ -12,19 +12,9 @@ from app.core.security import get_current_user
 from app.db.deps import get_db
 from app.models.user import User, UserRole
 from app.schemas.common import MessageResponse
-from app.schemas.user import (
-    DeveloperProfileRequest,
-    PortalSSORequest,
-    UserCreate,
-    UserLogin,
-    UserResponse,
-)
+from app.schemas.user import DeveloperProfileRequest, PortalSSORequest, UserCreate, UserLogin, UserResponse
 from app.services.auth_service import AuthService
-from app.services.developer_profile_service import (
-    DeveloperProfile,
-    DeveloperProfileManager,
-    DeveloperProfileService,
-)
+from app.services.developer_profile_service import DeveloperProfile, DeveloperProfileManager, DeveloperProfileService
 from app.services.mock_sso_service import MockSSOService
 from app.services.portal_sso_service import PortalSSOService
 

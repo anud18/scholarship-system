@@ -12,30 +12,12 @@ from app.models.application import (
     ProfessorReviewItem,
     ReviewStatus,
 )
-from app.models.application_field import (
-    ApplicationDocument,
-    ApplicationField,
-    FieldType,
-)
+from app.models.application_field import ApplicationDocument, ApplicationField, FieldType
 from app.models.audit_log import AuditAction, AuditLog
-from app.models.college_review import (
-    CollegeRanking,
-    CollegeRankingItem,
-    CollegeReview,
-    QuotaDistribution,
-)
-from app.models.enums import (
-    ApplicationCycle,
-    QuotaManagementMode,
-    Semester,
-    SubTypeSelectionMode,
-)
+from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview, QuotaDistribution
+from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
 from app.models.notification import Notification, NotificationType
-from app.models.scholarship import (
-    ScholarshipConfiguration,
-    ScholarshipRule,
-    ScholarshipType,
-)
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule, ScholarshipType
 from app.models.student import (  # 查詢表模型 (Reference data only); Helper functions
     Academy,
     Degree,

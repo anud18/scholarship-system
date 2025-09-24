@@ -17,11 +17,7 @@ from app.api.v1.endpoints.professor import (
     submit_professor_review,
 )
 from app.models.user import User, UserRole
-from app.schemas.application import (
-    ApplicationListResponse,
-    ProfessorReviewCreate,
-    ProfessorReviewItemCreate,
-)
+from app.schemas.application import ApplicationListResponse, ProfessorReviewCreate, ProfessorReviewItemCreate
 from app.schemas.common import PaginatedResponse
 
 

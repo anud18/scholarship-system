@@ -10,13 +10,7 @@ from sqlalchemy import and_, asc, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.email_management import (
-    EmailCategory,
-    EmailHistory,
-    EmailStatus,
-    ScheduledEmail,
-    ScheduleStatus,
-)
+from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail, ScheduleStatus
 from app.models.user import AdminScholarship, User
 from app.services.email_service import EmailService
 

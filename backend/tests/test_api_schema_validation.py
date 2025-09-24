@@ -78,11 +78,7 @@ class TestAPISchemaValidation:
             return User(id=1, nycu_id="test", email="test@test.com", role=UserRole.STUDENT)
 
         async def mock_get_eligible_scholarships(student):
-            from app.models.enums import (
-                ApplicationCycle,
-                Semester,
-                SubTypeSelectionMode,
-            )
+            from app.models.enums import ApplicationCycle, Semester, SubTypeSelectionMode
             from app.models.scholarship import ScholarshipStatus, ScholarshipType
 
             # Return a properly structured ScholarshipType object

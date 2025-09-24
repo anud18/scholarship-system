@@ -8,12 +8,7 @@ import aiosmtplib
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.email_management import (
-    EmailCategory,
-    EmailHistory,
-    EmailStatus,
-    ScheduledEmail,
-)
+from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail
 from app.services.system_setting_service import EmailTemplateService
 
 logger = logging.getLogger(__name__)

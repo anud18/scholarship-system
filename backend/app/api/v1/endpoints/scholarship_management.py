@@ -8,19 +8,9 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import (
-    get_current_user,
-    require_admin,
-    require_staff,
-    require_student,
-)
+from app.core.security import get_current_user, require_admin, require_staff, require_student
 from app.db.deps import get_db
-from app.models.application import (
-    Application,
-    ApplicationStatus,
-    ScholarshipMainType,
-    ScholarshipSubType,
-)
+from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.models.user import User
 from app.schemas.response import ApiResponse
 

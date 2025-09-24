@@ -65,9 +65,7 @@ class ScholarshipService:
     ) -> List[Dict[str, Any]]:
         """Get scholarships that the student is eligible for based on active configurations"""
         from app.services.eligibility_service import EligibilityService
-        from app.services.scholarship_configuration_service import (
-            ScholarshipConfigurationService,
-        )
+        from app.services.scholarship_configuration_service import ScholarshipConfigurationService
         from app.services.student_service import StudentService
 
         config_service = ScholarshipConfigurationService(self.db)

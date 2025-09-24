@@ -10,11 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.main import app
 from app.models.user import UserRole
-from app.services.developer_profile_service import (
-    DeveloperProfile,
-    DeveloperProfileManager,
-    DeveloperProfileService,
-)
+from app.services.developer_profile_service import DeveloperProfile, DeveloperProfileManager, DeveloperProfileService
 
 # Enable mock SSO for testing
 settings.enable_mock_sso = True

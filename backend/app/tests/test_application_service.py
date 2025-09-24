@@ -9,20 +9,11 @@ from unittest.mock import Mock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import (
-    AuthorizationError,
-    ConflictError,
-    NotFoundError,
-    ValidationError,
-)
+from app.core.exceptions import AuthorizationError, ConflictError, NotFoundError, ValidationError
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User, UserRole
-from app.schemas.application import (
-    ApplicationCreate,
-    ApplicationFormData,
-    ApplicationUpdate,
-)
+from app.schemas.application import ApplicationCreate, ApplicationFormData, ApplicationUpdate
 from app.services.application_service import ApplicationService
 
 

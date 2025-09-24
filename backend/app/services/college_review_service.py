@@ -17,12 +17,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BusinessLogicError, NotFoundError
 from app.models.application import Application, ApplicationStatus, ProfessorReview
-from app.models.college_review import (
-    CollegeRanking,
-    CollegeRankingItem,
-    CollegeReview,
-    QuotaDistribution,
-)
+from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview, QuotaDistribution
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration
 from app.services.email_automation_service import email_automation_service

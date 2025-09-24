@@ -17,11 +17,7 @@ from app.core.init_db import initDatabase
 from app.db.session import AsyncSessionLocal
 from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import User
-from app.schemas.application import (
-    ApplicationCreate,
-    ApplicationFormData,
-    DynamicFormField,
-)
+from app.schemas.application import ApplicationCreate, ApplicationFormData, DynamicFormField
 from app.services.application_service import ApplicationService
 from app.services.user_profile_service import UserProfileService
 

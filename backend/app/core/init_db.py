@@ -12,25 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.base_class import Base
 from app.db.session import AsyncSessionLocal, async_engine
-from app.models.application import (
-    ApplicationStatus,
-    ScholarshipMainType,
-    ScholarshipSubType,
-)
+from app.models.application import ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.models.application_field import ApplicationDocument, ApplicationField
-from app.models.email_management import (
-    EmailCategory,
-    EmailHistory,
-    EmailStatus,
-    ScheduledEmail,
-    ScheduleStatus,
-)
-from app.models.enums import (
-    ApplicationCycle,
-    QuotaManagementMode,
-    Semester,
-    SubTypeSelectionMode,
-)
+from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail, ScheduleStatus
+from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
 from app.models.notification import Notification, NotificationPriority, NotificationType
 from app.models.scholarship import (
     ScholarshipCategory,

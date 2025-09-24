@@ -10,11 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.security import require_admin
-from app.models.notification import (
-    NotificationChannel,
-    NotificationPriority,
-    NotificationType,
-)
+from app.models.notification import NotificationChannel, NotificationPriority, NotificationType
 from app.models.user import User
 from app.services.notification_service import NotificationService
 

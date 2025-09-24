@@ -315,9 +315,7 @@ class TestCriticalBusinessLogic:
             assert len(result["successful_approvals"]) == 2
 
         # Check quota availability - should show 0 available
-        from app.services.scholarship_configuration_service import (
-            ScholarshipConfigurationService,
-        )
+        from app.services.scholarship_configuration_service import ScholarshipConfigurationService
 
         config_service = ScholarshipConfigurationService(db)
 

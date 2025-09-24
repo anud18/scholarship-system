@@ -16,13 +16,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessLogicError, NotFoundError
-from app.models.email_management import (
-    EmailCategory,
-    EmailHistory,
-    EmailStatus,
-    ScheduledEmail,
-    ScheduleStatus,
-)
+from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail, ScheduleStatus
 from app.models.user import User, UserRole
 from app.services.email_management_service import EmailManagementService
 

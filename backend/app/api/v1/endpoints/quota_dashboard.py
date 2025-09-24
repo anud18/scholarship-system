@@ -11,12 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin, require_staff
 from app.db.deps import get_db
-from app.models.application import (
-    Application,
-    ApplicationStatus,
-    ScholarshipMainType,
-    ScholarshipSubType,
-)
+from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.services.scholarship_service import ScholarshipQuotaService

@@ -11,10 +11,12 @@ import sys
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 os.environ["TESTING"] = "true"
 
+
 async def test_seed_complete():
     """測試完整的 seed 流程"""
 
     from sqlalchemy import text
+
     from app.core.init_db import initDatabase
     from app.db.session import AsyncSessionLocal
 
@@ -38,7 +40,7 @@ async def test_seed_complete():
 
     async with AsyncSessionLocal() as session:
         # 手動執行 seed 的各個部分（繞過 advisory lock）
-        from app.seed import seed_lookup_tables, seed_test_users, seed_scholarships, seed_application_fields
+        from app.seed import seed_application_fields, seed_lookup_tables, seed_scholarships, seed_test_users
 
         await seed_lookup_tables(session)
         await seed_test_users(session)
@@ -83,11 +85,7 @@ async def test_seed_complete():
 
     # 驗證預期值
     success = (
-        degree_count == 4 and
-        dept_count == 17 and
-        user_count == 16 and
-        scholarship_count == 3 and
-        field_count == 2
+        degree_count == 4 and dept_count == 17 and user_count == 16 and scholarship_count == 3 and field_count == 2
     )
 
     if success:
@@ -96,6 +94,7 @@ async def test_seed_complete():
     else:
         print("\n❌ 部分驗證失敗，請檢查上述數據")
         return False
+
 
 if __name__ == "__main__":
     success = asyncio.run(test_seed_complete())

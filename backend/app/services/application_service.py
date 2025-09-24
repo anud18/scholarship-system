@@ -12,24 +12,9 @@ from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import (
-    AuthorizationError,
-    BusinessLogicError,
-    ConflictError,
-    NotFoundError,
-    ValidationError,
-)
-from app.models.application import (
-    Application,
-    ApplicationStatus,
-    ProfessorReview,
-    ProfessorReviewItem,
-)
-from app.models.scholarship import (
-    ScholarshipConfiguration,
-    ScholarshipType,
-    SubTypeSelectionMode,
-)
+from app.core.exceptions import AuthorizationError, BusinessLogicError, ConflictError, NotFoundError, ValidationError
+from app.models.application import Application, ApplicationStatus, ProfessorReview, ProfessorReviewItem
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
 from app.schemas.application import (
     ApplicationCreate,
@@ -2125,10 +2110,7 @@ class ApplicationService:
             if not review:
                 return None
 
-            from app.schemas.application import (
-                ProfessorReviewItemResponse,
-                ProfessorReviewResponse,
-            )
+            from app.schemas.application import ProfessorReviewItemResponse, ProfessorReviewResponse
 
             return ProfessorReviewResponse(
                 id=review.id,
@@ -2170,10 +2152,7 @@ class ApplicationService:
             if not review:
                 return None
 
-            from app.schemas.application import (
-                ProfessorReviewItemResponse,
-                ProfessorReviewResponse,
-            )
+            from app.schemas.application import ProfessorReviewItemResponse, ProfessorReviewResponse
 
             return ProfessorReviewResponse(
                 id=review.id,
@@ -2464,11 +2443,7 @@ class ApplicationService:
         try:
             from app.core.exceptions import NotFoundError, ValidationError
             from app.models.application import ApplicationReview, ProfessorReview
-            from app.models.notification import (
-                NotificationChannel,
-                NotificationPriority,
-                NotificationType,
-            )
+            from app.models.notification import NotificationChannel, NotificationPriority, NotificationType
             from app.models.user import UserRole
             from app.services.email_service import EmailService
             from app.services.notification_service import NotificationService

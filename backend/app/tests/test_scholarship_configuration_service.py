@@ -8,9 +8,7 @@ import pytest
 
 from app.models.scholarship import ScholarshipType
 from app.models.user import User, UserRole
-from app.services.scholarship_configuration_service import (
-    ScholarshipConfigurationService,
-)
+from app.services.scholarship_configuration_service import ScholarshipConfigurationService
 
 
 class TestScholarshipConfigurationServiceCRUD:

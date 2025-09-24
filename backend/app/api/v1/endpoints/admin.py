@@ -12,11 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
-from app.core.security import (
-    check_scholarship_permission,
-    get_current_user,
-    require_admin,
-)
+from app.core.security import check_scholarship_permission, get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import Semester
@@ -46,11 +42,7 @@ from app.schemas.common import (
     PaginatedResponse,
     SystemSettingSchema,
 )
-from app.schemas.notification import (
-    NotificationCreate,
-    NotificationResponse,
-    NotificationUpdate,
-)
+from app.schemas.notification import NotificationCreate, NotificationResponse, NotificationUpdate
 from app.schemas.scholarship import (
     ApplyTemplateRequest,
     BulkRuleOperation,
@@ -64,10 +56,7 @@ from app.schemas.scholarship import (
     ScholarshipSubTypeConfigUpdate,
 )
 from app.services.application_service import ApplicationService
-from app.services.system_setting_service import (
-    EmailTemplateService,
-    SystemSettingService,
-)
+from app.services.system_setting_service import EmailTemplateService, SystemSettingService
 
 logger = logging.getLogger(__name__)
 

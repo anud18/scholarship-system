@@ -13,11 +13,7 @@ from app.api.v1.endpoints.professor import (
 from app.core.init_db import initDatabase
 from app.db.session import AsyncSessionLocal
 from app.models.application import Application
-from app.models.scholarship import (
-    ScholarshipConfiguration,
-    ScholarshipType,
-    SubTypeSelectionMode,
-)
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
 from app.schemas.application import ProfessorReviewCreate, ProfessorReviewItemCreate
 

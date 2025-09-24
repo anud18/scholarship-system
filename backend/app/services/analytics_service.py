@@ -10,12 +10,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.application import (
-    Application,
-    ApplicationStatus,
-    ScholarshipMainType,
-    ScholarshipSubType,
-)
+from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 
 # Student model removed - student data now fetched from external API
 

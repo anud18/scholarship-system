@@ -5,16 +5,7 @@ User model for authentication and role management
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import (
-    JSON,
-    Column,
-    DateTime,
-    Enum,
-    ForeignKey,
-    Integer,
-    String,
-    UniqueConstraint,
-)
+from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.db.base_class import Base

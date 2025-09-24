@@ -6,12 +6,7 @@ Simple test runner for unit tests that don't require database fixtures
 import sys
 import traceback
 
-from app.core.exceptions import (
-    AuthenticationError,
-    NotFoundError,
-    ScholarshipException,
-    ValidationError,
-)
+from app.core.exceptions import AuthenticationError, NotFoundError, ScholarshipException, ValidationError
 
 
 def test_basic_exceptions():

@@ -13,15 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base_class import Base
 from app.db.session import AsyncSessionLocal, async_engine
-from app.models.student import (
-    Academy,
-    Degree,
-    Department,
-    EnrollType,
-    Identity,
-    SchoolIdentity,
-    StudyingStatus,
-)
+from app.models.student import Academy, Degree, Department, EnrollType, Identity, SchoolIdentity, StudyingStatus
 
 logger = logging.getLogger(__name__)
 

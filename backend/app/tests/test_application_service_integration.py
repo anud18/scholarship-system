@@ -15,10 +15,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
-from app.services.application_service import (
-    ApplicationService,
-    get_student_data_from_user,
-)
+from app.services.application_service import ApplicationService, get_student_data_from_user
 
 
 class TestApplicationServiceHelpers:

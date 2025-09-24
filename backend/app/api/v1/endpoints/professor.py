@@ -13,11 +13,7 @@ from app.core.rate_limiting import professor_rate_limit
 from app.core.security import require_professor
 from app.db.deps import get_db
 from app.models.user import User
-from app.schemas.application import (
-    ApplicationListResponse,
-    ProfessorReviewCreate,
-    ProfessorReviewResponse,
-)
+from app.schemas.application import ApplicationListResponse, ProfessorReviewCreate, ProfessorReviewResponse
 from app.schemas.common import PaginatedResponse
 from app.services.application_service import ApplicationService
 

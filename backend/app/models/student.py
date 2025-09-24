@@ -3,14 +3,7 @@ Student reference data models for lookup tables only.
 Student data is now fetched from external API instead of storing locally.
 """
 
-from sqlalchemy import (
-    Column,
-    ForeignKey,
-    Integer,
-    SmallInteger,
-    String,
-    UniqueConstraint,
-)
+from sqlalchemy import Column, ForeignKey, Integer, SmallInteger, String, UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship
 

@@ -15,9 +15,7 @@ from sqlalchemy import select
 from app.db.session import AsyncSessionLocal
 from app.models.scholarship import ScholarshipType
 from app.models.user import User, UserRole
-from app.services.scholarship_email_template_service import (
-    ScholarshipEmailTemplateService,
-)
+from app.services.scholarship_email_template_service import ScholarshipEmailTemplateService
 
 
 async def initialize_scholarship_email_templates():

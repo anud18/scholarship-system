@@ -23,12 +23,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
-from app.models.enums import (
-    ApplicationCycle,
-    QuotaManagementMode,
-    Semester,
-    SubTypeSelectionMode,
-)
+from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
 
 
 class ScholarshipStatus(enum.Enum):

@@ -5,17 +5,7 @@ Application management API endpoints
 import logging
 from typing import List, Optional
 
-from fastapi import (
-    APIRouter,
-    Body,
-    Depends,
-    File,
-    HTTPException,
-    Path,
-    Query,
-    UploadFile,
-    status,
-)
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 

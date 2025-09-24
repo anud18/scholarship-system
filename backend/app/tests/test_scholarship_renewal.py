@@ -7,11 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.models.enums import Semester
-from app.models.scholarship import (
-    ScholarshipCategory,
-    ScholarshipStatus,
-    ScholarshipType,
-)
+from app.models.scholarship import ScholarshipCategory, ScholarshipStatus, ScholarshipType
 
 
 class TestScholarshipRenewalPeriod:

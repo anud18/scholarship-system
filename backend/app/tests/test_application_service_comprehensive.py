@@ -17,21 +17,12 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import (
-    AuthorizationError,
-    BusinessLogicError,
-    ConflictError,
-    NotFoundError,
-    ValidationError,
-)
+from app.core.exceptions import AuthorizationError, BusinessLogicError, ConflictError, NotFoundError, ValidationError
 from app.models.application import Application, ApplicationStatus, Semester
 from app.models.scholarship import ScholarshipType
 from app.models.user import User, UserRole
 from app.schemas.application import ApplicationCreate, ApplicationUpdate
-from app.services.application_service import (
-    ApplicationService,
-    get_student_data_from_user,
-)
+from app.services.application_service import ApplicationService, get_student_data_from_user
 
 
 @pytest.mark.unit
