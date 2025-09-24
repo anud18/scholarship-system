@@ -3,12 +3,14 @@ Settings schemas for API requests and responses
 """
 
 from datetime import datetime
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, EmailStr
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class SystemSettingBase(BaseModel):
     """Base system setting schema"""
+
     key: str = Field(..., description="Setting key")
     value: str = Field(..., description="Setting value")
     description: Optional[str] = Field(None, description="Setting description")
@@ -18,11 +20,13 @@ class SystemSettingBase(BaseModel):
 
 class SystemSettingCreate(SystemSettingBase):
     """System setting creation schema"""
+
     pass
 
 
 class SystemSettingUpdate(BaseModel):
     """System setting update schema"""
+
     value: Optional[str] = None
     description: Optional[str] = None
     is_public: Optional[bool] = None
@@ -31,6 +35,7 @@ class SystemSettingUpdate(BaseModel):
 
 class SystemSettingResponse(SystemSettingBase):
     """System setting response schema"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -41,6 +46,7 @@ class SystemSettingResponse(SystemSettingBase):
 
 class EmailTemplateBase(BaseModel):
     """Base email template schema"""
+
     key: str = Field(..., description="Template key")
     subject_template: str = Field(..., description="Email subject template")
     body_template: str = Field(..., description="Email body template")
@@ -53,11 +59,13 @@ class EmailTemplateBase(BaseModel):
 
 class EmailTemplateCreate(EmailTemplateBase):
     """Email template creation schema"""
+
     pass
 
 
 class EmailTemplateUpdate(BaseModel):
     """Email template update schema"""
+
     subject_template: Optional[str] = None
     body_template: Optional[str] = None
     cc: Optional[List[EmailStr]] = None
@@ -69,6 +77,7 @@ class EmailTemplateUpdate(BaseModel):
 
 class EmailTemplateResponse(EmailTemplateBase):
     """Email template response schema"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -79,6 +88,7 @@ class EmailTemplateResponse(EmailTemplateBase):
 
 class EmailConfig(BaseModel):
     """Email configuration schema"""
+
     smtp_host: str = Field(..., description="SMTP host")
     smtp_port: int = Field(..., description="SMTP port")
     smtp_user: str = Field(..., description="SMTP username")
@@ -92,9 +102,10 @@ class EmailConfig(BaseModel):
 
 class EmailSendRequest(BaseModel):
     """Email send request schema"""
+
     template_key: str = Field(..., description="Email template key")
     to_emails: List[EmailStr] = Field(..., description="Recipient email addresses")
     cc: Optional[List[EmailStr]] = Field(None, description="CC recipients")
     bcc: Optional[List[EmailStr]] = Field(None, description="BCC recipients")
     variables: Optional[Dict[str, Any]] = Field(None, description="Template variables")
-    attachments: Optional[List[Dict[str, Any]]] = Field(None, description="Email attachments") 
+    attachments: Optional[List[Dict[str, Any]]] = Field(None, description="Email attachments")

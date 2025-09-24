@@ -1,5 +1,9 @@
 # Scholarship System Development Guidelines
 
+## Development Best Practices
+
+- Dont hardcode data; always retrieve data from database and if there is an issue, throw the error directly instead of using fallback data
+
 ## Core Development Principles
 
 ### 1. Error Handling Standards

@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import { AuthProvider } from "@/hooks/use-auth"
+import { DebugPanel } from "@/components/debug-panel"
 
 export const metadata: Metadata = {
   title: "獎學金申請與簽核作業管理系統 | 國立陽明交通大學教務處",
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           {children}
+          <DebugPanel />
         </AuthProvider>
       </body>
     </html>

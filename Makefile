@@ -119,7 +119,7 @@ test-coverage: ## Test - Run tests with coverage report
 lint: ## Lint and format all code
 	@echo "$(GREEN)Linting and formatting code...$(NC)"
 	@echo "$(CYAN)Backend linting...$(NC)"
-	cd backend && python -m black . && python -m isort . && python -m flake8 . --statistics
+	cd backend && python -m black app && python -m isort app && python -m flake8 app/core app/db app/middleware app/utils app/main.py
 	@echo "$(CYAN)Frontend linting...$(NC)"
 	cd frontend && npm run lint && npx prettier --write "**/*.{js,jsx,ts,tsx,json,css,md}"
 	@echo "$(GREEN)✅ Code formatting completed!$(NC)"

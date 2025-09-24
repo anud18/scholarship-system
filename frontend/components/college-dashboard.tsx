@@ -35,6 +35,7 @@ interface CollegeDashboardProps {
 interface ScholarshipConfig {
   id: number
   name: string
+  code?: string
   subTypes: { code: string; name: string }[]
 }
 
@@ -83,25 +84,62 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
     if (scholarshipConfig.length > 0) return scholarshipConfig
     
     try {
-      // Fetch from API instead of hardcoding
-      const response = await apiClient.scholarshipConfigurations.getScholarshipTypes()
-      if (response.success && response.data) {
-        const configs = response.data.map((type: any) => ({
-          id: type.id,
-          name: type.name,
-          subTypes: type.sub_types || [{ code: 'default', name: 'Default' }]
-        }))
+      // Ensure availableOptions is loaded first
+      let currentAvailableOptions = availableOptions
+      if (!currentAvailableOptions) {
+        console.log('Available options not loaded yet, fetching now...')
+        await fetchAvailableOptions()
+        currentAvailableOptions = availableOptions
+      }
+      
+      // If still not available after fetching, throw error
+      if (!currentAvailableOptions?.scholarship_types) {
+        throw new Error('Unable to load available scholarship options from college API')
+      }
+      
+      // Fetch all scholarships to get the actual IDs that we need for creating rankings
+      console.log('Fetching all scholarships to get IDs...')
+      const allScholarshipsResponse = await apiClient.scholarships.getAll()
+      
+      if (allScholarshipsResponse.success && allScholarshipsResponse.data) {
+        console.log('All scholarships:', allScholarshipsResponse.data)
+        console.log('Available scholarship types from college:', currentAvailableOptions.scholarship_types)
+        
+        // Map college scholarship types to full scholarship data with IDs
+        const configs: ScholarshipConfig[] = []
+        
+        for (const collegeType of currentAvailableOptions.scholarship_types) {
+          // Find the matching scholarship by code
+          const fullScholarship = allScholarshipsResponse.data.find((scholarship: any) => 
+            scholarship.code === collegeType.code || 
+            scholarship.name === collegeType.name ||
+            scholarship.name_en === collegeType.name
+          )
+          
+          if (fullScholarship) {
+            configs.push({
+              id: fullScholarship.id,
+              name: collegeType.name,
+              code: collegeType.code,
+              subTypes: [{ code: 'default', name: 'Default' }] // Use default sub-type
+            })
+          } else {
+            console.warn(`Could not find full scholarship data for college type: ${collegeType.code} - ${collegeType.name}`)
+          }
+        }
+        
+        console.log('Mapped scholarship configs:', configs)
         setScholarshipConfig(configs)
         return configs
       }
+      
+      // If no data available, throw error instead of using fallback data  
+      throw new Error('Failed to retrieve scholarship data from API')
+      
     } catch (error) {
-      console.error('Failed to fetch scholarship config:', error)
-      // Per CLAUDE.md guidelines: throw error instead of using fallback data
+      console.error('Failed to fetch scholarship configuration:', error)
       throw new Error(`Failed to retrieve scholarship configuration: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
-    
-    // If no data returned from successful API call, throw error instead of fallback
-    throw new Error('No scholarship configuration data available from database')
   }
 
   const [viewMode, setViewMode] = useState<"card" | "table">("card")
@@ -214,8 +252,10 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
 
   const fetchRankings = async () => {
     try {
+      console.log('Fetching rankings...')
       const response = await apiClient.college.getRankings()
       if (response.success && response.data) {
+        console.log(`Fetched ${response.data.length} rankings:`, response.data)
         setRankings(response.data)
       } else {
         console.warn('No rankings found or error:', response.message)
@@ -232,20 +272,40 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
     try {
       const response = await apiClient.college.getRanking(rankingId)
       if (response.success && response.data) {
-        // Transform the API response to match the expected format
+        // Transform the API response to match the expected format for CollegeRankingTable
+        const transformedApplications = (response.data.items || []).map((item: any) => ({
+          id: item.application?.id || item.id,
+          app_id: item.application?.app_id || `APP-${item.id}`,
+          student_name: item.student_name || '未提供姓名',
+          student_id: item.student_id || 'N/A',
+          scholarship_type: item.application?.scholarship_type || item.scholarship_type || '',
+          sub_type: item.application?.sub_type || item.sub_type || '',
+          total_score: item.total_score || 0,
+          rank_position: item.rank_position || 0,
+          is_allocated: item.is_allocated || false,
+          status: item.status || 'pending',
+          review_status: item.application?.status || 'pending'
+        }))
+        
         setRankingData({
-          applications: response.data.items || [],
+          applications: transformedApplications,
           totalQuota: response.data.total_quota,
           subTypeCode: response.data.sub_type_code,
           academicYear: response.data.academic_year,
           semester: response.data.semester,
           isFinalized: response.data.is_finalized
         })
+        
+        console.log(`Loaded ranking ${rankingId} with ${transformedApplications.length} applications`)
       } else {
         console.error('Failed to load ranking details:', response.message)
+        // Clear ranking data on failure
+        setRankingData(null)
       }
     } catch (error) {
       console.error('Failed to fetch ranking details:', error)
+      // Clear ranking data on error
+      setRankingData(null)
     } finally {
       setIsRankingLoading(false)
     }
@@ -314,24 +374,60 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
         throw new Error("No scholarship types available")
       }
       
-      const defaultScholarship = scholarshipConfig[0]
+      // Determine the scholarship type to use
+      let targetScholarshipId = scholarshipTypeId
+      let targetSubTypeCode = subTypeCode
+      
+      // If no specific scholarship type provided, find the one matching current tab
+      if (!targetScholarshipId && activeScholarshipTab && availableOptions?.scholarship_types) {
+        const currentScholarshipType = availableOptions.scholarship_types.find(
+          type => type.code === activeScholarshipTab
+        )
+        if (currentScholarshipType) {
+          // Get the scholarship ID from the scholarship config
+          const configScholarship = scholarshipConfig.find(
+            config => config.name === currentScholarshipType.name
+          )
+          targetScholarshipId = configScholarship?.id || scholarshipConfig[0]?.id
+          targetSubTypeCode = configScholarship?.subTypes[0]?.code || scholarshipConfig[0]?.subTypes[0]?.code
+        }
+      }
+      
+      // Fallback to first scholarship if still not found
+      if (!targetScholarshipId) {
+        const defaultScholarship = scholarshipConfig[0]
+        targetScholarshipId = defaultScholarship?.id
+        targetSubTypeCode = defaultScholarship?.subTypes[0]?.code
+      }
+      
+      // Use selected academic year and semester from the UI state
+      const useYear = selectedAcademicYear || academicConfig.currentYear
+      const useSemester = selectedSemester || academicConfig.currentSemester
+      
+      const semesterName = useSemester === 'FIRST' ? '上學期' : 
+                          useSemester === 'SECOND' ? '下學期' : 
+                          useSemester === 'YEARLY' ? '全年' : '學期'
+      
       const newRanking = {
-        scholarship_type_id: scholarshipTypeId || defaultScholarship?.id,
-        sub_type_code: subTypeCode || defaultScholarship?.subTypes[0]?.code,
-        academic_year: academicConfig.currentYear,
-        semester: academicConfig.currentSemester,
-        ranking_name: `新建排名 - ${useYear}學年度 ${useSemester === 'FIRST' ? '上' : '下'}學期`
+        scholarship_type_id: targetScholarshipId,
+        sub_type_code: targetSubTypeCode || 'default',
+        academic_year: useYear,
+        semester: useSemester,
+        ranking_name: `新建排名 - ${useYear}學年度 ${semesterName}`
       }
       
       const response = await apiClient.college.createRanking(newRanking)
       if (response.success) {
+        console.log('Ranking created successfully:', response.data)
         // Refresh rankings
         await fetchRankings()
       } else {
         console.error('Failed to create ranking:', response.message)
+        throw new Error(`Failed to create ranking: ${response.message}`)
       }
     } catch (error) {
       console.error('Failed to create ranking:', error)
+      throw error
     }
   }
 
@@ -719,7 +815,14 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                     <h2 className="text-3xl font-bold tracking-tight">學生排序管理 - {scholarshipType.name}</h2>
                     <p className="text-muted-foreground">管理獎學金申請的排序和排名</p>
                   </div>
-                  <Button onClick={createNewRanking}>
+                  <Button onClick={async () => {
+                    try {
+                      await createNewRanking()
+                    } catch (error) {
+                      console.error('Failed to create ranking:', error)
+                      alert(`無法建立新排名：${error instanceof Error ? error.message : '未知錯誤'}`)
+                    }
+                  }}>
                     <Plus className="h-4 w-4 mr-2" />
                     建立新排名
                   </Button>
@@ -732,31 +835,54 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                     <CardDescription>選擇要管理的排名清單</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {rankings.map((ranking) => (
-                        <Card 
-                          key={ranking.id} 
-                          className={`cursor-pointer transition-colors ${selectedRanking === ranking.id ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'}`}
-                          onClick={() => {
-                            setSelectedRanking(ranking.id)
-                            fetchRankingDetails(ranking.id)
-                          }}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <Badge variant={ranking.is_finalized ? "default" : "secondary"}>
-                                {ranking.is_finalized ? "已確認" : "進行中"}
-                              </Badge>
-                              <Trophy className="h-4 w-4 text-blue-600" />
-                            </div>
-                            <h3 className="font-medium mb-1">{ranking.ranking_name}</h3>
-                            <p className="text-sm text-gray-600">
-                              申請數: {ranking.total_applications} | 配額: {ranking.total_quota}
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
+                    {rankings.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Trophy className="h-12 w-12 mx-auto mb-4 text-nycu-blue-300" />
+                        <h3 className="text-lg font-semibold text-nycu-navy-800 mb-2">
+                          暫無排名資料
+                        </h3>
+                        <p className="text-nycu-navy-600 mb-4">
+                          {scholarshipType.name} 目前還沒有建立任何排名，請點擊上方「建立新排名」按鈕開始
+                        </p>
+                        <Button onClick={async () => {
+                          try {
+                            await createNewRanking()
+                          } catch (error) {
+                            console.error('Failed to create ranking:', error)
+                            alert(`無法建立新排名：${error instanceof Error ? error.message : '未知錯誤'}`)
+                          }
+                        }} variant="outline">
+                          <Plus className="h-4 w-4 mr-2" />
+                          立即建立排名
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {rankings.map((ranking) => (
+                          <Card
+                            key={ranking.id}
+                            className={`cursor-pointer transition-colors ${selectedRanking === ranking.id ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'}`}
+                            onClick={() => {
+                              setSelectedRanking(ranking.id)
+                              fetchRankingDetails(ranking.id)
+                            }}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <Badge variant={ranking.is_finalized ? "default" : "secondary"}>
+                                  {ranking.is_finalized ? "已確認" : "進行中"}
+                                </Badge>
+                                <Trophy className="h-4 w-4 text-blue-600" />
+                              </div>
+                              <h3 className="font-medium mb-1">{ranking.ranking_name}</h3>
+                              <p className="text-sm text-gray-600">
+                                申請數: {ranking.total_applications} | 配額: {ranking.total_quota}
+                              </p>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 

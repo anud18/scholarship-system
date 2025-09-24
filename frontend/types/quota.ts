@@ -98,6 +98,17 @@ export interface SubTypeConfig {
   parent_type: string
 }
 
+export interface ScholarshipTypeConfig {
+  code: string
+  name: string
+  name_en?: string
+  category?: string
+  description?: string
+  description_en?: string
+  quota_management_mode?: string
+  application_period?: 'semester' | 'academic_year' | string
+}
+
 // Available period (semester or academic year)
 export type AvailablePeriod = string // e.g., "114-1" or "114"
 

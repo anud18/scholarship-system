@@ -195,7 +195,7 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
       }
 
       // Get existing review if any
-      let initialItems = initializeItems(availableSubTypes)
+      const initialItems = initializeItems(availableSubTypes)
       console.log('Initial items created:', initialItems)
 
       try {
@@ -209,9 +209,9 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
           setExistingReview(reviewResponse.data)
           
           // Merge existing review items with all available sub-types
-          const existingItems = reviewResponse.data.items || []
+          const existingItems: ReviewItem[] = reviewResponse.data.items || []
           const mergedItems = availableSubTypes.map(subType => {
-            const existingItem = existingItems.find(item => item.sub_type_code === subType.value)
+            const existingItem = existingItems.find((item) => item.sub_type_code === subType.value)
             return existingItem || {
               sub_type_code: subType.value,
               is_recommended: false,

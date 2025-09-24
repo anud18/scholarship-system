@@ -2,11 +2,14 @@ import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { NotificationButton } from '../notification-button'
 
+// Create mutable mock function
+const mockGetUnreadCount = jest.fn().mockResolvedValue({ success: true, data: 0 })
+
 // Mock the API client
 jest.mock('@/lib/api', () => ({
   apiClient: {
     notifications: {
-      getUnreadCount: jest.fn()
+      getUnreadCount: (...args: any[]) => mockGetUnreadCount(...args)
     }
   }
 }))
@@ -23,7 +26,10 @@ jest.mock('../notification-panel', () => ({
   )
 }))
 
-const mockApiClient = require('@/lib/api').apiClient
+import { apiClient as mockApiClient } from '@/lib/api'
+
+// Override with mutable mock
+mockApiClient.notifications.getUnreadCount = mockGetUnreadCount
 
 // Mock console.error to avoid test noise
 const originalConsoleError = console.error

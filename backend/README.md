@@ -154,6 +154,15 @@ All API responses follow a standardized format:
 - File upload tests
 - Authentication flow tests
 
+## 🧹 Code Quality
+
+### Formatting
+- Run `black app` followed by `isort app` to keep imports and layout consistent with the pre-commit hooks.
+
+### Linting Baseline
+- Run `flake8 app/core app/db app/middleware app/utils app/main.py`.
+- The current lint pass intentionally focuses on the shared infrastructure modules. The API endpoints, services, and large legacy test suites still require refactors before we can enable linting for them without an overwhelming amount of noise.
+
 ## 📚 API Documentation
 
 Once implemented, API documentation will be available at:

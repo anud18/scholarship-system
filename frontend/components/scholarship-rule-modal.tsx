@@ -123,12 +123,12 @@ export function ScholarshipRuleModal({
     is_active: true,
     is_initial_enabled: true,
     is_renewal_enabled: true,
-    sub_type: null,
+    sub_type: undefined,
     academic_year: academicYear,
-    semester: semester,
+    semester: semester ?? undefined,
     is_template: false,
-    template_name: null,
-    template_description: null
+    template_name: undefined,
+    template_description: undefined
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -155,12 +155,12 @@ export function ScholarshipRuleModal({
         is_active: rule.is_active,
         is_initial_enabled: rule.is_initial_enabled,
         is_renewal_enabled: rule.is_renewal_enabled,
-        sub_type: rule.sub_type,
+        sub_type: rule.sub_type ?? undefined,
         academic_year: rule.academic_year || academicYear,
-        semester: rule.semester || semester,
+        semester: rule.semester ?? semester ?? undefined,
         is_template: rule.is_template,
-        template_name: rule.template_name,
-        template_description: rule.template_description
+        template_name: rule.template_name ?? undefined,
+        template_description: rule.template_description ?? undefined
       })
     } else {
       setFormData({
@@ -179,12 +179,12 @@ export function ScholarshipRuleModal({
         is_active: true,
         is_initial_enabled: true,
         is_renewal_enabled: true,
-        sub_type: null,
+        sub_type: undefined,
         academic_year: academicYear,
-        semester: semester,
+        semester: semester ?? undefined,
         is_template: false,
-        template_name: null,
-        template_description: null
+        template_name: undefined,
+        template_description: undefined
       })
     }
     setErrors({})
@@ -203,7 +203,7 @@ export function ScholarshipRuleModal({
       
       setLoadingSubTypes(true)
       try {
-        const response = await api.admin.getScholarshipSubTypes(scholarshipTypeId)
+        const response = await api.admin.getScholarshipRuleSubTypes(scholarshipTypeId)
         if (response.success && response.data && Array.isArray(response.data)) {
           setSubTypeOptions(response.data)
         } else {

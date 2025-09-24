@@ -275,6 +275,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   // File upload state (for backwards compatibility)
   const [uploadedFiles, setUploadedFiles] = useState<{ [documentType: string]: File[] }>({})
   const [selectedScholarship, setSelectedScholarship] = useState<ScholarshipType | null>(null)
+  const eligibleSubTypes = selectedScholarship?.eligible_sub_types ?? []
+  const selectionMode = selectedScholarship?.sub_type_selection_mode ?? 'multiple'
   
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formProgress, setFormProgress] = useState(0)
@@ -502,7 +504,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       
     } catch (error) {
       console.error('Failed to submit application:', error)
-      let errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       alert(locale === "zh" ? `提交失敗: ${errorMessage}` : `Failed to submit application: ${errorMessage}`)
     } finally {
       setIsSubmitting(false)
@@ -620,7 +622,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       }
     } catch (error) {
       console.error('Failed to save draft:', error)
-      let errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       alert(locale === "zh" ? `保存失敗: ${errorMessage}` : `Failed to save draft: ${errorMessage}`)
     } finally {
       setIsSubmitting(false)
@@ -1434,19 +1436,18 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                 </div>
 
                 {/* Sub-type selection UI */}
-                {newApplicationData.scholarship_type && selectedScholarship?.eligible_sub_types && 
-                 selectedScholarship.eligible_sub_types.length > 0 && 
-                 selectedScholarship.eligible_sub_types[0]?.value !== "general" && 
-                 selectedScholarship.eligible_sub_types[0]?.value !== null && (
+                {newApplicationData.scholarship_type && eligibleSubTypes.length > 0 && 
+                 eligibleSubTypes[0]?.value !== "general" && 
+                 eligibleSubTypes[0]?.value !== null && (
                   <div className="space-y-2">
                     <Label>{locale === "zh" ? "申請項目" : "Application Items"} *</Label>
                     
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {selectedScholarship.eligible_sub_types.map((subType, index) => {
+                      {eligibleSubTypes.map((subType, index) => {
                         const subTypeValue = subType.value
-                        const isSelected = selectedSubTypes[newApplicationData.scholarship_type]?.includes(subTypeValue)
-                        const selectionMode = selectedScholarship.sub_type_selection_mode || 'multiple'
-                        
+                        const isSelected = subTypeValue
+                          ? (selectedSubTypes[newApplicationData.scholarship_type]?.includes(subTypeValue) ?? false)
+                          : false
                         // For hierarchical mode, determine if this option is selectable
                         const isSelectable = (() => {
                           // Remove the editing restriction to allow sub-type reselection in edit mode
@@ -1454,7 +1455,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                           
                           if (selectionMode === 'hierarchical') {
                             const currentSelected = selectedSubTypes[newApplicationData.scholarship_type] || []
-                            const validSubTypes = selectedScholarship.eligible_sub_types.filter(st => st.value && st.value !== "general")
+                            const validSubTypes = eligibleSubTypes.filter(st => st.value && st.value !== "general")
                             const expectedIndex = currentSelected.length
                             
                             // Can select if it's already selected OR it's the next in sequence
@@ -1509,9 +1510,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     
                     {/* Selection mode description */}
                     <div className="mt-2 text-xs text-gray-600">
-                      {selectedScholarship.sub_type_selection_mode === 'single' ? (
+                      {selectionMode === 'single' ? (
                         locale === 'zh' ? '請選擇一個項目' : 'Please select one item'
-                      ) : selectedScholarship.sub_type_selection_mode === 'hierarchical' ? (
+                      ) : selectionMode === 'hierarchical' ? (
                         locale === 'zh' ? '請依序選擇項目（需按順序選取）' : 'Please select items in order (sequential selection required)'
                       ) : (
                         locale === 'zh' ? '可選擇多個項目' : 'Multiple selections allowed'

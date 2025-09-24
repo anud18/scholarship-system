@@ -65,13 +65,32 @@ export interface ApplicationFile {
   uploaded_at: string
 }
 
+export type ApplicationStatus =
+  | 'draft'
+  | 'submitted'
+  | 'pending_review'
+  | 'pending_recommendation'
+  | 'under_review'
+  | 'professor_review_pending'
+  | 'professor_reviewed'
+  | 'college_review_pending'
+  | 'college_reviewed'
+  | 'recommended'
+  | 'approved'
+  | 'rejected'
+  | 'returned'
+  | 'withdrawn'
+  | 'cancelled'
+  | 'pending'
+  | 'completed'
+
 export interface Application {
   id: number
   app_id?: string  // 申請編號，格式如 APP-2025-000001
   student_id: string
   scholarship_type: string
   scholarship_type_zh?: string  // 中文獎學金類型名稱
-  status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'withdrawn'
+  status: ApplicationStatus
   is_renewal?: boolean  // 是否為續領申請
   personal_statement?: string
   gpa_requirement_met: boolean
@@ -80,7 +99,10 @@ export interface Application {
   approved_at?: string
   created_at: string
   updated_at: string
-  
+  is_recommended?: boolean
+  professor_review_completed?: boolean
+  college_review_completed?: boolean
+
   // 動態表單資料
   form_data?: Record<string, any>  // 動態表單資料 (前端格式)
   submitted_form_data?: Record<string, any>  // 後端格式的表單資料，包含整合後的文件資訊
@@ -115,6 +137,7 @@ export interface Application {
     nycu_id: string
     name: string
     email: string
+    dept_name?: string
   }  // 關聯的教授資訊
   
   // Scholarship configuration
@@ -157,12 +180,22 @@ export interface DashboardStats {
   avg_processing_time: string
 }
 
+export interface RecipientOption {
+  value: string
+  label: string
+  description: string
+}
+
 export interface EmailTemplate {
   key: string
   subject_template: string
   body_template: string
   cc?: string | null
   bcc?: string | null
+  sending_type?: 'single' | 'bulk'
+  recipient_options?: RecipientOption[] | null
+  requires_approval?: boolean
+  max_recipients?: number | null
   updated_at?: string | null
 }
 
@@ -218,25 +251,25 @@ export interface NotificationResponse {
 
 export interface ScholarshipType {
   id: number
-  configuration_id: number  // ID of the specific configuration this eligibility is for
+  configuration_id?: number  // ID of the specific configuration this eligibility is for
   code: string
   name: string
   name_en?: string
-  description: string
+  description?: string
   description_en?: string
-  amount: string
-  currency: string
-  application_cycle: 'semester' | 'yearly'
-  application_start_date: string
-  application_end_date: string
-  sub_type_selection_mode: 'single' | 'multiple' | 'hierarchical'
-  eligible_sub_types: Array<{
+  amount?: string
+  currency?: string
+  application_cycle?: 'semester' | 'yearly'
+  application_start_date?: string
+  application_end_date?: string
+  sub_type_selection_mode?: 'single' | 'multiple' | 'hierarchical'
+  eligible_sub_types?: Array<{
     value: string | null
     label: string
     label_en: string
     is_default: boolean
   }>
-  passed: Array<{
+  passed?: Array<{
     rule_id: number
     rule_name: string
     rule_type: string
@@ -248,7 +281,7 @@ export interface ScholarshipType {
     is_warning: boolean
     is_hard_rule: boolean
   }>
-  warnings: Array<{
+  warnings?: Array<{
     rule_id: number
     rule_name: string
     rule_type: string
@@ -260,7 +293,7 @@ export interface ScholarshipType {
     is_warning: boolean
     is_hard_rule: boolean
   }>
-  errors: Array<{
+  errors?: Array<{
     rule_id: number
     rule_name: string
     rule_type: string
@@ -272,12 +305,12 @@ export interface ScholarshipType {
     is_warning: boolean
     is_hard_rule: boolean
   }>
-  created_at: string
+  created_at?: string
 }
 
 export interface ScholarshipRule {
-  id: number
-  scholarship_type_id: number
+  id?: number
+  scholarship_type_id?: number
   sub_type?: string
   academic_year?: number
   semester?: string
@@ -302,8 +335,8 @@ export interface ScholarshipRule {
   created_by?: number
   updated_by?: number
   academic_period_label?: string
-  created_at: string
-  updated_at: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface SubTypeOption {
@@ -538,6 +571,55 @@ export interface ApplicationDocument {
   existing_file_url?: string
 }
 
+export interface HistoricalApplication {
+  id: number
+  app_id: string
+  status: string
+  status_name?: string
+
+  // Student information
+  student_name?: string
+  student_id?: string
+  student_email?: string
+  student_department?: string
+
+  // Scholarship information
+  scholarship_name?: string
+  scholarship_type_code?: string
+  amount?: number
+  main_scholarship_type?: string
+  sub_scholarship_type?: string
+  is_renewal?: boolean
+
+  // Academic information
+  academic_year: number
+  semester?: string
+
+  // Important dates
+  submitted_at?: string
+  reviewed_at?: string
+  approved_at?: string
+  created_at: string
+  updated_at?: string
+
+  // Review information
+  professor_name?: string
+  reviewer_name?: string
+  review_score?: number
+  review_comments?: string
+  rejection_reason?: string
+}
+
+export interface HistoricalApplicationFilters {
+  page?: number
+  size?: number
+  status?: string
+  scholarship_type?: string
+  academic_year?: number
+  semester?: string
+  search?: string
+}
+
 export interface ApplicationDocumentCreate {
   scholarship_type: string
   document_name: string
@@ -575,6 +657,11 @@ export interface ScholarshipFormConfig {
   scholarship_type: string
   fields: ApplicationField[]
   documents: ApplicationDocument[]
+  title?: string
+  title_en?: string
+  color?: string
+  hasWhitelist?: boolean
+  whitelist_student_ids?: Record<string, number[]>
 }
 
 export interface FormConfigSaveRequest {
@@ -679,6 +766,7 @@ export interface ScholarshipConfiguration {
   id: number
   scholarship_type_id: number
   scholarship_type_name: string
+  scholarship_type_code: string
   academic_year: number
   semester: string | null
   config_name: string
@@ -687,13 +775,17 @@ export interface ScholarshipConfiguration {
   description_en?: string
   amount: number
   currency: string
+  title?: string
+  title_en?: string
+  color?: string
   // Quota management fields
   has_quota_limit?: boolean
   has_college_quota?: boolean
   quota_management_mode?: string
   total_quota?: number
   quotas?: Record<string, any>
-  whitelist_student_ids: Record<string, number[]>
+  whitelist_student_ids?: Record<string, number[]>
+  hasWhitelist?: boolean
   renewal_application_start_date?: string
   renewal_application_end_date?: string
   application_start_date?: string
@@ -879,18 +971,27 @@ class ApiClient {
   constructor() {
     // Dynamically determine backend URL
     if (typeof window !== 'undefined') {
-      // Browser environment - use current host with port 8000
-      const protocol = window.location.protocol
-      const hostname = window.location.hostname
-      this.baseURL = process.env.NEXT_PUBLIC_API_URL || `${protocol}//${hostname}:8000`
+      // Browser environment
+      if (process.env.NODE_ENV === 'production') {
+        // Production: use current host (nginx will proxy /api/ requests to backend)
+        this.baseURL = process.env.NEXT_PUBLIC_API_URL || `${window.location.protocol}//${window.location.host}`
+        console.log('🏭 API Client Production mode - using nginx proxy via:', this.baseURL)
+      } else {
+        // Development: use port 8000 directly
+        const protocol = window.location.protocol
+        const hostname = window.location.hostname
+        this.baseURL = process.env.NEXT_PUBLIC_API_URL || `${protocol}//${hostname}:8000`
+        console.log('🛠️ API Client Development mode - using direct backend:', this.baseURL)
+      }
     } else {
       // Server-side environment - use environment variable or localhost
       this.baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      console.log('🖥️ API Client Server-side mode - using:', this.baseURL)
     }
-    
-    // Try to get token from localStorage on client side
+
+    // Try to get token from localStorage on client side with safe access
     if (typeof window !== 'undefined') {
-      this.token = localStorage.getItem('auth_token')
+      this.token = window.localStorage?.getItem?.('auth_token') ?? null
     }
   }
 
@@ -908,7 +1009,36 @@ class ApiClient {
     }
   }
 
-  private async request<T>(
+  hasToken(): boolean {
+    return !!this.token
+  }
+
+  getToken(): string | null {
+    return this.token
+  }
+
+  private getContentType(res: any): string {
+    const h: any = res?.headers
+    if (h?.get) return h.get('content-type') || ''
+    if (h && typeof h === 'object') {
+      return h['content-type'] || h['Content-Type'] || h['Content-type'] || ''
+    }
+    return ''
+  }
+
+  private async readTextSafe(res: any): Promise<string> {
+    try {
+      if (typeof res?.text === 'function') return await res.text()
+    } catch {}
+    if (typeof res?.json === 'function') {
+      try { return JSON.stringify(await res.json()) } catch {}
+    }
+    if (typeof res?.body === 'string') return res.body
+    if (typeof (res as any)?._bodyInit === 'string') return (res as any)._bodyInit
+    return ''
+  }
+
+  async request<T = any>(
     endpoint: string,
     options: RequestInit & { params?: Record<string, any> } = {}
   ): Promise<ApiResponse<T>> {
@@ -927,20 +1057,24 @@ class ApiClient {
       }
     }
     
-    const headers: Record<string, string> = {
-      ...(options.headers as Record<string, string>),
-    }
+    // Normalize headers so .get/.set always exist
+    const headers = new Headers(options.headers ?? {})
 
-    // Only set Content-Type if it's not FormData (detected by empty headers object)
+    // Only set Content-Type if it's not FormData
     const isFormData = options.body instanceof FormData
-    if (!isFormData && !headers['Content-Type']) {
-      headers['Content-Type'] = 'application/json'
+    if (!isFormData && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json')
     }
+    headers.set('Accept', 'application/json')
 
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`
+      headers.set('Authorization', `Bearer ${this.token}`)
+      // console.log('🔐 API Request with auth token to:', endpoint)
     } else {
-      console.warn('No auth token available for request to:', endpoint)
+      // Optional: keep these for local debugging; comment to reduce CI noise
+      // console.warn('❌ No auth token available for request to:', endpoint)
+      // console.warn('❌ localStorage auth_token:', typeof window !== 'undefined'
+      //   ? window.localStorage?.getItem?.('auth_token') : 'N/A')
     }
 
     // Remove params from options before passing to fetch
@@ -951,26 +1085,25 @@ class ApiClient {
     }
 
     try {
-      const response = await fetch(url, config)
-      
-      
+      const response: any = await fetch(url, config)
+
+      const contentType = this.getContentType(response)
+      const canJson = contentType.includes('application/json') || typeof response?.json === 'function'
+
       let data: any
-      const contentType = response.headers.get('content-type')
-      
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json()
+      if (canJson) {
+        try {
+          data = await response.json()
+        } catch {
+          const t = await this.readTextSafe(response)
+          try { data = JSON.parse(t) } catch { data = t }
+        }
       } else {
-        const text = await response.text()
-        throw new Error(`Expected JSON response but got ${contentType}: ${text}`)
+        const t = await this.readTextSafe(response)
+        try { data = JSON.parse(t) } catch { data = t }
       }
 
       if (!response.ok) {
-        console.error(`API request failed: ${response.status} ${response.statusText}`, {
-          url,
-          status: response.status,
-          data
-        })
-        
         // Handle specific error codes
         if (response.status === 401) {
           console.error('Authentication failed - clearing token')
@@ -979,20 +1112,29 @@ class ApiClient {
           console.error('Authorization denied - user may not have proper permissions')
         } else if (response.status === 429) {
           console.warn('Rate limit exceeded - request throttled')
-          // Add user-friendly rate limit message
-          const rateLimitMessage = data.detail || data.message || 'Too many requests. Please wait a moment and try again.'
-          throw new Error(`請稍候再試：${rateLimitMessage}`)
         }
-        
-        throw new Error(data.message || data.detail || `HTTP error! status: ${response.status}`)
+
+        const msg =
+          (data && (data.detail || data.error || data.message || data.title)) ||
+          (typeof data === 'string' ? data : '') ||
+          response.statusText ||
+          `HTTP ${response.status}`
+        throw new Error(msg)
       }
 
-      
       // Handle different response formats from backend
       if (data && typeof data === 'object') {
         // If response already has success/message structure, return as-is
         if ('success' in data && 'message' in data) {
           return data as ApiResponse<T>
+        }
+        // If it's a PaginatedResponse (has items, total, page, size, pages), wrap it
+        else if ('items' in data && 'total' in data && 'page' in data && 'size' in data && 'pages' in data) {
+          return {
+            success: true,
+            message: 'Request completed successfully',
+            data: data as T
+          } as ApiResponse<T>
         }
         // If it's a direct object (like Application), wrap it
         else if ('id' in data) {
@@ -1011,7 +1153,7 @@ class ApiClient {
           } as ApiResponse<T>
         }
       }
-      
+
       return data
     } catch (error) {
       console.error('API request failed:', error)
@@ -1397,9 +1539,26 @@ class ApiClient {
       if (page) params.append('page', page.toString())
       if (size) params.append('size', size.toString())
       if (status) params.append('status', status)
-      
+
       const queryString = params.toString()
       return this.request(`/admin/applications${queryString ? `?${queryString}` : ''}`)
+    },
+
+    getHistoricalApplications: async (
+      filters?: HistoricalApplicationFilters
+    ): Promise<ApiResponse<{ items: HistoricalApplication[]; total: number; page: number; size: number; pages: number }>> => {
+      const params = new URLSearchParams()
+
+      if (filters?.page) params.append('page', filters.page.toString())
+      if (filters?.size) params.append('size', filters.size.toString())
+      if (filters?.status) params.append('status', filters.status)
+      if (filters?.scholarship_type) params.append('scholarship_type', filters.scholarship_type)
+      if (filters?.academic_year) params.append('academic_year', filters.academic_year.toString())
+      if (filters?.semester) params.append('semester', filters.semester)
+      if (filters?.search) params.append('search', filters.search)
+
+      const queryString = params.toString()
+      return this.request(`/admin/applications/history${queryString ? `?${queryString}` : ''}`)
     },
 
     updateApplicationStatus: async (
@@ -1422,6 +1581,74 @@ class ApiClient {
         method: 'PUT',
         body: JSON.stringify(template),
       })
+    },
+
+    getEmailTemplatesBySendingType: async (sendingType?: string): Promise<ApiResponse<EmailTemplate[]>> => {
+      const params = sendingType ? `?sending_type=${encodeURIComponent(sendingType)}` : ''
+      return this.request(`/admin/email-templates${params}`)
+    },
+
+    // Scholarship Email Template endpoints
+    getScholarshipEmailTemplates: async (scholarshipTypeId: number): Promise<ApiResponse<{
+      items: any[];
+      total: number;
+    }>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}`)
+    },
+
+    getScholarshipEmailTemplate: async (scholarshipTypeId: number, templateKey: string): Promise<ApiResponse<any>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/${encodeURIComponent(templateKey)}`)
+    },
+
+    createScholarshipEmailTemplate: async (templateData: {
+      scholarship_type_id: number;
+      email_template_key: string;
+      is_enabled?: boolean;
+      priority?: number;
+      custom_subject?: string;
+      custom_body?: string;
+      notes?: string;
+    }): Promise<ApiResponse<any>> => {
+      return this.request('/admin/scholarship-email-templates', {
+        method: 'POST',
+        body: JSON.stringify(templateData),
+      })
+    },
+
+    updateScholarshipEmailTemplate: async (
+      scholarshipTypeId: number, 
+      templateKey: string, 
+      templateData: {
+        is_enabled?: boolean;
+        priority?: number;
+        custom_subject?: string;
+        custom_body?: string;
+        notes?: string;
+      }
+    ): Promise<ApiResponse<any>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/${encodeURIComponent(templateKey)}`, {
+        method: 'PUT',
+        body: JSON.stringify(templateData),
+      })
+    },
+
+    deleteScholarshipEmailTemplate: async (scholarshipTypeId: number, templateKey: string): Promise<ApiResponse<boolean>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/${encodeURIComponent(templateKey)}`, {
+        method: 'DELETE',
+      })
+    },
+
+    bulkCreateScholarshipEmailTemplates: async (scholarshipTypeId: number): Promise<ApiResponse<{
+      items: any[];
+      total: number;
+    }>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/bulk-create`, {
+        method: 'POST',
+      })
+    },
+
+    getAvailableScholarshipEmailTemplates: async (scholarshipTypeId: number): Promise<ApiResponse<EmailTemplate[]>> => {
+      return this.request(`/admin/scholarship-email-templates/${scholarshipTypeId}/available`)
     },
 
     getSystemSetting: async (key: string): Promise<ApiResponse<SystemSetting>> => {
@@ -1505,29 +1732,21 @@ class ApiClient {
 
     // === 系統管理相關 API === //
     
-    // 工作流程管理
+    // 工作流程管理 (temporarily disabled - endpoints not implemented)
     getWorkflows: async (): Promise<ApiResponse<Workflow[]>> => {
-      return this.request('/admin/workflows')
+      return Promise.resolve({ success: true, data: [], message: 'Workflows feature coming soon' })
     },
 
     createWorkflow: async (workflow: Omit<Workflow, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<Workflow>> => {
-      return this.request('/admin/workflows', {
-        method: 'POST',
-        body: JSON.stringify(workflow),
-      })
+      return Promise.resolve({ success: false, message: 'Workflows feature not implemented yet' })
     },
 
     updateWorkflow: async (id: string, workflow: Partial<Workflow>): Promise<ApiResponse<Workflow>> => {
-      return this.request(`/admin/workflows/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(workflow),
-      })
+      return Promise.resolve({ success: false, message: 'Workflows feature not implemented yet' })
     },
 
     deleteWorkflow: async (id: string): Promise<ApiResponse<{ message: string }>> => {
-      return this.request(`/admin/workflows/${id}`, {
-        method: 'DELETE',
-      })
+      return Promise.resolve({ success: false, message: 'Workflows feature not implemented yet' })
     },
 
     // 獎學金規則管理
@@ -1557,7 +1776,7 @@ class ApiClient {
       return this.request(`/admin/scholarship-rules/${id}`);
     },
 
-    createScholarshipRule: async (rule: Omit<ScholarshipRule, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<ScholarshipRule>> => {
+    createScholarshipRule: async (rule: Partial<ScholarshipRule>): Promise<ApiResponse<ScholarshipRule>> => {
       return this.request('/admin/scholarship-rules', {
         method: 'POST',
         body: JSON.stringify(rule),
@@ -1587,7 +1806,7 @@ class ApiClient {
       rule_ids?: number[];
       overwrite_existing?: boolean;
     }): Promise<ApiResponse<ScholarshipRule[]>> => {
-      const response = await this.request('/admin/scholarship-rules/copy', {
+      const response = await this.request<ScholarshipRule[]>('/admin/scholarship-rules/copy', {
         method: 'POST',
         body: JSON.stringify(copyRequest),
       });
@@ -1608,7 +1827,7 @@ class ApiClient {
     // 規則模板管理
     getRuleTemplates: async (scholarship_type_id?: number): Promise<ApiResponse<ScholarshipRule[]>> => {
       const queryParams = scholarship_type_id ? `?scholarship_type_id=${scholarship_type_id}` : '';
-      return this.request(`/admin/scholarship-rules/templates${queryParams}`);
+      return this.request<ScholarshipRule[]>(`/admin/scholarship-rules/templates${queryParams}`);
     },
 
     createRuleTemplate: async (templateRequest: {
@@ -1649,7 +1868,7 @@ class ApiClient {
 
     // 系統統計
     getSystemStats: async (): Promise<ApiResponse<SystemStats>> => {
-      return this.request('/admin/system-stats')
+      return this.request('/admin/dashboard/stats')
     },
 
     // 獎學金權限管理
@@ -1783,6 +2002,11 @@ class ApiClient {
         method: 'PUT',
         body: JSON.stringify({ professor_nycu_id: professorNycuId })
       })
+    },
+
+    getAvailableProfessors: async (search?: string): Promise<ApiResponse<any[]>> => {
+      const params = search ? `?search=${encodeURIComponent(search)}` : '';
+      return this.request(`/admin/professors${params}`)
     },
   }
 
@@ -1974,37 +2198,23 @@ class ApiClient {
       try {
         const params = statusFilter ? `?status_filter=${statusFilter}` : '';
         console.log('🔍 Requesting professor applications with params:', params);
-        
-        // The /professor/applications endpoint returns PaginatedResponse directly, not wrapped in ApiResponse
+
         const response = await this.request<PaginatedResponse<Application>>(`/professor/applications${params}`);
         console.log('📨 Professor applications raw response:', response);
-        
-        // Check if response is a direct PaginatedResponse (backend returns this directly)
-        if (response && 'items' in response && 'total' in response && 'pages' in response) {
-          console.log('✅ Got direct PaginatedResponse:', response.items.length, 'applications, total:', response.total);
+
+        if (response.success && response.data && Array.isArray(response.data.items)) {
+          console.log('✅ Loaded professor applications:', response.data.items.length);
           return {
             success: true,
-            message: 'Applications loaded successfully',
-            data: response.items
+            message: response.message || 'Applications loaded successfully',
+            data: response.data.items
           };
         }
-        // Handle wrapped ApiResponse format (fallback for consistency)
-        else if (response && 'success' in response && response.success && response.data) {
-          if ('items' in response.data && Array.isArray(response.data.items)) {
-            console.log('✅ Got wrapped ApiResponse with paginated data:', response.data.items.length, 'applications');
-            return {
-              success: true,
-              message: response.message || 'Applications loaded successfully',
-              data: response.data.items
-            };
-          }
-        }
-        
-        // Handle error or unexpected response format
+
         console.warn('⚠️ Unexpected response format:', response);
         return {
           success: false,
-          message: 'Failed to load applications - unexpected response format',
+          message: response.message || 'Failed to load applications - unexpected response format',
           data: []
         };
       } catch (error: any) {
@@ -2072,7 +2282,114 @@ class ApiClient {
     }
   }
 
-  // College Review endpoints
+  // Email Management endpoints
+  emailManagement = {
+    // Get email history with filters
+    getEmailHistory: async (params?: {
+      skip?: number;
+      limit?: number;
+      email_category?: string;
+      status?: string;
+      scholarship_type_id?: number;
+      recipient_email?: string;
+      date_from?: string;
+      date_to?: string;
+    }): Promise<ApiResponse<{
+      items: any[];
+      total: number;
+      skip: number;
+      limit: number;
+    }>> => {
+      return this.request('/email-management/history', {
+        method: 'GET',
+        params
+      })
+    },
+
+    // Get scheduled emails with filters
+    getScheduledEmails: async (params?: {
+      skip?: number;
+      limit?: number;
+      status?: string;
+      scholarship_type_id?: number;
+      requires_approval?: boolean;
+      email_category?: string;
+      scheduled_from?: string;
+      scheduled_to?: string;
+    }): Promise<ApiResponse<{
+      items: any[];
+      total: number;
+      skip: number;
+      limit: number;
+    }>> => {
+      return this.request('/email-management/scheduled', {
+        method: 'GET',
+        params
+      })
+    },
+
+    // Get due scheduled emails (superadmin only)
+    getDueScheduledEmails: async (limit?: number): Promise<ApiResponse<any[]>> => {
+      const params = limit ? { limit } : {}
+      return this.request('/email-management/scheduled/due', {
+        method: 'GET',
+        params
+      })
+    },
+
+    // Approve scheduled email
+    approveScheduledEmail: async (emailId: number, approvalNotes?: string): Promise<ApiResponse<any>> => {
+      return this.request(`/email-management/scheduled/${emailId}/approve`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          approval_notes: approvalNotes
+        })
+      })
+    },
+
+    // Cancel scheduled email
+    cancelScheduledEmail: async (emailId: number): Promise<ApiResponse<any>> => {
+      return this.request(`/email-management/scheduled/${emailId}/cancel`, {
+        method: 'PATCH'
+      })
+    },
+
+    // Update scheduled email
+    updateScheduledEmail: async (emailId: number, data: { subject: string; body: string }): Promise<ApiResponse<any>> => {
+      return this.request(`/email-management/scheduled/${emailId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+      })
+    },
+
+    // Process due emails (superadmin only)
+    processDueEmails: async (batchSize?: number): Promise<ApiResponse<{
+      processed: number;
+      sent: number;
+      failed: number;
+      skipped: number;
+    }>> => {
+      const params = batchSize ? { batch_size: batchSize } : {}
+      return this.request('/email-management/scheduled/process', {
+        method: 'POST',
+        params
+      })
+    },
+
+    // Get email categories
+    getEmailCategories: async (): Promise<ApiResponse<string[]>> => {
+      return this.request('/email-management/categories')
+    },
+
+    // Get email and schedule statuses
+    getEmailStatuses: async (): Promise<ApiResponse<{
+      email_statuses: string[];
+      schedule_statuses: string[];
+    }>> => {
+      return this.request('/email-management/statuses')
+    }
+  }
+
   college = {
     // Get applications for review
     getApplicationsForReview: async (params?: string): Promise<ApiResponse<any[]>> => {

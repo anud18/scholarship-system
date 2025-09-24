@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { apiClient, UserListResponse, UserStats } from '@/lib/api'
+import { apiClient, UserListResponse, UserStats, UserCreate } from '@/lib/api'
 
 export default function TestUsersPage() {
   const [users, setUsers] = useState<UserListResponse[]>([])
@@ -55,7 +55,7 @@ export default function TestUsersPage() {
   const testCreateUser = async () => {
     try {
       console.log('🧪 測試創建用戶...')
-      const newUser = {
+      const newUser: UserCreate = {
         nycu_id: `test-${Date.now()}`,
         name: '測試用戶',
         email: `test${Date.now()}@example.com`,
@@ -65,8 +65,6 @@ export default function TestUsersPage() {
         dept_code: '5802',
         dept_name: '校務資訊組',
         comment: 'Test user',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
         raw_data: {
           chinese_name: '測試用戶',
           english_name: 'Test User'

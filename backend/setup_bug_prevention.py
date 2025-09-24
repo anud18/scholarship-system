@@ -7,23 +7,15 @@ to catch issues before they reach production.
 """
 
 import os
-import sys
 import subprocess
-import shutil
+import sys
 from pathlib import Path
 
 
 def run_command(command: str, cwd: str = None) -> bool:
     """Run a shell command and return success status"""
     try:
-        result = subprocess.run(
-            command, 
-            shell=True, 
-            cwd=cwd, 
-            check=True,
-            capture_output=True,
-            text=True
-        )
+        result = subprocess.run(command, shell=True, cwd=cwd, check=True, capture_output=True, text=True)
         print(f"✅ {command}")
         return True
     except subprocess.CalledProcessError as e:
@@ -45,50 +37,42 @@ def check_python_version():
 def install_dependencies():
     """Install required dependencies"""
     print("\n📦 Installing dependencies...")
-    
-    deps = [
-        "pre-commit",
-        "black",
-        "isort", 
-        "flake8",
-        "mypy",
-        "pytest",
-        "requests"
-    ]
-    
+
+    deps = ["pre-commit", "black", "isort", "flake8", "mypy", "pytest", "requests"]
+
     success = True
     for dep in deps:
         if not run_command(f"pip install {dep}"):
             success = False
-    
+
     return success
 
 
 def setup_pre_commit_hooks():
     """Setup pre-commit hooks"""
     print("\n🪝 Setting up pre-commit hooks...")
-    
+
     if not run_command("pre-commit install"):
         return False
-    
+
     # Make scripts executable
     scripts_dir = Path("scripts")
     if scripts_dir.exists():
         for script in scripts_dir.glob("*.py"):
             os.chmod(script, 0o755)
-    
+
     return True
 
 
 def setup_vscode_integration():
     """Setup VSCode integration"""
     print("\n🔧 Setting up VSCode integration...")
-    
+
     vscode_dir = Path(".vscode")
     if not vscode_dir.exists():
         print("⚠️  .vscode directory not found - VSCode settings may not be applied")
         return True
-    
+
     print("✅ VSCode settings configured")
     return True
 
@@ -96,12 +80,12 @@ def setup_vscode_integration():
 def create_git_hooks():
     """Create additional git hooks"""
     print("\n🔗 Creating git hooks...")
-    
+
     git_hooks_dir = Path(".git/hooks")
     if not git_hooks_dir.exists():
         print("⚠️  Not a git repository - skipping git hooks")
         return True
-    
+
     # Create pre-push hook for additional validation
     pre_push_hook = git_hooks_dir / "pre-push"
     pre_push_content = """#!/bin/bash
@@ -124,9 +108,9 @@ fi
 echo "✅ Pre-push validation passed"
 exit 0
 """
-    
+
     try:
-        with open(pre_push_hook, 'w') as f:
+        with open(pre_push_hook, "w") as f:
             f.write(pre_push_content)
         os.chmod(pre_push_hook, 0o755)
         print("✅ Pre-push hook created")
@@ -139,21 +123,21 @@ exit 0
 def run_initial_validation():
     """Run initial validation to ensure everything works"""
     print("\n🧪 Running initial validation...")
-    
+
     success = True
-    
+
     # Test pre-commit
     if not run_command("pre-commit run --all-files"):
         print("⚠️  Pre-commit checks failed - this is normal for first run")
-    
+
     # Test schema validation
     if not run_command("python test_endpoint_schemas.py --endpoint /health"):
         success = False
-    
+
     # Test type checking
     if not run_command("mypy app/main.py --ignore-missing-imports"):
         print("⚠️  Type checking has issues - review mypy output")
-    
+
     return success
 
 
@@ -246,7 +230,7 @@ async def get_items():
 
 Happy coding! 🚀
 """
-    
+
     print(instructions)
 
 
@@ -254,11 +238,11 @@ def main():
     """Main setup function"""
     print("🛠️  Setting up Bug Prevention Tools")
     print("=" * 50)
-    
+
     # Check prerequisites
     if not check_python_version():
         sys.exit(1)
-    
+
     # Run setup steps
     setup_steps = [
         ("Installing dependencies", install_dependencies),
@@ -267,13 +251,13 @@ def main():
         ("Creating git hooks", create_git_hooks),
         ("Running initial validation", run_initial_validation),
     ]
-    
+
     failed_steps = []
     for step_name, step_func in setup_steps:
         print(f"\n{step_name}...")
         if not step_func():
             failed_steps.append(step_name)
-    
+
     # Summary
     print("\n" + "=" * 50)
     if failed_steps:
@@ -283,9 +267,9 @@ def main():
         print("\nThe system should still work, but some features may be limited.")
     else:
         print("✅ All setup steps completed successfully!")
-    
+
     display_usage_instructions()
-    
+
     return 0 if not failed_steps else 1
 
 

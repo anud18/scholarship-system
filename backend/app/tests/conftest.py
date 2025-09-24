@@ -4,28 +4,17 @@ Pytest configuration and fixtures for all tests
 import asyncio
 import os
 from typing import AsyncGenerator, Generator
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.config import settings
-# Note: Password functions removed since system uses SSO authentication
-# from app.core.security import get_password_hash
-from app.db.base import Base
-from app.db.deps import get_db
-from app.main import app
-from app.models.user import User, UserRole
-from app.models.scholarship import ScholarshipType
-from app.models.application import Application, ApplicationStatus
-
-# Override settings for testing
-import os
+# Override settings BEFORE importing models (models use settings to determine JSON type)
 os.environ["TESTING"] = "true"
 os.environ["PYTEST_CURRENT_TEST"] = "true"
 
@@ -33,7 +22,20 @@ os.environ["PYTEST_CURRENT_TEST"] = "true"
 TEST_DATABASE_URL = "sqlite:///:memory:"
 TEST_DATABASE_URL_ASYNC = "sqlite+aiosqlite:///:memory:"
 
+from app.core.config import settings
+
 settings.database_url_sync = TEST_DATABASE_URL
+settings.database_url = TEST_DATABASE_URL_ASYNC  # Set async URL early too
+
+# Now import models (they will use SQLite-compatible JSON type)
+# Note: Password functions removed since system uses SSO authentication
+# from app.core.security import get_password_hash
+from app.db.base_class import Base  # Use the correct Base class that models use
+from app.db.deps import get_db
+from app.main import app
+from app.models.application import Application, ApplicationStatus
+from app.models.scholarship import ScholarshipType
+from app.models.user import User, UserRole, UserType
 
 # Create test engines - use sync only for service tests
 test_engine_sync = create_engine(
@@ -56,15 +58,11 @@ except ImportError:
     settings.database_url = TEST_DATABASE_URL
 
 # Create session factories
-TestingSessionLocalSync = sessionmaker(
-    test_engine_sync, class_=Session, expire_on_commit=False
-)
+TestingSessionLocalSync = sessionmaker(test_engine_sync, class_=Session, expire_on_commit=False)
 
 # Only create async session if async engine is available
 if test_engine:
-    TestingSessionLocal = async_sessionmaker(
-        test_engine, class_=AsyncSession, expire_on_commit=False
-    )
+    TestingSessionLocal = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
 else:
     TestingSessionLocal = None
 
@@ -82,7 +80,7 @@ async def db() -> AsyncGenerator[AsyncSession, None]:
     """Create a new database session for a test."""
     if not test_engine or not TestingSessionLocal:
         pytest.skip("Async database tests require aiosqlite")
-    
+
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -97,24 +95,25 @@ async def db() -> AsyncGenerator[AsyncSession, None]:
 def db_sync() -> Generator[Session, None, None]:
     """Create a new sync database session for a test."""
     Base.metadata.create_all(bind=test_engine_sync)
-    
+
     with TestingSessionLocalSync() as session:
         yield session
-    
+
     Base.metadata.drop_all(bind=test_engine_sync)
 
 
 @pytest_asyncio.fixture(scope="function")
 async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create a test client."""
+
     async def override_get_db():
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
-    
+
     async with AsyncClient(app=app, base_url="http://test") as ac:
         yield ac
-    
+
     app.dependency_overrides.clear()
 
 
@@ -122,12 +121,11 @@ async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 async def test_user(db: AsyncSession) -> User:
     """Create a test user."""
     user = User(
+        nycu_id="testuser",
+        name="Test User",
         email="test@university.edu",
-        username="testuser",
-        full_name="Test User",
+        user_type=UserType.STUDENT,
         role=UserRole.STUDENT,
-        # No password needed for SSO authentication
-        is_active=True,
     )
     db.add(user)
     await db.commit()
@@ -139,12 +137,11 @@ async def test_user(db: AsyncSession) -> User:
 async def test_admin(db: AsyncSession) -> User:
     """Create a test admin user."""
     admin = User(
+        nycu_id="adminuser",
+        name="Admin User",
         email="admin@university.edu",
-        username="adminuser",
-        full_name="Admin User",
+        user_type=UserType.EMPLOYEE,
         role=UserRole.ADMIN,
-        # No password needed for SSO authentication
-        is_active=True,
     )
     db.add(admin)
     await db.commit()
@@ -156,12 +153,11 @@ async def test_admin(db: AsyncSession) -> User:
 async def test_professor(db: AsyncSession) -> User:
     """Create a test professor user."""
     professor = User(
+        nycu_id="profuser",
+        name="Professor User",
         email="professor@university.edu",
-        username="profuser",
-        full_name="Professor User",
+        user_type=UserType.EMPLOYEE,
         role=UserRole.PROFESSOR,
-        # No password needed for SSO authentication
-        is_active=True,
     )
     db.add(professor)
     await db.commit()
@@ -181,7 +177,7 @@ async def test_scholarship(db: AsyncSession) -> ScholarshipType:
         category="undergraduate_freshman",
         eligible_student_types=["undergraduate"],
         max_ranking_percent=10.0,
-        gpa_requirement=3.8
+        gpa_requirement=3.8,
     )
     db.add(scholarship)
     await db.commit()
@@ -190,9 +186,7 @@ async def test_scholarship(db: AsyncSession) -> ScholarshipType:
 
 
 @pytest_asyncio.fixture
-async def test_application(
-    db: AsyncSession, test_user: User, test_scholarship: ScholarshipType
-) -> Application:
+async def test_application(db: AsyncSession, test_user: User, test_scholarship: ScholarshipType) -> Application:
     """Create a test application."""
     application = Application(
         user_id=test_user.id,
@@ -203,7 +197,7 @@ async def test_application(
         semester="first",
         student_data={"name": "Test Student"},
         submitted_form_data={"personal_statement": "This is my test personal statement."},
-        agree_terms=True
+        agree_terms=True,
     )
     db.add(application)
     await db.commit()
@@ -221,7 +215,7 @@ async def authenticated_client(client: AsyncClient, test_user: User) -> AsyncCli
     response = await client.post("/api/v1/auth/login", data=login_data)
     assert response.status_code == 200
     token = response.json()["access_token"]
-    
+
     client.headers.update({"Authorization": f"Bearer {token}"})
     return client
 
@@ -236,9 +230,69 @@ async def admin_client(client: AsyncClient, test_admin: User) -> AsyncClient:
     response = await client.post("/api/v1/auth/login", data=login_data)
     assert response.status_code == 200
     token = response.json()["access_token"]
-    
+
     client.headers.update({"Authorization": f"Bearer {token}"})
     return client
+
+
+# Fixture aliases for test_admin_endpoints.py compatibility
+# Use Mock objects since tests mock everything anyway
+@pytest.fixture
+def admin_user():
+    """Create mock admin user."""
+    from unittest.mock import Mock
+
+    user = Mock(spec=User)
+    user.id = 1
+    user.nycu_id = "adminuser"
+    user.name = "Admin User"
+    user.email = "admin@university.edu"
+    user.user_type = UserType.EMPLOYEE
+    user.role = UserRole.ADMIN
+    return user
+
+
+@pytest.fixture
+def regular_user():
+    """Create mock regular user."""
+    from unittest.mock import Mock
+
+    user = Mock(spec=User)
+    user.id = 2
+    user.nycu_id = "testuser"
+    user.name = "Test User"
+    user.email = "test@university.edu"
+    user.user_type = UserType.STUDENT
+    user.role = UserRole.STUDENT
+    return user
+
+
+@pytest.fixture
+def student_user():
+    """Create mock student user."""
+    from unittest.mock import Mock
+
+    user = Mock(spec=User)
+    user.id = 3
+    user.nycu_id = "student123"
+    user.name = "Student User"
+    user.email = "student@university.edu"
+    user.user_type = UserType.STUDENT
+    user.role = UserRole.STUDENT
+    return user
+
+
+@pytest.fixture
+def scholarship_type():
+    """Create mock scholarship type."""
+    from unittest.mock import Mock
+
+    scholarship = Mock(spec=ScholarshipType)
+    scholarship.id = 1
+    scholarship.code = "test_scholarship"
+    scholarship.name = "Test Academic Excellence Scholarship"
+    scholarship.description = "Test scholarship for academic excellence"
+    return scholarship
 
 
 @pytest.fixture
@@ -255,10 +309,12 @@ def mock_email_service():
 def mock_ocr_service():
     """Mock OCR service."""
     mock = AsyncMock()
-    mock.process_document = AsyncMock(return_value={
-        "text": "Sample extracted text",
-        "confidence": 0.95,
-    })
+    mock.process_document = AsyncMock(
+        return_value={
+            "text": "Sample extracted text",
+            "confidence": 0.95,
+        }
+    )
     return mock
 
 
@@ -312,32 +368,32 @@ def sample_scholarship_data():
 def performance_monitor():
     """Monitor performance metrics during tests."""
     import time
-    
+
     class PerformanceMonitor:
         def __init__(self):
             self.start_time = None
             self.end_time = None
             self.memory_start = None
             self.memory_end = None
-        
+
         def start(self):
             self.start_time = time.time()
             # Could add memory tracking here
-        
+
         def stop(self):
             self.end_time = time.time()
-        
+
         @property
         def duration(self):
             if self.start_time and self.end_time:
                 return self.end_time - self.start_time
             return None
-        
+
         def assert_performance(self, max_duration: float):
             """Assert that operation completed within max_duration seconds."""
             assert self.duration is not None, "Performance monitoring not started/stopped"
             assert self.duration < max_duration, f"Operation took {self.duration:.2f}s, expected < {max_duration}s"
-    
+
     return PerformanceMonitor()
 
 

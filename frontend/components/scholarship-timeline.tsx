@@ -84,7 +84,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
     
     // 重新載入該學期的獎學金時間軸資料
     // 對於學年制獎學金，不傳遞學期參數
-    await fetchScholarshipTimelines(academicYear, semester);
+    await fetchScholarshipTimelines(academicYear, semester ?? undefined);
   };
 
   // 重置篩選
@@ -438,7 +438,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
           <div className="text-center py-4">
             <p className="text-red-600">{error}</p>
             <button
-              onClick={fetchScholarshipTimelines}
+              onClick={() => fetchScholarshipTimelines()}
               className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
             >
               重試

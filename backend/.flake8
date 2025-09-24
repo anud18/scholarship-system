@@ -1,0 +1,25 @@
+[flake8]
+max-line-length = 120
+exclude = 
+    .git,
+    __pycache__,
+    .pytest_cache,
+    .mypy_cache,
+    alembic/versions,
+    *.pyc,
+    .env,
+    venv,
+    env
+
+extend-ignore = E203,W503,E501
+
+# Complexity
+max-complexity = 10
+
+# Docstrings
+docstring-convention = google
+
+# Show source code for errors
+show-source = True
+statistics = True
+count = True

@@ -5,6 +5,7 @@ import React from 'react'
 global.React = React
 
 // Set up environment variables
+// @ts-ignore - Allow NODE_ENV assignment in test environment
 process.env.NODE_ENV = 'test'
 process.env.NEXT_PUBLIC_API_URL = 'http://localhost:8000'
 process.env.NEXTAUTH_SECRET = 'test-secret'
@@ -142,22 +143,34 @@ Object.defineProperty(window, 'matchMedia', {
 // Mock window.scrollTo
 global.scrollTo = jest.fn()
 
-// Mock localStorage
-const localStorageMock = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
-  length: 0,
-  key: jest.fn(),
-}
-global.localStorage = localStorageMock as any
+// Deterministic localStorage for Node - stable across tests
+const localStorageStore = new Map<string, string>()
+Object.defineProperty(window, 'localStorage', {
+  value: {
+    getItem: (key: string) => (localStorageStore.has(key) ? localStorageStore.get(key)! : null),
+    setItem: (key: string, value: string) => { localStorageStore.set(key, String(value)) },
+    removeItem: (key: string) => { localStorageStore.delete(key) },
+    clear: () => { localStorageStore.clear() },
+    length: 0,
+    key: jest.fn(),
+  },
+  writable: true,
+})
 
-// Mock fetch for API calls
-global.fetch = jest.fn(() =>
-  Promise.resolve({
+// Minimal default fetch mock; tests can override per-case
+global.fetch = jest.fn(async () => {
+  const body = JSON.stringify([])
+  const headers = new Map([['content-type', 'application/json']])
+  return Promise.resolve({
     ok: true,
     status: 200,
-    json: () => Promise.resolve({}),
+    statusText: 'OK',
+    headers: {
+      get: (key: string) => headers.get(key.toLowerCase()) ?? null,
+      has: (key: string) => headers.has(key.toLowerCase()),
+      forEach: (callback: (value: string, key: string) => void) => headers.forEach(callback),
+    },
+    json: async () => JSON.parse(body),
+    text: async () => body,
   })
-) as jest.Mock 
+}) as jest.Mock 

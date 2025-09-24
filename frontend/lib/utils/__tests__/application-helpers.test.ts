@@ -11,20 +11,63 @@ import {
   BadgeVariant
 } from '../application-helpers'
 
+// Create mock functions that can be reconfigured
+const mockGetAll = jest.fn().mockResolvedValue({
+  success: true,
+  data: [
+    { id: 1, code: 'academic_excellence', name: '學業優秀獎學金', name_en: 'Academic Excellence Scholarship' },
+    { id: 2, code: 'research_grant', name: '研究補助', name_en: 'Research Grant' }
+  ]
+})
+
+const mockGetApplicationById = jest.fn().mockResolvedValue({
+  success: true,
+  data: {
+    id: 1,
+    scholarship_type_code: 'academic_excellence',
+    status: 'submitted',
+    created_at: '2024-01-01',
+    updated_at: '2024-01-02',
+    documents: [
+      {
+        id: 'file1',
+        filename: 'transcript.pdf',
+        file_type: 'transcript'
+      }
+    ]
+  }
+})
+
+const mockGetApplicationFiles = jest.fn().mockResolvedValue({
+  success: true,
+  data: [
+    {
+      id: 'file1',
+      filename: 'test.pdf',
+      file_type: 'transcript'
+    }
+  ]
+})
+
 // Mock the API
 jest.mock('@/lib/api', () => ({
   api: {
     scholarships: {
-      getAll: jest.fn()
+      getAll: (...args: any[]) => mockGetAll(...args)
     },
     applications: {
-      getApplicationById: jest.fn(),
-      getApplicationFiles: jest.fn()
+      getApplicationById: (...args: any[]) => mockGetApplicationById(...args),
+      getApplicationFiles: (...args: any[]) => mockGetApplicationFiles(...args)
     }
   }
 }))
 
-const mockApi = require('@/lib/api').api
+import { api as mockApi } from '@/lib/api'
+
+// Override mockApi with our mock functions so tests can access them
+(mockApi.scholarships.getAll as any) = mockGetAll;
+(mockApi.applications.getApplicationById as any) = mockGetApplicationById;
+(mockApi.applications.getApplicationFiles as any) = mockGetApplicationFiles
 
 describe('Application Helpers', () => {
   describe('formatDate', () => {

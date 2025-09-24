@@ -2,14 +2,14 @@
 Unit tests for NotificationService
 """
 
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.notification import Notification, NotificationPriority, NotificationType
 from app.services.notification_service import NotificationService
-from app.models.notification import Notification, NotificationRead, NotificationType, NotificationPriority
-from app.models.user import User
 
 
 class TestNotificationService:
@@ -49,30 +49,28 @@ class TestNotificationService:
         user_id = 1
         title = "Test Notification"
         message = "Test message"
-        
-        with patch.object(service.db, 'add') as mock_add, \
-             patch.object(service.db, 'commit') as mock_commit, \
-             patch.object(service.db, 'refresh') as mock_refresh:
-            
+
+        with patch.object(service.db, "add") as mock_add, patch.object(
+            service.db, "commit"
+        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
             # Mock the created notification
             created_notification = Mock(spec=Notification)
             created_notification.id = 1
             created_notification.user_id = user_id
             created_notification.title = title
             created_notification.message = message
-            
-            with patch('app.models.notification.Notification', return_value=created_notification):
-                result = await service.createUserNotification(
-                    user_id=user_id,
-                    title=title,
-                    message=message
-                )
-                
+
+            with patch(
+                "app.models.notification.Notification",
+                return_value=created_notification,
+            ):
+                result = await service.createUserNotification(user_id=user_id, title=title, message=message)
+
                 # Verify database operations
                 mock_add.assert_called_once_with(created_notification)
                 mock_commit.assert_called_once()
                 mock_refresh.assert_called_once_with(created_notification)
-                
+
                 # Verify result
                 assert result == created_notification
 
@@ -91,16 +89,13 @@ class TestNotificationService:
         action_url = "/test-url"
         expires_at = datetime.now() + timedelta(days=7)
         metadata = {"key": "value"}
-        
-        with patch.object(service.db, 'add'), \
-             patch.object(service.db, 'commit'), \
-             patch.object(service.db, 'refresh'):
-            
+
+        with patch.object(service.db, "add"), patch.object(service.db, "commit"), patch.object(service.db, "refresh"):
             created_notification = Mock(spec=Notification)
-            
-            with patch('app.models.notification.Notification') as mock_notification_class:
+
+            with patch("app.models.notification.Notification") as mock_notification_class:
                 mock_notification_class.return_value = created_notification
-                
+
                 result = await service.createUserNotification(
                     user_id=user_id,
                     title=title,
@@ -113,9 +108,9 @@ class TestNotificationService:
                     related_resource_id=related_resource_id,
                     action_url=action_url,
                     expires_at=expires_at,
-                    metadata=metadata
+                    metadata=metadata,
                 )
-                
+
                 # Verify Notification was created with correct parameters
                 mock_notification_class.assert_called_once_with(
                     user_id=user_id,
@@ -129,9 +124,9 @@ class TestNotificationService:
                     related_resource_id=related_resource_id,
                     action_url=action_url,
                     expires_at=expires_at,
-                    meta_data=metadata
+                    meta_data=metadata,
                 )
-                
+
                 assert result == created_notification
 
     @pytest.mark.asyncio
@@ -139,28 +134,27 @@ class TestNotificationService:
         """Test creating a system announcement successfully"""
         title = "System Announcement"
         message = "Important system message"
-        
-        with patch.object(service.db, 'add') as mock_add, \
-             patch.object(service.db, 'commit') as mock_commit, \
-             patch.object(service.db, 'refresh') as mock_refresh:
-            
+
+        with patch.object(service.db, "add") as mock_add, patch.object(
+            service.db, "commit"
+        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
             created_notification = Mock(spec=Notification)
             created_notification.id = 1
             created_notification.user_id = None  # System announcement
             created_notification.title = title
             created_notification.message = message
-            
-            with patch('app.models.notification.Notification', return_value=created_notification):
-                result = await service.createSystemAnnouncement(
-                    title=title,
-                    message=message
-                )
-                
+
+            with patch(
+                "app.models.notification.Notification",
+                return_value=created_notification,
+            ):
+                result = await service.createSystemAnnouncement(title=title, message=message)
+
                 # Verify database operations
                 mock_add.assert_called_once_with(created_notification)
                 mock_commit.assert_called_once()
                 mock_refresh.assert_called_once_with(created_notification)
-                
+
                 # Verify result
                 assert result == created_notification
 
@@ -171,22 +165,22 @@ class TestNotificationService:
         application_id = 123
         new_status = "approved"
         application_title = "獎學金申請"
-        
-        with patch.object(service, 'createUserNotification') as mock_create:
+
+        with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
-            
+
             result = await service.notifyApplicationStatusChange(
                 user_id=user_id,
                 application_id=application_id,
                 new_status=new_status,
-                application_title=application_title
+                application_title=application_title,
             )
-            
+
             # Verify createUserNotification was called with correct parameters
             mock_create.assert_called_once()
             call_args = mock_create.call_args[1]
-            
+
             assert call_args["user_id"] == user_id
             assert call_args["title"] == f"{application_title}狀態更新"
             assert call_args["title_en"] == f"{application_title} Status Update"
@@ -196,7 +190,7 @@ class TestNotificationService:
             assert call_args["related_resource_type"] == "application"
             assert call_args["related_resource_id"] == application_id
             assert call_args["action_url"] == f"/applications/{application_id}"
-            
+
             assert result == mock_notification
 
     @pytest.mark.asyncio
@@ -205,24 +199,22 @@ class TestNotificationService:
         user_id = 1
         application_id = 123
         new_status = "rejected"
-        
-        with patch.object(service, 'createUserNotification') as mock_create:
+
+        with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
-            
+
             result = await service.notifyApplicationStatusChange(
-                user_id=user_id,
-                application_id=application_id,
-                new_status=new_status
+                user_id=user_id, application_id=application_id, new_status=new_status
             )
-            
+
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
-            
+
             assert "很抱歉" in call_args["message"]  # Rejected message should contain apology
             assert call_args["notification_type"] == NotificationType.INFO.value
             assert call_args["priority"] == NotificationPriority.HIGH.value
-            
+
             assert result == mock_notification
 
     @pytest.mark.asyncio
@@ -231,24 +223,22 @@ class TestNotificationService:
         user_id = 1
         application_id = 123
         new_status = "under_review"
-        
-        with patch.object(service, 'createUserNotification') as mock_create:
+
+        with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
-            
+
             result = await service.notifyApplicationStatusChange(
-                user_id=user_id,
-                application_id=application_id,
-                new_status=new_status
+                user_id=user_id, application_id=application_id, new_status=new_status
             )
-            
+
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
-            
+
             assert "審核中" in call_args["message"]  # Under review message
             assert call_args["notification_type"] == NotificationType.INFO.value
             assert call_args["priority"] == NotificationPriority.NORMAL.value
-            
+
             assert result == mock_notification
 
     @pytest.mark.asyncio
@@ -258,21 +248,21 @@ class TestNotificationService:
         application_id = 123
         required_documents = ["成績單", "推薦信", "證明文件"]
         deadline = datetime.now() + timedelta(days=7)
-        
-        with patch.object(service, 'createUserNotification') as mock_create:
+
+        with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
-            
+
             result = await service.notifyDocumentRequired(
                 user_id=user_id,
                 application_id=application_id,
                 required_documents=required_documents,
-                deadline=deadline
+                deadline=deadline,
             )
-            
+
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
-            
+
             assert call_args["user_id"] == user_id
             assert call_args["title"] == "申請文件補充通知"
             assert call_args["title_en"] == "Document Requirement Notification"
@@ -280,7 +270,7 @@ class TestNotificationService:
             assert call_args["notification_type"] == NotificationType.WARNING.value
             assert call_args["priority"] == NotificationPriority.HIGH.value
             assert call_args["expires_at"] == deadline
-            
+
             assert result == mock_notification
 
     @pytest.mark.asyncio
@@ -289,25 +279,25 @@ class TestNotificationService:
         user_id = 1
         application_id = 123
         required_documents = ["成績單"]
-        
-        with patch.object(service, 'createUserNotification') as mock_create:
+
+        with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
-            
+
             result = await service.notifyDocumentRequired(
                 user_id=user_id,
                 application_id=application_id,
                 required_documents=required_documents,
-                deadline=None
+                deadline=None,
             )
-            
+
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
-            
+
             assert "成績單" in call_args["message"]
             assert "請於" not in call_args["message"]  # No deadline text
             assert call_args["expires_at"] is None
-            
+
             assert result == mock_notification
 
     @pytest.mark.asyncio
@@ -318,26 +308,26 @@ class TestNotificationService:
         title_en = "Scholarship Application"
         deadline = datetime.now() + timedelta(days=5)
         action_url = "/applications/123"
-        
-        with patch.object(service, 'createUserNotification') as mock_create:
+
+        with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
-            
+
             result = await service.notifyDeadlineReminder(
                 user_id=user_id,
                 title=title,
                 title_en=title_en,
                 deadline=deadline,
-                action_url=action_url
+                action_url=action_url,
             )
-            
+
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
-            
+
             assert "5 天後到期" in call_args["message"]
             assert call_args["priority"] == NotificationPriority.HIGH.value
             assert call_args["notification_type"] == NotificationType.REMINDER.value
-            
+
             assert result == mock_notification
 
     @pytest.mark.asyncio
@@ -346,23 +336,19 @@ class TestNotificationService:
         user_id = 1
         title = "獎學金申請"
         deadline = datetime.now() + timedelta(days=1)
-        
-        with patch.object(service, 'createUserNotification') as mock_create:
+
+        with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
-            
-            result = await service.notifyDeadlineReminder(
-                user_id=user_id,
-                title=title,
-                deadline=deadline
-            )
-            
+
+            result = await service.notifyDeadlineReminder(user_id=user_id, title=title, deadline=deadline)
+
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
-            
+
             assert "明天到期" in call_args["message"]
             assert call_args["priority"] == NotificationPriority.URGENT.value
-            
+
             assert result == mock_notification
 
     @pytest.mark.asyncio
@@ -371,23 +357,19 @@ class TestNotificationService:
         user_id = 1
         title = "獎學金申請"
         deadline = datetime.now() - timedelta(days=1)  # Yesterday
-        
-        with patch.object(service, 'createUserNotification') as mock_create:
+
+        with patch.object(service, "createUserNotification") as mock_create:
             mock_notification = Mock(spec=Notification)
             mock_create.return_value = mock_notification
-            
-            result = await service.notifyDeadlineReminder(
-                user_id=user_id,
-                title=title,
-                deadline=deadline
-            )
-            
+
+            result = await service.notifyDeadlineReminder(user_id=user_id, title=title, deadline=deadline)
+
             # Verify createUserNotification was called with correct parameters
             call_args = mock_create.call_args[1]
-            
+
             assert "已到期" in call_args["message"]
             assert call_args["priority"] == NotificationPriority.URGENT.value
-            
+
             assert result == mock_notification
 
     @pytest.mark.asyncio
@@ -396,31 +378,33 @@ class TestNotificationService:
         user_ids = [1, 2, 3]
         title = "系統通知"
         message = "重要系統消息"
-        
-        with patch.object(service.db, 'add_all') as mock_add_all, \
-             patch.object(service.db, 'commit') as mock_commit, \
-             patch.object(service.db, 'refresh') as mock_refresh:
-            
+
+        with patch.object(service.db, "add_all") as mock_add_all, patch.object(
+            service.db, "commit"
+        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
             # Mock created notifications
             created_notifications = [Mock(spec=Notification) for _ in user_ids]
             for i, notification in enumerate(created_notifications):
                 notification.id = i + 1
                 notification.user_id = user_ids[i]
-            
-            with patch('app.models.notification.Notification', side_effect=created_notifications):
+
+            with patch(
+                "app.models.notification.Notification",
+                side_effect=created_notifications,
+            ):
                 result = await service.bulkNotifyUsers(
                     user_ids=user_ids,
                     title=title,
                     message=message,
                     notification_type=NotificationType.INFO.value,
-                    priority=NotificationPriority.HIGH.value
+                    priority=NotificationPriority.HIGH.value,
                 )
-                
+
                 # Verify database operations
                 mock_add_all.assert_called_once()
                 mock_commit.assert_called_once()
                 assert mock_refresh.call_count == len(user_ids)
-                
+
                 # Verify result
                 assert len(result) == len(user_ids)
                 assert result == created_notifications
@@ -430,7 +414,7 @@ class TestNotificationService:
         """Test getting user notifications (personal notifications only)"""
         user_id = 1
         mock_notifications = [Mock(spec=Notification) for _ in range(3)]
-        
+
         # Set up mock notifications
         for i, notification in enumerate(mock_notifications):
             notification.id = i + 1
@@ -441,19 +425,19 @@ class TestNotificationService:
             notification.created_at = datetime.now()
             notification.expires_at = None
             notification.meta_data = {}
-        
-        with patch.object(service.db, 'execute') as mock_execute:
+
+        with patch.object(service.db, "execute") as mock_execute:
             # Mock notification query result
             mock_execute.return_value.scalars.return_value.all.return_value = mock_notifications
-            
+
             # Mock read records query (empty)
             mock_execute.return_value.scalars.return_value.all.side_effect = [
                 mock_notifications,  # First call for notifications
-                []  # Second call for read records
+                [],  # Second call for read records
             ]
-            
+
             result = await service.getUserNotifications(user_id=user_id)
-            
+
             # Verify result structure
             assert len(result) == 3
             for i, notification_data in enumerate(result):
@@ -466,17 +450,17 @@ class TestNotificationService:
     async def test_get_unread_notification_count(self, service):
         """Test getting unread notification count"""
         user_id = 1
-        
-        with patch.object(service.db, 'execute') as mock_execute:
+
+        with patch.object(service.db, "execute") as mock_execute:
             # Mock personal notifications count (3 unread)
             # Mock system notifications count (2 unread)
             mock_execute.return_value.scalar.side_effect = [3, 2]
-            
+
             result = await service.getUnreadNotificationCount(user_id)
-            
+
             # Total should be 3 + 2 = 5
             assert result == 5
-            
+
             # Verify both queries were executed
             assert mock_execute.call_count == 2
 
@@ -485,20 +469,18 @@ class TestNotificationService:
         """Test marking personal notification as read"""
         notification_id = 1
         user_id = 1
-        
+
         # Create mock notification (personal)
         mock_notification = Mock(spec=Notification)
         mock_notification.id = notification_id
         mock_notification.user_id = user_id
         mock_notification.mark_as_read = Mock()
-        
-        with patch.object(service.db, 'execute') as mock_execute, \
-             patch.object(service.db, 'commit') as mock_commit:
-            
+
+        with patch.object(service.db, "execute") as mock_execute, patch.object(service.db, "commit") as mock_commit:
             mock_execute.return_value.scalar_one_or_none.return_value = mock_notification
-            
+
             result = await service.markNotificationAsRead(notification_id, user_id)
-            
+
             # Verify notification was marked as read
             mock_notification.mark_as_read.assert_called_once()
             mock_commit.assert_called_once()
@@ -509,30 +491,29 @@ class TestNotificationService:
         """Test marking system notification as read (creating new read record)"""
         notification_id = 1
         user_id = 1
-        
+
         # Create mock system notification
         mock_notification = Mock(spec=Notification)
         mock_notification.id = notification_id
         mock_notification.user_id = None  # System notification
-        
-        with patch.object(service.db, 'execute') as mock_execute, \
-             patch.object(service.db, 'add') as mock_add, \
-             patch.object(service.db, 'commit') as mock_commit:
-            
+
+        with patch.object(service.db, "execute") as mock_execute, patch.object(
+            service.db, "add"
+        ) as mock_add, patch.object(service.db, "commit") as mock_commit:
             # Mock notification query
             mock_execute.return_value.scalar_one_or_none.side_effect = [
                 mock_notification,  # Notification found
-                None  # No existing read record
+                None,  # No existing read record
             ]
-            
+
             result = await service.markNotificationAsRead(notification_id, user_id)
-            
+
             # Verify read record was created
             mock_add.assert_called_once()
             added_record = mock_add.call_args[0][0]
-            assert hasattr(added_record, 'notification_id')
-            assert hasattr(added_record, 'user_id')
-            
+            assert hasattr(added_record, "notification_id")
+            assert hasattr(added_record, "user_id")
+
             mock_commit.assert_called_once()
             assert result is True
 
@@ -541,45 +522,48 @@ class TestNotificationService:
         """Test marking notification as read when notification not found"""
         notification_id = 999
         user_id = 1
-        
-        with patch.object(service.db, 'execute') as mock_execute:
+
+        with patch.object(service.db, "execute") as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = None
-            
+
             result = await service.markNotificationAsRead(notification_id, user_id)
-            
+
             assert result is False
 
     @pytest.mark.asyncio
     async def test_mark_all_notifications_as_read(self, service):
         """Test marking all notifications as read for a user"""
         user_id = 1
-        
-        with patch.object(service.db, 'execute') as mock_execute, \
-             patch.object(service.db, 'add_all') as mock_add_all, \
-             patch.object(service.db, 'commit') as mock_commit:
-            
+
+        with patch.object(service.db, "execute") as mock_execute, patch.object(
+            service.db, "add_all"
+        ) as mock_add_all, patch.object(service.db, "commit") as mock_commit:
             # Mock personal update result
             mock_personal_result = Mock()
             mock_personal_result.rowcount = 3
-            
+
             # Mock system notifications query result
             mock_system_result = Mock()
-            mock_system_result.fetchall.return_value = [(1,), (2,), (3,)]  # 3 system notifications
-            
+            mock_system_result.fetchall.return_value = [
+                (1,),
+                (2,),
+                (3,),
+            ]  # 3 system notifications
+
             mock_execute.side_effect = [
                 mock_personal_result,  # Personal update result
-                mock_system_result     # System notifications query result
+                mock_system_result,  # System notifications query result
             ]
-            
+
             result = await service.markAllNotificationsAsRead(user_id)
-            
+
             # Verify read records were created for system notifications
             mock_add_all.assert_called_once()
             added_records = mock_add_all.call_args[0][0]
             assert len(added_records) == 3  # 3 system notifications
-            
+
             mock_commit.assert_called_once()
-            
+
             # Total should be 3 personal + 3 system = 6
             assert result == 6
 
@@ -587,22 +571,22 @@ class TestNotificationService:
     async def test_get_user_notifications_with_filters(self, service):
         """Test getting user notifications with filters"""
         user_id = 1
-        
-        with patch.object(service.db, 'execute') as mock_execute:
+
+        with patch.object(service.db, "execute") as mock_execute:
             mock_notifications = []
             mock_execute.return_value.scalars.return_value.all.side_effect = [
                 mock_notifications,  # Notifications query
-                []  # Read records query
+                [],  # Read records query
             ]
-            
+
             result = await service.getUserNotifications(
                 user_id=user_id,
                 skip=10,
                 limit=20,
                 unread_only=True,
-                notification_type=NotificationType.WARNING.value
+                notification_type=NotificationType.WARNING.value,
             )
-            
+
             # Verify query was executed with filters
             assert mock_execute.call_count >= 1
             assert isinstance(result, list)

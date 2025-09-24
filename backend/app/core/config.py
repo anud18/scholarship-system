@@ -5,39 +5,40 @@ Handles all environment variables and application settings.
 
 import os
 from typing import List, Optional
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     """Application settings configuration"""
-    
+
     # Application
     app_name: str = "Scholarship Management System"
     app_version: str = "1.0.0"
     debug: bool = False
     environment: str = "production"
     api_v1_str: str = "/api/v1"
-    
+
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
     reload: bool = False
     base_url: str = "http://localhost:8000"  # Base URL for the application
-    
+
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/scholarship_test"
     database_url_sync: str = "postgresql://postgres:postgres@localhost:5432/scholarship_test"
-    
+
     # Security
     secret_key: str = "test-secret-key-for-development-only-please-change-in-production-this-is-32-chars"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
-    
+
     # CORS
     cors_origins: str = "http://localhost:3000,http://140.113.207.40:3000,http://140.113.0.229:3000"
-    
+
     # Email
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
@@ -45,7 +46,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     email_from: str = "noreply@scholarshipapp.com"
     email_from_name: str = "Scholarship System"
-    
+
     # File Upload
     upload_dir: str = "./uploads"
     max_file_size: int = 10485760  # 10MB
@@ -53,55 +54,57 @@ class Settings(BaseSettings):
     max_files_per_application: int = 5
     max_document_image_width: int = 1200
     max_document_image_height: int = 1200
-    
+
     # Virus Scanning
     enable_virus_scan: bool = False
     virus_scan_api_url: Optional[str] = None
     virus_scan_api_key: Optional[str] = None
     virus_scan_timeout: int = 30  # seconds
-    
+
     # MinIO Configuration
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin123"
     minio_bucket: str = "scholarship-files"
     minio_secure: bool = False
-    
+
     # OCR Service
     ocr_service_enabled: bool = False
     ocr_api_key: Optional[str] = None
     ocr_endpoint: Optional[str] = None
-    
+
     # Redis Cache
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl: int = 600  # 10 minutes
-    
+
     # Logging
     log_level: str = "INFO"
     log_format: str = "json"
     sqlalchemy_log_level: str = "WARNING"  # 簡化 SQLAlchemy 日誌
-    
+
     # Mock SSO for development
     enable_mock_sso: bool = True
     mock_sso_domain: str = "dev.university.edu"
-    
+
     # Portal SSO Configuration
     portal_sso_enabled: bool = True
     portal_jwt_server_url: str = "https://portal.test.nycu.edu.tw/jwt/portal"
     portal_test_mode: bool = False  # Set to True for testing with mock data
     portal_sso_timeout: float = 10.0  # Timeout for Portal JWT verification
-    
+
     # Security configurations
     bypass_time_restrictions: bool = False  # Only True in testing environments
-    
+
     # Student API Configuration
     student_api_enabled: bool = True
     student_api_base_url: str = "http://localhost:8080"  # Mock API in development
     student_api_account: str = "scholarship"
-    student_api_hmac_key: str = "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"  # Mock key for development
+    student_api_hmac_key: str = (
+        "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"  # Mock key for development
+    )
     student_api_timeout: float = 10.0
     student_api_encode_type: Optional[str] = "UTF-8"
-    
+
     @field_validator("database_url", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:
@@ -110,11 +113,11 @@ class Settings(BaseSettings):
         if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING"):
             if v.startswith(("sqlite", "postgresql")):
                 return v
-        
+
         if not v.startswith("postgresql"):
             raise ValueError("Database URL must be PostgreSQL")
         return v
-    
+
     @field_validator("secret_key", mode="before")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
@@ -124,21 +127,23 @@ class Settings(BaseSettings):
         if len(v) < 32:
             # For testing environments, just warn but don't fail
             import os
+
             if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI"):
                 pass  # Allow shorter keys in test environments
             else:
                 raise ValueError("SECRET_KEY must be at least 32 characters long")
         return v
-    
+
     @field_validator("bypass_time_restrictions", mode="before")
     @classmethod
     def validate_time_restrictions_bypass(cls, v) -> bool:
         """Only allow bypassing time restrictions in test environments"""
         import os
+
         if v and not (os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING") == "true"):
             raise ValueError("Time restrictions bypass only allowed in test environments")
         return bool(v)
-    
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v) -> str:
@@ -146,7 +151,7 @@ class Settings(BaseSettings):
         if isinstance(v, list):
             return ",".join(v)
         return str(v) if v else "http://localhost:3000"
-    
+
     @field_validator("allowed_file_types", mode="before")
     @classmethod
     def parse_allowed_file_types(cls, v) -> str:
@@ -154,33 +159,29 @@ class Settings(BaseSettings):
         if isinstance(v, list):
             return ",".join(v)
         return str(v) if v else "pdf,jpg,jpeg,png,doc,docx"
-    
+
     @field_validator("upload_dir", mode="before")
     @classmethod
     def create_upload_directory(cls, v: str) -> str:
         """Ensure upload directory exists"""
         os.makedirs(v, exist_ok=True)
         return v
-    
+
     @property
     def cors_origins_list(self) -> List[str]:
         """Get CORS origins as a list"""
-        return [s.strip() for s in self.cors_origins.split(',') if s.strip()]
-    
+        return [s.strip() for s in self.cors_origins.split(",") if s.strip()]
+
     @property
     def allowed_file_types_list(self) -> List[str]:
         """Get allowed file types as a list"""
-        return [s.strip() for s in self.allowed_file_types.split(',') if s.strip()]
-    
+        return [s.strip() for s in self.allowed_file_types.split(",") if s.strip()]
+
     @property
     def testing(self) -> bool:
         """Check if we're in a testing environment"""
-        return bool(
-            os.getenv("PYTEST_CURRENT_TEST") or 
-            os.getenv("CI") or 
-            os.getenv("TESTING")
-        )
-    
+        return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING"))
+
     class Config:
         env_file = ".env"
         case_sensitive = False
@@ -199,10 +200,10 @@ MAX_EMAIL_LENGTH = 255
 MIME_TYPE_MAPPING = {
     "pdf": "application/pdf",
     "jpg": "image/jpeg",
-    "jpeg": "image/jpeg", 
+    "jpeg": "image/jpeg",
     "png": "image/png",
     "doc": "application/msword",
-    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
 # Development scholarship settings

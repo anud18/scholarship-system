@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
-import api from '@/lib/api'
+import api, { type UserResponse } from '@/lib/api'
 import { 
   validateAdvisorInfo, 
   validateBankInfo, 
@@ -45,20 +45,6 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog"
 import { useLanguagePreference } from "@/hooks/use-language-preference"
 import { getTranslation } from "@/lib/i18n"
 
-interface UserInfo {
-  id: number
-  nycu_id: string
-  name: string
-  email: string
-  user_type: string
-  status: string
-  dept_code: string
-  dept_name: string
-  role: string
-  created_at: string
-  last_login_at: string
-}
-
 interface UserProfile {
   id: number
   user_id: number
@@ -77,7 +63,7 @@ interface UserProfile {
 }
 
 interface CompleteUserProfile {
-  user_info: UserInfo
+  user_info: UserResponse
   profile: UserProfile | null
   student_info?: any
 }
@@ -155,12 +141,12 @@ export default function UserProfileManagement() {
             nycu_id: "",
             name: "",
             email: "",
-            user_type: "",
+            role: 'student',
+            created_at: new Date().toISOString(),
+            user_type: "student",
             status: "",
             dept_code: "",
             dept_name: "",
-            role: "",
-            created_at: "",
             last_login_at: ""
           },
           profile: null,
@@ -195,12 +181,12 @@ export default function UserProfileManagement() {
           nycu_id: "",
           name: "",
           email: "",
-          user_type: "",
+          role: 'student',
+          created_at: new Date().toISOString(),
+          user_type: "student",
           status: "",
           dept_code: "",
           dept_name: "",
-          role: "",
-          created_at: "",
           last_login_at: ""
         },
         profile: null,

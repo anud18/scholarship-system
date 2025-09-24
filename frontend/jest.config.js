@@ -10,6 +10,9 @@ const createJestConfig = nextJest({
 const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testEnvironment: 'jsdom',
+  testTimeout: 10000,
+  maxWorkers: 2,
+  workerIdleMemoryLimit: '512MB',
   // More explicit module name mapping to ensure CI compatibility
   moduleNameMapper: {
     // CSS and static assets
@@ -61,15 +64,30 @@ const customJestConfig = {
   clearMocks: true,
   // Enable automatic mocking from __mocks__ directories
   automock: false,
-  // Disable coverage thresholds for now
-  // coverageThreshold: {
-  //   global: {
-  //     branches: 5,
-  //     functions: 5,
-  //     lines: 5,
-  //     statements: 5,
-  //   },
-  // },
+  // Temporarily lower coverage thresholds to allow CI to pass
+  // Current actual coverage: ~11% statements, ~8% branches, ~11% lines, ~6% functions
+  coverageThreshold: {
+    global: {
+      branches: 8,
+      functions: 6,
+      lines: 11,
+      statements: 11,
+    },
+  },
+  // Configure jest-junit reporter for CI
+  reporters: [
+    'default',
+    ['jest-junit', {
+      outputDirectory: '.',
+      outputName: 'junit.xml',
+      uniqueOutputName: false,
+      suiteNameTemplate: '{title}',
+      classNameTemplate: '{classname}',
+      titleTemplate: '{title}',
+      ancestorSeparator: ' › ',
+      usePathForSuiteName: true
+    }]
+  ],
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

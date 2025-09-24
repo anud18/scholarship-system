@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": false,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": false,
+    "noUncheckedIndexedAccess": false,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "suppressImplicitAnyIndexErrors": true,
+    "noStrictGenericChecks": true
+  },
+  "include": [
+    "**/__tests__/**/*",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "jest.setup.ts"
+  ]
+}

@@ -78,9 +78,10 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
       // 管理端需要看到所有欄位（包括停用的）
       const response = await api.applicationFields.getFormConfig(type, true)
       if (response.success && response.data) {
+        const { fields = [], documents = [] } = response.data
         setFormConfig(response.data)
-        setApplicationFields(response.data.fields || [])
-        setDocumentRequirements(response.data.documents || [])
+        setApplicationFields(fields)
+        setDocumentRequirements(documents)
       } else {
         setApplicationFields([])
         setDocumentRequirements([])
@@ -149,20 +150,21 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
         setSuccessMessage(`${formConfig?.title}設定已成功保存`)
         // 不要重新載入配置，保持當前狀態
         // 只有在需要獲取新的 ID 時才重新載入
-        if (response.data) {
+        const savedConfig = response.data
+        if (savedConfig) {
           // 更新現有項目的 ID（如果是新創建的）
-          if (response.data.fields) {
+          if (savedConfig.fields) {
             setApplicationFields(prev => 
               prev.map(field => {
-                const updatedField = response.data.fields.find(f => f.field_name === field.field_name)
+                const updatedField = savedConfig.fields?.find(f => f.field_name === field.field_name)
                 return updatedField ? { ...field, id: updatedField.id } : field
               })
             )
           }
-          if (response.data.documents) {
+          if (savedConfig.documents) {
             setDocumentRequirements(prev => 
               prev.map(doc => {
-                const updatedDoc = response.data.documents.find(d => d.document_name === doc.document_name)
+                const updatedDoc = savedConfig.documents?.find(d => d.document_name === doc.document_name)
                 return updatedDoc ? { ...doc, id: updatedDoc.id } : doc
               })
             )
@@ -183,8 +185,9 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
   const handleCreateField = async (fieldData: ApplicationFieldCreate) => {
     try {
       const response = await api.applicationFields.createField(fieldData)
-      if (response.success) {
-        setApplicationFields(prev => [...prev, response.data])
+      if (response.success && response.data) {
+        const newField = response.data
+        setApplicationFields(prev => [...prev, newField])
         setSuccessMessage('欄位新增成功')
         setFieldFormOpen(false)
       } else {
@@ -201,9 +204,10 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
     
     try {
       const response = await api.applicationFields.updateField(editingField.id, fieldData)
-      if (response.success) {
+      if (response.success && response.data) {
+        const updatedField = response.data
         setApplicationFields(prev => 
-          prev.map(field => field.id === editingField.id ? response.data : field)
+          prev.map(field => field.id === editingField.id ? updatedField : field)
         )
         setSuccessMessage('欄位更新成功')
         setFieldFormOpen(false)
@@ -236,8 +240,9 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
   const handleCreateDocument = async (documentData: ApplicationDocumentCreate) => {
     try {
       const response = await api.applicationFields.createDocument(documentData)
-      if (response.success) {
-        setDocumentRequirements(prev => [...prev, response.data])
+      if (response.success && response.data) {
+        const newDocument = response.data
+        setDocumentRequirements(prev => [...prev, newDocument])
         setSuccessMessage('文件要求新增成功')
         setDocumentFormOpen(false)
       } else {
@@ -249,14 +254,31 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
     }
   }
 
+  const handleFieldSave = async (fieldData: ApplicationFieldCreate | ApplicationFieldUpdate) => {
+    if (editingField) {
+      await handleUpdateField(fieldData as ApplicationFieldUpdate)
+    } else {
+      await handleCreateField(fieldData as ApplicationFieldCreate)
+    }
+  }
+
+  const handleDocumentSave = async (documentData: ApplicationDocumentCreate | ApplicationDocumentUpdate) => {
+    if (editingDocument) {
+      await handleUpdateDocument(documentData as ApplicationDocumentUpdate)
+    } else {
+      await handleCreateDocument(documentData as ApplicationDocumentCreate)
+    }
+  }
+
   const handleUpdateDocument = async (documentData: ApplicationDocumentUpdate) => {
     if (!editingDocument) return
     
     try {
       const response = await api.applicationFields.updateDocument(editingDocument.id, documentData)
-      if (response.success) {
+      if (response.success && response.data) {
+        const updatedDocument = response.data
         setDocumentRequirements(prev => 
-          prev.map(doc => doc.id === editingDocument.id ? response.data : doc)
+          prev.map(doc => doc.id === editingDocument.id ? updatedDocument : doc)
         )
         setSuccessMessage('文件要求更新成功')
         setDocumentFormOpen(false)
@@ -610,7 +632,7 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
           setFieldFormOpen(false)
           setEditingField(null)
         }}
-        onSave={editingField ? handleUpdateField : handleCreateField}
+        onSave={handleFieldSave}
         mode={editingField ? "edit" : "create"}
       />
 
@@ -623,7 +645,7 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
           setDocumentFormOpen(false)
           setEditingDocument(null)
         }}
-        onSave={editingDocument ? handleUpdateDocument : handleCreateDocument}
+        onSave={handleDocumentSave}
         mode={editingDocument ? "edit" : "create"}
       />
     </div>

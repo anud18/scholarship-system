@@ -8,24 +8,21 @@ Tests critical functionality including:
 - Permission checks and data integrity
 """
 
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch, MagicMock
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from unittest.mock import AsyncMock, MagicMock
 
-from app.services.college_review_service import (
-    CollegeReviewService,
-    CollegeReviewError,
-    RankingNotFoundError,
-    RankingModificationError,
-    InvalidRankingDataError,
-    ReviewPermissionError
-)
-from app.models.college_review import CollegeReview, CollegeRanking, CollegeRankingItem
-from app.models.application import Application, ApplicationStatus
-from app.models.user import User, UserRole
+import pytest
+
 from app.core.exceptions import BusinessLogicError, NotFoundError
+from app.models.application import Application
+from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview
+from app.services.college_review_service import (
+    CollegeReviewError,
+    CollegeReviewService,
+    InvalidRankingDataError,
+    RankingModificationError,
+    RankingNotFoundError,
+    ReviewPermissionError,
+)
 
 
 class TestCollegeReviewService:
@@ -46,7 +43,7 @@ class TestCollegeReviewService:
             academic_year=113,
             semester="FIRST",
             status="under_review",
-            sub_scholarship_type="phd_research"
+            sub_scholarship_type="phd_research",
         )
 
     @pytest.fixture
@@ -60,7 +57,7 @@ class TestCollegeReviewService:
             professor_review_score=90.0,
             college_criteria_score=88.0,
             ranking_score=87.5,
-            review_status="completed"
+            review_status="completed",
         )
 
     @pytest.fixture
@@ -74,7 +71,7 @@ class TestCollegeReviewService:
             semester="FIRST",
             created_by=2001,
             is_finalized=False,
-            ranking_status="draft"
+            ranking_status="draft",
         )
 
     async def test_create_review_success(self, service, sample_application):
@@ -94,15 +91,11 @@ class TestCollegeReviewService:
             "academic_score": 85.0,
             "professor_review_score": 90.0,
             "college_criteria_score": 88.0,
-            "comments": "Excellent candidate"
+            "comments": "Excellent candidate",
         }
 
         # Execute
-        result = await service.create_or_update_review(
-            application_id=1,
-            reviewer_id=2001,
-            review_data=review_data
-        )
+        result = await service.create_or_update_review(application_id=1, reviewer_id=2001, review_data=review_data)
 
         # Verify database operations were called
         service.db.add.assert_called_once()
@@ -120,11 +113,7 @@ class TestCollegeReviewService:
 
         # Should raise NotFoundError
         with pytest.raises(NotFoundError):
-            await service.create_or_update_review(
-                application_id=999,
-                reviewer_id=2001,
-                review_data=review_data
-            )
+            await service.create_or_update_review(application_id=999, reviewer_id=2001, review_data=review_data)
 
     async def test_create_review_invalid_application_status(self, service):
         """Test review creation with invalid application status"""
@@ -133,7 +122,7 @@ class TestCollegeReviewService:
             id=1,
             status="submitted",  # Invalid for review
             scholarship_type_id=1,
-            academic_year=113
+            academic_year=113,
         )
 
         result = MagicMock()
@@ -144,17 +133,13 @@ class TestCollegeReviewService:
 
         # Should raise BusinessLogicError
         with pytest.raises(BusinessLogicError):
-            await service.create_or_update_review(
-                application_id=1,
-                reviewer_id=2001,
-                review_data=review_data
-            )
+            await service.create_or_update_review(application_id=1, reviewer_id=2001, review_data=review_data)
 
     async def test_ranking_finalization_concurrent_protection(self, service, sample_ranking):
         """Test that ranking finalization has concurrent access protection"""
         # Mock database transaction context
         service.db.begin = AsyncMock().__aenter__.return_value.__aexit__ = AsyncMock()
-        
+
         # Mock ranking query with locking
         result = MagicMock()
         result.scalar_one_or_none.return_value = sample_ranking
@@ -171,11 +156,7 @@ class TestCollegeReviewService:
     async def test_finalize_already_finalized_ranking(self, service):
         """Test finalizing an already finalized ranking"""
         # Create finalized ranking
-        finalized_ranking = CollegeRanking(
-            id=1,
-            is_finalized=True,
-            ranking_status="finalized"
-        )
+        finalized_ranking = CollegeRanking(id=1, is_finalized=True, ranking_status="finalized")
 
         result = MagicMock()
         result.scalar_one_or_none.return_value = finalized_ranking
@@ -191,7 +172,7 @@ class TestCollegeReviewService:
         # Add items to ranking
         sample_ranking.items = [
             CollegeRankingItem(id=1, application_id=101, rank_position=1),
-            CollegeRankingItem(id=2, application_id=102, rank_position=2)
+            CollegeRankingItem(id=2, application_id=102, rank_position=2),
         ]
 
         result = MagicMock()
@@ -201,16 +182,10 @@ class TestCollegeReviewService:
         service.db.flush = AsyncMock()
 
         # Valid new order
-        new_order = [
-            {"item_id": 1, "position": 2},
-            {"item_id": 2, "position": 1}
-        ]
+        new_order = [{"item_id": 1, "position": 2}, {"item_id": 2, "position": 1}]
 
         # Should succeed
-        result = await service.update_ranking_order(
-            ranking_id=1,
-            new_order=new_order
-        )
+        result = await service.update_ranking_order(ranking_id=1, new_order=new_order)
 
         assert result is not None
         service.db.flush.assert_called_once()
@@ -222,7 +197,7 @@ class TestCollegeReviewService:
         # Invalid order with duplicate positions
         new_order = [
             {"item_id": 1, "position": 1},
-            {"item_id": 2, "position": 1}  # Duplicate position
+            {"item_id": 2, "position": 1},  # Duplicate position
         ]
 
         result = MagicMock()
@@ -231,10 +206,7 @@ class TestCollegeReviewService:
 
         # Should raise InvalidRankingDataError
         with pytest.raises(InvalidRankingDataError):
-            await service.update_ranking_order(
-                ranking_id=1,
-                new_order=new_order
-            )
+            await service.update_ranking_order(ranking_id=1, new_order=new_order)
 
     async def test_ranking_score_calculation(self, service):
         """Test ranking score calculation logic"""
@@ -242,7 +214,7 @@ class TestCollegeReviewService:
             "academic_score": 80.0,
             "professor_review_score": 90.0,
             "college_criteria_score": 85.0,
-            "special_circumstances_score": 75.0
+            "special_circumstances_score": 75.0,
         }
 
         # Calculate score using service's internal method
@@ -263,8 +235,8 @@ class TestCollegeReviewService:
                 "academic": 0.50,  # Higher weight on academics
                 "professor_review": 0.30,
                 "college_criteria": 0.15,
-                "special_circumstances": 0.05
-            }
+                "special_circumstances": 0.05,
+            },
         }
 
         score = service._calculate_ranking_score(review_data)

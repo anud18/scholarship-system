@@ -135,9 +135,9 @@ export function useApplications() {
     }
   }, [fetchApplications])
 
-  // Fetch applications on mount
+  // Fetch applications on mount - only if authenticated and has token
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && apiClient.hasToken?.()) {
       fetchApplications()
     }
   }, [fetchApplications, isAuthenticated])

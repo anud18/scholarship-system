@@ -3,13 +3,16 @@ Application field configuration schemas
 """
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
+
 from app.models.application_field import FieldType
 
 
 class ApplicationFieldBase(BaseModel):
     """Base schema for application field"""
+
     scholarship_type: str = Field(..., description="Scholarship type")
     field_name: str = Field(..., description="Field name (English)")
     field_label: str = Field(..., description="Field label (Chinese)")
@@ -33,11 +36,13 @@ class ApplicationFieldBase(BaseModel):
 
 class ApplicationFieldCreate(ApplicationFieldBase):
     """Schema for creating application field"""
+
     pass
 
 
 class ApplicationFieldUpdate(BaseModel):
     """Schema for updating application field"""
+
     field_label: Optional[str] = None
     field_label_en: Optional[str] = None
     field_type: Optional[str] = None
@@ -59,6 +64,7 @@ class ApplicationFieldUpdate(BaseModel):
 
 class ApplicationFieldResponse(ApplicationFieldBase):
     """Schema for application field response"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -75,6 +81,7 @@ class ApplicationFieldResponse(ApplicationFieldBase):
 
 class ApplicationDocumentBase(BaseModel):
     """Base schema for application document"""
+
     scholarship_type: str = Field(..., description="Scholarship type")
     document_name: str = Field(..., description="Document name")
     document_name_en: Optional[str] = Field(None, description="Document name (English)")
@@ -93,11 +100,13 @@ class ApplicationDocumentBase(BaseModel):
 
 class ApplicationDocumentCreate(ApplicationDocumentBase):
     """Schema for creating application document"""
+
     pass
 
 
 class ApplicationDocumentUpdate(BaseModel):
     """Schema for updating application document"""
+
     document_name: Optional[str] = None
     document_name_en: Optional[str] = None
     description: Optional[str] = None
@@ -115,6 +124,7 @@ class ApplicationDocumentUpdate(BaseModel):
 
 class ApplicationDocumentResponse(ApplicationDocumentBase):
     """Schema for application document response"""
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -130,9 +140,10 @@ class ApplicationDocumentResponse(ApplicationDocumentBase):
 
 class ScholarshipFormConfigResponse(BaseModel):
     """Schema for complete scholarship form configuration"""
+
     scholarship_type: str
     fields: List[ApplicationFieldResponse]
     documents: List[ApplicationDocumentResponse]
 
     class Config:
-        from_attributes = True 
+        from_attributes = True

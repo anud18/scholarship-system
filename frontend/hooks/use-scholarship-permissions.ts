@@ -52,12 +52,15 @@ export function useScholarshipPermissions() {
         setAllowedScholarships(response.data)
         
         // Convert to permission format for backward compatibility
+        const nowIso = new Date().toISOString()
         const permissionList = response.data.map(scholarship => ({
           id: scholarship.id,
-          admin_id: Number(user.id),
+          user_id: Number(user.id),
           scholarship_id: scholarship.id,
           scholarship_name: scholarship.name,
-          assigned_at: new Date().toISOString()
+          scholarship_name_en: scholarship.name_en,
+          created_at: nowIso,
+          updated_at: nowIso
         }))
         setPermissions(permissionList)
       } else {

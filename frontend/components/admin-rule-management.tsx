@@ -86,20 +86,6 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
     }
   }, [selectedScholarshipType])
 
-  // 當獎學金類型、學年或學期改變時載入規則（使用 useCallback 確保狀態一致性）
-  useEffect(() => {
-    if (selectedScholarshipType && selectedYear) {
-      // 對於學年制獎學金，不需要等待學期狀態
-      if (selectedScholarshipType.application_cycle === 'yearly') {
-        loadRules(selectedScholarshipType, selectedYear, null)
-      } 
-      // 對於學期制獎學金，需要確保有選擇學期
-      else if (selectedScholarshipType.application_cycle === 'semester' && selectedSemester) {
-        loadRules(selectedScholarshipType, selectedYear, selectedSemester)
-      }
-    }
-  }, [selectedScholarshipType, selectedYear, selectedSemester, loadRules])
-
   // Debounce search term (400ms delay)
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -168,6 +154,17 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
     }
   }, [])
 
+  // 當獎學金類型、學年或學期改變時載入規則（使用 useCallback 確保狀態一致性）
+  useEffect(() => {
+    if (selectedScholarshipType && selectedYear) {
+      if (selectedScholarshipType.application_cycle === 'yearly') {
+        loadRules(selectedScholarshipType, selectedYear, null)
+      } else if (selectedScholarshipType.application_cycle === 'semester' && selectedSemester) {
+        loadRules(selectedScholarshipType, selectedYear, selectedSemester)
+      }
+    }
+  }, [selectedScholarshipType, selectedYear, selectedSemester, loadRules])
+
   const handleCreateRule = () => {
     setSelectedRule(null)
     setIsCreating(true)
@@ -184,6 +181,9 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
     if (!confirm(`確定要刪除規則「${rule.rule_name}」嗎？`)) return
 
     try {
+      if (rule.id == null) {
+        throw new Error('規則缺少 ID，無法刪除')
+      }
       await api.admin.deleteScholarshipRule(rule.id)
       await loadRules(selectedScholarshipType!, selectedYear, selectedSemester)
       showSuccessToast('規則刪除成功')
@@ -198,9 +198,12 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
 
     try {
       if (isCreating) {
-        await api.admin.createScholarshipRule(ruleData as any)
+        await api.admin.createScholarshipRule(ruleData)
       } else if (selectedRule) {
-        await api.admin.updateScholarshipRule(selectedRule.id, ruleData as any)
+        if (selectedRule.id == null) {
+          throw new Error('規則缺少 ID，無法更新')
+        }
+        await api.admin.updateScholarshipRule(selectedRule.id, ruleData)
       }
       await loadRules(selectedScholarshipType, selectedYear, selectedSemester)
       showSuccessToast(isCreating ? '規則創建成功' : '規則更新成功')
@@ -236,12 +239,16 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
         overwriteExisting
       })
       
+      const ruleIds = selectedRulesForCopy
+        .map(rule => rule.id)
+        .filter((id): id is number => typeof id === 'number')
+
       const copyRequest = {
         source_academic_year: selectedYear || undefined,
         source_semester: selectedSemester || undefined,
         target_academic_year: targetYear,
         target_semester: targetSemester,
-        rule_ids: selectedRulesForCopy.map(rule => rule.id),
+        rule_ids: ruleIds,
         overwrite_existing: overwriteExisting
       }
 

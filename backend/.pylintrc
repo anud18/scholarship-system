@@ -1,0 +1,47 @@
+[MASTER]
+ignore=CVS,alembic,migrations,.git,__pycache__,.pytest_cache,.mypy_cache
+ignore-patterns=test_.*?\.py,conftest\.py
+
+[MESSAGES CONTROL]
+disable=
+    C0111,  # missing-docstring
+    R0903,  # too-few-public-methods (for Pydantic models)
+    C0103,  # invalid-name
+    R0913,  # too-many-arguments
+    R0914,  # too-many-locals
+    W0212,  # protected-access
+    C0115,  # missing-class-docstring
+    C0116,  # missing-function-docstring
+    R0801,  # duplicate-code
+
+[FORMAT]
+max-line-length=120
+indent-string='    '
+
+[DESIGN]
+max-args=7
+max-attributes=10
+max-bool-expr=5
+max-branches=12
+max-locals=15
+max-parents=7
+max-public-methods=20
+max-returns=6
+max-statements=50
+min-public-methods=0
+
+[BASIC]
+good-names=i,j,k,ex,db,_,id,pk,to,tz
+
+[IMPORTS]
+allow-wildcard-with-all=no
+
+[TYPECHECK]
+ignored-modules=pytest,sqlalchemy,fastapi,pydantic
+ignored-classes=SQLAlchemy,scoped_session
+
+[SIMILARITIES]
+min-similarity-lines=10
+ignore-comments=yes
+ignore-docstrings=yes
+ignore-imports=yes
