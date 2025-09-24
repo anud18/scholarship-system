@@ -334,6 +334,8 @@ jobs:
   # Build and Deploy
   build-deploy:
     name: Build and Deploy
+    permissions:
+      packages: write
     runs-on: ubuntu-latest
     needs: [quick-checks, backend-tests, frontend-tests]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -423,44 +425,15 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
 
-    - name: Install k6
-      run: |
-        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-        sudo apt-get update
-        sudo apt-get install k6 -y
+    - name: Setup k6
+      uses: grafana/setup-k6-action@v1
 
-    - name: Create k6 test script
-      run: |
-        mkdir -p infra/scripts
-        cat > infra/scripts/load-test.js << 'EOF'
-        import http from 'k6/http';
-        import { check, sleep } from 'k6';
-
-        export let options = {
-          stages: [
-            { duration: '30s', target: 10 },
-            { duration: '1m', target: 20 },
-            { duration: '30s', target: 0 },
-          ],
-          thresholds: {
-            http_req_duration: ['p(95)<600'], // 95% of requests must complete below 600ms
-          },
-        };
-
-        export default function () {
-          let response = http.get('https://staging.scholarship.example.com/api/v1/health');
-          check(response, {
-            'status is 200': (r) => r.status === 200,
-          });
-          sleep(1);
-        }
-        EOF
-
-    - name: Run performance tests
-      run: |
-        echo "Running performance tests..."
-        # k6 run infra/scripts/load-test.js || true
+    - name: Run k6 smoke
+      uses: grafana/run-k6-action@v1
+      with:
+        file: perf/smoke.js
+      env:
+        BASE_URL: ${{ vars.K6_BASE_URL_STAGING }}
       continue-on-error: true
 
   # Notification
