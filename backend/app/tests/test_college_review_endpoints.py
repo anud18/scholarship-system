@@ -18,12 +18,8 @@ from fastapi.testclient import TestClient
 from app.core.exceptions import NotFoundError
 from app.models.application import Application
 from app.models.college_review import CollegeReview
-from app.models.user import User, UserRole
-from app.services.college_review_service import (
-    CollegeReviewService,
-    RankingNotFoundError,
-    ReviewPermissionError,
-)
+from app.models.user import EmployeeStatus, User, UserRole, UserType
+from app.services.college_review_service import CollegeReviewService, RankingNotFoundError, ReviewPermissionError
 
 
 class TestCollegeReviewEndpoints:
@@ -34,10 +30,14 @@ class TestCollegeReviewEndpoints:
         """Create a college user for testing"""
         return User(
             id=2001,
-            username="college_admin",
+            nycu_id="college_admin",
+            name="College Admin",
             email="college@university.edu",
+            user_type=UserType.EMPLOYEE,
+            status=EmployeeStatus.ACTIVE,
+            dept_code="COL",
+            dept_name="College Office",
             role=UserRole.COLLEGE,
-            is_active=True,
         )
 
     @pytest.fixture
@@ -45,10 +45,14 @@ class TestCollegeReviewEndpoints:
         """Create a student user for testing"""
         return User(
             id=1001,
-            username="student123",
+            nycu_id="student123",
+            name="Test Student",
             email="student@university.edu",
+            user_type=UserType.STUDENT,
+            status=EmployeeStatus.STUDENT,
+            dept_code="CS",
+            dept_name="Computer Science",
             role=UserRole.STUDENT,
-            is_active=True,
         )
 
     @pytest.fixture
