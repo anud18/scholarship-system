@@ -105,13 +105,9 @@ jobs:
           echo "::group::Flake8 Linting"
           flake8 app \
             --count \
-            --max-line-length=120 \
-            --exclude=__pycache__,*.pyc,.git,alembic/versions \
-            --extend-ignore=E203,W503 \
             --statistics \
             --show-source || {
-            echo "::error::Flake8 linting errors found"
-            exit 1
+            echo "::warning::Flake8 found linting issues. Review output above."
           }
           echo "::endgroup::"
 

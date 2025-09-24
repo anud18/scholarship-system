@@ -11,11 +11,7 @@ exclude =
     venv,
     env
 
-# Error codes to ignore
-extend-ignore = 
-    E203,  # whitespace before ':'
-    W503,  # line break before binary operator
-    E501,  # line too long (handled by black)
+extend-ignore = E203,W503,E501
 
 # Complexity
 max-complexity = 10
