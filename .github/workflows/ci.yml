@@ -11,6 +11,7 @@ env:
   NODE_VERSION: '22'
   PYTHON_VERSION: '3.11'
   REGISTRY: ghcr.io
+  USER: ${{ github.actor }}
   IMAGE_NAME: ${{ github.repository }}
   CI: true
 
@@ -249,7 +250,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        images: ${{ env.REGISTRY }}/${{ env.USER }}/${{ env.IMAGE_NAME }}
         tags: |
           type=ref,event=branch
           type=ref,event=pr
@@ -263,8 +264,8 @@ jobs:
         context: ./backend
         push: true
         tags: |
-          ${{ env.REGISTRY }}/scholarship-system-backend:latest
-          ${{ env.REGISTRY }}/scholarship-system-backend:${{ github.sha }}
+          ${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-backend:latest
+          ${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-backend:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
@@ -277,28 +278,28 @@ jobs:
         context: ./frontend
         push: true
         tags: |
-          ${{ env.REGISTRY }}/scholarship-system-frontend:latest
-          ${{ env.REGISTRY }}/scholarship-system-frontend:${{ github.sha }}
+          ${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-frontend:latest
+          ${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-frontend:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         build-args: |
-          NEXT_PUBLIC_API_URL=${{ secrets.PRODUCTION_API_URL || 'https://api.scholarship.example.com' }}
+          NEXT_PUBLIC_API_URL=${{ secrets.PRODUCTION_API_URL || 'https://ss.aa.nycu.edu.tw' }}
 
-    - name: Deploy to staging
-      if: github.ref == 'refs/heads/main'
-      env:
-        DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-      run: |
-        echo "Deploying to staging environment..."
-        # Add deployment commands here
-        # Example: kubectl set image deployment/backend backend=${{ env.REGISTRY }}/scholarship-system-backend:${{ github.sha }}
-        # Example: kubectl set image deployment/frontend frontend=${{ env.REGISTRY }}/scholarship-system-frontend:${{ github.sha }}
+    # - name: Deploy to staging
+    #   if: github.ref == 'refs/heads/main'
+    #   env:
+    #     DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+    #   run: |
+    #     echo "Deploying to staging environment..."
+    #     # Add deployment commands here
+    #     # Example: kubectl set image deployment/backend backend=${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-backend:${{ github.sha }}
+    #     # Example: kubectl set image deployment/frontend frontend=${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-frontend:${{ github.sha }}
         
-    - name: Run smoke tests on staging
-      run: |
-        echo "Running smoke tests on staging..."
-        # Add smoke test commands here
-        # Example: curl -f https://staging.scholarship.example.com/api/v1/health || exit 1
+    # - name: Run smoke tests on staging
+    #   run: |
+    #     echo "Running smoke tests on staging..."
+    #     # Add smoke test commands here
+    #     # Example: curl -f https://staging.scholarship.example.com/api/v1/health || exit 1
 
   # Performance Tests
   performance-test:
