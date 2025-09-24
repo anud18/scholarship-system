@@ -324,9 +324,9 @@ show_service_info() {
             echo "  🗄️  MinIO Console: http://localhost:9001"
             ;;
         "staging")
-            echo "  🚀 Frontend: https://ss-test.aa.nycu.edu.tw/"
-            echo "  🔧 Backend API: https://ss-test.aa.nycu.edu.tw/api/"
-            echo "  📚 API Docs: https://ss-test.aa.nycu.edu.tw/docs"
+            echo "  🚀 Frontend: https://ss.test.nycu.edu.tw/"
+            echo "  🔧 Backend API: https://ss.test.nycu.edu.tw/api/"
+            echo "  📚 API Docs: https://ss.test.nycu.edu.tw/docs"
             echo "  🎭 Mock Student API: http://localhost:8080"
             echo "  🗄️  PgAdmin: http://localhost:8081"
             echo "  🗂️  MinIO Console: http://localhost:9001"
