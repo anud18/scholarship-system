@@ -28,15 +28,15 @@ class MockSSOService:
         user_list = []
         for user in db_users:
             # Generate role-based description
-            if user.role == UserRole.STUDENT:
+            if user.is_student():
                 description = f"Student ({user.nycu_id}) - {user.name}"
-            elif user.role == UserRole.PROFESSOR:
+            elif user.is_professor():
                 description = f"Professor - {user.name}"
-            elif user.role == UserRole.COLLEGE:
+            elif user.is_college():
                 description = f"College Reviewer - {user.name}"
-            elif user.role == UserRole.ADMIN:
+            elif user.is_admin():
                 description = f"Administrator - {user.name}"
-            elif user.role == UserRole.SUPER_ADMIN:
+            elif user.is_super_admin():
                 description = f"Super Administrator - {user.name}"
             else:
                 description = f"{user.role.value.title()} - {user.name}"

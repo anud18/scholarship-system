@@ -41,7 +41,7 @@ router = APIRouter()
 
 def require_super_admin(current_user: User = Depends(require_admin)) -> User:
     """Require super admin role"""
-    if current_user.role != UserRole.SUPER_ADMIN:
+    if not current_user.is_super_admin():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Super admin access required"
@@ -316,7 +316,7 @@ async def get_dashboard_stats(
     
     # Get user's scholarship permissions
     allowed_scholarship_ids = []
-    if current_user.role == UserRole.SUPER_ADMIN:
+    if current_user.is_super_admin():
         # Super admin can see all applications
         pass
     elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
@@ -567,7 +567,7 @@ async def get_recent_applications(
     
     # Get user's scholarship permissions
     allowed_scholarship_ids = []
-    if current_user.role == UserRole.SUPER_ADMIN:
+    if current_user.is_super_admin():
         # Super admin can see all applications
         pass
     elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
@@ -1607,7 +1607,7 @@ async def get_scholarship_permissions(
         target_user_result = await db.execute(target_user_stmt)
         target_user = target_user_result.scalar_one_or_none()
         
-        if target_user and target_user.role == UserRole.SUPER_ADMIN:
+        if target_user and target_user.is_super_admin():
             # Super admin has access to all scholarships
             from app.models.scholarship import ScholarshipType
             all_scholarships_stmt = select(ScholarshipType)
@@ -1661,7 +1661,7 @@ async def get_scholarship_permissions(
         })
     
     # If no user_id filter and current user is SUPER_ADMIN, also include virtual permissions for all scholarships
-    if not user_id and current_user.role == UserRole.SUPER_ADMIN:
+    if not user_id and current_user.is_super_admin():
         from app.models.scholarship import ScholarshipType
         all_scholarships_stmt = select(ScholarshipType)
         all_scholarships_result = await db.execute(all_scholarships_stmt)
@@ -1708,7 +1708,7 @@ async def get_current_user_scholarship_permissions(
         )
     
     # Super admin has access to all scholarships (no specific permissions needed)
-    if current_user.role == UserRole.SUPER_ADMIN:
+    if current_user.is_super_admin():
         return ApiResponse(
             success=True,
             message="Super admin has access to all scholarships",

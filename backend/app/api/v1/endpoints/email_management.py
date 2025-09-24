@@ -135,7 +135,7 @@ async def get_due_scheduled_emails(
     Get scheduled emails that are due to be sent.
     Only superadmins can access this endpoint for system processing.
     """
-    if current_user.role != "superadmin":
+    if not current_user.is_super_admin():
         raise HTTPException(status_code=403, detail="Only superadmins can access due emails")
     
     emails = await email_service.get_due_scheduled_emails(db=db, limit=limit)
@@ -207,9 +207,7 @@ async def update_scheduled_email(
     Update a scheduled email's subject and body.
     Only super_admin can update scheduled emails.
     """
-    # Check if user is super admin
-    from app.models.user import UserRole
-    if current_user.role != UserRole.SUPER_ADMIN:
+    if not current_user.is_super_admin():
         raise HTTPException(status_code=403, detail="Super admin access required")
     
     try:
@@ -237,7 +235,7 @@ async def process_due_emails(
     Process due scheduled emails by sending them.
     Only superadmins can trigger email processing.
     """
-    if current_user.role != "superadmin":
+    if not current_user.is_super_admin():
         raise HTTPException(status_code=403, detail="Only superadmins can process emails")
     
     try:

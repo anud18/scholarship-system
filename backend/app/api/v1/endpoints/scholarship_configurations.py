@@ -34,13 +34,13 @@ def western_to_taiwan_year(western_year: int) -> int:
 
 async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> List[int]:
     """Get scholarship IDs that the user can access based on their role and permissions"""
-    if user.role == UserRole.SUPER_ADMIN:
+    if user.is_super_admin():
         # Super admins can access all scholarships
         stmt = select(ScholarshipType.id)
         result = await db.execute(stmt)
         return result.scalars().all()
-    
-    elif user.role == UserRole.ADMIN:
+
+    elif user.is_admin():
         # Regular admins can only access scholarships they have permissions for
         stmt = select(AdminScholarship.scholarship_id).where(
             AdminScholarship.admin_id == user.id

@@ -205,7 +205,7 @@ class PreAuthorizationService:
             return False
         
         # Super admin can assign any role
-        if assigner.role == UserRole.SUPER_ADMIN:
+        if assigner.is_super_admin():
             return True
         
         # Admin can assign college and professor roles
@@ -221,7 +221,7 @@ class PreAuthorizationService:
             return False
         
         # Super admin can assign to any admin
-        if assigner.role == UserRole.SUPER_ADMIN:
+        if assigner.is_super_admin():
             return admin.role in [UserRole.ADMIN, UserRole.COLLEGE]
         
         # Admin can assign to college users
