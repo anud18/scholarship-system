@@ -32,7 +32,7 @@ def upgrade() -> None:
         op.execute("""
             DO $$ BEGIN
                 CREATE TYPE usertype AS ENUM ('student', 'employee');
-                CREATE TYPE userrole AS ENUM ('student', 'admin', 'department_admin', 'college_admin', 'scholarship_committee', 'professor');
+                CREATE TYPE userrole AS ENUM ('student', 'admin', 'department_admin', 'college_admin', 'scholarship_committee', 'professor', 'college', 'super_admin');
                 CREATE TYPE employeestatus AS ENUM ('在職', '退休', '在學', '畢業');
                 CREATE TYPE notificationtype AS ENUM ('INFO', 'WARNING', 'ERROR', 'SUCCESS', 'REMINDER');
                 CREATE TYPE notificationpriority AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT');

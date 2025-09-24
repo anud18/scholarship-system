@@ -254,7 +254,7 @@ async def seed_admin_user(session: AsyncSession):
 
     print(f"👤 Setting up admin user: {admin_email}")
 
-    # 使用 UPSERT - 不會降級 super_admin
+    # 使用 UPSERT
     await session.execute(
         text(
             """
@@ -264,7 +264,6 @@ async def seed_admin_user(session: AsyncSession):
         SET role = 'admin',
             email = EXCLUDED.email,
             name = EXCLUDED.name
-        WHERE users.role != 'super_admin'  -- 不降級 super_admin
     """
         ),
         {"nycu_id": admin_email.split("@")[0], "name": "System Administrator", "email": admin_email},
