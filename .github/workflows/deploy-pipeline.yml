@@ -128,7 +128,8 @@ jobs:
             VCS_REF=${{ github.sha }}
 
       - name: Image digest
-        run: echo "Image digest for ${{ matrix.component }}: ${{ steps.docker_build.outputs.digest }}"
+        run: |
+          echo "Image digest for ${{ matrix.component }}: ${{ steps.docker_build.outputs.digest }}"
 
   # Deploy to staging environment
   deploy-staging:
