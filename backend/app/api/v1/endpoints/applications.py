@@ -340,7 +340,7 @@ async def submit_professor_review(
     db: AsyncSession = Depends(get_db)
 ):
     """Submit professor's review and selected awards for an application"""
-    if current_user.role != "professor":
+    if not current_user.is_professor():
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Only professors can submit this review.")
     service = ApplicationService(db)

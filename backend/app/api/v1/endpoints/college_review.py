@@ -189,7 +189,7 @@ async def get_applications_for_review(
     """Get applications that are ready for college review"""
     
     # Granular authorization checks
-    if not current_user.is_college() and current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+    if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
         raise ReviewPermissionError("College role required for application review access")
     
     # Additional checks for specific operations
@@ -291,7 +291,7 @@ async def create_college_review(
     """Create or update a college review for an application"""
     
     # Granular authorization checks for review creation
-    if not current_user.is_college() and current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+    if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
         raise ReviewPermissionError("College role required for application review")
     
     # Check if user can review this specific application
