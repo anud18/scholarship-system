@@ -50,7 +50,7 @@ async def seed_lookup_tables(session: AsyncSession):
     print("📚 Checking lookup tables...")
 
     # Check if already initialized
-    result = await session.execute(text("SELECT COUNT(*) FROM degree"))
+    result = await session.execute(text("SELECT COUNT(*) FROM degrees"))
     count = result.scalar()
 
     if count == 0:
