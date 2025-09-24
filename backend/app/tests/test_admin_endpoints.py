@@ -11,6 +11,7 @@ Tests admin-only endpoints including:
 """
 
 import pytest
+import pytest_asyncio
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
@@ -24,77 +25,127 @@ from app.core.exceptions import AuthorizationError
 class TestAdminEndpoints:
     """Test suite for admin API endpoints"""
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def admin_client(self, client, admin_user):
         """Create authenticated admin client"""
-        # Mock the authentication dependency
-        with patch('app.api.v1.endpoints.admin.require_admin', return_value=admin_user):
-            yield client
+        # Override FastAPI dependency
+        from app.core.security import require_admin
+        from app.main import app
 
-    @pytest.fixture
+        async def override_require_admin():
+            return admin_user
+
+        app.dependency_overrides[require_admin] = override_require_admin
+        yield client
+        # Don't clear get_db override - let client fixture handle it
+        del app.dependency_overrides[require_admin]
+
+    @pytest_asyncio.fixture
     async def non_admin_client(self, client, regular_user):
         """Create authenticated non-admin client"""
-        with patch('app.api.v1.endpoints.admin.require_admin',
-                  side_effect=AuthorizationError("Admin access required")):
-            yield client
+        from app.core.security import require_admin
+        from app.main import app
 
-    @pytest.fixture
-    def sample_applications(self, student_user, scholarship_type):
-        """Create sample applications for testing"""
-        return [
+        async def override_require_admin():
+            raise AuthorizationError("Admin access required")
+
+        app.dependency_overrides[require_admin] = override_require_admin
+        yield client
+        del app.dependency_overrides[require_admin]
+
+    @pytest_asyncio.fixture
+    async def sample_applications(self, client):
+        """Create sample applications using client's DB"""
+        from app.db.deps import get_db
+        from app.main import app
+        from app.models.user import User, UserRole, UserType
+        from app.models.scholarship import ScholarshipType
+
+        # Get DB from client's override
+        get_db_override = app.dependency_overrides[get_db]
+        # Call the override function to get the generator
+        db_gen = get_db_override()
+        # Get the yielded db session
+        db = await anext(db_gen)
+
+        # Create user
+        user = User(
+            nycu_id="testuser",
+            name="Test User",
+            email="test@university.edu",
+            user_type=UserType.STUDENT,
+            role=UserRole.STUDENT,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+        # Create scholarship
+        scholarship = ScholarshipType(
+            code="test_scholarship",
+            name="Test Scholarship",
+            description="Test",
+            category="undergraduate_freshman",  # Required field
+        )
+        db.add(scholarship)
+        await db.commit()
+        await db.refresh(scholarship)
+
+        # Create second user for unique constraint
+        user2 = User(
+            nycu_id="testuser2",
+            name="Test User 2",
+            email="test2@university.edu",
+            user_type=UserType.STUDENT,
+            role=UserRole.STUDENT,
+        )
+        db.add(user2)
+        await db.commit()
+        await db.refresh(user2)
+
+        # Create applications (different users to satisfy unique constraint)
+        apps = [
             Application(
-                id=1,
                 app_id="APP-2024-000001",
-                user_id=student_user.id,
-                scholarship_type_id=scholarship_type.id,
+                user_id=user.id,
+                scholarship_type_id=scholarship.id,
                 status=ApplicationStatus.SUBMITTED.value,
-                amount=Decimal("50000"),
                 academic_year=113,
+                semester="FIRST",
+                sub_type_selection_mode="SINGLE",
                 created_at=datetime.now(timezone.utc)
             ),
             Application(
-                id=2,
                 app_id="APP-2024-000002",
-                user_id=student_user.id,
-                scholarship_type_id=scholarship_type.id,
+                user_id=user2.id,  # Different user
+                scholarship_type_id=scholarship.id,
                 status=ApplicationStatus.UNDER_REVIEW.value,
-                amount=Decimal("30000"),
                 academic_year=113,
+                semester="FIRST",
+                sub_type_selection_mode="SINGLE",
                 created_at=datetime.now(timezone.utc) - timedelta(days=1)
             )
         ]
+        for app in apps:
+            db.add(app)
+        await db.commit()
+        for app in apps:
+            await db.refresh(app)
+
+        return apps
 
     @pytest.mark.asyncio
     async def test_get_all_applications_success(self, admin_client, sample_applications):
         """Test successful retrieval of all applications"""
-        # Arrange
-        with patch('app.api.v1.endpoints.admin.get_db') as mock_get_db:
-            mock_db = AsyncMock()
-            mock_get_db.return_value.__aenter__.return_value = mock_db
+        # Act
+        response = await admin_client.get("/api/v1/admin/applications")
 
-            # Mock the query result
-            mock_result = Mock()
-            mock_result.fetchall.return_value = [
-                Mock(Application=sample_applications[0], student_name="Test Student",
-                     scholarship_name="Test Scholarship", professor_name=None, reviewer_name=None),
-                Mock(Application=sample_applications[1], student_name="Test Student",
-                     scholarship_name="Test Scholarship", professor_name=None, reviewer_name=None)
-            ]
-            mock_db.execute.return_value = mock_result
-
-            # Mock count query
-            mock_count_result = Mock()
-            mock_count_result.scalar.return_value = 2
-            mock_db.execute.side_effect = [mock_result, mock_count_result]
-
-            # Act
-            response = await admin_client.get("/api/v1/admin/applications")
-
-            # Assert
-            assert response.status_code == 200
-            data = response.json()
-            assert data["success"] is True
-            assert len(data["data"]["items"]) == 2
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        # Check paginated response format
+        assert "items" in data
+        assert len(data["items"]) == 2
 
     @pytest.mark.asyncio
     async def test_get_all_applications_permission_denied(self, non_admin_client):

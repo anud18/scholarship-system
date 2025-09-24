@@ -14,17 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.config import settings
-# Note: Password functions removed since system uses SSO authentication
-# from app.core.security import get_password_hash
-from app.db.base import Base
-from app.db.deps import get_db
-from app.main import app
-from app.models.user import User, UserRole, UserType
-from app.models.scholarship import ScholarshipType
-from app.models.application import Application, ApplicationStatus
-
-# Override settings for testing
+# Override settings BEFORE importing models (models use settings to determine JSON type)
 os.environ["TESTING"] = "true"
 os.environ["PYTEST_CURRENT_TEST"] = "true"
 
@@ -32,7 +22,19 @@ os.environ["PYTEST_CURRENT_TEST"] = "true"
 TEST_DATABASE_URL = "sqlite:///:memory:"
 TEST_DATABASE_URL_ASYNC = "sqlite+aiosqlite:///:memory:"
 
+from app.core.config import settings
 settings.database_url_sync = TEST_DATABASE_URL
+settings.database_url = TEST_DATABASE_URL_ASYNC  # Set async URL early too
+
+# Now import models (they will use SQLite-compatible JSON type)
+# Note: Password functions removed since system uses SSO authentication
+# from app.core.security import get_password_hash
+from app.db.base_class import Base  # Use the correct Base class that models use
+from app.db.deps import get_db
+from app.main import app
+from app.models.user import User, UserRole, UserType
+from app.models.scholarship import ScholarshipType
+from app.models.application import Application, ApplicationStatus
 
 # Create test engines - use sync only for service tests
 test_engine_sync = create_engine(
@@ -235,6 +237,62 @@ async def admin_client(client: AsyncClient, test_admin: User) -> AsyncClient:
     
     client.headers.update({"Authorization": f"Bearer {token}"})
     return client
+
+
+# Fixture aliases for test_admin_endpoints.py compatibility
+# Use Mock objects since tests mock everything anyway
+@pytest.fixture
+def admin_user():
+    """Create mock admin user."""
+    from unittest.mock import Mock
+    user = Mock(spec=User)
+    user.id = 1
+    user.nycu_id = "adminuser"
+    user.name = "Admin User"
+    user.email = "admin@university.edu"
+    user.user_type = UserType.EMPLOYEE
+    user.role = UserRole.ADMIN
+    return user
+
+
+@pytest.fixture
+def regular_user():
+    """Create mock regular user."""
+    from unittest.mock import Mock
+    user = Mock(spec=User)
+    user.id = 2
+    user.nycu_id = "testuser"
+    user.name = "Test User"
+    user.email = "test@university.edu"
+    user.user_type = UserType.STUDENT
+    user.role = UserRole.STUDENT
+    return user
+
+
+@pytest.fixture
+def student_user():
+    """Create mock student user."""
+    from unittest.mock import Mock
+    user = Mock(spec=User)
+    user.id = 3
+    user.nycu_id = "student123"
+    user.name = "Student User"
+    user.email = "student@university.edu"
+    user.user_type = UserType.STUDENT
+    user.role = UserRole.STUDENT
+    return user
+
+
+@pytest.fixture
+def scholarship_type():
+    """Create mock scholarship type."""
+    from unittest.mock import Mock
+    scholarship = Mock(spec=ScholarshipType)
+    scholarship.id = 1
+    scholarship.code = "test_scholarship"
+    scholarship.name = "Test Academic Excellence Scholarship"
+    scholarship.description = "Test scholarship for academic excellence"
+    return scholarship
 
 
 @pytest.fixture
