@@ -134,7 +134,7 @@ jobs:
   # Deploy to staging environment
   deploy-staging:
     name: Deploy to Staging
-    runs-on: [self-hosted, scholarship-test]
+    runs-on: [self-hosted, scholarship, test]
     needs: [pre-deployment, build-images]
     if: needs.pre-deployment.outputs.deploy-staging == 'true'
     environment:
