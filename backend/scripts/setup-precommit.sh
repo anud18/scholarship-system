@@ -11,6 +11,13 @@ if [[ ! -f ".pre-commit-config.yaml" ]]; then
     exit 1
 fi
 
+# Auto-detect Python version and update pre-commit config
+PYTHON_VERSION=$(python3 -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')")
+echo "🐍 Detected Python version: $PYTHON_VERSION"
+
+# Update pre-commit config to use correct Python version
+sed -i "s/language_version: python[0-9]\+\.[0-9]\+/language_version: $PYTHON_VERSION/g" .pre-commit-config.yaml
+
 # Install pre-commit if not already installed
 if ! command -v pre-commit &> /dev/null; then
     echo "📦 Installing pre-commit..."

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -153,20 +153,28 @@ async def test_get_notification_analytics(dummy_service, monkeypatch):
     monkeypatch.setattr("app.services.notification_service.datetime", FixedDateTime)
 
     notifications = [
-        type("Notif", (), {
-            "created_at": base_time - timedelta(days=1),
-            "is_read": True,
-            "notification_type": NotificationType.APPLICATION_APPROVED,
-            "priority": NotificationPriority.HIGH,
-            "channel": NotificationChannel.IN_APP,
-        })(),
-        type("Notif", (), {
-            "created_at": base_time - timedelta(days=2),
-            "is_read": False,
-            "notification_type": NotificationType.APPLICATION_REJECTED,
-            "priority": NotificationPriority.NORMAL,
-            "channel": NotificationChannel.EMAIL,
-        })(),
+        type(
+            "Notif",
+            (),
+            {
+                "created_at": base_time - timedelta(days=1),
+                "is_read": True,
+                "notification_type": NotificationType.APPLICATION_APPROVED,
+                "priority": NotificationPriority.HIGH,
+                "channel": NotificationChannel.IN_APP,
+            },
+        )(),
+        type(
+            "Notif",
+            (),
+            {
+                "created_at": base_time - timedelta(days=2),
+                "is_read": False,
+                "notification_type": NotificationType.APPLICATION_REJECTED,
+                "priority": NotificationPriority.NORMAL,
+                "channel": NotificationChannel.EMAIL,
+            },
+        )(),
     ]
 
     class FakeScalarResult:

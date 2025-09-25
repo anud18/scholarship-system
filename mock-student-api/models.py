@@ -1,17 +1,19 @@
 """
 Pydantic models for HMAC-SHA256 authenticated Mock Student Database API
 
-⚠️ DEVELOPMENT/TESTING ONLY ⚠️ 
+⚠️ DEVELOPMENT/TESTING ONLY ⚠️
 These models match the university's student information system API specification.
 """
 
+from typing import Any, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import List, Optional, Any
 
 
 # Request Models
 class StudentBasicRequest(BaseModel):
     """Request model for getting student basic information"""
+
     account: str = Field(..., description="Account identifier (should be 'scholarship')")
     action: str = Field(..., description="Action identifier (should be 'qrySoaaScholarshipStudent')")
     stdcode: str = Field(..., description="Student code/number")
@@ -19,6 +21,7 @@ class StudentBasicRequest(BaseModel):
 
 class StudentTermRequest(BaseModel):
     """Request model for getting student semester information"""
+
     account: str = Field(..., description="Account identifier (should be 'scholarship')")
     action: str = Field(..., description="Action identifier (should be 'qrySoaaScholarshipStudentTerm')")
     stdcode: str = Field(..., description="Student code/number")
@@ -29,6 +32,7 @@ class StudentTermRequest(BaseModel):
 # Response Data Models
 class StudentBasicData(BaseModel):
     """Student basic information data model"""
+
     std_stdno: str = Field(..., description="學號代碼")
     std_stdcode: str = Field(..., description="學號")
     std_pid: str = Field(..., description="身分證字號")
@@ -59,6 +63,7 @@ class StudentBasicData(BaseModel):
 
 class StudentTermData(BaseModel):
     """Student semester information data model"""
+
     trm_year: str = Field(..., description="學年度")
     trm_term: str = Field(..., description="學期")
     trm_stdno: str = Field(..., description="學號")
@@ -78,6 +83,7 @@ class StudentTermData(BaseModel):
 # API Response Models
 class APIResponse(BaseModel):
     """Standard API response format"""
+
     code: int = Field(..., description="Response code (200 for success)")
     msg: str = Field(..., description="Response message")
     data: List[Any] = Field(..., description="Response data array")
@@ -85,17 +91,20 @@ class APIResponse(BaseModel):
 
 class StudentBasicResponse(APIResponse):
     """Response model for student basic information"""
+
     data: List[StudentBasicData]
 
 
 class StudentTermResponse(APIResponse):
     """Response model for student semester information"""
+
     data: List[StudentTermData]
 
 
 # Error Response Models
 class ErrorResponse(BaseModel):
     """Error response model"""
+
     code: int = Field(..., description="Error code")
     msg: str = Field(..., description="Error message")
     data: List[Any] = Field(default_factory=list, description="Empty data array for errors")

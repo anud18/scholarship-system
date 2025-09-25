@@ -1,7 +1,8 @@
-import pytest
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+import pytest
 
 from app.services.github_integration_service import GitHubIntegrationService
 

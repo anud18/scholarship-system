@@ -25,7 +25,6 @@ from sqlalchemy.sql import func
 from app.db.base_class import Base
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
 
-
 if TYPE_CHECKING:
     from app.models.application import Application
 

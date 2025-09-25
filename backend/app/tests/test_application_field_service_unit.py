@@ -1,6 +1,6 @@
 from datetime import datetime
-from types import SimpleNamespace
 from itertools import count
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
