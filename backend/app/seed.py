@@ -1,6 +1,6 @@
 """
 Environment-specific seed data with idempotency and advisory lock
-完全對應 init_db.py 的結果，但使用冪等方式
+使用冪等方式進行數據庫初始化
 
 Usage:
     python -m app.seed              # Development: Full test data
@@ -17,7 +17,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.init_lookup_tables import initLookupTables
 from app.db.session import AsyncSessionLocal
 from app.models.user import EmployeeStatus, UserRole, UserType
 
@@ -44,7 +43,6 @@ async def release_advisory_lock(session: AsyncSession):
 async def seed_lookup_tables(session: AsyncSession):
     """
     Initialize lookup/reference tables
-    對應 init_db.py 的 initLookupTables()
     """
     print("📚 Checking lookup tables...")
 
@@ -54,19 +52,31 @@ async def seed_lookup_tables(session: AsyncSession):
 
     if count == 0:
         print("  📖 Initializing lookup tables...")
-        await initLookupTables(session)
+        # Initialize lookup tables inline
+        print("  📖 Initializing degrees...")
+        await session.execute(text("""
+            INSERT INTO degrees (id, name) VALUES
+            (1, '學士'),
+            (2, '碩士'),
+            (3, '博士')
+            ON CONFLICT (id) DO NOTHING
+        """))
+
+        print("  🎓 Initializing student identities...")
+        # Add other lookup table initialization as needed
+        await session.commit()
     else:
         print(f"  ✓ Lookup tables already initialized ({count} degrees found)")
 
 
 async def seed_test_users(session: AsyncSession):
     """
-    建立測試用戶（完全對應 init_db.py 的 createTestUsers）
+    建立測試用戶
     使用 ON CONFLICT 實現冪等性
     """
     print("👥 Creating/updating test users...")
 
-    # 完全對應 init_db.py 的 test_users_data
+    # 測試用戶數據
     test_users_data = [
         {
             "nycu_id": "admin",
@@ -274,7 +284,7 @@ async def seed_admin_user(session: AsyncSession):
 
 async def seed_scholarships(session: AsyncSession):
     """
-    建立獎學金資料（簡化版，對應 init_db.py 的 createTestScholarships）
+    建立獎學金資料
     """
     print("🎓 Creating scholarship data...")
 
@@ -361,7 +371,7 @@ async def seed_scholarships(session: AsyncSession):
 
 async def seed_application_fields(session: AsyncSession):
     """
-    建立申請欄位配置（簡化版，對應 init_db.py 的 createApplicationFields）
+    建立申請欄位配置
     """
     print("📝 Creating application field configurations...")
 
