@@ -54,14 +54,14 @@ export function CopyRulesModal({
 
     setIsLoading(true)
     setError(null) // Clear previous errors
-    
+
     try {
       await onCopy(finalYear, targetSemester || undefined, overwriteExisting)
       onClose()
     } catch (error: any) {
       // Extract meaningful error message
       let errorMessage = '複製失敗，請稍後再試'
-      
+
       if (error?.message) {
         errorMessage = error.message
       } else if (typeof error === 'string') {
@@ -69,7 +69,7 @@ export function CopyRulesModal({
       } else if (error?.response?.data?.message) {
         errorMessage = error.response.data.message
       }
-      
+
       setError(errorMessage)
       console.error('複製失敗:', error)
     } finally {
@@ -110,7 +110,7 @@ export function CopyRulesModal({
             {currentScholarshipType.application_cycle === 'semester' && (
               <div>
                 <span className="text-muted-foreground">學期：</span>
-                {currentSemester === 'first' ? '第一學期' : 
+                {currentSemester === 'first' ? '第一學期' :
                  currentSemester === 'second' ? '第二學期' : '未指定'}
               </div>
             )}
@@ -141,14 +141,14 @@ export function CopyRulesModal({
         {/* 目標設定 */}
         <div className="space-y-4">
           <h4 className="font-semibold">複製到</h4>
-          
+
           {/* 學年度選擇方式 */}
           <Tabs value={yearInputMode} onValueChange={(value) => setYearInputMode(value as "existing" | "custom")}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="existing">現有學年</TabsTrigger>
               <TabsTrigger value="custom">自定義學年</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="existing" className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label>目標學年度 *</Label>
@@ -169,7 +169,7 @@ export function CopyRulesModal({
                 </Select>
               </div>
             </TabsContent>
-            
+
             <TabsContent value="custom" className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label>自定義學年度 *</Label>
@@ -244,10 +244,10 @@ export function CopyRulesModal({
           <X className="h-4 w-4 mr-1" />
           取消
         </Button>
-        <Button 
-          onClick={handleCopy} 
+        <Button
+          onClick={handleCopy}
           disabled={
-            (yearInputMode === "existing" ? !targetYear : !customYear || isNaN(parseInt(customYear))) || 
+            (yearInputMode === "existing" ? !targetYear : !customYear || isNaN(parseInt(customYear))) ||
             isLoading
           }
           className="nycu-gradient text-white"

@@ -7,7 +7,7 @@ This document outlines the multi-layered bug prevention system designed to catch
 ## Prevention Layers
 
 ### Layer 1: IDE Integration (Real-time)
-**When**: As you type code  
+**When**: As you type code
 **Files**: `.vscode/settings.json`, `.vscode/tasks.json`
 
 - **Real-time type checking** with MyPy
@@ -19,7 +19,7 @@ This document outlines the multi-layered bug prevention system designed to catch
 **Benefits**: Catches 70% of common issues before you even save the file.
 
 ### Layer 2: Pre-commit Hooks (Before commit)
-**When**: Every time you commit code  
+**When**: Every time you commit code
 **Files**: `.pre-commit-config.yaml`, `scripts/pre_commit_schema_check.py`
 
 **Automated Checks**:
@@ -33,7 +33,7 @@ This document outlines the multi-layered bug prevention system designed to catch
 **Benefits**: Prevents 90% of schema validation errors from being committed.
 
 ### Layer 3: Development Middleware (Runtime)
-**When**: During development server runtime  
+**When**: During development server runtime
 **Files**: `app/middleware/schema_validation_middleware.py`
 
 - **Automatic response validation** against declared schemas
@@ -44,7 +44,7 @@ This document outlines the multi-layered bug prevention system designed to catch
 **Benefits**: Catches schema mismatches immediately when testing endpoints.
 
 ### Layer 4: Auto-conversion Utilities (Development aid)
-**When**: Used as decorators on API endpoints  
+**When**: Used as decorators on API endpoints
 **Files**: `app/core/auto_response_converter.py`
 
 ```python
@@ -58,7 +58,7 @@ async def get_items():
 **Benefits**: Eliminates boilerplate conversion code and prevents manual errors.
 
 ### Layer 5: Automated Testing (CI/CD)
-**When**: On push/PR to main branches  
+**When**: On push/PR to main branches
 **Files**: `.github/workflows/schema_validation.yml`
 
 - **Schema validation tests** for all endpoints
@@ -69,7 +69,7 @@ async def get_items():
 **Benefits**: Ensures nothing reaches main branch without validation.
 
 ### Layer 6: Quick Manual Testing
-**When**: On-demand during development  
+**When**: On-demand during development
 **Files**: `test_endpoint_schemas.py`, `tests/test_api_schema_validation.py`
 
 ```bash

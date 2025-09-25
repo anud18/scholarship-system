@@ -5,9 +5,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
-import { 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  TrendingUp,
+  TrendingDown,
   AlertCircle,
   CheckCircle,
   XCircle,
@@ -69,7 +69,7 @@ export function QuotaStatsCard({
 
   const getTrendIcon = () => {
     if (!trend || trend === 'neutral') return null
-    return trend === 'up' 
+    return trend === 'up'
       ? <TrendingUp className="h-4 w-4 text-green-600" />
       : <TrendingDown className="h-4 w-4 text-red-600" />
   }
@@ -112,19 +112,19 @@ export function QuotaStatsCard({
       <CardContent>
         <div className="space-y-2">
           <div className="text-2xl font-bold">{value}</div>
-          
+
           {subtitle && (
             <p className="text-xs text-gray-500">{subtitle}</p>
           )}
-          
+
           {percentage !== undefined && (
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-gray-500">使用率</span>
                 <span className="font-medium">{percentage}%</span>
               </div>
-              <Progress 
-                value={percentage} 
+              <Progress
+                value={percentage}
                 className="h-2"
                 indicatorClassName={getProgressColor()}
               />

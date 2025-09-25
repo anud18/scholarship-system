@@ -3,12 +3,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select';
 import { Loader2, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -94,16 +94,16 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const loadScholarshipBasedData = async () => {
     try {
       setLoading(true);
-      
+
       // 使用新的 scholarship-configurations API 來獲取實際配置的學期
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      
+
       if (activePeriodsOnly) {
         // 獲取有實際申請資料的學期
         const url = `${API_BASE}/api/v1/reference-data/active-academic-periods`;
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to fetch active academic periods');
-        
+
         const data = await response.json();
         setCombinations(data.active_periods || []);
         setDetectedCycle('semester');
@@ -115,7 +115,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
       } else {
         // 獲取 ScholarshipConfiguration 中實際配置的學期
         const result = await apiClient.admin.getAvailableSemesters(scholarshipCode);
-        
+
         if (result.success && result.data) {
           // 轉換 API 回傳的期間格式為組件需要的格式
           const configuredPeriods = result.data.map((period: string) => {
@@ -125,7 +125,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
               const academicYear = parseInt(year);
               const semester = sem === '1' ? 'first' : 'second';
               const semesterLabel = sem === '1' ? '第一學期' : '第二學期';
-              
+
               return {
                 value: period,
                 academic_year: academicYear,
@@ -138,7 +138,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
             } else {
               // 學年制：格式如 "114"
               const academicYear = parseInt(period);
-              
+
               return {
                 value: period,
                 academic_year: academicYear,
@@ -150,13 +150,13 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
               };
             }
           });
-          
+
           setCombinations(configuredPeriods);
-          
+
           // 根據配置的期間類型決定顯示模式
           const hasSemesterPeriods = configuredPeriods.some((p: any) => p.cycle === 'semester');
           const hasYearlyPeriods = configuredPeriods.some((p: any) => p.cycle === 'yearly');
-          
+
           if (hasYearlyPeriods && !hasSemesterPeriods) {
             setDetectedCycle('yearly');
             setActualMode('yearly');
@@ -164,7 +164,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
             setDetectedCycle('semester');
             setActualMode('combined');
           }
-          
+
           setCurrentInfo({
             current_period: configuredPeriods.find((p: any) => p.is_current)?.value || null,
             cycle: hasYearlyPeriods && !hasSemesterPeriods ? 'yearly' : 'semester'
@@ -194,7 +194,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await fetch(`${API_BASE}/api/v1/reference-data/semesters`);
       if (!response.ok) throw new Error('Failed to fetch semester data');
-      
+
       const data = await response.json();
       setAcademicYears(data.academic_years || []);
       setSemesters(data.semesters || []);
@@ -214,21 +214,21 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const loadCombinationData = async () => {
     try {
       setLoading(true);
-      
+
       // 使用 college API 來獲取可用的組合資料
       const response = await apiClient.college.getAvailableCombinations();
-      
+
       if (response.success && response.data) {
         const payload = response.data
         // 將 API 回傳的資料轉換為組合選項格式
         const combinationOptions: CombinationOption[] = [];
-        
+
         // 基於學年和學期創建組合選項
         payload.academic_years.forEach((year: number) => {
           payload.semesters.forEach((semester: string) => {
             const semesterLabel = semester === 'FIRST' ? '第一學期' : '第二學期';
             const semesterNum = semester === 'FIRST' ? '1' : '2';
-            
+
             combinationOptions.push({
               value: `${year}-${semesterNum}`,
               academic_year: year,
@@ -239,7 +239,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
             });
           });
         });
-        
+
         // 如果只有一個學期選項，可能是學年制
         if (payload.semesters.length === 0) {
           payload.academic_years.forEach((year: number) => {
@@ -253,7 +253,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
             });
           });
         }
-        
+
         setCombinations(combinationOptions);
       } else {
         console.error('Failed to fetch available combinations:', response.message);
@@ -332,7 +332,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
             </SelectContent>
           </Select>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <span className="text-sm">學期：</span>
           <Select value={selectedSemester} onValueChange={handleSemesterChange}>
@@ -359,7 +359,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const isYearlyMode = actualMode === 'yearly' || detectedCycle === 'yearly';
   const labelText = isYearlyMode ? '學年：' : '學期：';
   const placeholderText = isYearlyMode ? '選擇學年' : '選擇學年學期';
-  
+
   return (
     <div className={cn("flex items-center space-x-4", className)}>
       <div className="flex items-center space-x-2">
@@ -385,7 +385,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
             ))}
           </SelectContent>
         </Select>
-        
+
         {/* 顯示獎學金名稱和制度資訊 */}
         {scholarshipName && (
           <div className="flex items-center space-x-2 text-sm text-muted-foreground">

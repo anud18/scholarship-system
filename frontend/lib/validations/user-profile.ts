@@ -29,17 +29,17 @@ const EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
  */
 export function validateAdvisorEmail(email: string | undefined | null): ValidationResult {
   const errors: string[] = []
-  
+
   // Empty string or null/undefined is valid (optional field)
   if (!email || email.trim() === '') {
     return { isValid: true, errors: [] }
   }
-  
+
   // If provided, must be valid email format
   if (!EMAIL_PATTERN.test(email.trim())) {
     errors.push('請輸入有效的Email格式 (例：professor@nycu.edu.tw)')
   }
-  
+
   return { isValid: errors.length === 0, errors }
 }
 
@@ -49,23 +49,23 @@ export function validateAdvisorEmail(email: string | undefined | null): Validati
  */
 export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
   const errors: string[] = []
-  
+
   // Validate advisor name (optional, max 100 chars)
   if (data.advisor_name && data.advisor_name.length > 100) {
     errors.push('指導教授姓名不能超過100個字符')
   }
-  
+
   // Validate advisor email
   const emailValidation = validateAdvisorEmail(data.advisor_email)
   if (!emailValidation.isValid) {
     errors.push(...emailValidation.errors)
   }
-  
+
   // Validate advisor NYCU ID (optional, max 20 chars)
   if (data.advisor_nycu_id && data.advisor_nycu_id.length > 20) {
     errors.push('指導教授學校工號不能超過20個字符')
   }
-  
+
   return { isValid: errors.length === 0, errors }
 }
 
@@ -75,17 +75,17 @@ export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
  */
 export function validateBankInfo(data: BankInfo): ValidationResult {
   const errors: string[] = []
-  
+
   // Validate bank code (optional, max 20 chars)
   if (data.bank_code && data.bank_code.length > 20) {
     errors.push('銀行代碼不能超過20個字符')
   }
-  
+
   // Validate account number (optional, max 50 chars)
   if (data.account_number && data.account_number.length > 50) {
     errors.push('帳戶號碼不能超過50個字符')
   }
-  
+
   return { isValid: errors.length === 0, errors }
 }
 

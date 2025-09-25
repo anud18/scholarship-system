@@ -33,7 +33,7 @@ const roleIcons = {
 
 const roleColors = {
   student: "bg-blue-100 text-blue-800",
-  professor: "bg-green-100 text-green-800", 
+  professor: "bg-green-100 text-green-800",
   college: "bg-purple-100 text-purple-800",
   admin: "bg-orange-100 text-orange-800",
   super_admin: "bg-red-100 text-red-800"
@@ -42,7 +42,7 @@ const roleColors = {
 const roleLabels = {
   student: "Student",
   professor: "Professor",
-  college: "College Reviewer", 
+  college: "College Reviewer",
   admin: "Administrator",
   super_admin: "Super Administrator"
 };
@@ -56,7 +56,7 @@ export function DevLoginPage() {
   const [mockUsers, setMockUsers] = useState<MockUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const router = useRouter();
-  
+
   console.log('DevLoginPage state:', { selectedUser, isLoggingIn, error, usersCount: mockUsers.length });
 
   // Load mock users from API
@@ -65,10 +65,10 @@ export function DevLoginPage() {
       console.log('Loading mock users from API...');
       setIsLoadingUsers(true);
       setError(null);
-      
+
       const response = await api.auth.getMockUsers();
       console.log('Mock users response:', response);
-      
+
       if (response.success && response.data) {
         setMockUsers(response.data);
       } else {
@@ -97,24 +97,24 @@ export function DevLoginPage() {
     console.log('DevLoginPage useEffect running, NODE_ENV:', process.env.NODE_ENV);
     console.log('Current hostname:', window.location.hostname);
     console.log('API client:', api);
-    
+
     // Allow dev login if:
     // 1. We're on localhost or 127.0.0.1 (local development)
     // 2. Or if we're explicitly accessing /dev-login (manual override)
-    const isLocalhost = window.location.hostname === 'localhost' || 
+    const isLocalhost = window.location.hostname === 'localhost' ||
                        window.location.hostname === '127.0.0.1' ||
                        window.location.hostname.startsWith('192.168.') ||
                        window.location.hostname.includes('dev');
-    
+
     const isDevLoginPath = window.location.pathname === '/dev-login';
-    
+
     console.log('Is localhost:', isLocalhost);
     console.log('Is dev-login path:', isDevLoginPath);
-    
+
     // Only redirect if we're in a real production environment
-    if (typeof window !== 'undefined' && 
-        process.env.NODE_ENV === 'production' && 
-        !isLocalhost && 
+    if (typeof window !== 'undefined' &&
+        process.env.NODE_ENV === 'production' &&
+        !isLocalhost &&
         !isDevLoginPath) {
       console.log('Real production mode detected, redirecting to home page');
       router.push('/');
@@ -127,16 +127,16 @@ export function DevLoginPage() {
 
   const handleUserLogin = async (user: MockUser) => {
     console.log('Calling mock SSO login API with nycu_id:', user.nycu_id);
-    
+
     try {
       const response = await api.auth.mockSSOLogin(user.nycu_id);
       console.log('Mock SSO login response:', response);
-      
+
       if (response.success && response.data) {
         // Store token and user data using the authentication context
         const { access_token, user: userData } = response.data;
         console.log('Login successful, setting authentication via context');
-        
+
         // Use the auth context login function to properly set state
         login(access_token, userData);
 
@@ -149,7 +149,7 @@ export function DevLoginPage() {
       }
     } catch (error) {
       console.error('Dev login failed with error:', error);
-      
+
       // More detailed error message
       let errorMessage = "Mock login failed. ";
       if (error instanceof Error) {
@@ -163,7 +163,7 @@ export function DevLoginPage() {
       } else {
         errorMessage += "Unknown error occurred.";
       }
-      
+
       setError(errorMessage);
     } finally {
       setIsLoggingIn(false);
@@ -175,17 +175,17 @@ export function DevLoginPage() {
 
   // Don't render in real production (but allow in Docker development)
   const isLocalhost = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' || 
+    window.location.hostname === 'localhost' ||
     window.location.hostname === '127.0.0.1' ||
     window.location.hostname.startsWith('192.168.') ||
     window.location.hostname.includes('dev')
   );
-  
+
   const isDevLoginPath = typeof window !== 'undefined' && window.location.pathname === '/dev-login';
-  
-  if (typeof window !== 'undefined' && 
-      process.env.NODE_ENV === 'production' && 
-      !isLocalhost && 
+
+  if (typeof window !== 'undefined' &&
+      process.env.NODE_ENV === 'production' &&
+      !isLocalhost &&
       !isDevLoginPath) {
     console.log('Blocking dev login in real production');
     return null;
@@ -209,7 +209,7 @@ export function DevLoginPage() {
         <Alert className="mb-6 border-orange-200 bg-orange-50">
           <AlertTriangle className="h-4 w-4 text-orange-600" />
           <AlertDescription className="text-orange-800">
-            <strong>Development Only:</strong> This interface allows you to quickly switch between different user roles for testing. 
+            <strong>Development Only:</strong> This interface allows you to quickly switch between different user roles for testing.
             Uses real authentication tokens that work with all API endpoints.
           </AlertDescription>
         </Alert>
@@ -224,11 +224,11 @@ export function DevLoginPage() {
         )}
 
         <div className="mb-6 flex gap-2">
-          <Button 
+          <Button
             onClick={() => {
               console.log('Refresh users button clicked!');
               loadMockUsers();
-            }} 
+            }}
             disabled={isLoadingUsers}
             variant="secondary"
             size="sm"
@@ -247,11 +247,11 @@ export function DevLoginPage() {
         ) : mockUsers.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-600 mb-4">No users found. Please ensure the database is initialized with test users.</p>
-            <Button 
+            <Button
               onClick={() => {
                 console.log('Refresh users button clicked!');
                 loadMockUsers();
-              }} 
+              }}
               disabled={isLoadingUsers}
               variant="secondary"
             >
@@ -261,8 +261,8 @@ export function DevLoginPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {mockUsers.map((user) => (
-              <Card 
-                key={user.id} 
+              <Card
+                key={user.id}
                 className="border border-gray-200 hover:border-gray-300 transition-all hover:shadow-md cursor-pointer"
                 onClick={() => {
                   console.log('Card clicked!', user);
@@ -279,10 +279,10 @@ export function DevLoginPage() {
                       {roleLabels[user.role]}
                     </Badge>
                   </div>
-                  
+
                   <div className="space-y-1">
                     <p className="text-sm font-medium">
-                      {user.raw_data?.chinese_name && user.raw_data?.english_name 
+                      {user.raw_data?.chinese_name && user.raw_data?.english_name
                         ? `${user.raw_data.chinese_name} (${user.raw_data.english_name})`
                         : user.name
                       }
@@ -290,7 +290,7 @@ export function DevLoginPage() {
                     <p className="text-xs text-gray-500">{user.email}</p>
                   </div>
                 </CardHeader>
-                
+
                 <CardContent className="pt-0">
                   <p className="text-xs text-gray-600 mb-3">{user.description}</p>
                   <Button
@@ -338,4 +338,4 @@ export function DevLoginPage() {
       </div>
     </div>
   );
-} 
+}

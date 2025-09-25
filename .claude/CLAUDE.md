@@ -53,17 +53,17 @@ CREATE TABLE scholarship_configurations (
     id SERIAL PRIMARY KEY,
     scholarship_type_id INTEGER REFERENCES scholarship_types(id),
     config_code VARCHAR(50) UNIQUE NOT NULL,
-    
+
     -- Dynamic configuration fields
     requires_interview BOOLEAN DEFAULT FALSE,
     has_quota_limit BOOLEAN DEFAULT FALSE,
     allows_multiple_applications BOOLEAN DEFAULT FALSE,
     requires_recommendation_letter BOOLEAN DEFAULT FALSE,
-    
+
     -- Custom configuration
     custom_fields JSON,
     eligibility_overrides JSON,
-    
+
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -84,7 +84,7 @@ interface ScholarshipConfig {
 // Configuration-driven component rendering
 function ScholarshipForm({ scholarship }: { scholarship: Scholarship }) {
   const config = scholarship.configuration;
-  
+
   return (
     <div>
       {config.requiresInterview && <InterviewSection />}
@@ -104,18 +104,18 @@ class ScholarshipService:
         if not config:
             raise ScholarshipConfigNotFoundError(f"Configuration not found for scholarship {scholarship_id}")
         return config
-    
+
     def validate_application_eligibility(self, student_id: int, scholarship_id: int) -> bool:
         """Validate eligibility based on configuration"""
         config = self.get_scholarship_config(scholarship_id)
-        
+
         # Use configuration-driven validation
         if config.requires_interview and not self.has_completed_interview(student_id):
             raise EligibilityError("Interview required but not completed")
-            
+
         if config.has_quota_limit and not self.has_available_quota(scholarship_id):
             raise QuotaExceededError("Scholarship quota exceeded")
-        
+
         return True
 ```
 
@@ -132,9 +132,9 @@ INSERT INTO scholarship_types (code, name, category, academic_year, semester, am
 VALUES ('new_scholarship', 'New Scholarship Type', 'phd', 113, 'first', 50000);
 
 INSERT INTO scholarship_configurations (
-    scholarship_type_id, 
-    config_code, 
-    requires_interview, 
+    scholarship_type_id,
+    config_code,
+    requires_interview,
     has_quota_limit,
     allows_multiple_applications
 ) VALUES (
@@ -160,7 +160,7 @@ def test_scholarship_configuration_driven_logic():
         allows_multiple_applications=False
     )
     scholarship.configuration = config
-    
+
     # Act & Assert
     assert scholarship.requires_interview() == True
     assert scholarship.has_quota_limit() == True

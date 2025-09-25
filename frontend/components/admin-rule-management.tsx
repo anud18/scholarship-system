@@ -101,7 +101,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
 
     if (debouncedSearchTerm) {
       const searchLower = debouncedSearchTerm.toLowerCase()
-      filtered = filtered.filter(rule => 
+      filtered = filtered.filter(rule =>
         rule.rule_name.toLowerCase().includes(searchLower) ||
         (rule.tag && rule.tag.toLowerCase().includes(searchLower)) ||
         (rule.description && rule.description.toLowerCase().includes(searchLower))
@@ -131,12 +131,12 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
         scholarship_type_id: scholarshipType.id,
         academic_year: year
       }
-      
+
       // 只有學期制的獎學金才傳送 semester 參數
       if (scholarshipType.application_cycle === 'semester') {
         params.semester = semester
       }
-      
+
       const response = await api.admin.getScholarshipRules(params)
       if (response.success && response.data) {
         setRules(response.data)
@@ -238,7 +238,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
         semester: targetSemester,
         overwriteExisting
       })
-      
+
       const ruleIds = selectedRulesForCopy
         .map(rule => rule.id)
         .filter((id): id is number => typeof id === 'number')
@@ -253,31 +253,31 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
       }
 
       console.log('[COPY RULES] Request payload:', copyRequest)
-      
+
       const response = await api.admin.copyRulesBetweenPeriods(copyRequest)
-      
+
       console.log('[COPY RULES] Response:', response)
       console.log('[COPY RULES] Response data:', response.data)
-      
+
       if (response.success) {
         const copiedCount = response.data?.length || 0
         const skippedCount = selectedRulesForCopy.length - copiedCount
-        
+
         console.log('[COPY RULES] Results:', {
           totalRules: selectedRulesForCopy.length,
           copiedCount,
           skippedCount,
           copiedRules: response.data
         })
-        
+
         let message = `成功複製 ${copiedCount} 條規則`
         if (skippedCount > 0) {
           message += `，跳過 ${skippedCount} 條重複規則`
         }
-        
+
         console.log('[COPY RULES] Alert message:', message)
         alert(message)
-        
+
         // 如果複製到新的年份（不在現有列表中），重新載入可用年份
         if (!availableYears.includes(targetYear)) {
           console.log('[COPY RULES] New year detected, reloading available years...')
@@ -291,9 +291,9 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
             showErrorToast('重新載入可用年份失敗')
           }
         }
-        
+
         // 如果複製到當前顯示的期間，重新載入規則
-        if (targetYear === selectedYear && 
+        if (targetYear === selectedYear &&
             ((!targetSemester && !selectedSemester) || targetSemester === selectedSemester)) {
           console.log('[COPY RULES] Reloading rules for current period...')
           await loadRules(selectedScholarshipType!, selectedYear, selectedSemester)
@@ -323,8 +323,8 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
   return (
     <div className="space-y-6">
       {/* 獎學金類型選擇 */}
-      <Tabs 
-        value={selectedScholarshipType?.id.toString() || ""} 
+      <Tabs
+        value={selectedScholarshipType?.id.toString() || ""}
         onValueChange={(value) => {
           const type = scholarshipTypes.find(t => t.id.toString() === value)
           setSelectedScholarshipType(type || null)
@@ -384,8 +384,8 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
                       </SelectContent>
                     </Select>
                   )}
-                  <Button 
-                    onClick={handleBulkCopyRules} 
+                  <Button
+                    onClick={handleBulkCopyRules}
                     variant="outline"
                     disabled={filteredRules.length === 0}
                     title="批量複製當前顯示的所有規則"
@@ -493,11 +493,11 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
                               ) : (
                                 <Badge variant="secondary" className="text-xs whitespace-nowrap">已停用</Badge>
                               )}
-                              
+
                               {rule.is_initial_enabled && (
                                 <Badge className="text-xs bg-blue-500 whitespace-nowrap">初領</Badge>
                               )}
-                              
+
                               {rule.is_renewal_enabled && (
                                 <Badge className="text-xs bg-orange-500 whitespace-nowrap">續領</Badge>
                               )}
@@ -575,7 +575,7 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
             onCopy={handleCopyRules}
             isBulkMode={false}
           />
-          
+
           <CopyRulesModal
             isOpen={isBulkCopyModalOpen}
             onClose={() => {
@@ -597,8 +597,8 @@ export function AdminRuleManagement({ scholarshipTypes }: AdminRuleManagementPro
       {/* Toast Notification */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-md shadow-lg transition-all duration-300 ${
-          toast.type === 'success' 
-            ? 'bg-green-50 border border-green-200 text-green-800' 
+          toast.type === 'success'
+            ? 'bg-green-50 border border-green-200 text-green-800'
             : 'bg-red-50 border border-red-200 text-red-800'
         }`}>
           <div className="flex items-center gap-2">

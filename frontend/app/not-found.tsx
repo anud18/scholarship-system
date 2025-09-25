@@ -7,4 +7,4 @@ export default function NotFound() {
       <p className="text-lg text-gray-600">Sorry, the page you are looking for does not exist.</p>
     </div>
   );
-} 
+}

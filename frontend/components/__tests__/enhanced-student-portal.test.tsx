@@ -189,7 +189,7 @@ describe('EnhancedStudentPortal', () => {
     await act(async () => {
       render(<EnhancedStudentPortal user={mockUser} locale="en" />)
     })
-    
+
     expect(screen.getByText(errorMessage)).toBeInTheDocument()
   })
 
@@ -321,4 +321,4 @@ describe('EnhancedStudentPortal', () => {
       expect(screen.getByText('Approved')).toBeInTheDocument()
     })
   })
-}) 
+})

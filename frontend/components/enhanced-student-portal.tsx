@@ -25,11 +25,11 @@ import { getTranslation } from "@/lib/i18n"
 import { useApplications } from "@/hooks/use-applications"
 import { FormValidator, Locale } from "@/lib/validators"
 import api, { ScholarshipType, Application as ApiApplication, ApplicationFile, ApplicationCreate, ApplicationField, ApplicationDocument } from "@/lib/api"
-import { 
-  getApplicationTimeline, 
-  getStatusColor, 
+import {
+  getApplicationTimeline,
+  getStatusColor,
   getStatusName,
-  ApplicationStatus 
+  ApplicationStatus
 } from "@/lib/utils/application-helpers"
 import { clsx } from "@/lib/utils"
 import { User } from "@/types/user"
@@ -49,37 +49,37 @@ type BadgeVariant = "secondary" | "default" | "outline" | "destructive"
 export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalProps) {
   const t = (key: string) => getTranslation(locale, key)
   const validator = useMemo(() => new FormValidator(locale), [locale])
-  
+
   const [activeTab, setActiveTab] = useState("applications")
   const [editingApplication, setEditingApplication] = useState<Application | null>(null)
   const [selectedSubTypes, setSelectedSubTypes] = useState<Record<string, string[]>>({})
-  
 
-  
+
+
   // 直接從 eligibleScholarships (API) 取得名稱，找不到就顯示 code
   const getScholarshipTypeName = (scholarshipType: string): string => {
     const scholarship = eligibleScholarships.find(s => s.code === scholarshipType)
     return scholarship ? (locale === "zh" ? scholarship.name : (scholarship.name_en || scholarship.name)) : scholarshipType
   }
-  
+
   // Helper function to handle sub-type selection based on selection mode
   const handleSubTypeSelection = (scholarshipType: string, subTypeValue: string, selectionMode: 'single' | 'multiple' | 'hierarchical') => {
     setSelectedSubTypes(prev => {
       const currentSelected = prev[scholarshipType] || []
       let newSelected: string[]
-      
+
       switch (selectionMode) {
         case 'single':
           // Single mode: only one selection allowed
           newSelected = currentSelected.includes(subTypeValue) ? [] : [subTypeValue]
           break
-          
+
         case 'hierarchical':
           // Hierarchical mode: sequential selection only
           const scholarship = eligibleScholarships.find(s => s.code === scholarshipType)
           const validSubTypes = scholarship?.eligible_sub_types?.filter(st => st.value && st.value !== "general") || []
           const orderedValues = validSubTypes.map(st => st.value!).filter(Boolean)
-          
+
           if (currentSelected.includes(subTypeValue)) {
             // Deselecting - remove this and all subsequent selections
             const indexToRemove = currentSelected.indexOf(subTypeValue)
@@ -96,7 +96,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             }
           }
           break
-          
+
         case 'multiple':
         default:
           // Multiple mode: free selection
@@ -105,14 +105,14 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             : [...currentSelected, subTypeValue]
           break
       }
-      
+
       return {
         ...prev,
         [scholarshipType]: newSelected
       }
     })
   }
-  
+
   // Debug authentication status
   useEffect(() => {
     console.log('EnhancedStudentPortal mounted with user:', user)
@@ -120,11 +120,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     console.log('Current auth token exists:', !!token)
     console.log('Token preview:', token ? token.substring(0, 20) + '...' : 'No token')
   }, [user])
-  
+
   // Use real application data from API
-  const { 
-    applications, 
-    isLoading: applicationsLoading, 
+  const {
+    applications,
+    isLoading: applicationsLoading,
     error: applicationsError,
     fetchApplications,
     createApplication,
@@ -140,7 +140,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   const [eligibleScholarships, setEligibleScholarships] = useState<ScholarshipType[]>([])
   const [isLoadingScholarships, setIsLoadingScholarships] = useState(true)
   const [scholarshipsError, setScholarshipsError] = useState<string | null>(null)
-  
+
   // State for scholarship application info (form fields and documents)
   const [scholarshipApplicationInfo, setScholarshipApplicationInfo] = useState<{
     [scholarshipType: string]: {
@@ -157,12 +157,12 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       try {
         setIsLoadingScholarships(true)
         const response = await api.scholarships.getEligible()
-        
+
         // Debug: Check the raw API response
         console.log('Debug: Raw API response:', response)
         console.log('Debug: API response success:', response.success)
         console.log('Debug: API response data:', response.data)
-        
+
         let scholarshipData: ScholarshipType[] = []
         if (response.success && response.data) {
           scholarshipData = response.data
@@ -171,18 +171,18 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           setEligibleScholarships([])
           return
         }
-        
+
         if (scholarshipData.length === 0) {
           setScholarshipsError('目前沒有符合資格的獎學金')
         } else {
           // Debug: Check the structure of scholarship data
           console.log('Debug: First scholarship data structure:', scholarshipData[0])
-          console.log('Debug: All scholarship configuration_ids:', 
+          console.log('Debug: All scholarship configuration_ids:',
             scholarshipData.map(s => ({ code: s.code, configuration_id: s.configuration_id })))
-          
+
           setEligibleScholarships(scholarshipData)
           setScholarshipsError(null)
-          
+
           // 自動載入每個獎學金的申請資訊
           scholarshipData.forEach(scholarship => {
             fetchScholarshipApplicationInfo(scholarship.code)
@@ -219,7 +219,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
 
     try {
       const response = await api.applicationFields.getFormConfig(scholarshipType)
-      
+
       if (response.success && response.data) {
         setScholarshipApplicationInfo(prev => ({
           ...prev,
@@ -264,20 +264,20 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       documents: []
     }
   })
-  
+
   // Dynamic form state
   const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({})
   const [dynamicFileData, setDynamicFileData] = useState<Record<string, File[]>>({})
-  
+
   // Terms agreement state
   const [agreeTerms, setAgreeTerms] = useState(false)
-  
+
   // File upload state (for backwards compatibility)
   const [uploadedFiles, setUploadedFiles] = useState<{ [documentType: string]: File[] }>({})
   const [selectedScholarship, setSelectedScholarship] = useState<ScholarshipType | null>(null)
   const eligibleSubTypes = selectedScholarship?.eligible_sub_types ?? []
   const selectionMode = selectedScholarship?.sub_type_selection_mode ?? 'multiple'
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formProgress, setFormProgress] = useState(0)
 
@@ -298,24 +298,24 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         }
 
         const { fields, documents } = response.data
-        
+
         // Calculate total required items
         const requiredFields = fields.filter(f => f.is_active && f.is_required)
         const requiredDocuments = documents.filter(d => d.is_active && d.is_required)
         let totalRequired = requiredFields.length + requiredDocuments.length
-        
+
         // Add sub-type selection as a required item if applicable
         const scholarship = selectedScholarship
-        if (scholarship?.eligible_sub_types && 
+        if (scholarship?.eligible_sub_types &&
             scholarship.eligible_sub_types.length > 0 &&
-            scholarship.eligible_sub_types[0]?.value !== "general" && 
+            scholarship.eligible_sub_types[0]?.value !== "general" &&
             scholarship.eligible_sub_types[0]?.value !== null) {
           totalRequired += 1
         }
-        
+
         // Add terms agreement as a required item
         totalRequired += 1
-        
+
         if (totalRequired === 0) {
           setFormProgress(100) // No requirements means 100% complete
           return
@@ -336,7 +336,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           const docFiles = dynamicFileData[doc.document_name]
           // For fixed documents, check if they have existing_file_url or files
           const isFixedDocument = doc.is_fixed === true
-          
+
           if (isFixedDocument && doc.existing_file_url) {
             // Fixed document with existing file URL is considered complete
             completedItems++
@@ -345,17 +345,17 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             completedItems++
           }
         })
-        
+
         // Check sub-type selection completion
-        if (scholarship?.eligible_sub_types && 
+        if (scholarship?.eligible_sub_types &&
             scholarship.eligible_sub_types.length > 0 &&
-            scholarship.eligible_sub_types[0]?.value !== "general" && 
+            scholarship.eligible_sub_types[0]?.value !== "general" &&
             scholarship.eligible_sub_types[0]?.value !== null) {
           if (selectedSubTypes[newApplicationData.scholarship_type]?.length > 0) {
             completedItems++
           }
         }
-        
+
         // Check terms agreement completion
         if (agreeTerms) {
           completedItems++
@@ -390,13 +390,13 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
 
     try {
       setIsSubmitting(true)
-      
+
       // Debug: Log current state before submission
       console.log('Debug: handleSubmitApplication called')
       console.log('Debug: newApplicationData at submission:', newApplicationData)
       console.log('Debug: selectedScholarship at submission:', selectedScholarship)
       console.log('Debug: configuration_id at submission:', newApplicationData.configuration_id)
-      
+
       // Format form fields according to backend requirements
       const formFields: Record<string, {
         field_id: string,
@@ -431,8 +431,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       const applicationData = {
         scholarship_type: newApplicationData.scholarship_type,
         configuration_id: newApplicationData.configuration_id,
-        scholarship_subtype_list: selectedSubTypes[newApplicationData.scholarship_type]?.length 
-          ? selectedSubTypes[newApplicationData.scholarship_type] 
+        scholarship_subtype_list: selectedSubTypes[newApplicationData.scholarship_type]?.length
+          ? selectedSubTypes[newApplicationData.scholarship_type]
           : ["general"],
         agree_terms: agreeTerms,
         form_data: {
@@ -440,15 +440,15 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           documents: documents
         }
       }
-      
+
       console.log('Debug: Final applicationData being sent:', applicationData)
       console.log('Debug: Final configuration_id being sent:', applicationData.configuration_id)
-      
+
       if (editingApplication) {
         // 編輯模式 - 更新草稿然後提交
         console.log('Updating application with data:', applicationData)
         await updateApplication(editingApplication.id, applicationData)
-        
+
         // 上傳新文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
@@ -457,31 +457,31 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             }
           }
         }
-        
+
         // 提交編輯後的申請
         await submitApplicationApi(editingApplication.id)
       } else {
         // 新建模式 - 先創建草稿，然後提交
         console.log('Creating application as draft with data:', applicationData)
         const createdApplication = await createApplication(applicationData, true) // 創建為草稿
-        
+
         if (!createdApplication || !createdApplication.id) {
           throw new Error('Failed to create application')
         }
-        
+
         // 上傳文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
             await uploadDocument(createdApplication.id, file, docType)
           }
         }
-        
+
         // 提交草稿
         await submitApplicationApi(createdApplication.id)
       }
 
       // 重置表單
-      setNewApplicationData({ 
+      setNewApplicationData({
         scholarship_type: '',
         configuration_id: 0,  // Reset configuration_id
         form_data: {
@@ -495,13 +495,13 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       setSelectedScholarship(null)
       setEditingApplication(null)
       setAgreeTerms(false)
-      
+
       // 重新載入申請列表
       await fetchApplications()
       setActiveTab("applications")
-      
+
       alert(locale === "zh" ? "申請提交成功！" : "Application submitted successfully!")
-      
+
     } catch (error) {
       console.error('Failed to submit application:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -519,7 +519,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
 
     try {
       setIsSubmitting(true)
-      
+
       // Format form fields according to backend requirements
       const formFields: Record<string, {
         field_id: string,
@@ -554,8 +554,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       const applicationData = {
         scholarship_type: newApplicationData.scholarship_type,
         configuration_id: newApplicationData.configuration_id,
-        scholarship_subtype_list: selectedSubTypes[newApplicationData.scholarship_type]?.length 
-          ? selectedSubTypes[newApplicationData.scholarship_type] 
+        scholarship_subtype_list: selectedSubTypes[newApplicationData.scholarship_type]?.length
+          ? selectedSubTypes[newApplicationData.scholarship_type]
           : ["general"],
         agree_terms: agreeTerms,
         form_data: {
@@ -568,7 +568,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         // 編輯模式 - 更新現有申請
         console.log('Updating draft application with data:', applicationData)
         await updateApplication(editingApplication.id, applicationData)
-        
+
         // 上傳新文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
@@ -577,13 +577,13 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             }
           }
         }
-        
+
         alert(locale === "zh" ? "草稿已更新" : "Draft updated successfully")
       } else {
         // 新建模式 - 創建新草稿
         console.log('Saving new draft with data:', applicationData)
         const application = await saveApplicationDraft(applicationData)
-        
+
         if (application && application.id) {
           // 上傳文件
           for (const [docType, files] of Object.entries(dynamicFileData)) {
@@ -593,21 +593,21 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
               }
             }
           }
-          
+
           alert(locale === "zh" ? "草稿已保存，您可以繼續編輯" : "Draft saved successfully. You can continue editing.")
         } else {
           alert(locale === "zh" ? "儲存草稿失敗" : "Failed to save draft")
           return
         }
       }
-      
+
       // 重新載入申請列表
       await fetchApplications()
-      
+
       // 如果是編輯模式，保持在編輯狀態；如果是新建模式，重置表單
       if (!editingApplication) {
         // Reset form only for new applications
-        setNewApplicationData({ 
+        setNewApplicationData({
           scholarship_type: "",
           configuration_id: 0,
           form_data: {
@@ -667,14 +667,14 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       // 如果獲取失敗，使用原始的申請資料
     setSelectedApplicationForDetails(application)
     }
-    
+
     setIsDetailsDialogOpen(true)
   }
 
   // 取消編輯函數
   const handleCancelEdit = () => {
     setEditingApplication(null)
-    setNewApplicationData({ 
+    setNewApplicationData({
       scholarship_type: '',
       configuration_id: 0,
       form_data: {
@@ -695,11 +695,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   const handleEditApplication = async (application: Application) => {
     // 設置編輯模式
     setEditingApplication(application)
-    
+
     // 先設置獎學金類型，這樣可以確保 selectedScholarship 正確設置
     const scholarship = eligibleScholarships.find(s => s.code === application.scholarship_type) || null
     setSelectedScholarship(scholarship)
-    
+
     // 載入申請資料到表單
     setNewApplicationData({
       scholarship_type: application.scholarship_type,
@@ -710,17 +710,17 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         documents: []
       }
     })
-    
+
     // 載入同意條款狀態
     setAgreeTerms(application.agree_terms || false)
-    
+
     // 載入現有的表單資料
     const existingFormData: Record<string, any> = {}
     const existingFileData: Record<string, File[]> = {}
-    
+
     // 處理 submitted_form_data 或 form_data
     const formData = application.submitted_form_data || application.form_data || {}
-    
+
     // 處理欄位資料
     if (formData.fields) {
       // 後端格式：{ fields: { field_id: { value: "..." } } }
@@ -737,7 +737,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         }
       })
     }
-    
+
     // 處理文件資料
     if (formData.documents) {
       // 後端格式：{ documents: [{ document_id: "...", ... }] }
@@ -767,14 +767,14 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         }
       })
     }
-    
+
     // 載入子類型選擇 - 確保在設置 selectedScholarship 之後
     // 檢查獎學金是否有特殊的子類型（不是只有 general）
-    const hasSpecialSubTypes = scholarship?.eligible_sub_types && 
-      scholarship.eligible_sub_types.length > 0 && 
-      scholarship.eligible_sub_types[0]?.value !== "general" && 
+    const hasSpecialSubTypes = scholarship?.eligible_sub_types &&
+      scholarship.eligible_sub_types.length > 0 &&
+      scholarship.eligible_sub_types[0]?.value !== "general" &&
       scholarship.eligible_sub_types[0]?.value !== null
-    
+
     console.log('Debug handleEditApplication:', {
       applicationId: application.id,
       scholarshipType: application.scholarship_type,
@@ -782,7 +782,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       hasSpecialSubTypes,
       eligibleSubTypes: scholarship?.eligible_sub_types
     })
-    
+
     if (hasSpecialSubTypes) {
       // 只有當獎學金有特殊子類型時才載入子類型選擇
       if (application.scholarship_subtype_list && application.scholarship_subtype_list.length > 0) {
@@ -817,11 +817,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         [application.scholarship_type]: []
       }))
     }
-    
+
     // 設置動態表單資料
     setDynamicFormData(existingFormData)
     setDynamicFileData(existingFileData)
-    
+
     // 切換到新增申請頁面
     setActiveTab("new-application")
   }
@@ -910,16 +910,16 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       {/* Scholarship Info Cards */}
       {eligibleScholarships.map((scholarship) => {
         const applicationInfo = scholarshipApplicationInfo[scholarship.code]
-        const isEligible = Array.isArray(scholarship.eligible_sub_types) && 
+        const isEligible = Array.isArray(scholarship.eligible_sub_types) &&
           scholarship.eligible_sub_types.length > 0
-        
+
         return (
-        <Card 
-          key={scholarship.id} 
+        <Card
+          key={scholarship.id}
           className={clsx(
             "border border-gray-100",
-            isEligible 
-              ? "bg-white hover:border-primary/30 transition-colors" 
+            isEligible
+              ? "bg-white hover:border-primary/30 transition-colors"
               : "bg-gray-50/50 border-gray-100 hover:bg-gray-50/80 transition-colors"
           )}
         >
@@ -952,7 +952,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             </CardDescription>
 
             {/* Eligible Programs Section */}
-            {scholarship.eligible_sub_types && scholarship.eligible_sub_types.length > 0 && 
+            {scholarship.eligible_sub_types && scholarship.eligible_sub_types.length > 0 &&
              scholarship.eligible_sub_types[0]?.value !== "general" && scholarship.eligible_sub_types[0]?.value !== null && (
               <div className="mt-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50 divide-y divide-indigo-100/50">
                 <div className="px-3 py-2">
@@ -962,9 +962,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                 </div>
                 <div className="px-3 py-2 flex flex-wrap gap-1.5">
                   {scholarship.eligible_sub_types.map((subType, index) => (
-                    <Badge 
-                      key={subType.value || index} 
-                      variant="outline" 
+                    <Badge
+                      key={subType.value || index}
+                      variant="outline"
                       className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
                     >
                       {locale === 'zh' ? subType.label : subType.label_en}
@@ -993,9 +993,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     {/* Basic eligibility tags */}
                     <div className="flex flex-wrap gap-1">
                       {scholarship.passed?.filter(rule => !rule.sub_type).map((rule) => (
-                        <Badge 
-                          key={rule.rule_id} 
-                          variant="outline" 
+                        <Badge
+                          key={rule.rule_id}
+                          variant="outline"
                           className="bg-emerald-50 text-emerald-600 border-emerald-100"
                         >
                           {getTranslation(locale, `eligibility_tags.${rule.tag}`)}
@@ -1007,10 +1007,10 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     {["nstc", "moe_1w", "moe_2w"].map(subType => {
                       const passedRulesForType = scholarship.passed?.filter(rule => rule.sub_type === subType);
                       const errorRulesForType = scholarship.errors?.filter(rule => rule.sub_type === subType);
-                      
+
                       // Only show subtype section if there are any rules for it
                       if (!passedRulesForType?.length && !errorRulesForType?.length) return null;
-                      
+
                       return (
                         <div key={subType} className="pl-2 border-l-2 border-gray-200">
                           <p className="text-sm text-gray-600 mb-1">
@@ -1019,9 +1019,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                           <div className="flex flex-wrap gap-1">
                             {/* Passed rules for this subtype */}
                             {passedRulesForType?.map((rule) => (
-                              <Badge 
-                                key={rule.rule_id} 
-                                variant="outline" 
+                              <Badge
+                                key={rule.rule_id}
+                                variant="outline"
                                 className="bg-emerald-50 text-emerald-600 border-emerald-100"
                               >
                                 {getTranslation(locale, `eligibility_tags.${rule.tag}`)}
@@ -1029,9 +1029,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                             ))}
                             {/* Error rules for this subtype */}
                             {errorRulesForType?.map((rule) => (
-                              <Badge 
-                                key={rule.rule_id} 
-                                variant="outline" 
+                              <Badge
+                                key={rule.rule_id}
+                                variant="outline"
                                 className="bg-rose-50 text-rose-600 border-rose-100"
                               >
                                 <AlertTriangle className="h-3 w-3 mr-1" />
@@ -1047,9 +1047,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     {scholarship.warnings && scholarship.warnings.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {scholarship.warnings?.map((rule) => (
-                          <Badge 
-                            key={rule.rule_id} 
-                            variant="outline" 
+                          <Badge
+                            key={rule.rule_id}
+                            variant="outline"
                             className="bg-amber-50 text-amber-600 border-amber-100"
                           >
                             <AlertTriangle className="h-3 w-3 mr-1" />
@@ -1063,9 +1063,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     {scholarship.errors && scholarship.errors.filter(rule => !rule.sub_type).length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {scholarship.errors?.filter(rule => !rule.sub_type).map((rule) => (
-                          <Badge 
-                            key={rule.rule_id} 
-                            variant="outline" 
+                          <Badge
+                            key={rule.rule_id}
+                            variant="outline"
                             className="bg-rose-50 text-rose-600 border-rose-100"
                           >
                             <AlertTriangle className="h-3 w-3 mr-1" />
@@ -1120,9 +1120,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       <p className="text-sm font-medium text-rose-700">{t("applications.load_error")}</p>
                     </div>
                     <p className="text-sm text-rose-600 mt-2">{applicationInfo.error}</p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => fetchScholarshipApplicationInfo(scholarship.code)}
                       className="mt-2"
                     >
@@ -1246,8 +1246,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       {locale === "zh" ? "尚無申請記錄" : "No application records"}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {locale === "zh" 
-                        ? "您可以點擊「新增申請」開始申請獎學金" 
+                      {locale === "zh"
+                        ? "您可以點擊「新增申請」開始申請獎學金"
                         : "Click 'New Application' to start your scholarship application"}
                     </p>
                   </div>
@@ -1292,9 +1292,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                               <Edit className="h-4 w-4 mr-1" />
                               {locale === "zh" ? "編輯" : "Edit"}
                             </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => handleDeleteApplication(app.id)}
                               className="text-destructive hover:text-destructive"
                             >
@@ -1337,8 +1337,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
               </CardTitle>
               <CardDescription>
                 {editingApplication ? (
-                  locale === "zh" 
-                    ? `正在編輯申請編號: ${editingApplication.app_id || `APP-${editingApplication.id}`}` 
+                  locale === "zh"
+                    ? `正在編輯申請編號: ${editingApplication.app_id || `APP-${editingApplication.id}`}`
                     : `Editing Application ID: ${editingApplication.app_id || `APP-${editingApplication.id}`}`
                 ) : (
                   locale === "zh"
@@ -1352,32 +1352,32 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="scholarship_type">{locale === "zh" ? "獎學金類型" : "Scholarship Type"} *</Label>
-                  <Select 
-                    value={newApplicationData.scholarship_type} 
+                  <Select
+                    value={newApplicationData.scholarship_type}
                     onValueChange={(value) => {
                       const scholarship = eligibleScholarships.find(s => s.code === value)
                       console.log('Debug: Selected scholarship:', scholarship)
                       console.log('Debug: Configuration ID from scholarship:', scholarship?.configuration_id)
-                      
+
                       const configId = scholarship?.configuration_id || 0
                       console.log('Debug: Setting configuration_id to:', configId)
-                      
-                      setNewApplicationData(prev => ({ 
-                        ...prev, 
+
+                      setNewApplicationData(prev => ({
+                        ...prev,
                         scholarship_type: value,
                         configuration_id: configId
                       }))
                       setSelectedScholarship(scholarship || null)
-                      
+
                       // Initialize selected sub-types based on selection mode
-                      if (scholarship?.eligible_sub_types && 
+                      if (scholarship?.eligible_sub_types &&
                           scholarship.eligible_sub_types.length > 0 &&
-                          scholarship.eligible_sub_types[0]?.value !== "general" && 
+                          scholarship.eligible_sub_types[0]?.value !== "general" &&
                           scholarship.eligible_sub_types[0]?.value !== null) {
-                        
+
                         const selectionMode = scholarship.sub_type_selection_mode || 'multiple'
                         let initialSelection: string[] = []
-                        
+
                         switch (selectionMode) {
                           case 'hierarchical':
                             // Hierarchical: start with empty selection
@@ -1393,20 +1393,20 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                             initialSelection = []
                             break
                         }
-                        
+
                         setSelectedSubTypes(prev => ({
                           ...prev,
                           [value]: initialSelection
                         }))
                       }
-                      
+
                       // Reset dynamic form data when scholarship type changes
                       setDynamicFormData({})
                       setDynamicFileData({})
-                      
+
                       // Clear legacy uploaded files
                       setUploadedFiles({})
-                      
+
                       // Reset terms agreement when scholarship type changes
                       setAgreeTerms(false)
                     }}
@@ -1417,8 +1417,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     </SelectTrigger>
                     <SelectContent>
                       {eligibleScholarships
-                        .filter(scholarship => 
-                          Array.isArray(scholarship.eligible_sub_types) && 
+                        .filter(scholarship =>
+                          Array.isArray(scholarship.eligible_sub_types) &&
                           scholarship.eligible_sub_types.length > 0
                         )
                         .map((scholarship) => (
@@ -1436,12 +1436,12 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                 </div>
 
                 {/* Sub-type selection UI */}
-                {newApplicationData.scholarship_type && eligibleSubTypes.length > 0 && 
-                 eligibleSubTypes[0]?.value !== "general" && 
+                {newApplicationData.scholarship_type && eligibleSubTypes.length > 0 &&
+                 eligibleSubTypes[0]?.value !== "general" &&
                  eligibleSubTypes[0]?.value !== null && (
                   <div className="space-y-2">
                     <Label>{locale === "zh" ? "申請項目" : "Application Items"} *</Label>
-                    
+
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {eligibleSubTypes.map((subType, index) => {
                         const subTypeValue = subType.value
@@ -1452,19 +1452,19 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                         const isSelectable = (() => {
                           // Remove the editing restriction to allow sub-type reselection in edit mode
                           if (!subTypeValue) return false
-                          
+
                           if (selectionMode === 'hierarchical') {
                             const currentSelected = selectedSubTypes[newApplicationData.scholarship_type] || []
                             const validSubTypes = eligibleSubTypes.filter(st => st.value && st.value !== "general")
                             const expectedIndex = currentSelected.length
-                            
+
                             // Can select if it's already selected OR it's the next in sequence
                             return isSelected || index === expectedIndex
                           }
-                          
+
                           return true // For single/multiple modes, all are selectable
                         })()
-                        
+
                         return (
                           <Card
                             key={subType.value || subType.label}
@@ -1489,7 +1489,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                               <p className="text-sm font-medium">
                                 {locale === 'zh' ? subType.label : subType.label_en}
                               </p>
-                              
+
                               {/* Show selection mode indicators */}
                               <div className="text-xs text-gray-500 mt-1 space-y-1">
                                 {selectionMode === 'single' && (
@@ -1507,7 +1507,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                         )
                       })}
                     </div>
-                    
+
                     {/* Selection mode description */}
                     <div className="mt-2 text-xs text-gray-600">
                       {selectionMode === 'single' ? (
@@ -1518,7 +1518,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                         locale === 'zh' ? '可選擇多個項目' : 'Multiple selections allowed'
                       )}
                     </div>
-                    
+
                     {selectedSubTypes[newApplicationData.scholarship_type]?.length === 0 && (
                       <p className="text-sm text-destructive">
                         {locale === "zh" ? "請至少選擇一個申請項目" : "Please select at least one item"}
@@ -1553,8 +1553,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                   <span>{formProgress}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                     style={{ width: `${formProgress}%` }}
                   ></div>
                 </div>
@@ -1577,7 +1577,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
               {/* Action buttons */}
               <div className="flex gap-3 pt-4">
                 {editingApplication && (
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={handleCancelEdit}
                     disabled={isSubmitting}
@@ -1586,8 +1586,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     {locale === "zh" ? "取消編輯" : "Cancel Edit"}
                   </Button>
                 )}
-                
-                <Button 
+
+                <Button
                   variant="outline"
                   onClick={handleSaveDraft}
                   disabled={isSubmitting}
@@ -1609,8 +1609,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     </>
                   )}
                 </Button>
-                
-                <Button 
+
+                <Button
                   onClick={handleSubmitApplication}
                   disabled={isSubmitting || formProgress < 100}
                   className="flex-1 nycu-gradient text-white"
@@ -1633,12 +1633,12 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                   )}
                 </Button>
               </div>
-              
+
               {formProgress < 100 && (
                 <div className="text-center">
                   <p className="text-sm text-muted-foreground">
-                    {locale === "zh" 
-                      ? `請完成所有必填項目 (${formProgress}%)` 
+                    {locale === "zh"
+                      ? `請完成所有必填項目 (${formProgress}%)`
                       : `Please complete all required fields (${formProgress}%)`
                     }
                   </p>

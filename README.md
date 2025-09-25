@@ -204,4 +204,4 @@ For issues and questions:
 
 **Target Launch**: July 3, 2025
 
-Built with ❤️ for education accessibility 
+Built with ❤️ for education accessibility

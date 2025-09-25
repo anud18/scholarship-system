@@ -8,7 +8,7 @@ backend:
   - changed-files:
     - any-glob-to-any-file: 'requirements*.txt'
 
-# Frontend changes  
+# Frontend changes
 frontend:
   - changed-files:
     - any-glob-to-any-file: 'frontend/**/*'

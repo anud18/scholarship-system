@@ -51,7 +51,7 @@ export function AdminDashboard({
 }: AdminDashboardProps) {
   // Get user's scholarship permissions
   const { filterScholarshipsByPermission } = useScholarshipPermissions()
-  
+
   // 狀態中文化映射
   const getStatusText = (status: string) => {
     const statusMap = {
@@ -133,12 +133,12 @@ export function AdminDashboard({
                   try {
                     const response = await api.auth.mockSSOLogin('super_admin')
                     console.log('Mock login response:', response)
-                    
+
                     if (response.success && response.data) {
                       const { access_token, user: userData } = response.data
                       login(access_token, userData)
                       console.log('Super admin login successful')
-                      
+
                       // 手動觸發數據刷新
                       setTimeout(() => {
                         fetchRecentApplications()
@@ -209,7 +209,7 @@ export function AdminDashboard({
                     console.log('Testing super_admin login...')
                     const response = await api.auth.mockSSOLogin('super_admin')
                     console.log('Mock login response:', response)
-                    
+
                     if (response.success && response.data) {
                       const { access_token, user: userData } = response.data
                       login(access_token, userData)
@@ -325,10 +325,10 @@ export function AdminDashboard({
                         <p className="font-medium text-nycu-navy-800">
                           {getScholarshipTypeName(app.scholarship_type, app.scholarship_type_zh, app.scholarship_name)}
                         </p>
-                        <Badge 
+                        <Badge
                           variant={
-                            app.status === 'approved' ? 'default' : 
-                            app.status === 'rejected' ? 'destructive' : 
+                            app.status === 'approved' ? 'default' :
+                            app.status === 'rejected' ? 'destructive' :
                             'outline'
                           }
                           className={
@@ -404,4 +404,4 @@ export function AdminDashboard({
       </div>
     </div>
   )
-} 
+}

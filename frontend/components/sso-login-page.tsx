@@ -22,7 +22,7 @@ export function SSOLoginPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <Button 
+            <Button
               onClick={handleSSOLogin}
               className="w-full"
             >
@@ -37,4 +37,4 @@ export function SSOLoginPage() {
       </Card>
     </div>
   );
-} 
+}

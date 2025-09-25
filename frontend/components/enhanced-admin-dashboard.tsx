@@ -69,7 +69,7 @@ export function EnhancedAdminDashboard({
     setSelectedCombination(combination);
     setCurrentAcademicYear(academicYear);
     setCurrentSemester(semester ?? undefined);
-    
+
     // 重新載入該學期的統計資料
     await fetchFilteredData(academicYear, semester);
   };
@@ -163,7 +163,7 @@ export function EnhancedAdminDashboard({
               onCombinationChange={handleSemesterChange}
               className="flex-1"
             />
-            
+
             <div className="flex gap-2">
               {selectedCombination && (
                 <Button
@@ -178,11 +178,11 @@ export function EnhancedAdminDashboard({
               )}
             </div>
           </div>
-          
+
           {selectedCombination && (
             <div className="mt-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-sm text-blue-800">
-                <strong>當前篩選：</strong> {currentAcademicYear}學年 
+                <strong>當前篩選：</strong> {currentAcademicYear}學年
                 {currentSemester === 'first' ? '第一學期' : '第二學期'}
               </p>
             </div>
@@ -306,7 +306,7 @@ export function EnhancedAdminDashboard({
                         {new Date(application.created_at).toLocaleString('zh-TW')}
                       </div>
                     </div>
-                    <Badge 
+                    <Badge
                       variant={
                         application.status === 'approved' ? 'default' :
                         application.status === 'rejected' ? 'destructive' :

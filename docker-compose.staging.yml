@@ -60,7 +60,7 @@ services:
 
   # FastAPI Backend
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: scholarship_backend_staging
@@ -158,4 +158,4 @@ volumes:
 
 networks:
   scholarship_staging_network:
-    driver: bridge 
+    driver: bridge

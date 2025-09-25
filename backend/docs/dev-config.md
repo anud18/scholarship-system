@@ -40,13 +40,13 @@ MOCK_APPLICATION_PERIOD=true
 
 ```sql
 -- 啟用白名單並新增學生
-UPDATE scholarship_types 
+UPDATE scholarship_types
 SET whitelist_enabled = true,
     whitelist_student_ids = '[1, 2, 3]'  -- 學生ID列表
 WHERE code = 'undergraduate_freshman';
 
 -- 關閉白名單
-UPDATE scholarship_types 
+UPDATE scholarship_types
 SET whitelist_enabled = false
 WHERE code = 'undergraduate_freshman';
 ```
@@ -77,4 +77,4 @@ asyncio.run(check())
 1. **申請期間**: 自動設定為當前時間前後30天
 2. **白名單**: 開發模式下預設關閉
 3. **日誌**: 詳細記錄資格檢查過程
-4. **彈性設定**: 可透過環境變數快速調整 
+4. **彈性設定**: 可透過環境變數快速調整

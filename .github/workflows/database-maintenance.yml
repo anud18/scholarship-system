@@ -25,7 +25,7 @@ jobs:
     name: Database Backup
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || github.event.inputs.action == 'backup'
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -47,10 +47,10 @@ jobs:
         DB_NAME=$(echo $DATABASE_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
         DB_USER=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
         DB_PASS=$(echo $DATABASE_URL | sed -n 's/.*:\/\/[^:]*:\([^@]*\)@.*/\1/p')
-        
+
         # Create backup filename with timestamp
         BACKUP_FILE="scholarship_db_$(date +%Y%m%d_%H%M%S).sql"
-        
+
         # Perform backup
         PGPASSWORD=$DB_PASS pg_dump \
           -h $DB_HOST \
@@ -63,10 +63,10 @@ jobs:
           --no-privileges \
           --if-exists \
           --clean
-        
+
         # Compress backup
         gzip $BACKUP_FILE
-        
+
         echo "backup_file=${BACKUP_FILE}.gz" >> $GITHUB_ENV
         echo "backup_size=$(ls -lh ${BACKUP_FILE}.gz | awk '{print $5}')" >> $GITHUB_ENV
 
@@ -79,10 +79,10 @@ jobs:
       run: |
         # Install AWS CLI
         pip install awscli
-        
+
         # Upload to S3 with lifecycle management
         aws s3 cp ${{ env.backup_file }} s3://${S3_BUCKET}/database-backups/
-        
+
         # Keep only last 30 days of backups
         aws s3 ls s3://${S3_BUCKET}/database-backups/ | \
           awk '{print $4}' | \
@@ -105,7 +105,7 @@ jobs:
     name: Database Maintenance
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action != 'backup'
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -128,9 +128,9 @@ jobs:
         DB_NAME=$(echo $DATABASE_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
         DB_USER=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
         DB_PASS=$(echo $DATABASE_URL | sed -n 's/.*:\/\/[^:]*:\([^@]*\)@.*/\1/p')
-        
+
         export PGPASSWORD=$DB_PASS
-        
+
         case $MAINTENANCE_ACTION in
           vacuum)
             echo "Running VACUUM ANALYZE..."
@@ -145,16 +145,16 @@ jobs:
             psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "REINDEX DATABASE $DB_NAME;"
             ;;
         esac
-        
+
         # Get database statistics
         echo "### Database Statistics" >> $GITHUB_STEP_SUMMARY
         psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "
-          SELECT 
+          SELECT
             schemaname,
             tablename,
             pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size,
             n_live_tup AS rows
-          FROM pg_stat_user_tables 
+          FROM pg_stat_user_tables
           ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC
           LIMIT 10;
         " >> $GITHUB_STEP_SUMMARY
@@ -163,7 +163,7 @@ jobs:
     name: Cleanup Old Data
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -192,40 +192,40 @@ jobs:
         from app.db.session import async_session_maker
         from app.models.application import Application, ApplicationStatus
         from app.models.document import Document
-        
+
         async def cleanup_old_data():
             async with async_session_maker() as session:
                 # Delete draft applications older than 30 days
                 cutoff_date = datetime.utcnow() - timedelta(days=30)
-                
+
                 result = await session.execute(
                     delete(Application)
                     .where(Application.status == ApplicationStatus.DRAFT)
                     .where(Application.updated_at < cutoff_date)
                 )
-                
+
                 draft_count = result.rowcount
-                
+
                 # Delete orphaned documents
                 orphaned_docs = await session.execute(
                     select(Document)
                     .outerjoin(Application)
                     .where(Application.id.is_(None))
                 )
-                
+
                 orphan_count = len(orphaned_docs.scalars().all())
-                
+
                 await session.commit()
-                
+
                 print(f"Cleaned up {draft_count} old draft applications")
                 print(f"Cleaned up {orphan_count} orphaned documents")
-                
+
                 return draft_count, orphan_count
-        
+
         if __name__ == "__main__":
             draft_count, orphan_count = asyncio.run(cleanup_old_data())
         EOF
-        
+
         python cleanup_old_data.py || echo "Cleanup script failed"
 
     - name: Generate cleanup report

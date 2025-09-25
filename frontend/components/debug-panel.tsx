@@ -26,16 +26,16 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   const { user, token } = useAuth()
 
   // Only show in test/development mode
-  const shouldShow = isTestMode || process.env.NODE_ENV === 'development' || 
+  const shouldShow = isTestMode || process.env.NODE_ENV === 'development' ||
     (typeof window !== 'undefined' && (
-      window.location.hostname === '140.113.7.148' || 
+      window.location.hostname === '140.113.7.148' ||
       window.location.hostname === 'localhost'
     ))
 
   // Helper functions to detect data sources
   const detectEnvironment = (): 'dev' | 'test' | 'prod' | 'unknown' => {
     if (typeof window === 'undefined') return 'unknown'
-    
+
     const hostname = window.location.hostname
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'dev'
@@ -67,12 +67,12 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         return 'real'
       }
     }
-    
+
     // Check environment to make educated guess
     const env = detectEnvironment()
     if (env === 'dev') return 'mock'
     if (env === 'test' || env === 'prod') return 'real'  // Test mode uses real Portal SSO
-    
+
     return 'unknown'
   }
 
@@ -100,7 +100,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     const env = detectEnvironment()
     if (env === 'dev' || env === 'test') return 'mock'  // Test mode uses mock Student API for backdrop
     if (env === 'prod') return 'real'
-    
+
     return 'unknown'
   }
 
@@ -160,18 +160,18 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   // Function to fetch portal data (from JWT and current user data)
   const fetchPortalData = async () => {
     if (!user || !token) return
-    
+
     setIsRefreshing(prev => new Set(prev).add('portal'))
     try {
       console.log('🔍 Assembling portal data from current user and JWT...')
-      
+
       // Get current user profile which contains portal-sourced data
       const response = await apiClient.users.getProfile()
       if (response.success && response.data) {
         console.log('🔍 Portal-sourced user data:', response.data)
         setPortalData({
           source: 'api_live',
-          api_endpoint: '/users/me', 
+          api_endpoint: '/users/me',
           timestamp: new Date().toISOString(),
           user_profile: response.data,
           jwt_claims: jwtData ? {
@@ -220,20 +220,20 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     try {
       const parts = token.split('.')
       console.log('🔍 JWT Parts count:', parts.length)
-      
+
       if (parts.length === 3) {
         // Add padding if needed for base64 decoding
         let payload = parts[1]
         while (payload.length % 4) {
           payload += '='
         }
-        
+
         console.log('🔍 Decoding JWT payload:', payload.substring(0, 50) + '...')
         const decodedPayload = JSON.parse(atob(payload))
         console.log('🔍 Decoded JWT payload:', decodedPayload)
-        
+
         setJwtData(decodedPayload)
-        
+
         // Extract portal data from JWT
         if (decodedPayload.portal_data) {
           console.log('🔍 Found portal_data in JWT:', decodedPayload.portal_data)
@@ -241,7 +241,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         } else {
           console.log('🔍 No portal_data found in JWT')
         }
-        
+
         // Extract student data from JWT
         if (decodedPayload.student_data) {
           console.log('🔍 Found student_data in JWT:', decodedPayload.student_data)
@@ -298,11 +298,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     if (value === null || value === undefined) {
       return <span className="text-gray-400">null</span>
     }
-    
+
     if (typeof value === 'boolean') {
       return <span className={value ? 'text-green-600' : 'text-red-600'}>{String(value)}</span>
     }
-    
+
     if (typeof value === 'string' || typeof value === 'number') {
       const stringValue = String(value)
       return (
@@ -322,7 +322,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         </div>
       )
     }
-    
+
     if (Array.isArray(value)) {
       return (
         <div className="ml-4">
@@ -335,7 +335,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         </div>
       )
     }
-    
+
     if (typeof value === 'object') {
       return (
         <div className="ml-4">
@@ -347,7 +347,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
         </div>
       )
     }
-    
+
     return <span className="text-gray-600">{JSON.stringify(value)}</span>
   }
 
@@ -407,7 +407,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
       {/* Debug Panel */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setIsOpen(false)}>
-          <div 
+          <div
             className="bg-white rounded-lg shadow-xl w-[90%] max-w-4xl h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >

@@ -20,9 +20,9 @@ interface ProgressTimelineProps {
   showProgress?: boolean
 }
 
-export function ProgressTimeline({ 
-  steps, 
-  className, 
+export function ProgressTimeline({
+  steps,
+  className,
   orientation = "vertical",
   isLoading = false,
   showProgress = true
@@ -88,7 +88,7 @@ export function ProgressTimeline({
               >
                 {getStepIcon(step.status)}
               </div>
-              
+
               {/* 連接線 - 所有步驟都有連接線 */}
               <div
                 className={cn(
@@ -99,7 +99,7 @@ export function ProgressTimeline({
             </div>
           ))}
         </div>
-        
+
         {/* 文字容器 - 使用 flex 佈局確保對齊圓圈中心 */}
         <div className="flex justify-between">
           {steps.map((step, index) => (
@@ -118,7 +118,7 @@ export function ProgressTimeline({
                 >
                   {step.title}
                 </h4>
-                
+
                 {/* 日期 - 只顯示日期，不顯示時間 */}
                 {step.date && (
                   <div
@@ -137,7 +137,7 @@ export function ProgressTimeline({
                     預計 {step.estimatedDate}
                   </div>
                 )}
-                
+
                 {/* 描述 */}
                 {step.description && (
                   <div className="text-xs text-gray-500 mt-1 leading-tight transition-colors duration-200">

@@ -159,4 +159,4 @@ minio_data/
 
 # Test results
 test-results/
-playwright-report/ 
+playwright-report/

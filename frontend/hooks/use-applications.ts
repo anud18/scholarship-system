@@ -17,9 +17,9 @@ export function useApplications() {
     try {
       setIsLoading(true)
       setError(null)
-      
+
       const response = await apiClient.applications.getMyApplications(status)
-      
+
       if (Array.isArray(response)) {
         setApplications(response)
       } else if (response.success && response.data) {
@@ -38,9 +38,9 @@ export function useApplications() {
   const createApplication = useCallback(async (applicationData: ApplicationCreate, isDraft: boolean = false) => {
     try {
       setError(null)
-      
+
       const response = await apiClient.applications.createApplication(applicationData, isDraft)
-      
+
       if (response.success && response.data) {
         setApplications(prev => [response.data!, ...prev])
         return response.data
@@ -56,11 +56,11 @@ export function useApplications() {
   const submitApplication = useCallback(async (applicationId: number) => {
     try {
       setError(null)
-      
+
       const response = await apiClient.applications.submitApplication(applicationId)
-      
+
       if (response.success && response.data) {
-        setApplications(prev => 
+        setApplications(prev =>
           prev.map(app => app.id === applicationId ? response.data! : app)
         )
         return response.data
@@ -76,11 +76,11 @@ export function useApplications() {
   const withdrawApplication = useCallback(async (applicationId: number) => {
     try {
       setError(null)
-      
+
       const response = await apiClient.applications.withdrawApplication(applicationId)
-      
+
       if (response.success && response.data) {
-        setApplications(prev => 
+        setApplications(prev =>
           prev.map(app => app.id === applicationId ? response.data! : app)
         )
         return response.data
@@ -94,16 +94,16 @@ export function useApplications() {
   }, [])
 
   const updateApplication = useCallback(async (
-    applicationId: number, 
+    applicationId: number,
     applicationData: Partial<ApplicationCreate>
   ) => {
     try {
       setError(null)
-      
+
       const response = await apiClient.applications.updateApplication(applicationId, applicationData)
-      
+
       if (response.success && response.data) {
-        setApplications(prev => 
+        setApplications(prev =>
           prev.map(app => app.id === applicationId ? response.data! : app)
         )
         return response.data
@@ -119,9 +119,9 @@ export function useApplications() {
   const uploadDocument = useCallback(async (applicationId: number, file: File, fileType: string = 'other') => {
     try {
       setError(null)
-      
+
       const response = await apiClient.applications.uploadDocument(applicationId, file, fileType)
-      
+
       if (response.success) {
         // Refresh applications to get updated document info
         await fetchApplications()
@@ -145,9 +145,9 @@ export function useApplications() {
   const saveApplicationDraft = useCallback(async (applicationData: ApplicationCreate) => {
     try {
       setError(null)
-      
+
       const response = await apiClient.applications.saveApplicationDraft(applicationData)
-      
+
       if (response.success && response.data) {
         setApplications(prev => [response.data!, ...prev])
         return response.data
@@ -163,9 +163,9 @@ export function useApplications() {
   const deleteApplication = useCallback(async (applicationId: number) => {
     try {
       setError(null)
-      
+
       const response = await apiClient.applications.deleteApplication(applicationId)
-      
+
       if (response.success) {
         setApplications(prev => prev.filter(app => app.id !== applicationId))
         return response.data
@@ -191,4 +191,4 @@ export function useApplications() {
     uploadDocument,
     deleteApplication,
   }
-} 
+}

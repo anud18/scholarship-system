@@ -85,7 +85,7 @@ function ProfessorAssignmentDropdownInner({
         fetchProfessors(search)
       }
     }, 300)
-    
+
     return () => clearTimeout(timer) // Proper cleanup
   }, [search])
 
@@ -143,8 +143,8 @@ function ProfessorAssignmentDropdownInner({
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0">
         <Command>
-          <CommandInput 
-            placeholder="搜尋姓名或 NYCU ID..." 
+          <CommandInput
+            placeholder="搜尋姓名或 NYCU ID..."
             value={search}
             onValueChange={handleSearch}
           />
@@ -164,8 +164,8 @@ function ProfessorAssignmentDropdownInner({
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
-                        selectedProfessor?.nycu_id === professor.nycu_id 
-                          ? "opacity-100" 
+                        selectedProfessor?.nycu_id === professor.nycu_id
+                          ? "opacity-100"
                           : "opacity-0"
                       )}
                     />

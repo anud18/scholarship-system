@@ -252,4 +252,4 @@ describe('API Client', () => {
       ).rejects.toThrow('Internal server error')
     })
   })
-}) 
+})

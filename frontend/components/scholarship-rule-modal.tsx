@@ -96,7 +96,7 @@ export function ScholarshipRuleModal({
   onSubmit,
   isLoading = false
 }: ScholarshipRuleModalProps) {
-  
+
   const getAvailableFields = (ruleType: string) => {
     switch (ruleType) {
       case "student":
@@ -200,7 +200,7 @@ export function ScholarshipRuleModal({
         ])
         return
       }
-      
+
       setLoadingSubTypes(true)
       try {
         const response = await api.admin.getScholarshipRuleSubTypes(scholarshipTypeId)
@@ -230,12 +230,12 @@ export function ScholarshipRuleModal({
   const handleChange = (field: keyof ScholarshipRule, value: any) => {
     setFormData(prev => {
       const newData = { ...prev, [field]: value }
-      
+
       // 當規則類型改變時，清空條件欄位
       if (field === "rule_type" && prev.rule_type !== value) {
         newData.condition_field = ""
       }
-      
+
       return newData
     })
     if (errors[field]) {

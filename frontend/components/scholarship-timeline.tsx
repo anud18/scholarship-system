@@ -6,11 +6,11 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProgressTimeline } from "@/components/progress-timeline"
 import SemesterSelector from "@/components/semester-selector"
-import { 
-  Calendar, 
-  Clock, 
-  CheckCircle, 
-  AlertCircle, 
+import {
+  Calendar,
+  Clock,
+  CheckCircle,
+  AlertCircle,
   Loader2,
   Award,
   GraduationCap,
@@ -67,12 +67,12 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<string>("")
-  
+
   // 學期選擇狀態
   const [selectedCombination, setSelectedCombination] = useState<string>()
   const [currentAcademicYear, setCurrentAcademicYear] = useState<number>()
   const [currentSemester, setCurrentSemester] = useState<string>()
-  
+
   // Get user's scholarship permissions
   const { filterScholarshipsByPermission, isLoading: permissionsLoading } = useScholarshipPermissions()
 
@@ -81,7 +81,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
     setSelectedCombination(combination);
     setCurrentAcademicYear(academicYear);
     setCurrentSemester(semester || 'first');
-    
+
     // 重新載入該學期的獎學金時間軸資料
     // 對於學年制獎學金，不傳遞學期參數
     await fetchScholarshipTimelines(academicYear, semester ?? undefined);
@@ -100,27 +100,27 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
     try {
       setIsLoading(true)
       setError(null)
-      
+
       console.log('ScholarshipTimeline: Starting fetch for user:', user.role, user.id)
-      
+
       // 建構查詢參數
       const queryParams = new URLSearchParams();
       if (academicYear) queryParams.append('academic_year', academicYear.toString());
       if (semester && semester !== 'null') queryParams.append('semester', semester);
-      
+
       // 根據用戶角色獲取不同的獎學金列表
       let response
       if (user.role === "super_admin") {
         // Super admin 可以看到所有獎學金
         console.log('ScholarshipTimeline: Fetching all scholarships for super_admin', { academicYear, semester })
-        
+
         // 構建帶參數的 URL
         const url = queryParams.toString() ? `/scholarships?${queryParams.toString()}` : '/scholarships';
         response = await apiClient.request(url);
       } else if (user.role === "admin" || user.role === "college") {
         // Admin 和 College 可以看到他們有權限的獎學金
         console.log('ScholarshipTimeline: Fetching scholarships for admin/college user', { academicYear, semester })
-        
+
         // 構建帶參數的 URL
         const url = queryParams.toString() ? `/scholarships?${queryParams.toString()}` : '/scholarships';
         response = await apiClient.request(url);
@@ -134,14 +134,14 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
 
       if (response.success && response.data) {
         console.log('ScholarshipTimeline: Raw scholarships data:', response.data)
-        
+
         // Use the filterScholarshipsByPermission function to filter scholarships
         const filteredScholarships = filterScholarshipsByPermission(response.data)
         console.log('ScholarshipTimeline: Filtered scholarships based on permissions:', filteredScholarships)
-        
+
         const timelineData: ScholarshipTimelineData[] = filteredScholarships.map((scholarship: any) => {
           console.log(`ScholarshipTimeline: Processing ${scholarship.name}, application_cycle:`, scholarship.application_cycle)
-          
+
           return {
             id: scholarship.id,
             code: scholarship.code,
@@ -188,7 +188,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
   // 獲取當前階段
   const getCurrentStage = (scholarship: any): string => {
     const now = new Date()
-    
+
     // 檢查續領申請期間
     if (scholarship.renewal_application_start_date && scholarship.renewal_application_end_date) {
       const renewalStart = new Date(scholarship.renewal_application_start_date)
@@ -250,7 +250,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
   const generateTimelineSteps = (scholarship: ScholarshipTimelineData): TimelineStep[] => {
     const steps: TimelineStep[] = []
     const now = new Date()
-    
+
     // 如果有選擇特定學期，需要根據該學期的資料來生成時間軸
     // 這裡可以根據 currentAcademicYear 和 currentSemester 來過濾或調整時間軸
 
@@ -258,13 +258,13 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
     if (scholarship.timeline.renewal.applicationStart && scholarship.timeline.renewal.applicationEnd) {
       const renewalStart = new Date(scholarship.timeline.renewal.applicationStart)
       const renewalEnd = new Date(scholarship.timeline.renewal.applicationEnd)
-      
+
       steps.push({
         id: "renewal-application",
         title: "續領申請期間",
-        status: now >= renewalStart && now <= renewalEnd ? "current" : 
+        status: now >= renewalStart && now <= renewalEnd ? "current" :
                 now > renewalEnd ? "completed" : "pending",
-        date: now >= renewalStart && now <= renewalEnd ? 
+        date: now >= renewalStart && now <= renewalEnd ?
               `進行中 (${formatDateOnly(scholarship.timeline.renewal.applicationEnd)})` :
               formatDateOnly(scholarship.timeline.renewal.applicationEnd),
         estimatedDate: now < renewalStart ? formatDateOnly(scholarship.timeline.renewal.applicationStart) : undefined
@@ -275,13 +275,13 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
     if (scholarship.timeline.renewal.professorReviewStart && scholarship.timeline.renewal.professorReviewEnd) {
       const profStart = new Date(scholarship.timeline.renewal.professorReviewStart)
       const profEnd = new Date(scholarship.timeline.renewal.professorReviewEnd)
-      
+
       steps.push({
         id: "renewal-professor",
         title: "續領教授審查",
-        status: now >= profStart && now <= profEnd ? "current" : 
+        status: now >= profStart && now <= profEnd ? "current" :
                 now > profEnd ? "completed" : "pending",
-        date: now >= profStart && now <= profEnd ? 
+        date: now >= profStart && now <= profEnd ?
               `進行中 (${formatDateOnly(scholarship.timeline.renewal.professorReviewEnd)})` :
               formatDateOnly(scholarship.timeline.renewal.professorReviewEnd),
         estimatedDate: now < profStart ? formatDateOnly(scholarship.timeline.renewal.professorReviewStart) : undefined
@@ -292,13 +292,13 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
     if (scholarship.timeline.renewal.collegeReviewStart && scholarship.timeline.renewal.collegeReviewEnd) {
       const collegeStart = new Date(scholarship.timeline.renewal.collegeReviewStart)
       const collegeEnd = new Date(scholarship.timeline.renewal.collegeReviewEnd)
-      
+
       steps.push({
         id: "renewal-college",
         title: "續領學院審查",
-        status: now >= collegeStart && now <= collegeEnd ? "current" : 
+        status: now >= collegeStart && now <= collegeEnd ? "current" :
                 now > collegeEnd ? "completed" : "pending",
-        date: now >= collegeStart && now <= collegeEnd ? 
+        date: now >= collegeStart && now <= collegeEnd ?
               `進行中 (${formatDateOnly(scholarship.timeline.renewal.collegeReviewEnd)})` :
               formatDateOnly(scholarship.timeline.renewal.collegeReviewEnd),
         estimatedDate: now < collegeStart ? formatDateOnly(scholarship.timeline.renewal.collegeReviewStart) : undefined
@@ -309,13 +309,13 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
     if (scholarship.timeline.general.applicationStart && scholarship.timeline.general.applicationEnd) {
       const appStart = new Date(scholarship.timeline.general.applicationStart)
       const appEnd = new Date(scholarship.timeline.general.applicationEnd)
-      
+
       steps.push({
         id: "general-application",
         title: "一般申請期間",
-        status: now >= appStart && now <= appEnd ? "current" : 
+        status: now >= appStart && now <= appEnd ? "current" :
                 now > appEnd ? "completed" : "pending",
-        date: now >= appStart && now <= appEnd ? 
+        date: now >= appStart && now <= appEnd ?
               `進行中 (${formatDateOnly(scholarship.timeline.general.applicationEnd)})` :
               formatDateOnly(scholarship.timeline.general.applicationEnd),
         estimatedDate: now < appStart ? formatDateOnly(scholarship.timeline.general.applicationStart) : undefined
@@ -326,13 +326,13 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
     if (scholarship.timeline.general.professorReviewStart && scholarship.timeline.general.professorReviewEnd) {
       const profStart = new Date(scholarship.timeline.general.professorReviewStart)
       const profEnd = new Date(scholarship.timeline.general.professorReviewEnd)
-      
+
       steps.push({
         id: "general-professor",
         title: "一般教授審查",
-        status: now >= profStart && now <= profEnd ? "current" : 
+        status: now >= profStart && now <= profEnd ? "current" :
                 now > profEnd ? "completed" : "pending",
-        date: now >= profStart && now <= profEnd ? 
+        date: now >= profStart && now <= profEnd ?
               `進行中 (${formatDateOnly(scholarship.timeline.general.professorReviewEnd)})` :
               formatDateOnly(scholarship.timeline.general.professorReviewEnd),
         estimatedDate: now < profStart ? formatDateOnly(scholarship.timeline.general.professorReviewStart) : undefined
@@ -343,13 +343,13 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
     if (scholarship.timeline.general.collegeReviewStart && scholarship.timeline.general.collegeReviewEnd) {
       const collegeStart = new Date(scholarship.timeline.general.collegeReviewStart)
       const collegeEnd = new Date(scholarship.timeline.general.collegeReviewEnd)
-      
+
       steps.push({
         id: "general-college",
         title: "一般學院審查",
-        status: now >= collegeStart && now <= collegeEnd ? "current" : 
+        status: now >= collegeStart && now <= collegeEnd ? "current" :
                 now > collegeEnd ? "completed" : "pending",
-        date: now >= collegeStart && now <= collegeEnd ? 
+        date: now >= collegeStart && now <= collegeEnd ?
               `進行中 (${formatDateOnly(scholarship.timeline.general.collegeReviewEnd)})` :
               formatDateOnly(scholarship.timeline.general.collegeReviewEnd),
         estimatedDate: now < collegeStart ? formatDateOnly(scholarship.timeline.general.collegeReviewStart) : undefined
@@ -465,8 +465,8 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
           <div className="text-center py-8 text-nycu-navy-600">
             <Award className="h-12 w-12 mx-auto mb-2 text-nycu-blue-300" />
             <p>
-              {['admin', 'college'].includes(user.role) 
-                ? '您目前沒有被分配任何獎學金權限，請聯繫管理員' 
+              {['admin', 'college'].includes(user.role)
+                ? '您目前沒有被分配任何獎學金權限，請聯繫管理員'
                 : '暫無獎學金時間軸資料'
               }
             </p>
@@ -511,7 +511,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
                     onCombinationChange={handleSemesterChange}
                     className="flex-1"
                   />
-                  
+
                   {selectedCombination && (
                     <button
                       onClick={resetFilter}
@@ -521,11 +521,11 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
                     </button>
                   )}
                 </div>
-                
+
                 {selectedCombination && (
                   <div className="mt-3 text-sm text-nycu-navy-600">
                     <strong>當前篩選：</strong> {currentAcademicYear}學年
-                    {scholarship.applicationCycle === 'semester' && currentSemester && currentSemester !== 'null' ? 
+                    {scholarship.applicationCycle === 'semester' && currentSemester && currentSemester !== 'null' ?
                       (currentSemester === 'first' ? '度 第一學期' : '度 第二學期') : '度'
                     }
                   </div>
@@ -537,11 +537,11 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
                 <div>
                   <h3 className="font-semibold text-nycu-navy-800">{scholarship.name}</h3>
                   <p className="text-sm text-nycu-navy-600">
-                    {selectedCombination ? 
-                      `${currentAcademicYear}學年度${scholarship.applicationCycle === 'semester' && currentSemester && currentSemester !== 'null' ? 
+                    {selectedCombination ?
+                      `${currentAcademicYear}學年度${scholarship.applicationCycle === 'semester' && currentSemester && currentSemester !== 'null' ?
                         (currentSemester === 'first' ? ' 第一學期' : ' 第二學期') : ''
                       }` :
-                      `${scholarship.academicYear}學年度${scholarship.applicationCycle === 'semester' ? 
+                      `${scholarship.academicYear}學年度${scholarship.applicationCycle === 'semester' ?
                         (scholarship.semester === "first" ? " 第一學期" : " 第二學期") : ''
                       }`
                     }
@@ -555,8 +555,8 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
               {/* 時間軸 */}
               <div className="mt-6">
                 <h4 className="text-sm font-medium text-nycu-navy-700 mb-3">申請與審查流程</h4>
-                <ProgressTimeline 
-                  steps={generateTimelineSteps(scholarship)} 
+                <ProgressTimeline
+                  steps={generateTimelineSteps(scholarship)}
                   orientation="horizontal"
                   className="mb-4"
                   isLoading={isLoading || permissionsLoading}
@@ -671,4 +671,4 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
       </CardContent>
     </Card>
   )
-} 
+}

@@ -8,13 +8,13 @@ import { useAuth } from "@/hooks/use-auth"
 
 function SSOCallbackContent() {
   console.log('🚀 SSOCallbackContent component is rendering!')
-  
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login } = useAuth()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [message, setMessage] = useState('')
-  
+
   console.log('🔍 SearchParams available:', !!searchParams)
   console.log('🔍 Current search params:', searchParams ? Object.fromEntries(searchParams.entries()) : 'Not available')
 
@@ -24,12 +24,12 @@ function SSOCallbackContent() {
         // Get token and redirect path from URL parameters
         const token = searchParams.get('token')
         const redirectPath = searchParams.get('redirect') || 'dashboard'
-        
+
         console.log('🔐 SSO Callback - Starting authentication process')
         console.log('📄 URL Search Params:', Object.fromEntries(searchParams.entries()))
         console.log('🎟️ Token received:', !!token, token ? `${token.substring(0, 20)}...` : 'none')
         console.log('🔄 Redirect path:', redirectPath)
-        
+
         if (!token) {
           console.error('❌ No token provided in URL parameters')
           throw new Error('No token provided')
@@ -44,12 +44,12 @@ function SSOCallbackContent() {
           const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
             return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
           }).join(''))
-          
+
           const tokenData = JSON.parse(jsonPayload)
           console.log('🎫 Decoded token data:', tokenData)
           console.log('🔑 User role from token:', tokenData.role)
           console.log('🆔 User ID from token:', tokenData.nycu_id)
-          
+
           // Create user object from token data
           const userData = {
             id: tokenData.sub,
@@ -60,23 +60,23 @@ function SSOCallbackContent() {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           }
-          
+
           console.log('👤 Constructed user data:', userData)
-          
+
           // Use the login function from useAuth to set authentication state
           console.log('🔄 Calling login() with token and user data...')
           login(token, userData)
           console.log('✅ login() function called successfully')
-            
+
             setStatus('success')
             setMessage('登入成功！正在重導向...')
-            
+
             // Redirect based on user role
             const userRole = userData.role
             let redirectPath = '/'
-            
+
             console.log('🎯 Determining redirect path based on role:', userRole)
-            
+
             // Role-based redirection
             if (userRole === 'admin' || userRole === 'super_admin') {
               redirectPath = '/#dashboard'  // Admin dashboard
@@ -91,22 +91,22 @@ function SSOCallbackContent() {
               redirectPath = '/#main'  // Student portal
               console.log('🎒 Student - redirecting to main')
             }
-            
+
             console.log('🚀 Final redirect path:', redirectPath)
             console.log('⏰ Setting 1.5 second delay before redirect...')
-            
+
             setTimeout(() => {
               console.log('⏰ Timeout reached, executing router.push...')
               router.push(redirectPath)
               console.log('✅ router.push() called')
             }, 1500)
-            
+
         } catch (decodeError) {
           console.error('💥 Token decoding failed:', decodeError)
           console.error('📡 Decode error details:', decodeError instanceof Error ? decodeError.message : decodeError)
           setStatus('error')
           setMessage('登入驗證失敗，請重新嘗試')
-          
+
           console.log('🔄 Redirecting to login page after token decode error')
           // Redirect to login page after error
           setTimeout(() => {
@@ -120,7 +120,7 @@ function SSOCallbackContent() {
         console.error('💥 Error stack:', error instanceof Error ? error.stack : 'No stack trace')
         setStatus('error')
         setMessage('登入失敗，請重新嘗試')
-        
+
         console.log('🔄 Redirecting to login page after general error')
         // Redirect to login page after error
         setTimeout(() => {
@@ -150,7 +150,7 @@ function SSOCallbackContent() {
               <p className="text-nycu-navy-600">正在驗證登入資訊...</p>
             </>
           )}
-          
+
           {status === 'success' && (
             <>
               <div className="h-8 w-8 mx-auto mb-4 text-green-600 flex items-center justify-center">
@@ -161,7 +161,7 @@ function SSOCallbackContent() {
               <p className="text-green-600 font-medium">{message}</p>
             </>
           )}
-          
+
           {status === 'error' && (
             <>
               <div className="h-8 w-8 mx-auto mb-4 text-red-600 flex items-center justify-center">
@@ -181,7 +181,7 @@ function SSOCallbackContent() {
 export default function SSOCallbackPage() {
   console.log('🎯 SSO Callback Page component is rendering!')
   console.log('📍 Current location:', typeof window !== 'undefined' ? window.location.href : 'SSR')
-  
+
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex items-center justify-center">

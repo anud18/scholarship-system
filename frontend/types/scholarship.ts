@@ -1,6 +1,6 @@
 export enum ScholarshipCategory {
   PHD = "phd",
-  UNDERGRADUATE = "undergraduate", 
+  UNDERGRADUATE = "undergraduate",
   MASTER = "master",
   SPECIAL = "special"
 }

@@ -56,7 +56,7 @@ case "$1" in
         ;;
     "init-lookup")
         echo "Initializing lookup tables (reference data)..."
-        
+
         # Check if backend service is running
         if ! docker compose -f docker-compose.dev.yml ps backend | grep -q "Up" 2>/dev/null; then
             echo "⚠️  Backend service is not running. Starting development services first..."
@@ -69,11 +69,11 @@ case "$1" in
                 echo "❌ No docker-compose file found"
                 exit 1
             fi
-            
+
             # Wait for services to be ready
             echo "⏳ Waiting for services to start..."
             sleep 10
-            
+
             # Check if database is ready
             echo "🔍 Checking database connection..."
             for i in {1..30}; do
@@ -91,11 +91,11 @@ case "$1" in
         else
             echo "✅ Backend service is already running"
         fi
-        
+
         # Run lookup tables initialization
         echo "🚀 Running lookup tables initialization..."
         docker exec scholarship_backend_dev python -m app.core.init_lookup_tables
-        
+
         if [ $? -eq 0 ]; then
             echo "✅ Lookup tables initialization completed successfully!"
             echo ""
@@ -114,24 +114,24 @@ case "$1" in
         ;;
     "init-testdata")
         echo "Initializing test data (users, scholarships, etc.)..."
-        
+
         # Check if backend service is running
         if ! docker compose -f docker-compose.dev.yml ps backend | grep -q "Up" 2>/dev/null; then
             echo "❌ Backend service is not running. Please start services first with 'start' command"
             exit 1
         fi
-        
+
         # Check if lookup tables exist
         echo "🔍 Checking if lookup tables are initialized..."
         DEGREE_COUNT=$(docker exec scholarship_postgres_dev psql -U scholarship_user -d scholarship_db -t -c "SELECT COUNT(*) FROM degrees;" 2>/dev/null | tr -d ' ')
-        
+
         if [ "$DEGREE_COUNT" -eq 0 ] 2>/dev/null; then
             echo "⚠️  Lookup tables not found. Initializing lookup tables first..."
             $0 init-lookup
         else
             echo "✅ Lookup tables found ($DEGREE_COUNT degrees)"
         fi
-        
+
         # Run test data initialization (without lookup tables)
         echo "🚀 Running test data initialization..."
         docker exec scholarship_backend_dev python -c "
@@ -150,13 +150,13 @@ async def init_test_data():
 
 asyncio.run(init_test_data())
 "
-        
+
         if [ $? -eq 0 ]; then
             echo "✅ Test data initialization completed successfully!"
             echo ""
             echo "📋 Test User Accounts:"
             echo "- Admin: admin / admin123"
-            echo "- Super Admin: super_admin / super123" 
+            echo "- Super Admin: super_admin / super123"
             echo "- Professor: professor / professor123"
             echo "- College: college / college123"
             echo "- Student (學士): stu_under / stuunder123"
@@ -171,7 +171,7 @@ asyncio.run(init_test_data())
         ;;
     "init-db")
         echo "Initializing complete database (lookup tables + test data)..."
-        
+
         # Check if backend service is running
         if ! docker compose -f docker-compose.dev.yml ps backend | grep -q "Up" 2>/dev/null; then
             echo "⚠️  Backend service is not running. Starting development services first..."
@@ -184,11 +184,11 @@ asyncio.run(init_test_data())
                 echo "❌ No docker-compose file found"
                 exit 1
             fi
-            
+
             # Wait for services to be ready
             echo "⏳ Waiting for services to start..."
             sleep 10
-            
+
             # Check if database is ready
             echo "🔍 Checking database connection..."
             for i in {1..30}; do
@@ -206,17 +206,17 @@ asyncio.run(init_test_data())
         else
             echo "✅ Backend service is already running"
         fi
-        
+
         # Run complete database initialization
         echo "🚀 Running complete database initialization..."
         docker exec scholarship_backend_dev python -m app.core.init_db
-        
+
         if [ $? -eq 0 ]; then
             echo "✅ Database initialization completed successfully!"
             echo ""
             echo "📋 Test User Accounts:"
             echo "- Admin: admin / admin123"
-            echo "- Super Admin: super_admin / super123" 
+            echo "- Super Admin: super_admin / super123"
             echo "- Professor: professor / professor123"
             echo "- College: college / college123"
             echo "- Student (學士): stu_under / stuunder123"

@@ -81,11 +81,11 @@ get_compose_file() {
 check_env_file() {
     local env=$1
     local env_file=".env.${env}"
-    
+
     if [ ! -f "$env_file" ]; then
         log_warning "Environment file $env_file not found"
         log_info "Creating $env_file from example..."
-        
+
         if [ -f ".env.example.${env}" ]; then
             cp ".env.example.${env}" "$env_file"
             log_warning "Please edit $env_file with your actual configuration values"
@@ -108,17 +108,17 @@ setup_ssl_certificates() {
 start_services() {
     local env=$1
     local compose_file=$(get_compose_file $env)
-    
+
     log_info "Starting $env environment..."
-    
+
     # Check environment file
     check_env_file $env
-    
+
     # Load environment variables
     if [ -f ".env.${env}" ]; then
         export $(cat ".env.${env}" | grep -v '^#' | xargs)
     fi
-    
+
     # Special handling for different environments
     case $env in
         "prod-db")
@@ -133,10 +133,10 @@ start_services() {
             mkdir -p logs/{backend,nginx}
             ;;
     esac
-    
+
     # Start services
     docker compose -f "$compose_file" up -d --build
-    
+
     if [ $? -eq 0 ]; then
         log_success "$env environment started successfully"
         sleep 5
@@ -150,10 +150,10 @@ start_services() {
 stop_services() {
     local env=$1
     local compose_file=$(get_compose_file $env)
-    
+
     log_info "Stopping $env environment..."
     docker compose -f "$compose_file" down -v
-    
+
     if [ $? -eq 0 ]; then
         log_success "$env environment stopped successfully"
     else
@@ -165,7 +165,7 @@ stop_services() {
 show_status() {
     local env=$1
     local compose_file=$(get_compose_file $env)
-    
+
     log_info "Status for $env environment:"
     docker compose -f "$compose_file" ps
 }
@@ -174,7 +174,7 @@ show_logs() {
     local env=$1
     local compose_file=$(get_compose_file $env)
     local service=${3:-""}
-    
+
     if [ -n "$service" ]; then
         log_info "Showing logs for $service in $env environment:"
         docker compose -f "$compose_file" logs -f "$service"
@@ -186,7 +186,7 @@ show_logs() {
 
 init_database() {
     local env=$1
-    
+
     case $env in
         "dev"|"staging")
             local compose_file=$(get_compose_file $env)
@@ -197,13 +197,13 @@ init_database() {
             elif [ "$env" = "dev" ]; then
                 container_suffix="_dev"
             fi
-            
+
             log_info "Initializing database for $env environment..."
-            
+
             # Wait for services to be ready
             log_info "Waiting for services to start..."
             sleep 10
-            
+
             # Check if database is ready
             for i in {1..30}; do
                 if docker exec scholarship_postgres${container_suffix} pg_isready -U scholarship_user -d scholarship_db > /dev/null 2>&1; then
@@ -217,7 +217,7 @@ init_database() {
                 echo "   Waiting for database... ($i/30)"
                 sleep 2
             done
-            
+
             # Run database migrations with Alembic
             log_info "Running database migrations..."
             docker exec scholarship_backend${container_suffix} alembic upgrade head
@@ -272,7 +272,7 @@ print(asyncio.run(count_users()))
 
 backup_database() {
     local env=$1
-    
+
     case $env in
         "prod-db")
             log_info "Creating database backup..."
@@ -294,18 +294,18 @@ backup_database() {
 check_health() {
     local env=$1
     local compose_file=$(get_compose_file $env)
-    
+
     log_info "Checking health for $env environment:"
-    
+
     # Get list of services
     services=$(docker compose -f "$compose_file" ps --services)
-    
+
     for service in $services; do
         container_name=$(docker compose -f "$compose_file" ps -q "$service" 2>/dev/null)
         if [ -n "$container_name" ]; then
             health=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "no healthcheck")
             status=$(docker inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null || echo "unknown")
-            
+
             case $health in
                 "healthy")
                     echo -e "  ${service}: ${GREEN}healthy${NC} (${status})"
@@ -335,10 +335,10 @@ check_health() {
 
 show_service_info() {
     local env=$1
-    
+
     echo ""
     log_info "Service Information for $env environment:"
-    
+
     case $env in
         "dev")
             echo "  🚀 Frontend: http://localhost:3000"

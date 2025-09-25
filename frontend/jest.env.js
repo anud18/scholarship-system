@@ -30,4 +30,4 @@ if (typeof global.Blob === 'undefined') {
   }
 }
 
-module.exports = {} 
+module.exports = {}

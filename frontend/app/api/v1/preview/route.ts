@@ -9,14 +9,14 @@ export async function GET(request: NextRequest) {
     const applicationId = searchParams.get('applicationId')
     const userId = searchParams.get('userId')
     const token = searchParams.get('token')
-    
+
     if (!fileId) {
       return NextResponse.json(
         { error: 'File ID is required' },
         { status: 400 }
       )
     }
-    
+
     // For user profile documents, userId can be used instead of applicationId
     if (!applicationId && !userId) {
       return NextResponse.json(
@@ -24,14 +24,14 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
-    
+
     if (!token) {
       return NextResponse.json(
         { error: 'Access token is required' },
         { status: 400 }
       )
     }
-    
+
     // 預設使用內部 Docker 網路地址來訪問後端，如果沒有設定則使用 NEXT_PUBLIC_API_URL
     let backendUrl
     if (applicationId) {
@@ -46,14 +46,14 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
-    
+
     console.log('Preview API called:', {
       fileId,
       applicationId,
       userId,
       backendUrl
     })
-    
+
     // 從後端獲取文件
     const response = await fetch(backendUrl, {
       method: 'GET',
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         'Authorization': `Bearer ${token}`,
       },
     })
-    
+
     if (!response.ok) {
       console.error('Backend response error:', response.status, response.statusText)
       return NextResponse.json(
@@ -69,11 +69,11 @@ export async function GET(request: NextRequest) {
         { status: response.status }
       )
     }
-    
+
     // 獲取文件數據
     const fileBuffer = await response.arrayBuffer()
     const contentType = response.headers.get('content-type') || 'application/octet-stream'
-    
+
     // 根據文件類型設置適當的 Content-Type
     let finalContentType = contentType
     if (type === 'pdf') {
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     } else if (type === 'image') {
       finalContentType = contentType.startsWith('image/') ? contentType : 'image/jpeg'
     }
-    
+
     // 處理中文文件名編碼
     let contentDisposition = 'inline'
     if (filename) {
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
       const encodedFilename = encodeURIComponent(filename)
       contentDisposition = `inline; filename*=UTF-8''${encodedFilename}`
     }
-    
+
     // 返回文件給用戶
     return new NextResponse(fileBuffer, {
       status: 200,
@@ -106,4 +106,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-} 
+}

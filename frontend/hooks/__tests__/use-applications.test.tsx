@@ -200,7 +200,7 @@ describe.skip('useApplications Hook', () => {
   describe('submitApplication', () => {
     it('should submit application successfully', async () => {
       const submittedApp = { id: 1, status: 'submitted', submitted_at: '2025-01-01' }
-      
+
       // Set initial applications
       mockApiClient.applications.getMyApplications.mockResolvedValue({
         success: true,
@@ -248,7 +248,7 @@ describe.skip('useApplications Hook', () => {
   describe('withdrawApplication', () => {
     it('should withdraw application successfully', async () => {
       const withdrawnApp = { id: 1, status: 'withdrawn' }
-      
+
       mockApiClient.applications.getMyApplications.mockResolvedValue({
         success: true,
         data: [{ id: 1, status: 'submitted' }]
@@ -276,7 +276,7 @@ describe.skip('useApplications Hook', () => {
   describe('updateApplication', () => {
     it('should update application successfully', async () => {
       const updatedApp = { id: 1, status: 'draft', personal_statement: 'Updated statement' }
-      
+
       mockApiClient.applications.getMyApplications.mockResolvedValue({
         success: true,
         data: [{ id: 1, status: 'draft', personal_statement: 'Original' }]
@@ -304,7 +304,7 @@ describe.skip('useApplications Hook', () => {
   describe('uploadDocument', () => {
     it('should upload document successfully', async () => {
       const file = new File(['content'], 'test.pdf', { type: 'application/pdf' })
-      
+
       mockApiClient.applications.uploadDocument.mockResolvedValue({
         success: true,
         data: { file_id: 'file123' }
