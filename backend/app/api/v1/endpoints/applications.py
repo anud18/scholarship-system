@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, 
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import get_current_user, require_staff, require_student
 from app.db.deps import get_db
 from app.models.user import User
@@ -92,7 +92,7 @@ async def create_application(
         try:
             # Try to validate form data structure
             logger.debug("Validating form data structure")
-            form_data_dict = application_data.form_data.dict()
+            application_data.form_data.dict()
             logger.debug("Form data validated successfully")
         except Exception as e:
             logger.error(f"Form data validation failed: {str(e)}")

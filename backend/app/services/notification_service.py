@@ -174,7 +174,7 @@ class NotificationService:
                     Notification.user_id == user_id,
                     Notification.group_key == group_key,
                     Notification.created_at >= cutoff_time,
-                    Notification.is_read == False,
+                    Notification.is_read.is_(False),
                 )
             )
             .order_by(desc(Notification.created_at))
@@ -365,7 +365,7 @@ class NotificationService:
         query = select(NotificationTemplate).where(
             and_(
                 NotificationTemplate.type == notification_type,
-                NotificationTemplate.is_active == True,
+                NotificationTemplate.is_active.is_(True),
             )
         )
         result = await self.db.execute(query)
@@ -786,7 +786,7 @@ class NotificationService:
                     or_(
                         and_(
                             Notification.user_id == user_id,
-                            Notification.is_read == False,
+                            Notification.is_read.is_(False),
                         ),
                         and_(
                             Notification.user_id.is_(None),
@@ -870,7 +870,7 @@ class NotificationService:
         personal_query = select(func.count(Notification.id)).where(
             and_(
                 Notification.user_id == user_id,
-                Notification.is_read == False,
+                Notification.is_read.is_(False),
                 or_(
                     Notification.expires_at.is_(None),
                     Notification.expires_at > datetime.now(),
@@ -957,7 +957,7 @@ class NotificationService:
         # 標記個人通知為已讀
         personal_update = (
             update(Notification)
-            .where(and_(Notification.user_id == user_id, Notification.is_read == False))
+            .where(and_(Notification.user_id == user_id, Notification.is_read.is_(False)))
             .values(is_read=True, read_at=datetime.now())
         )
 
@@ -1056,8 +1056,8 @@ class NotificationService:
         """
         # Group updates by user
         user_updates = defaultdict(list)
-        for update in application_updates:
-            user_updates[update["user_id"]].append(update)
+        for application_update in application_updates:
+            user_updates[application_update["user_id"]].append(application_update)
 
         notifications_sent = 0
         aggregated_notifications = 0
@@ -1065,12 +1065,12 @@ class NotificationService:
         for user_id, updates in user_updates.items():
             if len(updates) == 1:
                 # Single update - send individual notification
-                update = updates[0]
+                first_update = updates[0]
                 await self.notifyApplicationStatusChange(
                     user_id=user_id,
-                    application_id=update["application_id"],
-                    new_status=update["status"],
-                    application_title=update.get("application_title", "獎學金申請"),
+                    application_id=first_update["application_id"],
+                    new_status=first_update["status"],
+                    application_title=first_update.get("application_title", "獎學金申請"),
                 )
                 notifications_sent += 1
             else:

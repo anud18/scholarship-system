@@ -4,6 +4,7 @@ Provides real-time quota tracking, analytics, and management interface
 """
 
 from typing import Any, Dict, Optional
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import and_, func
@@ -73,7 +74,7 @@ async def get_quota_overview(
                 ]
             )
         ).count()
-        renewal_applications = base_query.filter(Application.is_renewal == True).count()
+        renewal_applications = base_query.filter(Application.is_renewal.is_(True)).count()
 
         return ApiResponse(
             success=True,
@@ -115,6 +116,8 @@ async def get_detailed_quota_status(
     try:
         main_type_enum = ScholarshipMainType(main_type)
         sub_type_enum = ScholarshipSubType(sub_type)
+        main_type_value = main_type_enum.value
+        sub_type_value = sub_type_enum.value
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid scholarship type: {str(e)}")
 
@@ -124,8 +127,8 @@ async def get_detailed_quota_status(
         # Get applications for this type combination
         query = sync_session.query(Application).filter(
             and_(
-                Application.main_scholarship_type == main_type,
-                Application.sub_scholarship_type == sub_type,
+                Application.main_scholarship_type == main_type_value,
+                Application.sub_scholarship_type == sub_type_value,
             )
         )
 
@@ -155,7 +158,6 @@ async def get_detailed_quota_status(
         }
 
         # Time-based analysis
-        from datetime import datetime, timedelta, timezone
 
         now = datetime.now(timezone.utc)
 
@@ -185,7 +187,7 @@ async def get_detailed_quota_status(
 
         # Get quota information
         quota_service = ScholarshipQuotaService(sync_session)
-        quota_status = quota_service.get_quota_status_by_type(main_type, sub_type, semester or "all")
+        quota_status = quota_service.get_quota_status_by_type(main_type_value, sub_type_value, semester or "all")
 
         return ApiResponse(
             success=True,
@@ -199,8 +201,8 @@ async def get_detailed_quota_status(
                 "overdue_applications": overdue_applications,
                 "total_applications": len(applications),
                 "filters": {
-                    "main_type": main_type,
-                    "sub_type": sub_type,
+                    "main_type": main_type_value,
+                    "sub_type": sub_type_value,
                     "semester": semester,
                 },
             },
@@ -221,7 +223,6 @@ async def get_quota_trends(
     db: AsyncSession = Depends(get_db),
 ):
     """Get quota utilization trends over time"""
-    from datetime import datetime, timedelta, timezone
 
     from sqlalchemy.orm import sessionmaker
 
@@ -355,8 +356,8 @@ async def adjust_quota_limits(
                 adjusted_quotas.append(
                     {
                         "type_combination": type_combination,
-                        "main_type": main_type,
-                        "sub_type": sub_type,
+                        "main_type": main_type_enum.value,
+                        "sub_type": sub_type_enum.value,
                         "new_quota": new_quota,
                         "adjusted_by": current_user.username,
                         "adjusted_at": datetime.now(timezone.utc).isoformat(),
@@ -389,7 +390,6 @@ async def get_quota_alerts(
     db: AsyncSession = Depends(get_db),
 ):
     """Get quota-related alerts and warnings"""
-    from datetime import datetime, timedelta, timezone
 
     from sqlalchemy.orm import sessionmaker
 
@@ -447,7 +447,6 @@ async def get_quota_alerts(
                         )
 
         # Check for overdue applications
-        overdue_threshold = now - timedelta(days=30)
         overdue_count = (
             sync_session.query(Application)
             .filter(

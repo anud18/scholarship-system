@@ -11,16 +11,14 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timedelta, timezone
-from typing import List
 
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.init_lookup_tables import initLookupTables
-from app.db.session import AsyncSessionLocal, async_engine
-from app.models.user import EmployeeStatus, User, UserRole, UserType
+from app.db.session import AsyncSessionLocal
+from app.models.user import EmployeeStatus, UserRole, UserType
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +278,6 @@ async def seed_scholarships(session: AsyncSession):
     print("🎓 Creating scholarship data...")
 
     from app.models.enums import ApplicationCycle, ScholarshipCategory, ScholarshipStatus, SubTypeSelectionMode
-    from app.models.scholarship import ScholarshipType
 
     # 基本獎學金類型
     scholarships_data = [

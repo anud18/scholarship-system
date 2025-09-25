@@ -1665,7 +1665,7 @@ async def createTestApplicationsAndQuotaUsage(session: AsyncSession) -> None:
     print("📊 Setting up quota management data...")
 
     # Verify quota configurations exist
-    result = await session.execute(select(ScholarshipConfiguration).where(ScholarshipConfiguration.is_active == True))
+    result = await session.execute(select(ScholarshipConfiguration).where(ScholarshipConfiguration.is_active.is_(True)))
     configs = result.scalars().all()
 
     print(f"✅ Found {len(configs)} active scholarship configurations:")

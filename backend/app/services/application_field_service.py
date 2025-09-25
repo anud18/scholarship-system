@@ -38,7 +38,7 @@ class ApplicationFieldService:
 
         # 如果不需要包含停用的欄位，則只返回啟用的
         if not include_inactive:
-            query = query.where(ApplicationField.is_active == True)
+            query = query.where(ApplicationField.is_active.is_(True))
 
         query = query.order_by(ApplicationField.display_order, ApplicationField.id)
 
@@ -138,7 +138,7 @@ class ApplicationFieldService:
 
         # 如果不需要包含停用的文件，則只返回啟用的
         if not include_inactive:
-            query = query.where(ApplicationDocument.is_active == True)
+            query = query.where(ApplicationDocument.is_active.is_(True))
 
         query = query.order_by(ApplicationDocument.display_order, ApplicationDocument.id)
 
@@ -424,7 +424,7 @@ class ApplicationFieldService:
             query = select(ScholarshipConfiguration).where(
                 ScholarshipConfiguration.scholarship_type_id.in_(
                     select(ScholarshipConfiguration.scholarship_type_id).where(
-                        ScholarshipConfiguration.is_active == True
+                        ScholarshipConfiguration.is_active.is_(True)
                     )
                 )
             )

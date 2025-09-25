@@ -299,7 +299,6 @@ class BulkApprovalService:
 
             for application in applications:
                 try:
-                    old_status = application.status
                     application.status = ApplicationStatus.APPROVED.value
                     application.approved_at = datetime.now(timezone.utc)
                     application.decision_date = datetime.now(timezone.utc)
@@ -359,7 +358,7 @@ class BulkApprovalService:
         try:
             # Validate status
             try:
-                status_enum = ApplicationStatus(new_status)
+                _ = ApplicationStatus(new_status)
             except ValueError:
                 raise ValueError(f"Invalid status: {new_status}")
 

@@ -34,14 +34,6 @@ class GitHubIntegrationService:
         issue_body = await self._generate_issue_body(distribution, ranking)
         labels = self._generate_issue_labels(distribution)
 
-        # Prepare GitHub issue data
-        github_issue_data = {
-            "title": issue_title,
-            "body": issue_body,
-            "labels": labels,
-            "assignees": [],
-        }
-
         # Create issue URL (for tracking purposes)
         issue_url = f"https://github.com/{self.github_repo}/issues"
 
@@ -55,6 +47,8 @@ class GitHubIntegrationService:
             "state": "open",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "html_url": f"{issue_url}/{self._generate_issue_number()}",
+            "labels": labels,
+            "assignees": [],
         }
 
         # Update distribution record with GitHub issue info
@@ -81,7 +75,7 @@ class GitHubIntegrationService:
             stmt = (
                 select(CollegeRanking)
                 .where(
-                    CollegeRanking.distribution_executed == True,
+                    CollegeRanking.distribution_executed.is_(True),
                     CollegeRanking.distribution_date.isnot(None),
                 )
                 .order_by(CollegeRanking.distribution_date.desc())
@@ -246,6 +240,8 @@ class GitHubIntegrationService:
             "body": issue_body,
             "state": "open",
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "labels": labels,
+            "assignees": [],
         }
 
         # Update ranking record
