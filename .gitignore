@@ -96,6 +96,7 @@ coverage/
 *.db
 *.sqlite
 *.sqlite3
+temp_autogen.db
 
 # File uploads
 uploads/
@@ -118,11 +119,16 @@ dump.rdb
 # Backup files
 *.bak
 *.backup
+*.old
+*.temp
+*.tmp
+*~
 
 # Coverage reports
 htmlcov/
 .coverage
 .coverage.*
+coverage.json
 
 # pytest
 .pytest_cache/
