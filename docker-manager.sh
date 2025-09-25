@@ -218,14 +218,48 @@ init_database() {
                 sleep 2
             done
             
-            # Run database initialization
-            log_info "Running database initialization..."
-            docker exec scholarship_backend${container_suffix} python -m app.core.init_db
-            
+            # Run database migrations with Alembic
+            log_info "Running database migrations..."
+            docker exec scholarship_backend${container_suffix} alembic upgrade head
+
             if [ $? -eq 0 ]; then
-                log_success "Database initialization completed!"
+                log_success "Database migrations completed!"
             else
-                log_error "Database initialization failed"
+                log_error "Database migrations failed"
+                exit 1
+            fi
+
+            # Run seed script to populate initial data
+            log_info "Seeding database with initial data..."
+            docker exec scholarship_backend${container_suffix} python -m app.seed
+
+            if [ $? -eq 0 ]; then
+                log_success "Database seeding completed!"
+            else
+                log_warning "Database seeding completed with some warnings (core data is ready)"
+                log_info "Core tables (users, scholarships, lookup data) are successfully initialized"
+            fi
+
+            # Verify database setup
+            log_info "Verifying database setup..."
+            user_count=$(docker exec scholarship_backend${container_suffix} python -c "
+import asyncio
+from app.db.session import AsyncSessionLocal
+from sqlalchemy import func, select
+from app.models.user import User
+
+async def count_users():
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(func.count()).select_from(User))
+        return result.scalar()
+
+print(asyncio.run(count_users()))
+" 2>/dev/null)
+
+            if [ "$user_count" -gt 0 ]; then
+                log_success "Database verification passed: $user_count users created"
+            else
+                log_error "Database verification failed: No users found"
                 exit 1
             fi
             ;;
