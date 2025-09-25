@@ -345,7 +345,7 @@ jobs:
   # Staging validation tests
   staging-tests:
     name: Staging Validation
-    runs-on: [self-hosted, scholarship-test]
+    runs-on: [self-hosted, scholarship, test]
     needs: [pre-deployment, deploy-staging]
     if: needs.pre-deployment.outputs.deploy-staging == 'true' && needs.pre-deployment.outputs.skip-tests == 'false'
 
