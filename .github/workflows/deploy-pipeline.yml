@@ -238,7 +238,7 @@ jobs:
       - name: Stop old containers
         run: |
           cd ~/scholarship-staging
-          docker-compose down || true
+          docker compose down || true
 
       - name: Run database migrations
         env:
@@ -271,7 +271,7 @@ jobs:
       - name: Start new containers
         run: |
           cd ~/scholarship-staging
-          docker-compose up -d
+          docker compose up -d
 
           # Wait for services to be healthy
           echo "Waiting for services to be ready..."
@@ -292,7 +292,7 @@ jobs:
 
           if [ $retry_count -eq $max_retries ]; then
             echo "❌ Backend health check failed"
-            docker-compose -f ~/scholarship-staging/docker-compose.yml logs backend
+            docker compose -f ~/scholarship-staging/docker-compose.yml logs backend
             exit 1
           fi
 
@@ -308,7 +308,7 @@ jobs:
 
           if [ $retry_count -eq $max_retries ]; then
             echo "❌ Frontend health check failed"
-            docker-compose -f ~/scholarship-staging/docker-compose.yml logs frontend
+            docker compose -f ~/scholarship-staging/docker-compose.yml logs frontend
             exit 1
           fi
 
