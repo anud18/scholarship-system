@@ -8,6 +8,7 @@ Usage:
 """
 
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -277,7 +278,8 @@ async def seed_scholarships(session: AsyncSession):
     """
     print("🎓 Creating scholarship data...")
 
-    from app.models.enums import ApplicationCycle, ScholarshipCategory, ScholarshipStatus, SubTypeSelectionMode
+    from app.models.enums import ApplicationCycle, SubTypeSelectionMode
+    from app.models.scholarship import ScholarshipCategory, ScholarshipStatus
 
     # 基本獎學金類型
     scholarships_data = [
@@ -321,6 +323,10 @@ async def seed_scholarships(session: AsyncSession):
     ]
 
     for scholarship_data in scholarships_data:
+        # Convert list to JSON for sub_type_list
+        if "sub_type_list" in scholarship_data and isinstance(scholarship_data["sub_type_list"], list):
+            scholarship_data["sub_type_list"] = json.dumps(scholarship_data["sub_type_list"])
+
         await session.execute(
             text(
                 """

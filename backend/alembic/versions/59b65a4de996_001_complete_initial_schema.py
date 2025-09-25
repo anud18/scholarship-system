@@ -38,9 +38,9 @@ def upgrade() -> None:
                 CREATE TYPE notificationpriority AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT');
                 CREATE TYPE semester AS ENUM ('FIRST', 'SECOND', 'SUMMER', 'ANNUAL');
                 CREATE TYPE applicationstatus AS ENUM ('draft', 'submitted', 'under_review', 'approved', 'rejected', 'withdrawn');
-                CREATE TYPE applicationcycle AS ENUM ('SEMESTER', 'ANNUAL');
-                CREATE TYPE subtypeselectionmode AS ENUM ('SINGLE', 'MULTIPLE');
-                CREATE TYPE quotamanagementmode AS ENUM ('DEPARTMENT_LEVEL', 'COLLEGE_LEVEL', 'SCHOOL_LEVEL');
+                CREATE TYPE applicationcycle AS ENUM ('semester', 'yearly');
+                CREATE TYPE subtypeselectionmode AS ENUM ('single', 'multiple', 'hierarchical');
+                CREATE TYPE quotamanagementmode AS ENUM ('none', 'simple', 'college_based', 'matrix_based');
                 CREATE TYPE emailcategory AS ENUM ('application_confirmation', 'review_request', 'decision_notification', 'reminder', 'system_notification', 'custom');
                 CREATE TYPE emailstatus AS ENUM ('pending', 'sent', 'failed', 'cancelled');
             EXCEPTION
