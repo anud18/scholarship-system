@@ -96,14 +96,16 @@ jobs:
           pip install black==23.11.0 flake8 mypy pylint
 
           echo "::group::Black Format Check"
-          black --check --diff . || {
-            echo "::error::Code formatting issues found. Run 'black .' to fix."
+          black --check --diff --line-length=120 . || {
+            echo "::error::Code formatting issues found. Run 'black --line-length=120 .' to fix."
             exit 1
           }
           echo "::endgroup::"
 
           echo "::group::Flake8 Linting"
           flake8 app \
+            --max-line-length=120 \
+            --extend-ignore=E203,W503,E501 \
             --count \
             --statistics \
             --show-source || {

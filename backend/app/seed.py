@@ -54,13 +54,17 @@ async def seed_lookup_tables(session: AsyncSession):
         print("  📖 Initializing lookup tables...")
         # Initialize lookup tables inline
         print("  📖 Initializing degrees...")
-        await session.execute(text("""
+        await session.execute(
+            text(
+                """
             INSERT INTO degrees (id, name) VALUES
             (1, '學士'),
             (2, '碩士'),
             (3, '博士')
             ON CONFLICT (id) DO NOTHING
-        """))
+        """
+            )
+        )
 
         print("  🎓 Initializing student identities...")
         # Add other lookup table initialization as needed
