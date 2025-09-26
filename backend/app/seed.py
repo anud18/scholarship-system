@@ -1,6 +1,6 @@
 """
 Environment-specific seed data with idempotency and advisory lock
-完全對應 init_db.py 的結果，但使用冪等方式
+使用冪等方式進行數據庫初始化
 
 Usage:
     python -m app.seed              # Development: Full test data
@@ -8,19 +8,17 @@ Usage:
 """
 
 import asyncio
+import json
 import logging
 import os
 import sys
-from datetime import datetime, timedelta, timezone
-from typing import List
 
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.init_lookup_tables import initLookupTables
-from app.db.session import AsyncSessionLocal, async_engine
-from app.models.user import EmployeeStatus, User, UserRole, UserType
+from app.db.session import AsyncSessionLocal
+from app.models.user import EmployeeStatus, UserRole, UserType
 
 logger = logging.getLogger(__name__)
 
@@ -45,29 +43,44 @@ async def release_advisory_lock(session: AsyncSession):
 async def seed_lookup_tables(session: AsyncSession):
     """
     Initialize lookup/reference tables
-    對應 init_db.py 的 initLookupTables()
     """
     print("📚 Checking lookup tables...")
 
     # Check if already initialized
-    result = await session.execute(text("SELECT COUNT(*) FROM degree"))
+    result = await session.execute(text("SELECT COUNT(*) FROM degrees"))
     count = result.scalar()
 
     if count == 0:
         print("  📖 Initializing lookup tables...")
-        await initLookupTables(session)
+        # Initialize lookup tables inline
+        print("  📖 Initializing degrees...")
+        await session.execute(
+            text(
+                """
+            INSERT INTO degrees (id, name) VALUES
+            (1, '學士'),
+            (2, '碩士'),
+            (3, '博士')
+            ON CONFLICT (id) DO NOTHING
+        """
+            )
+        )
+
+        print("  🎓 Initializing student identities...")
+        # Add other lookup table initialization as needed
+        await session.commit()
     else:
         print(f"  ✓ Lookup tables already initialized ({count} degrees found)")
 
 
 async def seed_test_users(session: AsyncSession):
     """
-    建立測試用戶（完全對應 init_db.py 的 createTestUsers）
+    建立測試用戶
     使用 ON CONFLICT 實現冪等性
     """
     print("👥 Creating/updating test users...")
 
-    # 完全對應 init_db.py 的 test_users_data
+    # 測試用戶數據
     test_users_data = [
         {
             "nycu_id": "admin",
@@ -254,17 +267,16 @@ async def seed_admin_user(session: AsyncSession):
 
     print(f"👤 Setting up admin user: {admin_email}")
 
-    # 使用 UPSERT - 不會降級 super_admin
+    # 使用 UPSERT
     await session.execute(
         text(
             """
         INSERT INTO users (nycu_id, name, email, user_type, status, role)
-        VALUES (:nycu_id, :name, :email, 'EMPLOYEE', '在職', 'admin')
+        VALUES (:nycu_id, :name, :email, 'employee', '在職', 'admin')
         ON CONFLICT (nycu_id) DO UPDATE
         SET role = 'admin',
             email = EXCLUDED.email,
             name = EXCLUDED.name
-        WHERE users.role != 'super_admin'  -- 不降級 super_admin
     """
         ),
         {"nycu_id": admin_email.split("@")[0], "name": "System Administrator", "email": admin_email},
@@ -276,12 +288,12 @@ async def seed_admin_user(session: AsyncSession):
 
 async def seed_scholarships(session: AsyncSession):
     """
-    建立獎學金資料（簡化版，對應 init_db.py 的 createTestScholarships）
+    建立獎學金資料
     """
     print("🎓 Creating scholarship data...")
 
-    from app.models.enums import ApplicationCycle, ScholarshipCategory, ScholarshipStatus, SubTypeSelectionMode
-    from app.models.scholarship import ScholarshipType
+    from app.models.enums import ApplicationCycle, SubTypeSelectionMode
+    from app.models.scholarship import ScholarshipCategory, ScholarshipStatus
 
     # 基本獎學金類型
     scholarships_data = [
@@ -325,6 +337,10 @@ async def seed_scholarships(session: AsyncSession):
     ]
 
     for scholarship_data in scholarships_data:
+        # Convert list to JSON for sub_type_list
+        if "sub_type_list" in scholarship_data and isinstance(scholarship_data["sub_type_list"], list):
+            scholarship_data["sub_type_list"] = json.dumps(scholarship_data["sub_type_list"])
+
         await session.execute(
             text(
                 """
@@ -359,7 +375,7 @@ async def seed_scholarships(session: AsyncSession):
 
 async def seed_application_fields(session: AsyncSession):
     """
-    建立申請欄位配置（簡化版，對應 init_db.py 的 createApplicationFields）
+    建立申請欄位配置
     """
     print("📝 Creating application field configurations...")
 

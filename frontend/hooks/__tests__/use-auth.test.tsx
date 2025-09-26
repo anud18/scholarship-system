@@ -64,7 +64,7 @@ describe('useAuth Hook', () => {
 
   it('should throw error when used outside provider', () => {
     let caughtError: Error | null = null
-    
+
     const handleError = (error: Error) => {
       caughtError = error
     }
@@ -84,4 +84,4 @@ describe('useAuth Hook', () => {
     // Restore console.error
     consoleSpy.mockRestore()
   })
-}) 
+})

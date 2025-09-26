@@ -9,16 +9,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
-import { 
-  FileText, 
-  Users, 
-  Clock, 
-  Timer, 
-  Search, 
-  Filter, 
-  Eye, 
-  CheckCircle, 
-  XCircle, 
+import {
+  FileText,
+  Users,
+  Clock,
+  Timer,
+  Search,
+  Filter,
+  Eye,
+  CheckCircle,
+  XCircle,
   AlertCircle,
   GraduationCap,
   Star,
@@ -149,7 +149,7 @@ interface DashboardApplication {
 const transformApplicationData = (app: any): DashboardApplication => {
   console.log('🔍 Transforming application data:', app.app_id)
   console.log('📊 Professor data in raw API response:', app.professor)
-  
+
   // Ensure submitted_form_data has the correct structure for file preview
   let submittedFormData = app.submitted_form_data
   if (submittedFormData && submittedFormData.documents) {
@@ -175,7 +175,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
       }))
     }
   }
-  
+
   const transformed = {
     id: app.id,
     app_id: app.app_id,
@@ -219,7 +219,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
     // Pass through scholarship configuration for professor review requirements
     scholarship_configuration: app.scholarship_configuration
   }
-  
+
   console.log('✅ Transformed result:', transformed.app_id)
   console.log('📋 Professor in transformed data:', transformed.professor)
   console.log('🎯 Professor name in transformed:', transformed.professor?.name)
@@ -230,14 +230,14 @@ const transformApplicationData = (app: any): DashboardApplication => {
 
 export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardProps) {
   // 使用 hook 獲取真實資料
-  const { 
-    applicationsByType, 
+  const {
+    applicationsByType,
     scholarshipTypes,
     scholarshipStats,
-    isLoading, 
-    error, 
+    isLoading,
+    error,
     refetch,
-    updateApplicationStatus 
+    updateApplicationStatus
   } = useScholarshipSpecificApplications()
 
   // Get user's scholarship permissions for debugging
@@ -245,7 +245,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
 
   // Locale state for internationalization (管理員頁面固定使用中文)
   const [locale] = useState<Locale>("zh")
-  
+
   // State for sub-type translations from backend
   const [subTypeTranslations, setSubTypeTranslations] = useState<Record<string, string>>({})
   const [translationsLoading, setTranslationsLoading] = useState(false)
@@ -267,7 +267,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   const [statusFilter, setStatusFilter] = useState("all")
   const [showApplicationDetail, setShowApplicationDetail] = useState(false)
   const [selectedApplicationForDetail, setSelectedApplicationForDetail] = useState<DashboardApplication | null>(null)
-  
+
   // 學期選擇相關狀態
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>()
   const [selectedSemester, setSelectedSemester] = useState<string>()
@@ -286,28 +286,28 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   const getApplicationsByType = (type: string) => {
     const rawApplications = applicationsByType[type] || []
     const transformedApplications = rawApplications.map(transformApplicationData)
-    
+
     // Debug logging
     if (transformedApplications.length > 0) {
       console.log(`Transformed applications for ${type}:`, transformedApplications[0])
     }
-    
+
     return transformedApplications
   }
-  
+
   // 獲取當前選擇的獎學金類型的子類型（從後端獲取）
   const getCurrentScholarshipSubTypes = () => {
     if (!activeTab || !scholarshipStats[activeTab]) return []
     return scholarshipStats[activeTab].sub_types || []
   }
-  
+
   // 當獎學金類型載入後，自動選擇第一個類型
   useEffect(() => {
     if (scholarshipTypes.length > 0 && !activeTab) {
       setActiveTab(scholarshipTypes[0])
     }
   }, [scholarshipTypes, activeTab])
-  
+
   // 當獎學金類型改變時，重置子類型選擇和學期選擇
   useEffect(() => {
     setSelectedSubTypes([])
@@ -320,7 +320,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   useEffect(() => {
     const loadSubTypeTranslations = async () => {
       if (Object.keys(subTypeTranslations).length > 0) return // 已經載入過
-      
+
       setTranslationsLoading(true)
       try {
         const response = await apiClient.admin.getSubTypeTranslations()
@@ -362,7 +362,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
     // 搜尋篩選
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(app => 
+      filtered = filtered.filter(app =>
         app.student_name?.toLowerCase().includes(term) ||
         app.student_no?.toLowerCase().includes(term) ||
         app.user?.email.toLowerCase().includes(term) ||
@@ -389,7 +389,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
     if (subTypeTranslations[subType]) {
       return subTypeTranslations[subType]
     }
-    
+
     // 如果沒有翻譯，顯示原始代碼
     return subType
   }
@@ -424,13 +424,13 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   // 渲染統計卡片
   const renderStatsCards = (applications: DashboardApplication[]) => {
     const totalApplications = applications.length
-    const pendingApplications = applications.filter(app => 
+    const pendingApplications = applications.filter(app =>
       ['submitted', 'under_review'].includes(app.status)
     ).length
-    const approvedApplications = applications.filter(app => 
+    const approvedApplications = applications.filter(app =>
       app.status === 'approved'
     ).length
-    const rejectedApplications = applications.filter(app => 
+    const rejectedApplications = applications.filter(app =>
       app.status === 'rejected'
     ).length
 
@@ -682,13 +682,13 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {app.submitted_at 
+                      {app.submitted_at
                         ? new Date(app.submitted_at).toLocaleDateString('zh-TW')
                         : 'N/A'
                       }
                     </TableCell>
                     <TableCell>
-                      {app.days_waiting !== undefined 
+                      {app.days_waiting !== undefined
                         ? `${app.days_waiting}天`
                         : 'N/A'
                       }
@@ -759,7 +759,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
     if (selectedSubTypes.length === 0) {
       return applications // 如果沒有選擇子類型，顯示全部
     }
-    
+
     // 這裡需要根據實際的申請數據結構來過濾
     // 暫時返回全部，實際實現時需要根據 scholarship_subtype_list 來過濾
     return applications.filter(app => {
@@ -774,7 +774,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   // 渲染子類型多選標籤頁
   const renderSubTypeTabs = (applications: DashboardApplication[]) => {
     const subTypes = getCurrentScholarshipSubTypes()
-    
+
     if (subTypes.length === 0) {
       // 沒有子類型的獎學金，直接顯示統計卡片和申請列表
       return (
@@ -787,7 +787,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
 
     // 過濾掉 "general" 類型，只顯示其他子類型
     const filteredSubTypes = subTypes.filter((subType: string) => subType !== "general")
-    
+
     // 如果沒有其他子類型，直接顯示申請列表
     if (filteredSubTypes.length === 0) {
       // 只有 "general" 類型的獎學金，顯示統計卡片和申請列表
@@ -856,7 +856,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                 {selectedSubTypes.length > 0 ? (
                   <span className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-green-600" />
-                    已選擇 {selectedSubTypes.length} 個子類型: 
+                    已選擇 {selectedSubTypes.length} 個子類型:
                     <span className="font-medium">
                       {selectedSubTypes.map(type => getSubTypeDisplayName(type)).join(', ')}
                     </span>
@@ -868,7 +868,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                   </span>
                 )}
               </div>
-              
+
               {selectedSubTypes.length > 0 && (
                 <Button
                   variant="outline"
@@ -956,9 +956,9 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
         <div>
           <h2 className="text-2xl font-bold">獎學金申請管理</h2>
           <p className="text-muted-foreground">
-            管理各類型獎學金申請案件 - {user.role === 'super_admin' ? '超級管理員' : 
-            user.role === 'admin' ? '管理員' : 
-            user.role === 'college' ? '學院審核人員' : 
+            管理各類型獎學金申請案件 - {user.role === 'super_admin' ? '超級管理員' :
+            user.role === 'admin' ? '管理員' :
+            user.role === 'college' ? '學院審核人員' :
             user.role === 'professor' ? '教授' : '未知角色'}
           </p>
         </div>
@@ -977,14 +977,14 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
               <div>
                 <h3 className="font-semibold text-blue-900">權限狀態</h3>
                 <p className="text-sm text-blue-700">
-                  {user.role === 'super_admin' 
-                    ? '可管理所有獎學金類型' 
-                    : user.role === 'admin' 
-                    ? '可管理指定權限的獎學金類型' 
-                    : user.role === 'college' 
-                    ? '可管理指定權限的獎學金類型' 
-                    : user.role === 'professor' 
-                    ? '可查看指導學生的申請案件' 
+                  {user.role === 'super_admin'
+                    ? '可管理所有獎學金類型'
+                    : user.role === 'admin'
+                    ? '可管理指定權限的獎學金類型'
+                    : user.role === 'college'
+                    ? '可管理指定權限的獎學金類型'
+                    : user.role === 'professor'
+                    ? '可查看指導學生的申請案件'
                     : '無管理權限'}
                 </p>
                 {/* Debug information */}
@@ -1103,7 +1103,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                     </Button>
                   )}
                 </div>
-                
+
                 {/* 顯示當前篩選狀態 */}
                 {(selectedAcademicYear || selectedSemester) && (
                   <div className="mt-4 p-3 bg-white rounded-lg border border-green-200">
@@ -1124,7 +1124,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                 )}
               </CardContent>
             </Card>
-            
+
             {renderSubTypeTabs(getApplicationsByType(type))}
           </TabsContent>
         ))}
@@ -1144,8 +1144,8 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
       {/* 獎學金管理面板 */}
       {activeTab && (
         <div className="mt-8">
-          <AdminScholarshipManagementInterface 
-            type={activeTab as any} 
+          <AdminScholarshipManagementInterface
+            type={activeTab as any}
             className="border-t pt-6"
           />
         </div>

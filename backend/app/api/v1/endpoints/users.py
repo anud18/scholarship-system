@@ -301,11 +301,11 @@ async def get_user_stats(current_user: User = Depends(require_admin), db: AsyncS
 
     # Status distribution
     status_stats = {}
-    for status in EmployeeStatus:
-        stmt = select(func.count(User.id)).where(User.status == status)
+    for employee_status in EmployeeStatus:
+        stmt = select(func.count(User.id)).where(User.status == employee_status)
         result = await db.execute(stmt)
         count = result.scalar()
-        status_stats[status.value] = count
+        status_stats[employee_status.value] = count
 
     # Recent registrations (last 30 days)
     from datetime import datetime, timedelta

@@ -37,4 +37,4 @@ export interface EmployeeUser extends User {
   role: 'professor' | 'college' | 'admin' | 'super_admin'
   user_type: 'employee'
   status: '在職' | '退休'
-} 
+}

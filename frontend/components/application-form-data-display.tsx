@@ -14,8 +14,8 @@ const getFieldLabel = (fieldName: string, locale: Locale, fieldLabels?: {[key: s
 }
 
 interface ApplicationFormDataDisplayProps {
-  formData: Record<string, any> | { 
-    form_data?: Record<string, any>, 
+  formData: Record<string, any> | {
+    form_data?: Record<string, any>,
     submitted_form_data?: Record<string, any>,
     fields?: Record<string, any>
   }
@@ -34,12 +34,12 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
     const formatData = async () => {
       setIsLoading(true)
       const formatted: Record<string, any> = {}
-      
+
       // 處理表單資料，支援後端返回的結構：
       // { submitted_form_data: { fields: { field_id: { value: "..." } } } }
-      
+
       const dataToProcess: Record<string, any> = {}
-      
+
       // 處理後端的 submitted_form_data.fields 結構
       if (formData.submitted_form_data && formData.submitted_form_data.fields) {
         // 後端嵌套結構 - 只處理欄位，不處理文件
@@ -77,7 +77,7 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
           }
         })
       }
-      
+
       for (const [key, value] of Object.entries(dataToProcess)) {
         if (key === 'scholarship_type') {
           try {
@@ -90,7 +90,7 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
           formatted[key] = value
         }
       }
-      
+
       setFormattedData(formatted)
       setIsLoading(false)
     }
@@ -101,7 +101,7 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
   if (isLoading) {
     // 處理載入狀態的顯示
     const dataToShow: Record<string, any> = {}
-    
+
     if (formData.submitted_form_data && formData.submitted_form_data.fields) {
       // 後端嵌套結構 - 只處理欄位
       Object.entries(formData.submitted_form_data.fields).forEach(([fieldId, fieldData]: [string, any]) => {
@@ -137,7 +137,7 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
         }
       })
     }
-    
+
     return (
       <div className="space-y-3">
         {Object.entries(dataToShow).map(([key, value]) => {
@@ -147,8 +147,8 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
                 <Label className="text-sm font-medium text-gray-700">{getFieldLabel(key, locale, fieldLabels)}</Label>
                 <p className="text-sm text-gray-600 mt-1">
                   {key === 'scholarship_type' ? '載入中...' : (
-                    typeof value === 'string' && value.length > 100 
-                      ? `${value.substring(0, 100)}...` 
+                    typeof value === 'string' && value.length > 100
+                      ? `${value.substring(0, 100)}...`
                       : String(value)
                   )}
                 </p>
@@ -168,8 +168,8 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
             <div className="flex-1">
               <Label className="text-sm font-medium text-gray-700">{getFieldLabel(key, locale, fieldLabels)}</Label>
               <p className="text-sm text-gray-600 mt-1">
-                {typeof value === 'string' && value.length > 100 
-                  ? `${value.substring(0, 100)}...` 
+                {typeof value === 'string' && value.length > 100
+                  ? `${value.substring(0, 100)}...`
                   : String(value)
                 }
               </p>
@@ -179,4 +179,4 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
       })}
     </div>
   )
-} 
+}

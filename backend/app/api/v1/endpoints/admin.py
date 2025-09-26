@@ -2405,7 +2405,7 @@ async def _copy_rules_in_batches(
                 ScholarshipRule.operator == source_rule.operator,
                 ScholarshipRule.expected_value == source_rule.expected_value,
                 ScholarshipRule.sub_type == source_rule.sub_type,
-                ScholarshipRule.is_template == False,
+                ScholarshipRule.is_template.is_(False),
             )
             .exists()
         )
@@ -2517,7 +2517,7 @@ async def copy_rules_between_periods(
         stmt = stmt.where(ScholarshipRule.id.in_(copy_request.rule_ids))
 
     # Exclude templates
-    stmt = stmt.where(ScholarshipRule.is_template == False)
+    stmt = stmt.where(ScholarshipRule.is_template.is_(False))
 
     # Get count first to decide on batch processing approach
     count_stmt = select(func.count(ScholarshipRule.id))
@@ -2531,7 +2531,7 @@ async def copy_rules_between_periods(
         if copy_request.source_semester:
             count_stmt = count_stmt.where(ScholarshipRule.semester == copy_request.source_semester)
 
-    count_stmt = count_stmt.where(ScholarshipRule.is_template == False)
+    count_stmt = count_stmt.where(ScholarshipRule.is_template.is_(False))
     count_result = await db.execute(count_stmt)
     total_rules = count_result.scalar()
 
@@ -2541,6 +2541,8 @@ async def copy_rules_between_periods(
     # For large datasets (>500 rules), use batch processing to avoid memory issues
     BATCH_SIZE = 500
     use_batch_processing = total_rules > BATCH_SIZE
+
+    target_semester_enum = copy_request.target_semester
 
     if use_batch_processing:
         # Process in batches for large datasets
@@ -2563,9 +2565,6 @@ async def copy_rules_between_periods(
         for scholarship_type_id in scholarship_type_ids:
             check_scholarship_permission(current_user, scholarship_type_id)
 
-    # Prepare target semester enum (already an enum from schema)
-    target_semester_enum = copy_request.target_semester
-
     # Create copies with bulk duplicate checking for better performance
     new_rules = []
     skipped_rules = 0
@@ -2585,7 +2584,7 @@ async def copy_rules_between_periods(
                 ScholarshipRule.operator == source_rule.operator,
                 ScholarshipRule.expected_value == source_rule.expected_value,
                 ScholarshipRule.sub_type == source_rule.sub_type,
-                ScholarshipRule.is_template == False,  # Exclude templates
+                ScholarshipRule.is_template.is_(False),  # Exclude templates
             )
             .exists()
         )
@@ -2741,7 +2740,7 @@ async def get_rule_templates(
             selectinload(ScholarshipRule.scholarship_type),
             selectinload(ScholarshipRule.creator),
         )
-        .where(ScholarshipRule.is_template == True)
+        .where(ScholarshipRule.is_template.is_(True))
     )
 
     if scholarship_type_id:
@@ -2892,7 +2891,7 @@ async def apply_rule_template(
     # Get template rules
     stmt = select(ScholarshipRule).where(
         ScholarshipRule.id == template_request.template_id,
-        ScholarshipRule.is_template == True,
+        ScholarshipRule.is_template.is_(True),
     )
     result = await db.execute(stmt)
     template_rule = result.scalar_one_or_none()
@@ -2907,7 +2906,7 @@ async def apply_rule_template(
     template_stmt = select(ScholarshipRule).where(
         ScholarshipRule.template_name == template_rule.template_name,
         ScholarshipRule.scholarship_type_id == template_request.scholarship_type_id,
-        ScholarshipRule.is_template == True,
+        ScholarshipRule.is_template.is_(True),
     )
     template_result = await db.execute(template_stmt)
     template_rules = template_result.scalars().all()
@@ -2922,7 +2921,7 @@ async def apply_rule_template(
             ScholarshipRule.scholarship_type_id == template_request.scholarship_type_id,
             ScholarshipRule.academic_year == template_request.academic_year,
             ScholarshipRule.semester == target_semester_enum,
-            ScholarshipRule.is_template == False,
+            ScholarshipRule.is_template.is_(False),
         )
 
         existing_result = await db.execute(existing_stmt)
@@ -3020,7 +3019,7 @@ async def delete_rule_template(
     stmt = select(ScholarshipRule).where(
         ScholarshipRule.template_name == template_name,
         ScholarshipRule.scholarship_type_id == scholarship_type_id,
-        ScholarshipRule.is_template == True,
+        ScholarshipRule.is_template.is_(True),
     )
     result = await db.execute(stmt)
     template_rules = result.scalars().all()

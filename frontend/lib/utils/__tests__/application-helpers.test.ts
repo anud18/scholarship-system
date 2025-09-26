@@ -109,7 +109,7 @@ describe('Application Helpers', () => {
     it('should return correct timeline for draft status in Chinese', () => {
       const draftApp = { ...mockApplication, status: 'draft' }
       const timeline = getApplicationTimeline(draftApp, 'zh')
-      
+
       expect(timeline).toHaveLength(4)
       expect(timeline[0].title).toBe('提交申請')
       expect(timeline[0].status).toBe('current')
@@ -121,7 +121,7 @@ describe('Application Helpers', () => {
     it('should return correct timeline for submitted status in English', () => {
       const submittedApp = { ...mockApplication, status: 'submitted' }
       const timeline = getApplicationTimeline(submittedApp, 'en')
-      
+
       expect(timeline).toHaveLength(4)
       expect(timeline[0].title).toBe('Submit Application')
       expect(timeline[0].status).toBe('completed')
@@ -132,7 +132,7 @@ describe('Application Helpers', () => {
     it('should return correct timeline for approved status', () => {
       const approvedApp = { ...mockApplication, status: 'approved' }
       const timeline = getApplicationTimeline(approvedApp, 'zh')
-      
+
       expect(timeline[0].status).toBe('completed')
       expect(timeline[1].status).toBe('completed')
       expect(timeline[2].status).toBe('completed')
@@ -142,7 +142,7 @@ describe('Application Helpers', () => {
     it('should return correct timeline for rejected status', () => {
       const rejectedApp = { ...mockApplication, status: 'rejected' }
       const timeline = getApplicationTimeline(rejectedApp, 'zh')
-      
+
       expect(timeline[1].status).toBe('rejected')
       expect(timeline[2].status).toBe('rejected')
       expect(timeline[3].status).toBe('rejected')
@@ -245,14 +245,14 @@ describe('Application Helpers', () => {
   describe('getDocumentLabel', () => {
     it('should use dynamic label when provided', () => {
       const dynamicLabel = { zh: '動態標籤', en: 'Dynamic Label' }
-      
+
       expect(getDocumentLabel('transcript', 'zh', dynamicLabel)).toBe('動態標籤')
       expect(getDocumentLabel('transcript', 'en', dynamicLabel)).toBe('Dynamic Label')
     })
 
     it('should fallback to Chinese label when English not available', () => {
       const dynamicLabel = { zh: '中文標籤' }
-      
+
       expect(getDocumentLabel('transcript', 'en', dynamicLabel)).toBe('中文標籤')
     })
 
@@ -300,7 +300,7 @@ describe('Application Helpers', () => {
       })
 
       const result = await fetchApplicationFiles(1)
-      
+
       expect(result).toHaveLength(1)
       expect(result[0]).toEqual({
         id: 'file1',

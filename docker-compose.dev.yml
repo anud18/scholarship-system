@@ -62,7 +62,7 @@ services:
 
   # FastAPI Backend with Hot Reload
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: scholarship_backend_dev

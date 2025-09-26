@@ -45,7 +45,7 @@ export const translations = {
       not_set: "未設定",
       student: "學生",
       staff: "職員",
-      
+
       // Messages and notifications
       loading: "載入中...",
       loading_profile: "正在載入個人資料...",
@@ -60,10 +60,10 @@ export const translations = {
       profile_updated: "個人資料已更新",
       update_failed: "更新失敗",
       update_profile_error: "更新個人資料時發生錯誤",
-      
+
       // Contact info notice
       contact_notice: "聯絡資訊來自校務系統，如需修改請洽學務處。",
-      
+
       // Basic info section
       basic_readonly_title: "基本資料 (從 API 取得，無法修改)",
       basic_readonly_notice: "以下資料來自校務系統，如需修改請聯繫相關單位。",
@@ -80,7 +80,7 @@ export const translations = {
       enrollment_status: "學籍狀態",
       enrollment_year: "入學年度",
       semester_count: "在學期數",
-      
+
       // Bank info section
       bank_account_info: "銀行帳戶資訊",
       bank_code: "銀行代碼",
@@ -109,7 +109,7 @@ export const translations = {
       document_deleted: "銀行帳戶證明文件已刪除",
       delete_failed: "刪除失敗",
       delete_error: "刪除檔案時發生錯誤",
-      
+
       // Advisor info section
       advisor_name: "指導教授 姓名",
       advisor_name_placeholder: "例：王小明",
@@ -117,7 +117,7 @@ export const translations = {
       advisor_id: "指導教授 學校工號",
       advisor_id_placeholder: "例：professor123",
       save_advisor_info: "儲存指導教授資訊",
-      
+
       // History modal
       profile_history: "個人資料異動紀錄",
       old_value: "舊值",
@@ -344,7 +344,7 @@ export const translations = {
       not_set: "Not Set",
       student: "Student",
       staff: "Staff",
-      
+
       // Messages and notifications
       loading: "Loading...",
       loading_profile: "Loading profile...",
@@ -359,10 +359,10 @@ export const translations = {
       profile_updated: "Profile has been updated",
       update_failed: "Update Failed",
       update_profile_error: "Error occurred while updating profile",
-      
+
       // Contact info notice
       contact_notice: "Contact information is from the academic system. Please contact the Student Affairs Office to modify.",
-      
+
       // Basic info section
       basic_readonly_title: "Basic Information (From API, Read Only)",
       basic_readonly_notice: "The following information is from the academic system. Please contact relevant departments to modify.",
@@ -379,7 +379,7 @@ export const translations = {
       enrollment_status: "Enrollment Status",
       enrollment_year: "Enrollment Year",
       semester_count: "Semesters Completed",
-      
+
       // Bank info section
       bank_account_info: "Bank Account Information",
       bank_code: "Bank Code",
@@ -408,7 +408,7 @@ export const translations = {
       document_deleted: "Bank account proof document has been deleted",
       delete_failed: "Delete Failed",
       delete_error: "Error occurred while deleting file",
-      
+
       // Advisor info section
       advisor_name: "Advisor Name",
       advisor_name_placeholder: "e.g., John Smith",
@@ -416,7 +416,7 @@ export const translations = {
       advisor_id: "Advisor School ID",
       advisor_id_placeholder: "e.g., professor123",
       save_advisor_info: "Save Advisor Information",
-      
+
       // History modal
       profile_history: "Profile Change History",
       old_value: "Old Value",
@@ -607,10 +607,10 @@ export const translations = {
 export function getTranslation(locale: 'zh' | 'en', key: string): string {
   const keys = key.split('.')
   let value: any = translations[locale]
-  
+
   for (const k of keys) {
     value = value?.[k]
   }
-  
+
   return value || key
 }

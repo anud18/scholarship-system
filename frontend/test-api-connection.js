@@ -9,7 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 async function testApiConnection() {
   console.log('🔗 Testing API connectivity...')
   console.log(`📍 API URL: ${API_URL}`)
-  
+
   try {
     const response = await fetch(`${API_URL}/health`, {
       method: 'GET',
@@ -17,7 +17,7 @@ async function testApiConnection() {
         'Content-Type': 'application/json',
       },
     })
-    
+
     if (response.ok) {
       const data = await response.json()
       console.log('✅ API connection successful!')
@@ -55,4 +55,4 @@ testApiConnection()
   .catch(error => {
     console.error('Test failed:', error)
     process.exit(1)
-  }) 
+  })

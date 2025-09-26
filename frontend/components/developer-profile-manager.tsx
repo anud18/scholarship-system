@@ -20,4 +20,4 @@ export function DeveloperProfileManager() {
       </CardContent>
     </Card>
   );
-} 
+}

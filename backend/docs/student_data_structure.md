@@ -18,17 +18,17 @@ class StudentDataSchema(BaseModel):
     email: Optional[str] = "Email"
     department: Optional[str] = "系所"
     degree: Optional[str] = "學位"
-    
+
     # 金融帳戶資訊 (使用者輸入)
     financial_info: Optional[StudentFinancialInfo]
-    
+
     # 指導教授資訊 (使用者輸入)
     supervisor_info: Optional[SupervisorInfo]
-    
+
     # 聯絡資訊 (使用者輸入)
     contact_phone: Optional[str] = "聯絡電話"
     contact_address: Optional[str] = "聯絡地址"
-    
+
     # 學術資訊 (外部 API + 使用者輸入)
     gpa: Optional[float] = "GPA"
     class_ranking: Optional[int] = "班級排名"

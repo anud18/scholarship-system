@@ -6,6 +6,7 @@ Provides comprehensive scholarship application management with priority processi
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
+from sqlalchemy import and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user, require_admin, require_staff, require_student
@@ -13,9 +14,7 @@ from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
 from app.models.user import User
 from app.schemas.response import ApiResponse
-
-# TODO: Temporarily disabled due to Student model refactoring
-# from app.services.scholarship_service import ScholarshipApplicationService, ScholarshipQuotaService
+from app.services.scholarship_service import ScholarshipApplicationService, ScholarshipQuotaService
 
 router = APIRouter()
 
@@ -191,6 +190,8 @@ async def get_quota_status(
     try:
         main_type_enum = ScholarshipMainType(main_type)
         sub_type_enum = ScholarshipSubType(sub_type)
+        main_type_value = main_type_enum.value
+        sub_type_value = sub_type_enum.value
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid scholarship type: {str(e)}")
 
@@ -198,7 +199,7 @@ async def get_quota_status(
 
     try:
         service = ScholarshipQuotaService(sync_session)
-        quota_status = service.get_quota_status_by_type(main_type, sub_type, semester)
+        quota_status = service.get_quota_status_by_type(main_type_value, sub_type_value, semester)
 
         return ApiResponse(
             success=True,
@@ -227,6 +228,8 @@ async def process_applications_by_priority(
     try:
         main_type_enum = ScholarshipMainType(main_type)
         sub_type_enum = ScholarshipSubType(sub_type)
+        main_type_value = main_type_enum.value
+        sub_type_value = sub_type_enum.value
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid scholarship type: {str(e)}")
 
@@ -234,7 +237,7 @@ async def process_applications_by_priority(
 
     try:
         service = ScholarshipQuotaService(sync_session)
-        result = service.process_applications_by_priority(main_type, sub_type, semester)
+        result = service.process_applications_by_priority(main_type_value, sub_type_value, semester)
 
         return ApiResponse(success=True, message="Applications processed successfully", data=result)
 
@@ -296,7 +299,7 @@ async def get_scholarship_dashboard(
             query = query.filter(Application.semester == semester)
 
         total_applications = query.count()
-        renewal_applications = query.filter(Application.is_renewal == True).count()
+        renewal_applications = query.filter(Application.is_renewal.is_(True)).count()
         new_applications = total_applications - renewal_applications
 
         # Status breakdown

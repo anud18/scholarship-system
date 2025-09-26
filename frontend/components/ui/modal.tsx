@@ -25,11 +25,11 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className={`relative bg-white rounded-lg shadow-xl w-full mx-4 ${sizeClasses[size]} max-h-[90vh] overflow-hidden`}>
         {/* Header */}
@@ -44,7 +44,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
             <X className="h-4 w-4" />
           </Button>
         </div>
-        
+
         {/* Content */}
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {children}
@@ -52,4 +52,4 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       </div>
     </div>
   )
-} 
+}

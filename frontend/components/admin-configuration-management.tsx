@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { 
+import {
   Plus, Edit, Copy, Trash2, AlertCircle, Search,
   Calendar, DollarSign, Eye, FileText, Clock, Info
 } from "lucide-react"
@@ -35,8 +35,8 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
   const [searchTerm, setSearchTerm] = useState("")
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [academyCodes, setAcademyCodes] = useState<Record<string, string>>({})
-  
-  // Calculate current ROC year dynamically  
+
+  // Calculate current ROC year dynamically
   const currentROCYear = new Date().getFullYear() - 1911
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null)
 
@@ -61,7 +61,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
 
   const showSuccessToast = (message: string) => showToast(message, 'success')
   const showErrorToast = (message: string) => showToast(message, 'error')
-  
+
   // Academic year options (generate based on current year)
   const currentYear = new Date().getFullYear()
   const taiwanYear = currentYear - 1911
@@ -118,7 +118,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
 
     if (debouncedSearchTerm) {
       const searchLower = debouncedSearchTerm.toLowerCase()
-      filtered = filtered.filter(config => 
+      filtered = filtered.filter(config =>
         config.config_name.toLowerCase().includes(searchLower) ||
         (config.config_code && config.config_code.toLowerCase().includes(searchLower)) ||
         (config.description && config.description.toLowerCase().includes(searchLower))
@@ -153,14 +153,14 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
         api.admin.getScholarshipConfigurations({ scholarship_type_id: scholarshipType.id, is_active: true }),
         api.admin.getScholarshipConfigurations({ scholarship_type_id: scholarshipType.id, is_active: false })
       ])
-      
-      
+
+
       const allConfigurations = [
         ...(activeResponse.success ? activeResponse.data || [] : []),
         ...(inactiveResponse.success ? inactiveResponse.data || [] : [])
       ]
-      
-      
+
+
       setConfigurations(allConfigurations)
     } catch (error) {
       console.error('載入配置失敗:', error)
@@ -192,7 +192,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
 
   const handleUpdateConfig = async () => {
     if (!selectedConfig) return
-    
+
     try {
       setFormLoading(true)
       const response = await api.admin.updateScholarshipConfiguration(selectedConfig.id, formData)
@@ -213,7 +213,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
 
   const handleDeleteConfig = async () => {
     if (!selectedConfig) return
-    
+
     try {
       setFormLoading(true)
       const response = await api.admin.deleteScholarshipConfiguration(selectedConfig.id)
@@ -233,7 +233,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
 
   const handleDuplicateConfig = async () => {
     if (!selectedConfig) return
-    
+
     try {
       setFormLoading(true)
       const targetData = {
@@ -278,13 +278,13 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
   }
 
   const openViewDialog = (config: ScholarshipConfiguration) => {
-    
+
     setSelectedConfig(config)
     setShowViewDialog(true)
   }
 
   const openEditDialog = (config: ScholarshipConfiguration) => {
-    
+
     setSelectedConfig(config)
     setFormData({
       config_name: config.config_name,
@@ -365,14 +365,14 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
         console.warn('Invalid date string:', dateString)
         return ""
       }
-      
+
       // 使用本地時間
       const year = date.getFullYear()
       const month = String(date.getMonth() + 1).padStart(2, '0')
       const day = String(date.getDate()).padStart(2, '0')
       const hours = String(date.getHours()).padStart(2, '0')
       const minutes = String(date.getMinutes()).padStart(2, '0')
-      
+
       return `${year}-${month}-${day}T${hours}:${minutes}`
     } catch (error) {
       return ""
@@ -400,8 +400,8 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
   return (
     <div className="space-y-6">
       {/* Scholarship Type Tabs */}
-      <Tabs 
-        value={selectedScholarshipType?.id.toString() || ""} 
+      <Tabs
+        value={selectedScholarshipType?.id.toString() || ""}
         onValueChange={(value) => {
           const type = scholarshipTypes.find(t => t.id.toString() === value)
           setSelectedScholarshipType(type || null)
@@ -502,7 +502,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                                   </div>
                                 </div>
                               ) : null}
-                              
+
                               {/* 續領申請期間 */}
                               {config.renewal_application_start_date && config.renewal_application_end_date ? (
                                 <div>
@@ -512,16 +512,16 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                                   </div>
                                 </div>
                               ) : null}
-                              
+
                               {/* 如果兩個期間都沒設定 */}
-                              {!config.application_start_date && !config.application_end_date && 
+                              {!config.application_start_date && !config.application_end_date &&
                                !config.renewal_application_start_date && !config.renewal_application_end_date ? (
                                 <div className="text-muted-foreground">未設定</div>
                               ) : null}
                             </div>
                           </td>
                           <td className="p-4">
-                            <Badge 
+                            <Badge
                               className={config.is_active ? "text-xs bg-green-500 whitespace-nowrap" : "text-xs whitespace-nowrap"}
                               variant={config.is_active ? "default" : "secondary"}
                             >
@@ -590,7 +590,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               {selectedConfig?.config_name}
             </DialogDescription>
           </DialogHeader>
-          
+
           <ScrollArea className="max-h-[60vh]">
             <div className="space-y-6 pr-4">
               {/* Basic Information */}
@@ -869,7 +869,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                     </span>
                   </div>
                 </div>
-                
+
                 {/* Display quotas configuration if exists */}
                 {selectedConfig?.quotas && Object.keys(selectedConfig.quotas).length > 0 && (
                   <div className="mt-4">
@@ -962,7 +962,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               為選定的獎學金類型建立新的配置設定
             </DialogDescription>
           </DialogHeader>
-          
+
           <ScrollArea className="max-h-[60vh]">
             <div className="grid gap-4 pl-2 pr-4">
               <div className="grid grid-cols-2 gap-4">
@@ -989,8 +989,8 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="academic_year">學年度 *</Label>
-                  <Select 
-                    value={formData.academic_year?.toString() || ''} 
+                  <Select
+                    value={formData.academic_year?.toString() || ''}
                     onValueChange={(value) => setFormData(prev => ({...prev, academic_year: parseInt(value)}))}
                   >
                     <SelectTrigger>
@@ -1005,8 +1005,8 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                 </div>
                 <div>
                   <Label htmlFor="semester">學期</Label>
-                  <Select 
-                    value={formData.semester || 'null'} 
+                  <Select
+                    value={formData.semester || 'null'}
                     onValueChange={(value) => setFormData(prev => ({...prev, semester: value === 'null' ? null : value}))}
                   >
                     <SelectTrigger>
@@ -1073,7 +1073,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               {/* Quota Management */}
               <div className="space-y-4">
                 <h4 className="font-medium">配額管理設定</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center space-x-2">
                     <input
@@ -1085,7 +1085,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                     />
                     <Label htmlFor="has_quota_limit">啟用配額限制</Label>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -1101,8 +1101,8 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="quota_management_mode">配額管理模式</Label>
-                    <Select 
-                      value={formData.quota_management_mode || 'none'} 
+                    <Select
+                      value={formData.quota_management_mode || 'none'}
                       onValueChange={(value) => setFormData(prev => ({...prev, quota_management_mode: value}))}
                     >
                       <SelectTrigger>
@@ -1116,7 +1116,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div>
                     <Label htmlFor="total_quota">總配額數量</Label>
                     <Input
@@ -1214,7 +1214,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                       />
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="renewal_application_start_date">續領申請開始</Label>
@@ -1287,7 +1287,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               修改選定配置的設定
             </DialogDescription>
           </DialogHeader>
-          
+
           <ScrollArea className="max-h-[60vh]">
             <div className="grid gap-4 pl-2 pr-4">
               <div>
@@ -1359,7 +1359,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               {/* Quota Management Edit */}
               <div className="space-y-4">
                 <h4 className="font-medium">配額管理設定</h4>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center space-x-2">
                     <input
@@ -1371,7 +1371,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                     />
                     <Label htmlFor="edit_has_quota_limit">啟用配額限制</Label>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -1387,8 +1387,8 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="edit_quota_management_mode">配額管理模式</Label>
-                    <Select 
-                      value={formData.quota_management_mode || 'none'} 
+                    <Select
+                      value={formData.quota_management_mode || 'none'}
                       onValueChange={(value) => setFormData(prev => ({...prev, quota_management_mode: value}))}
                     >
                       <SelectTrigger>
@@ -1402,7 +1402,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div>
                     <Label htmlFor="edit_total_quota">總配額數量</Label>
                     <Input
@@ -1479,7 +1479,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               {/* 申請時間區段編輯 */}
               <div className="space-y-4">
                 <h4 className="font-medium">申請期間設定</h4>
-                
+
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -1530,7 +1530,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               {/* 審查期間設定 */}
               <div className="space-y-4">
                 <h4 className="font-medium">審查期間設定</h4>
-                
+
                 <div className="space-y-4">
                   {/* 續領審查期間 */}
                   <div>
@@ -1555,7 +1555,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                         />
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4 mt-2">
                       <div>
                         <Label htmlFor="edit_renewal_college_review_start">續領學院審查開始</Label>
@@ -1581,7 +1581,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
                   {/* 一般申請審查期間 */}
                   <div>
                     <h5 className="text-sm font-medium mb-2">一般申請審查期間</h5>
-                    
+
                     <div className="flex items-center space-x-2 mb-2">
                       <input
                         type="checkbox"
@@ -1726,13 +1726,13 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               複製現有配置到新的學年度/學期
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="target_academic_year">目標學年度</Label>
-                <Select 
-                  value={formData.academic_year?.toString() || ''} 
+                <Select
+                  value={formData.academic_year?.toString() || ''}
                   onValueChange={(value) => setFormData(prev => ({...prev, academic_year: parseInt(value)}))}
                 >
                   <SelectTrigger>
@@ -1747,8 +1747,8 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               </div>
               <div>
                 <Label htmlFor="target_semester">目標學期</Label>
-                <Select 
-                  value={formData.semester || 'null'} 
+                <Select
+                  value={formData.semester || 'null'}
                   onValueChange={(value) => setFormData(prev => ({...prev, semester: value === 'null' ? null : value}))}
                 >
                   <SelectTrigger>
@@ -1822,7 +1822,7 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
               配額設定中使用的學院代碼與中文名稱對照表
             </DialogDescription>
           </DialogHeader>
-          
+
           <ScrollArea className="max-h-[60vh]">
             <div className="space-y-2">
               <div className="grid grid-cols-3 gap-4 p-3 bg-gray-50 rounded-lg font-medium text-sm">
@@ -1858,8 +1858,8 @@ export function AdminConfigurationManagement({ scholarshipTypes }: AdminConfigur
       {/* Toast Notification */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-md shadow-lg transition-all duration-300 ${
-          toast.type === 'success' 
-            ? 'bg-green-50 border border-green-200 text-green-800' 
+          toast.type === 'success'
+            ? 'bg-green-50 border border-green-200 text-green-800'
             : 'bg-red-50 border border-red-200 text-red-800'
         }`}>
           <div className="flex items-center gap-2">

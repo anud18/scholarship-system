@@ -10,13 +10,13 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { 
-  FormInput, 
-  FileText, 
-  UserCheck, 
-  Plus, 
-  Edit, 
-  Trash2, 
+import {
+  FormInput,
+  FileText,
+  UserCheck,
+  Plus,
+  Edit,
+  Trash2,
   Save,
   GraduationCap,
   Loader2,
@@ -42,13 +42,13 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
   const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(null)
   const [applicationFields, setApplicationFields] = useState<ApplicationField[]>([])
   const [documentRequirements, setDocumentRequirements] = useState<ApplicationDocument[]>([])
-  
+
   // Loading and error states
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  
+
   // Form states
   const [fieldFormOpen, setFieldFormOpen] = useState(false)
   const [documentFormOpen, setDocumentFormOpen] = useState(false)
@@ -61,7 +61,7 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
       const timer = setTimeout(() => {
         setSuccessMessage(null)
       }, 3000)
-      
+
       return () => clearTimeout(timer)
     }
   }, [successMessage])
@@ -145,7 +145,7 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
       }
 
       const response = await api.applicationFields.saveFormConfig(type, configData)
-      
+
       if (response.success) {
         setSuccessMessage(`${formConfig?.title}設定已成功保存`)
         // 不要重新載入配置，保持當前狀態
@@ -154,7 +154,7 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
         if (savedConfig) {
           // 更新現有項目的 ID（如果是新創建的）
           if (savedConfig.fields) {
-            setApplicationFields(prev => 
+            setApplicationFields(prev =>
               prev.map(field => {
                 const updatedField = savedConfig.fields?.find(f => f.field_name === field.field_name)
                 return updatedField ? { ...field, id: updatedField.id } : field
@@ -162,7 +162,7 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
             )
           }
           if (savedConfig.documents) {
-            setDocumentRequirements(prev => 
+            setDocumentRequirements(prev =>
               prev.map(doc => {
                 const updatedDoc = savedConfig.documents?.find(d => d.document_name === doc.document_name)
                 return updatedDoc ? { ...doc, id: updatedDoc.id } : doc
@@ -201,12 +201,12 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
 
   const handleUpdateField = async (fieldData: ApplicationFieldUpdate) => {
     if (!editingField) return
-    
+
     try {
       const response = await api.applicationFields.updateField(editingField.id, fieldData)
       if (response.success && response.data) {
         const updatedField = response.data
-        setApplicationFields(prev => 
+        setApplicationFields(prev =>
           prev.map(field => field.id === editingField.id ? updatedField : field)
         )
         setSuccessMessage('欄位更新成功')
@@ -272,12 +272,12 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
 
   const handleUpdateDocument = async (documentData: ApplicationDocumentUpdate) => {
     if (!editingDocument) return
-    
+
     try {
       const response = await api.applicationFields.updateDocument(editingDocument.id, documentData)
       if (response.success && response.data) {
         const updatedDocument = response.data
-        setDocumentRequirements(prev => 
+        setDocumentRequirements(prev =>
           prev.map(doc => doc.id === editingDocument.id ? updatedDocument : doc)
         )
         setSuccessMessage('文件要求更新成功')
@@ -325,7 +325,7 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
+
       {successMessage && (
         <Alert variant="default" className="border-green-200 bg-green-50 text-green-800">
           <CheckCircle className="h-4 w-4" />
@@ -344,8 +344,8 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
             <p className="text-sm text-gray-600">管理申請要求、文件設定{formConfig?.hasWhitelist ? "和白名單" : ""}</p>
           </div>
         </div>
-        <Button 
-          onClick={handleSaveSettings} 
+        <Button
+          onClick={handleSaveSettings}
           disabled={isSaving}
           className="nycu-gradient text-white px-6"
         >
@@ -448,8 +448,8 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
                             <Switch
                               checked={field.is_active}
                               onCheckedChange={(checked) => {
-                                setApplicationFields(prev => 
-                                  prev.map(f => 
+                                setApplicationFields(prev =>
+                                  prev.map(f =>
                                     f.field_name === field.field_name ? { ...f, is_active: checked } : f
                                   )
                                 )
@@ -567,8 +567,8 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
                             <Switch
                               checked={doc.is_active}
                               onCheckedChange={(checked) => {
-                                setDocumentRequirements(prev => 
-                                  prev.map(d => 
+                                setDocumentRequirements(prev =>
+                                  prev.map(d =>
                                     d.document_name === doc.document_name ? { ...d, is_active: checked } : d
                                   )
                                 )
@@ -615,7 +615,7 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
         {/* Whitelist Tab */}
         {formConfig?.hasWhitelist && (
           <TabsContent value="whitelist" className="space-y-4">
-            <WhitelistManagement 
+            <WhitelistManagement
               scholarshipType={type}
               title={`${formConfig.title}白名單管理`}
             />
@@ -650,4 +650,4 @@ export function AdminScholarshipManagementInterface({ type, className }: AdminSc
       />
     </div>
   )
-} 
+}

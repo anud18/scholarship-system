@@ -20,6 +20,7 @@ from app.models.application import (
     ApplicationReview,
     ApplicationStatus,
     ProfessorReview,
+    ProfessorReviewItem,
     ReviewStatus,
     ScholarshipMainType,
     ScholarshipSubType,
@@ -346,7 +347,7 @@ class ScholarshipService:
         # Query active subtype configurations
         stmt = select(ScholarshipSubTypeConfig).filter(
             ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id,
-            ScholarshipSubTypeConfig.is_active == True,
+            ScholarshipSubTypeConfig.is_active.is_(True),
         )
         result = await self.db.execute(stmt)
         configs = result.scalars().all()

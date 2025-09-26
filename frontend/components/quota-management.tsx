@@ -32,7 +32,7 @@ import {
 
 export function QuotaManagement() {
   const { toast } = useToast()
-  
+
   // State management
   const [availablePeriods, setAvailablePeriods] = useState<AvailablePeriod[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<string>('')
@@ -134,7 +134,7 @@ export function QuotaManagement() {
   const fetchMatrixQuotaData = async (period: string) => {
     setLoading(true)
     setError(null)
-    
+
     try {
       const response = await quotaApi.getMatrixQuotaStatus(period)
       if (response.success && response.data) {
@@ -158,7 +158,7 @@ export function QuotaManagement() {
 
   const handleRefresh = useCallback(async () => {
     if (!selectedPeriod || refreshing) return
-    
+
     setRefreshing(true)
     try {
       await fetchMatrixQuotaData(selectedPeriod)
@@ -184,7 +184,7 @@ export function QuotaManagement() {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-      
+
       toast({
         title: '匯出成功',
         description: '配額資料已匯出',
@@ -203,7 +203,7 @@ export function QuotaManagement() {
     setMatrixData({ ...newData })
     setLastUpdate(new Date())
     setForceUpdateCounter(prev => prev + 1) // Force re-calculation of stats
-    
+
     // Optional: Show brief success feedback for immediate visual confirmation
     // This could be enhanced to show the specific change made
   }
@@ -299,7 +299,7 @@ export function QuotaManagement() {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -310,7 +310,7 @@ export function QuotaManagement() {
                 <RefreshCw className={cn('h-4 w-4 mr-2', refreshing && 'animate-spin')} />
                 重新整理
               </Button>
-              
+
               <Button
                 variant="outline"
                 size="sm"

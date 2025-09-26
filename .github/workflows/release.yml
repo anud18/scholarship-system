@@ -30,7 +30,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       changelog: ${{ steps.changelog.outputs.changelog }}
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -51,7 +51,7 @@ jobs:
         else
           # Get current version from package.json
           CURRENT_VERSION=$(node -p "require('./frontend/package.json').version")
-          
+
           # Calculate next version based on release type
           case "${{ github.event.inputs.release_type }}" in
             major)
@@ -68,7 +68,7 @@ jobs:
               ;;
           esac
         fi
-        
+
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "### Release Version: $VERSION" >> $GITHUB_STEP_SUMMARY
 
@@ -77,33 +77,33 @@ jobs:
       run: |
         # Install changelog generator
         npm install -g conventional-changelog-cli
-        
+
         # Generate changelog for this version
         conventional-changelog -p angular -i CHANGELOG.md -s -r 1 > changelog_new.md || true
-        
+
         # If no conventional commits, create manual changelog
         if [ ! -s changelog_new.md ]; then
           cat > changelog_new.md << EOF
         ## What's Changed
-        
+
         ### Features
         - Updated dependencies
         - Performance improvements
-        
+
         ### Bug Fixes
         - Various bug fixes and improvements
-        
+
         ### Full Changelog
         https://github.com/${{ github.repository }}/compare/v${{ steps.version.outputs.version }}...HEAD
         EOF
         fi
-        
+
         # Save changelog to output
         CHANGELOG=$(cat changelog_new.md | sed ':a;N;$!ba;s/\n/\\n/g')
         echo "changelog<<EOF" >> $GITHUB_OUTPUT
         cat changelog_new.md >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-        
+
         # Display in summary
         echo "### Changelog" >> $GITHUB_STEP_SUMMARY
         cat changelog_new.md >> $GITHUB_STEP_SUMMARY
@@ -111,15 +111,15 @@ jobs:
     - name: Update version files
       run: |
         VERSION=${{ steps.version.outputs.version }}
-        
+
         # Update frontend package.json
         cd frontend
         npm version $VERSION --no-git-tag-version
         cd ..
-        
+
         # Update backend version
         echo "__version__ = '$VERSION'" > backend/app/__version__.py
-        
+
         # Update docker-compose versions
         sed -i "s/image: .*/image: ghcr.io\/${{ github.repository }}\/backend:$VERSION/g" docker-compose.yml
         sed -i "s/image: .*/image: ghcr.io\/${{ github.repository }}\/frontend:$VERSION/g" docker-compose.yml
@@ -132,18 +132,18 @@ jobs:
         title: "Release v${{ steps.version.outputs.version }}"
         body: |
           ## Release v${{ steps.version.outputs.version }}
-          
+
           This PR prepares the release for version ${{ steps.version.outputs.version }}.
-          
+
           ### Changes
           ${{ steps.changelog.outputs.changelog }}
-          
+
           ### Checklist
           - [ ] All tests pass
           - [ ] Version numbers updated
           - [ ] Changelog reviewed
           - [ ] Documentation updated
-          
+
           After merging this PR, the release workflow will continue automatically.
         branch: release/v${{ steps.version.outputs.version }}
         labels: |
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: prepare-release
     if: github.ref == 'refs/heads/main'
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -175,18 +175,18 @@ jobs:
     - name: Build and push Docker images
       run: |
         VERSION=${{ needs.prepare-release.outputs.version }}
-        
+
         # Build backend
         docker build -t ghcr.io/${{ github.repository }}/backend:$VERSION \
                      -t ghcr.io/${{ github.repository }}/backend:latest \
                      ./backend
-        
+
         # Build frontend
         docker build -t ghcr.io/${{ github.repository }}/frontend:$VERSION \
                      -t ghcr.io/${{ github.repository }}/frontend:latest \
                      --build-arg NEXT_PUBLIC_API_URL=${{ secrets.PRODUCTION_API_URL }} \
                      ./frontend
-        
+
         # Push images
         docker push ghcr.io/${{ github.repository }}/backend:$VERSION
         docker push ghcr.io/${{ github.repository }}/backend:latest
@@ -213,35 +213,35 @@ jobs:
     - name: Create deployment artifacts
       run: |
         VERSION=${{ needs.prepare-release.outputs.version }}
-        
+
         # Create deployment package
         mkdir -p release-artifacts
-        
+
         # Copy deployment files
         cp -r k8s release-artifacts/
         cp docker-compose.yml release-artifacts/
         cp docker-compose.prod.yml release-artifacts/
-        
+
         # Create deployment script
         cat > release-artifacts/deploy.sh << 'EOF'
         #!/bin/bash
         VERSION=$1
-        
+
         echo "Deploying Scholarship System v$VERSION"
-        
+
         # Update Kubernetes deployments
         kubectl set image deployment/backend backend=ghcr.io/${{ github.repository }}/backend:$VERSION
         kubectl set image deployment/frontend frontend=ghcr.io/${{ github.repository }}/frontend:$VERSION
-        
+
         # Wait for rollout
         kubectl rollout status deployment/backend
         kubectl rollout status deployment/frontend
-        
+
         echo "Deployment complete!"
         EOF
-        
+
         chmod +x release-artifacts/deploy.sh
-        
+
         # Create archive
         tar -czf scholarship-system-v$VERSION.tar.gz release-artifacts/
 
@@ -257,7 +257,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [prepare-release, create-release]
     if: always()
-    
+
     steps:
     - name: Notify release status
       run: |
@@ -288,20 +288,20 @@ jobs:
             repo: context.repo.repo,
             title: `🎉 Release v${version} Announcement`,
             body: `## Scholarship System v${version} Released!
-            
+
             We're excited to announce the release of version ${version} of the Scholarship Management System.
-            
+
             ### What's New
             ${{ needs.prepare-release.outputs.changelog }}
-            
+
             ### Deployment
             - Docker images are available at \`ghcr.io/${{ github.repository }}\`
             - Use the deployment script from the release artifacts
-            
+
             ### Documentation
             - [Release Notes](https://github.com/${{ github.repository }}/releases/tag/v${version})
             - [Deployment Guide](https://github.com/${{ github.repository }}/blob/main/docs/deployment.md)
-            
+
             Thank you to all contributors!`,
             labels: ['announcement', 'release']
           });

@@ -24,4 +24,4 @@ declare global {
       toHaveBeenCalledTimes(expected: number): R;
     }
   }
-} 
+}

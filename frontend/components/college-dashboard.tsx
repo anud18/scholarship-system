@@ -57,32 +57,32 @@ interface RankingData {
 export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps) {
   const t = (key: string) => getTranslation(locale, key)
   const { applications, isLoading, error, updateApplicationStatus, fetchCollegeApplications } = useCollegeApplications()
-  
+
   // Configuration fetch functions
   const getAcademicConfig = async (): Promise<AcademicConfig> => {
     if (academicConfig) return academicConfig
-    
+
     // Calculate current academic year (ROC system)
     const currentDate = new Date()
     const currentYear = currentDate.getFullYear() - 1911
     const currentMonth = currentDate.getMonth() + 1
-    
+
     // Determine semester based on month (Aug-Jan = FIRST, Feb-July = SECOND)
     const currentSemester: 'FIRST' | 'SECOND' = currentMonth >= 8 || currentMonth <= 1 ? 'FIRST' : 'SECOND'
-    
+
     const config: AcademicConfig = {
       currentYear,
       currentSemester,
       availableYears: [currentYear - 1, currentYear, currentYear + 1]
     }
-    
+
     setAcademicConfig(config)
     return config
   }
-  
+
   const getScholarshipConfig = async (): Promise<ScholarshipConfig[]> => {
     if (scholarshipConfig.length > 0) return scholarshipConfig
-    
+
     try {
       // Ensure availableOptions is loaded first
       let currentAvailableOptions = availableOptions
@@ -91,31 +91,31 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
         await fetchAvailableOptions()
         currentAvailableOptions = availableOptions
       }
-      
+
       // If still not available after fetching, throw error
       if (!currentAvailableOptions?.scholarship_types) {
         throw new Error('Unable to load available scholarship options from college API')
       }
-      
+
       // Fetch all scholarships to get the actual IDs that we need for creating rankings
       console.log('Fetching all scholarships to get IDs...')
       const allScholarshipsResponse = await apiClient.scholarships.getAll()
-      
+
       if (allScholarshipsResponse.success && allScholarshipsResponse.data) {
         console.log('All scholarships:', allScholarshipsResponse.data)
         console.log('Available scholarship types from college:', currentAvailableOptions.scholarship_types)
-        
+
         // Map college scholarship types to full scholarship data with IDs
         const configs: ScholarshipConfig[] = []
-        
+
         for (const collegeType of currentAvailableOptions.scholarship_types) {
           // Find the matching scholarship by code
-          const fullScholarship = allScholarshipsResponse.data.find((scholarship: any) => 
-            scholarship.code === collegeType.code || 
+          const fullScholarship = allScholarshipsResponse.data.find((scholarship: any) =>
+            scholarship.code === collegeType.code ||
             scholarship.name === collegeType.name ||
             scholarship.name_en === collegeType.name
           )
-          
+
           if (fullScholarship) {
             configs.push({
               id: fullScholarship.id,
@@ -127,15 +127,15 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
             console.warn(`Could not find full scholarship data for college type: ${collegeType.code} - ${collegeType.name}`)
           }
         }
-        
+
         console.log('Mapped scholarship configs:', configs)
         setScholarshipConfig(configs)
         return configs
       }
-      
-      // If no data available, throw error instead of using fallback data  
+
+      // If no data available, throw error instead of using fallback data
       throw new Error('Failed to retrieve scholarship data from API')
-      
+
     } catch (error) {
       console.error('Failed to fetch scholarship configuration:', error)
       throw new Error(`Failed to retrieve scholarship configuration: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -152,13 +152,13 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
   const [isRankingLoading, setIsRankingLoading] = useState(false)
   const [scholarshipConfig, setScholarshipConfig] = useState<ScholarshipConfig[]>([])
   const [academicConfig, setAcademicConfig] = useState<AcademicConfig | null>(null)
-  
+
   // 學期選擇相關狀態
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>()
   const [selectedSemester, setSelectedSemester] = useState<string>()
   const [selectedCombination, setSelectedCombination] = useState<string>()
   const [selectedScholarshipType, setSelectedScholarshipType] = useState<string>()
-  
+
   // 可用選項狀態
   const [availableOptions, setAvailableOptions] = useState<{
     scholarship_types: Array<{ code: string; name: string; name_en?: string }>;
@@ -182,18 +182,18 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
       const response = await apiClient.college.getAvailableCombinations()
       if (response.success && response.data) {
         setAvailableOptions(response.data)
-        
+
         // 取得當前學期資訊
         const currentConfig = await getAcademicConfig()
         const currentCombination = `${currentConfig.currentYear}-${currentConfig.currentSemester}`
-        
+
         // 檢查當前學期組合是否存在於可用選項中
-        const hasCurrentCombination = response.data.academic_years?.includes(currentConfig.currentYear) && 
+        const hasCurrentCombination = response.data.academic_years?.includes(currentConfig.currentYear) &&
           response.data.semesters?.includes(currentConfig.currentSemester)
-        
+
         // 檢查是否有學年制獎學金（YEARLY 選項）
         const hasYearlyOption = response.data.semesters?.includes('YEARLY')
-        
+
         // 設定預設學期組合
         if (hasCurrentCombination && !selectedCombination) {
           setSelectedCombination(currentCombination)
@@ -201,8 +201,8 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
           setSelectedSemester(currentConfig.currentSemester)
         } else if (hasYearlyOption && !selectedCombination && response.data.academic_years?.length > 0) {
           // 如果有學年制獎學金，優先選擇當前年度的全年選項
-          const yearlyYear = response.data.academic_years.includes(currentConfig.currentYear) 
-            ? currentConfig.currentYear 
+          const yearlyYear = response.data.academic_years.includes(currentConfig.currentYear)
+            ? currentConfig.currentYear
             : response.data.academic_years[0]
           const yearlyCombination = `${yearlyYear}-YEARLY`
           setSelectedCombination(yearlyCombination)
@@ -217,27 +217,27 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
           setSelectedAcademicYear(firstYear)
           setSelectedSemester(firstSemester)
         }
-        
+
         // 設定第一個獎學金類型為預設 tab
         if (response.data.scholarship_types && response.data.scholarship_types.length > 0 && !activeScholarshipTab) {
           const firstType = response.data.scholarship_types[0].code
           setActiveScholarshipTab(firstType)
-          
+
           // 使用已設定的學期載入申請資料
           let useYear, useSemester
           if (hasCurrentCombination) {
             useYear = currentConfig.currentYear
             useSemester = currentConfig.currentSemester
           } else if (hasYearlyOption) {
-            useYear = response.data.academic_years.includes(currentConfig.currentYear) 
-              ? currentConfig.currentYear 
+            useYear = response.data.academic_years.includes(currentConfig.currentYear)
+              ? currentConfig.currentYear
               : response.data.academic_years[0]
             useSemester = 'YEARLY'
           } else {
             useYear = response.data.academic_years?.[0] || undefined
             useSemester = response.data.semesters?.[0] || undefined
           }
-          
+
           fetchCollegeApplications(useYear, useSemester, firstType)
         }
       } else {
@@ -286,7 +286,7 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
           status: item.status || 'pending',
           review_status: item.application?.status || 'pending'
         }))
-        
+
         setRankingData({
           applications: transformedApplications,
           totalQuota: response.data.total_quota,
@@ -295,7 +295,7 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
           semester: response.data.semester,
           isFinalized: response.data.is_finalized
         })
-        
+
         console.log(`Loaded ranking ${rankingId} with ${transformedApplications.length} applications`)
       } else {
         console.error('Failed to load ranking details:', response.message)
@@ -369,15 +369,15 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
       // Get academic configuration from API or system settings
       const academicConfig = await getAcademicConfig()
       const scholarshipConfig = await getScholarshipConfig()
-      
+
       if (!scholarshipTypeId && scholarshipConfig.length === 0) {
         throw new Error("No scholarship types available")
       }
-      
+
       // Determine the scholarship type to use
       let targetScholarshipId = scholarshipTypeId
       let targetSubTypeCode = subTypeCode
-      
+
       // If no specific scholarship type provided, find the one matching current tab
       if (!targetScholarshipId && activeScholarshipTab && availableOptions?.scholarship_types) {
         const currentScholarshipType = availableOptions.scholarship_types.find(
@@ -392,22 +392,22 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
           targetSubTypeCode = configScholarship?.subTypes[0]?.code || scholarshipConfig[0]?.subTypes[0]?.code
         }
       }
-      
+
       // Fallback to first scholarship if still not found
       if (!targetScholarshipId) {
         const defaultScholarship = scholarshipConfig[0]
         targetScholarshipId = defaultScholarship?.id
         targetSubTypeCode = defaultScholarship?.subTypes[0]?.code
       }
-      
+
       // Use selected academic year and semester from the UI state
       const useYear = selectedAcademicYear || academicConfig.currentYear
       const useSemester = selectedSemester || academicConfig.currentSemester
-      
-      const semesterName = useSemester === 'FIRST' ? '上學期' : 
-                          useSemester === 'SECOND' ? '下學期' : 
+
+      const semesterName = useSemester === 'FIRST' ? '上學期' :
+                          useSemester === 'SECOND' ? '下學期' :
                           useSemester === 'YEARLY' ? '全年' : '學期'
-      
+
       const newRanking = {
         scholarship_type_id: targetScholarshipId,
         sub_type_code: targetSubTypeCode || 'default',
@@ -415,7 +415,7 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
         semester: useSemester,
         ranking_name: `新建排名 - ${useYear}學年度 ${semesterName}`
       }
-      
+
       const response = await apiClient.college.createRanking(newRanking)
       if (response.success) {
         console.log('Ranking created successfully:', response.data)
@@ -434,7 +434,7 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
   const getStatusColor = (status: string) => {
     const statusMap = {
       pending_review: "destructive",
-      under_review: "outline", 
+      under_review: "outline",
       approved: "default",
       rejected: "secondary",
       submitted: "outline",
@@ -558,25 +558,25 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                         <SelectValue placeholder="選擇學期">
                           <div className="flex items-center">
                             <Calendar className="h-4 w-4 mr-2" />
-                            {selectedCombination ? 
+                            {selectedCombination ?
                               `${selectedCombination.split('-')[0]} ${
-                                selectedCombination.split('-')[1] === 'FIRST' ? '上學期' : 
-                                selectedCombination.split('-')[1] === 'SECOND' ? '下學期' : 
-                                selectedCombination.split('-')[1] === 'YEARLY' ? '全年' : 
+                                selectedCombination.split('-')[1] === 'FIRST' ? '上學期' :
+                                selectedCombination.split('-')[1] === 'SECOND' ? '下學期' :
+                                selectedCombination.split('-')[1] === 'YEARLY' ? '全年' :
                                 selectedCombination.split('-')[1]
-                              }` 
+                              }`
                               : "選擇學期"
                             }
                           </div>
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {availableOptions?.academic_years?.map((year) => 
+                        {availableOptions?.academic_years?.map((year) =>
                           availableOptions?.semesters?.map((semester) => (
                             <SelectItem key={`${year}-${semester}`} value={`${year}-${semester}`}>
                               {year} 學年度 {
-                                semester === 'FIRST' ? '上學期' : 
-                                semester === 'SECOND' ? '下學期' : 
+                                semester === 'FIRST' ? '上學期' :
+                                semester === 'SECOND' ? '下學期' :
                                 semester === 'YEARLY' ? '全年' : semester
                               }
                             </SelectItem>
@@ -584,7 +584,7 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                         )}
                       </SelectContent>
                     </Select>
-                    
+
                     <Button variant="outline" size="sm">
                       <Download className="h-4 w-4 mr-1" />
                       {locale === "zh" ? "匯出" : "Export"}
@@ -653,7 +653,7 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {applications.length > 0 
+                        {applications.length > 0
                           ? Math.round(applications.reduce((sum, app) => sum + (app.days_waiting || 0), 0) / applications.length)
                           : 0
                         }
@@ -959,16 +959,16 @@ export function CollegeDashboard({ user, locale = "zh" }: CollegeDashboardProps)
                         根據已確認的排名執行獎學金分配
                       </p>
                       <div className="space-y-2">
-                        <Button 
-                          className="w-full" 
+                        <Button
+                          className="w-full"
                           onClick={handleExecuteDistribution}
                           disabled={!selectedRanking}
                         >
                           <Send className="h-4 w-4 mr-2" />
                           執行自動分發
                         </Button>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           className="w-full"
                           onClick={handleFinalizeRanking}
                           disabled={!selectedRanking}

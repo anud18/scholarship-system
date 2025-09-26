@@ -28,7 +28,7 @@
   ```python
   # 從外部 API 獲取學生資料快照
   student_snapshot = await self.student_service.get_student_snapshot(student_code)
-  
+
   # 儲存到 application 的 student_data 欄位
   application = Application(
       # ...
@@ -88,7 +88,7 @@
   "student_id": "110123456",
   "name": "王小明",
   "department": "資訊工程學系",
-  
+
   // 金融帳戶資訊 (使用者輸入)
   "financial_info": {
     "bank_postal_account": "123456789",
@@ -96,7 +96,7 @@
     "bank_name": "台灣銀行",
     "account_holder_name": "王小明"
   },
-  
+
   // 指導教授資訊 (使用者輸入)
   "supervisor_info": {
     "supervisor_employee_id": "T001234",
@@ -104,7 +104,7 @@
     "supervisor_name": "李教授",
     "supervisor_department": "資訊工程學系"
   },
-  
+
   // 其他聯絡和學術資訊
   "contact_phone": "0912345678",
   "gpa": 3.8

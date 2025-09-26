@@ -4,7 +4,7 @@ Scholarship type and rule models
 
 import enum
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from sqlalchemy import (
     JSON,
@@ -24,6 +24,9 @@ from sqlalchemy.sql import func
 
 from app.db.base_class import Base
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
+
+if TYPE_CHECKING:
+    from app.models.application import Application
 
 
 class ScholarshipStatus(enum.Enum):
@@ -158,8 +161,6 @@ class ScholarshipType(Base):
 
     def get_current_review_stage(self) -> Optional[str]:
         """Get current review stage: 'renewal_professor', 'renewal_college', 'general_professor', 'general_college' or None"""
-        now = datetime.now(timezone.utc)
-
         # 續領階段
         if self.is_renewal_professor_review_period():
             return "renewal_professor"
@@ -217,50 +218,6 @@ class ScholarshipType(Base):
         elif "MOE_2W" in self.code.upper():
             return "MOE_2W"
         return "GENERAL"
-
-    def get_sub_type_translations(self) -> Dict[str, Dict[str, str]]:
-        """Get translations for sub-types in both Chinese and English"""
-        translations = {
-            "zh": {
-                "general": "通用",
-                "nstc": "國科會博士生獎學金",
-                "moe_1w": "教育部博士生獎學金（指導教授配合款一萬）",
-                "moe_2w": "教育部博士生獎學金（指導教授配合款兩萬）",
-            },
-            "en": {
-                "general": "General",
-                "nstc": "NSTC Doctoral Scholarship",
-                "moe_1w": "MOE Doctoral Scholarship (10K Advisor Match)",
-                "moe_2w": "MOE Doctoral Scholarship (20K Advisor Match)",
-            },
-        }
-        return translations
-
-    def can_student_apply(self, student_id: int, semester: str) -> tuple[bool, str]:
-        """Check if student can apply for this scholarship"""
-        # Check if scholarship is active
-        if not self.is_active:
-            return False, "獎學金目前未開放申請"
-
-        # Check application period
-        if not self.is_application_period:
-            return False, "目前不在申請期間內"
-
-        # Check whitelist
-        if not self.is_student_in_whitelist(student_id):
-            return False, "您不在此獎學金的申請名單中"
-
-        # Check if student already has an application for this semester
-        # This would need to be implemented with proper session management
-        # existing_app = session.query(Application).filter(
-        #     Application.student_id == student_id,
-        #     Application.scholarship_type_id == self.id,
-        #     Application.semester == semester
-        # ).first()
-        # if existing_app:
-        #     return False, "您已經在本學期申請過此獎學金"
-
-        return True, ""
 
     def validate_sub_type_list(self) -> bool:
         """Validate sub_type_list against ScholarshipSubType enum"""
@@ -342,7 +299,6 @@ class ScholarshipType(Base):
             return False
 
         # Check if student already has an application for this semester
-        semester_key = self.get_semester_key()
         for application in existing_applications:
             if (
                 application.scholarship_type_id == self.id
@@ -992,8 +948,6 @@ class ScholarshipConfiguration(Base):
 
     def get_current_review_stage(self) -> Optional[str]:
         """Get current review stage: 'renewal_professor', 'renewal_college', 'general_professor', 'general_college' or None"""
-        now = datetime.now(timezone.utc)
-
         # 續領階段
         if self.is_renewal_professor_review_period():
             return "renewal_professor"

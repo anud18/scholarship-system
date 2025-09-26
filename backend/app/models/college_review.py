@@ -40,7 +40,7 @@ def get_json_type():
             return JSONB
         else:
             return JSON
-    except:
+    except Exception:
         return JSON  # Fallback to standard JSON
 
 

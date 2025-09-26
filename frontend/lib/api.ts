@@ -107,7 +107,7 @@ export interface Application {
   form_data?: Record<string, any>  // 動態表單資料 (前端格式)
   submitted_form_data?: Record<string, any>  // 後端格式的表單資料，包含整合後的文件資訊
   meta_data?: Record<string, any>  // 額外的元資料
-  
+
   // 後端 ApplicationResponse 實際返回的欄位
   user_id?: number
   scholarship_type_id?: number  // 主獎學金ID
@@ -124,12 +124,12 @@ export interface Application {
   days_waiting?: number
   scholarship_subtype_list?: string[]
   agree_terms?: boolean  // 同意條款
-  
+
   // Extended properties for dashboard display (保留向後兼容)
   user?: User  // 關聯的使用者資訊
   student?: Student  // 關聯的學生資訊
   scholarship?: ScholarshipType  // 關聯的獎學金資訊
-  
+
   // Professor assignment fields
   professor_id?: number | string  // 指導教授ID
   professor?: {
@@ -139,7 +139,7 @@ export interface Application {
     email: string
     dept_name?: string
   }  // 關聯的教授資訊
-  
+
   // Scholarship configuration
   scholarship_configuration?: {
     requires_professor_recommendation: boolean
@@ -1056,7 +1056,7 @@ class ApiClient {
         url += `?${queryString}`
       }
     }
-    
+
     // Normalize headers so .get/.set always exist
     const headers = new Headers(options.headers ?? {})
 
@@ -1278,20 +1278,20 @@ class ApiClient {
     getEligible: async (): Promise<ApiResponse<ScholarshipType[]>> => {
       return this.request('/scholarships/eligible')
     },
-    
+
     getById: async (id: number): Promise<ApiResponse<ScholarshipType>> => {
       return this.request(`/scholarships/${id}`)
     },
-    
+
     getAll: async (): Promise<ApiResponse<any[]>> => {
       return this.request('/scholarships')
     },
-    
+
     // Get combined scholarships
     getCombined: async (): Promise<ApiResponse<ScholarshipType[]>> => {
       return this.request('/scholarships/combined/list')
     },
-    
+
     // Create combined PhD scholarship
     createCombinedPhd: async (data: {
       name: string
@@ -1332,7 +1332,7 @@ class ApiClient {
       const params = new URLSearchParams()
       if (status) params.append('status', status)
       if (scholarshipType) params.append('scholarship_type', scholarshipType)
-      
+
       const queryString = params.toString()
       return this.request(`/applications/college/review${queryString ? `?${queryString}` : ''}`)
     },
@@ -1341,7 +1341,7 @@ class ApiClient {
       const params = new URLSearchParams()
       params.append('scholarship_type', scholarshipType)
       if (status) params.append('status', status)
-      
+
       const queryString = params.toString()
       return this.request(`/applications/review/list${queryString ? `?${queryString}` : ''}`)
     },
@@ -1376,7 +1376,7 @@ class ApiClient {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('file_type', fileType)
-      
+
       return this.request(`/applications/${applicationId}/files`, {
         method: 'POST',
         body: formData
@@ -1422,7 +1422,7 @@ class ApiClient {
         method: 'POST',
         body: JSON.stringify(applicationData),
       })
-      
+
       // Handle direct Application response vs wrapped ApiResponse
       if (response && typeof response === 'object' && 'id' in response && !('success' in response)) {
         // Direct Application object - wrap it in ApiResponse format
@@ -1432,7 +1432,7 @@ class ApiClient {
           data: response as unknown as Application
         }
       }
-      
+
       // Already in ApiResponse format
       return response as ApiResponse<Application>
     },
@@ -1468,7 +1468,7 @@ class ApiClient {
       if (limit) params.append('limit', limit.toString())
       if (unreadOnly) params.append('unread_only', 'true')
       if (notificationType) params.append('notification_type', notificationType)
-      
+
       const queryString = params.toString()
       return this.request(`/notifications${queryString ? `?${queryString}` : ''}`)
     },
@@ -1616,8 +1616,8 @@ class ApiClient {
     },
 
     updateScholarshipEmailTemplate: async (
-      scholarshipTypeId: number, 
-      templateKey: string, 
+      scholarshipTypeId: number,
+      templateKey: string,
       templateData: {
         is_enabled?: boolean;
         priority?: number;
@@ -1663,7 +1663,7 @@ class ApiClient {
     },
 
     // === 系統公告管理 === //
-    
+
     getAllAnnouncements: async (
       page?: number,
       size?: number,
@@ -1675,7 +1675,7 @@ class ApiClient {
       if (size) params.append('size', size.toString())
       if (notificationType) params.append('notification_type', notificationType)
       if (priority) params.append('priority', priority)
-      
+
       const queryString = params.toString()
       return this.request(`/admin/announcements${queryString ? `?${queryString}` : ''}`)
     },
@@ -1717,7 +1717,7 @@ class ApiClient {
       const params = new URLSearchParams()
       if (subType) params.append('sub_type', subType)
       if (status) params.append('status', status)
-      
+
       const queryString = params.toString()
       return this.request(`/admin/scholarships/${scholarshipCode}/applications${queryString ? `?${queryString}` : ''}`)
     },
@@ -1731,7 +1731,7 @@ class ApiClient {
     },
 
     // === 系統管理相關 API === //
-    
+
     // 工作流程管理 (temporarily disabled - endpoints not implemented)
     getWorkflows: async (): Promise<ApiResponse<Workflow[]>> => {
       return Promise.resolve({ success: true, data: [], message: 'Workflows feature coming soon' })
@@ -1908,10 +1908,10 @@ class ApiClient {
     },
 
     // 獲取當前用戶有權限管理的獎學金列表
-    getMyScholarships: async (): Promise<ApiResponse<Array<{ 
-      id: number; 
-      name: string; 
-      name_en?: string; 
+    getMyScholarships: async (): Promise<ApiResponse<Array<{
+      id: number;
+      name: string;
+      name_en?: string;
       code: string;
       category?: string;
       application_cycle?: string;
@@ -1946,7 +1946,7 @@ class ApiClient {
       if (params?.academic_year) queryParams.append('academic_year', params.academic_year.toString())
       if (params?.semester) queryParams.append('semester', params.semester)
       if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString())
-      
+
       const queryString = queryParams.toString()
       return this.request(`/scholarship-configurations/configurations/${queryString ? `?${queryString}` : ''}`)
     },
@@ -2013,53 +2013,53 @@ class ApiClient {
   // Application Fields Configuration
   applicationFields = {
     // Form configuration
-    getFormConfig: (scholarshipType: string, includeInactive: boolean = false) => 
+    getFormConfig: (scholarshipType: string, includeInactive: boolean = false) =>
       this.request<ScholarshipFormConfig>(`/application-fields/form-config/${scholarshipType}?include_inactive=${includeInactive}`),
-    
-    saveFormConfig: (scholarshipType: string, config: FormConfigSaveRequest) => 
+
+    saveFormConfig: (scholarshipType: string, config: FormConfigSaveRequest) =>
       this.request<ScholarshipFormConfig>(`/application-fields/form-config/${scholarshipType}`, {
         method: 'POST',
         body: JSON.stringify(config)
       }),
-    
+
     // Fields management
-    getFields: (scholarshipType: string) => 
+    getFields: (scholarshipType: string) =>
       this.request<ApplicationField[]>(`/application-fields/fields/${scholarshipType}`),
-    
-    createField: (fieldData: ApplicationFieldCreate) => 
+
+    createField: (fieldData: ApplicationFieldCreate) =>
       this.request<ApplicationField>('/application-fields/fields', {
         method: 'POST',
         body: JSON.stringify(fieldData)
       }),
-    
-    updateField: (fieldId: number, fieldData: ApplicationFieldUpdate) => 
+
+    updateField: (fieldId: number, fieldData: ApplicationFieldUpdate) =>
       this.request<ApplicationField>(`/application-fields/fields/${fieldId}`, {
         method: 'PUT',
         body: JSON.stringify(fieldData)
       }),
-    
-    deleteField: (fieldId: number) => 
+
+    deleteField: (fieldId: number) =>
       this.request<boolean>(`/application-fields/fields/${fieldId}`, {
         method: 'DELETE'
       }),
-    
+
     // Documents management
-    getDocuments: (scholarshipType: string) => 
+    getDocuments: (scholarshipType: string) =>
       this.request<ApplicationDocument[]>(`/application-fields/documents/${scholarshipType}`),
-    
-    createDocument: (documentData: ApplicationDocumentCreate) => 
+
+    createDocument: (documentData: ApplicationDocumentCreate) =>
       this.request<ApplicationDocument>('/application-fields/documents', {
         method: 'POST',
         body: JSON.stringify(documentData)
       }),
-    
-    updateDocument: (documentId: number, documentData: ApplicationDocumentUpdate) => 
+
+    updateDocument: (documentId: number, documentData: ApplicationDocumentUpdate) =>
       this.request<ApplicationDocument>(`/application-fields/documents/${documentId}`, {
         method: 'PUT',
         body: JSON.stringify(documentData)
       }),
-    
-    deleteDocument: (documentId: number) => 
+
+    deleteDocument: (documentId: number) =>
       this.request<boolean>(`/application-fields/documents/${documentId}`, {
         method: 'DELETE'
       }),
@@ -2120,7 +2120,7 @@ class ApiClient {
     uploadBankDocumentFile: async (file: File): Promise<ApiResponse<{ document_url: string }>> => {
       const formData = new FormData()
       formData.append('file', file)
-      
+
       return this.request('/user-profiles/me/bank-document/file', {
         method: 'POST',
         body: formData,
@@ -2395,7 +2395,7 @@ class ApiClient {
     getApplicationsForReview: async (params?: string): Promise<ApiResponse<any[]>> => {
       return this.request(`/college/applications${params ? `?${params}` : ''}`)
     },
-    
+
     // Get rankings list
     getRankings: async (academicYear?: number, semester?: string): Promise<ApiResponse<any[]>> => {
       const params = new URLSearchParams()
@@ -2403,12 +2403,12 @@ class ApiClient {
       if (semester) params.append('semester', semester)
       return this.request(`/college/rankings${params.toString() ? `?${params.toString()}` : ''}`)
     },
-    
+
     // Get ranking details
     getRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
       return this.request(`/college/rankings/${rankingId}`)
     },
-    
+
     // Create new ranking
     createRanking: async (data: {
       scholarship_type_id: number;
@@ -2422,7 +2422,7 @@ class ApiClient {
         body: JSON.stringify(data)
       })
     },
-    
+
     // Update ranking order
     updateRankingOrder: async (rankingId: number, newOrder: Array<{item_id: number, position: number}>): Promise<ApiResponse<any>> => {
       return this.request(`/college/rankings/${rankingId}/order`, {
@@ -2430,7 +2430,7 @@ class ApiClient {
         body: JSON.stringify(newOrder)
       })
     },
-    
+
     // Execute distribution
     executeDistribution: async (rankingId: number, distributionRules?: any): Promise<ApiResponse<any>> => {
       return this.request(`/college/rankings/${rankingId}/distribute`, {
@@ -2438,14 +2438,14 @@ class ApiClient {
         body: JSON.stringify({ distribution_rules: distributionRules })
       })
     },
-    
+
     // Finalize ranking
     finalizeRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
       return this.request(`/college/rankings/${rankingId}/finalize`, {
         method: 'POST'
       })
     },
-    
+
     // Get quota status
     getQuotaStatus: async (scholarshipTypeId: number, academicYear: number, semester?: string): Promise<ApiResponse<any>> => {
       const params = new URLSearchParams({
@@ -2455,7 +2455,7 @@ class ApiClient {
       if (semester) params.append('semester', semester)
       return this.request(`/college/quota-status?${params.toString()}`)
     },
-    
+
     // Get college review statistics
     getStatistics: async (academicYear?: number, semester?: string): Promise<ApiResponse<any>> => {
       const params = new URLSearchParams()
@@ -2463,7 +2463,7 @@ class ApiClient {
       if (semester) params.append('semester', semester)
       return this.request(`/college/statistics${params.toString() ? `?${params.toString()}` : ''}`)
     },
-    
+
     // Get available combinations of scholarship types, years, and semesters
     getAvailableCombinations: async (): Promise<ApiResponse<{
       scholarship_types: Array<{ code: string; name: string; name_en?: string }>;
@@ -2480,4 +2480,4 @@ export const apiClient = new ApiClient()
 export default apiClient
 
 // Alias for backward compatibility
-export const api = apiClient 
+export const api = apiClient

@@ -12,11 +12,11 @@ graph TD
     B --> C[Frontend Tests]
     B --> D[Backend Tests]
     B --> E[Security Scan]
-    
+
     C --> F[E2E Tests]
     D --> F
     E --> F
-    
+
     F --> G[Build & Deploy]
     G --> H[Performance Tests]
     H --> I[Notifications]
@@ -90,7 +90,7 @@ graph TD
 ### Frontend
 - **Target**: 70% coverage (branches, functions, lines, statements)
 - **Tools**: Jest, React Testing Library
-- **Exclusions**: 
+- **Exclusions**:
   - Type definition files (`.d.ts`)
   - Next.js build files (`.next/`)
   - Node modules
@@ -132,13 +132,13 @@ services:
 
   redis:
     image: redis:7-alpine
-    
+
   backend:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://dev_user:dev_password@postgres:5432/scholarship_dev
       REDIS_URL: redis://redis:6379/0
-      
+
   frontend:
     build: ./frontend
     environment:
@@ -381,4 +381,4 @@ curl -w "@curl-format.txt" -o /dev/null -s http://api.example.com/health
 ---
 
 *Last Updated: 2025-01-01*
-*Version: 1.0* 
+*Version: 1.0*

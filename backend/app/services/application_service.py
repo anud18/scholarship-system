@@ -271,11 +271,6 @@ class ApplicationService:
         app_id = self._generate_app_id()
         logger.debug(f"Generated app_id: {app_id}")
 
-        # Extract names from student data snapshot
-        cname = student_snapshot.get("cname", "")
-        ename = student_snapshot.get("ename", "")
-        std_stdcode = student_snapshot.get("std_stdcode", "")
-
         # Determine sub_type_selection_mode from scholarship configuration
         sub_type_selection_mode = SubTypeSelectionMode.SINGLE  # Default
         if scholarship.sub_type_selection_mode:
@@ -355,7 +350,7 @@ class ApplicationService:
         except Exception as e:
             # Don't fail the entire application creation if document cloning fails
             logger.warning(
-                f"Failed to clone fixed documents for application {app_id}: {e}",
+                f"Failed to clone fixed documents for application {application.app_id}: {e}",
                 exc_info=True,
             )
 
@@ -912,7 +907,7 @@ class ApplicationService:
             raise ValidationError("Application cannot be submitted in current status")
 
         # 驗證所有必填欄位
-        form_data = ApplicationFormData(**application.submitted_form_data)
+        _ = ApplicationFormData(**application.submitted_form_data)
 
         # 處理銀行帳戶證明文件 clone（從個人資料複製到申請）
         await self._clone_user_profile_documents(application, user)
@@ -1257,68 +1252,6 @@ class ApplicationService:
             "file_type": file_type,
             "filename": getattr(file, "filename", "unknown"),
         }
-
-    async def submit_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
-        """Submit professor review for an application"""
-        stmt = select(Application).where(Application.id == application_id)
-        result = await self.db.execute(stmt)
-        application = result.scalar_one_or_none()
-        if not application:
-            raise NotFoundError("Application", str(application_id))
-        # Only the assigned professor can submit
-        if application.professor_id != user.id:
-            raise AuthorizationError("You are not the assigned professor for this application")
-
-        # Create professor review record
-        from app.models.application import ProfessorReview, ProfessorReviewItem
-
-        review = ProfessorReview(
-            application_id=application_id,
-            professor_id=user.id,
-            recommendation=review_data.recommendation,
-            review_status=review_data.review_status or "completed",
-            reviewed_at=datetime.utcnow(),
-        )
-        self.db.add(review)
-        await self.db.flush()  # Get the review ID
-
-        # Create review items for each sub-type
-        for item_data in review_data.items:
-            review_item = ProfessorReviewItem(
-                review_id=review.id,
-                sub_type_code=item_data.sub_type_code,
-                is_recommended=item_data.is_recommended,
-                comments=item_data.comments,
-            )
-            self.db.add(review_item)
-
-        await self.db.commit()
-
-        # 發送自動化通知 - Professor review submitted
-        try:
-            # Prepare review data for email automation
-            email_data = {
-                "id": application.id,
-                "app_id": application.app_id,
-                "student_name": getattr(application, "student_name", ""),
-                "professor_name": getattr(user, "name", ""),
-                "professor_email": getattr(user, "email", ""),
-                "scholarship_type": getattr(application.scholarship, "name", "") if application.scholarship else "",
-                "scholarship_type_id": application.scholarship_type_id,
-                "review_result": review_data.recommendation,
-                "review_date": datetime.utcnow().strftime("%Y-%m-%d"),
-                "professor_recommendation": review_data.recommendation,
-                "college_name": getattr(application, "college_name", ""),
-                "review_deadline": getattr(application, "review_deadline", ""),
-            }
-
-            # Trigger email automation for professor review submission
-            await email_automation_service.trigger_professor_review_submitted(self.db, application.id, email_data)
-        except Exception as e:
-            logger.error(f"Failed to trigger automated professor review emails: {e}")
-
-        # Return fresh copy with all relationships loaded
-        return await self.get_application_by_id(application_id)
 
     async def create_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
         """Create a professor review record and notify college reviewers"""
@@ -1694,16 +1627,13 @@ class ApplicationService:
                     source_object_name = getattr(user_profile, doc_config["object_name_field"], None)
                     if source_object_name:
                         filename = source_object_name.split("/")[-1]
-                        file_extension = filename.split(".")[-1] if "." in filename else "jpg"
                     else:
                         # 從 URL 提取
                         filename = doc_url.split("/")[-1].split("?")[0]
-                        file_extension = filename.split(".")[-1] if "." in filename else "jpg"
                         source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
                 else:
                     # 從 URL 提取（舊的邏輯作為備用）
                     filename = doc_url.split("/")[-1].split("?")[0]
-                    file_extension = filename.split(".")[-1] if "." in filename else "jpg"
                     source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
 
                 # 使用 MinIO 服務複製文件到申請路徑
@@ -1904,10 +1834,8 @@ class ApplicationService:
             responses = []
             for app in applications:
                 # Get scholarship type information for display
-                scholarship_type_name = None
                 scholarship_type_zh = None
                 if app.scholarship_configuration and app.scholarship_configuration.scholarship_type:
-                    scholarship_type_name = app.scholarship_configuration.scholarship_type.name
                     # Use name for Chinese display since name_zh doesn't exist
                     scholarship_type_zh = app.scholarship_configuration.scholarship_type.name
 
@@ -2041,10 +1969,10 @@ class ApplicationService:
             ]:
                 return False
 
-            # Check professor review period for SUBMISSION (this is where time restriction applies)
-            # Skip time restrictions if review periods are not configured (e.g., in test environment)
             now = datetime.now(timezone.utc)
 
+            # Check professor review period for SUBMISSION (this is where time restriction applies)
+            # Skip time restrictions if review periods are not configured (e.g., in test environment)
             if application.is_renewal:
                 # Check renewal review period
                 renewal_start = config.renewal_professor_review_start
@@ -2353,8 +2281,6 @@ class ApplicationService:
     async def get_professor_review_stats(self, professor_id: int) -> dict:
         """Get basic review statistics for a professor"""
         try:
-            now = datetime.now(timezone.utc)
-
             # Get applications in current review period - simplified approach to avoid column reference issues
             pending_query = select(func.count(Application.id)).where(
                 Application.professor_id == professor_id,

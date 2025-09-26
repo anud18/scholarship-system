@@ -26,7 +26,7 @@ async def get_eligible_scholarships():
 @router.get("/eligible", response_model=List[EligibleScholarshipResponse])
 async def get_eligible_scholarships():
     scholarships = await service.get_eligible_scholarships(student)
-    
+
     # ✅ Convert to proper response format
     response_data = []
     for scholarship in scholarships:
@@ -40,7 +40,7 @@ async def get_eligible_scholarships():
             # ... other fields
         )
         response_data.append(response_item)
-    
+
     return response_data
 ```
 

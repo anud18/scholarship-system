@@ -30,7 +30,7 @@ jobs:
       pull-requests: write
       contents: read
       issues: write
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,26 +51,26 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.issue.number,
             });
-            
+
             let additions = 0;
             let deletions = 0;
             let changedFiles = 0;
-            
+
             files.forEach(file => {
               additions += file.additions;
               deletions += file.deletions;
               changedFiles++;
             });
-            
+
             const totalChanges = additions + deletions;
             let sizeLabel = '';
-            
+
             if (totalChanges < 50) sizeLabel = 'size/XS';
             else if (totalChanges < 200) sizeLabel = 'size/S';
             else if (totalChanges < 500) sizeLabel = 'size/M';
             else if (totalChanges < 1000) sizeLabel = 'size/L';
             else sizeLabel = 'size/XL';
-            
+
             // Add size label
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
@@ -78,7 +78,7 @@ jobs:
               issue_number: context.issue.number,
               labels: [sizeLabel]
             });
-            
+
             // Add warning comment for large PRs
             if (totalChanges > 500) {
               const warningMessage = [
@@ -94,7 +94,7 @@ jobs:
                 `- 🗑️ ${deletions} deletions`,
                 `- 📁 ${changedFiles} files changed`
               ].join('\n');
-              
+
               try {
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
@@ -113,7 +113,7 @@ jobs:
     name: Conflict Detection
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -124,7 +124,7 @@ jobs:
         id: conflict-check
         run: |
           git fetch origin ${{ github.base_ref }}
-          
+
           # Check if PR branch can be merged cleanly
           if git merge-tree $(git merge-base HEAD origin/${{ github.base_ref }}) HEAD origin/${{ github.base_ref }} | grep -q '<<<<<<<'; then
             echo "conflicts=true" >> $GITHUB_OUTPUT
@@ -156,7 +156,7 @@ jobs:
               '',
               'The CI will re-run automatically after conflicts are resolved.'
             ].join('\n');
-            
+
             try {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -174,11 +174,11 @@ jobs:
     name: Code Quality
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    
+
     strategy:
       matrix:
         component: [backend, frontend]
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -216,7 +216,7 @@ jobs:
         run: |
           echo "## 🐍 Backend Code Quality Results" >> quality-report.md
           echo "" >> quality-report.md
-          
+
           # Black formatting check
           echo "### Code Formatting (Black)" >> quality-report.md
           if black --check --diff .; then
@@ -228,7 +228,7 @@ jobs:
             echo "\`\`\`" >> quality-report.md
           fi
           echo "" >> quality-report.md
-          
+
           # Import sorting check
           echo "### Import Sorting (isort)" >> quality-report.md
           if isort --check-only --diff .; then
@@ -240,7 +240,7 @@ jobs:
             echo "\`\`\`" >> quality-report.md
           fi
           echo "" >> quality-report.md
-          
+
           # Flake8 style check
           echo "### Code Style (Flake8)" >> quality-report.md
           if flake8 . --count --statistics --format='%(path)s:%(row)d:%(col)d: %(code)s %(text)s'; then
@@ -249,7 +249,7 @@ jobs:
             echo "❌ Style issues found" >> quality-report.md
           fi
           echo "" >> quality-report.md
-          
+
           # Type checking
           echo "### Type Checking (MyPy)" >> quality-report.md
           if mypy app --ignore-missing-imports; then
@@ -264,7 +264,7 @@ jobs:
         run: |
           echo "## ⚛️ Frontend Code Quality Results" >> quality-report.md
           echo "" >> quality-report.md
-          
+
           # ESLint check
           echo "### Linting (ESLint)" >> quality-report.md
           if npm run lint; then
@@ -273,7 +273,7 @@ jobs:
             echo "❌ Linting errors found" >> quality-report.md
           fi
           echo "" >> quality-report.md
-          
+
           # Prettier formatting check
           echo "### Code Formatting (Prettier)" >> quality-report.md
           if npx prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}"; then
@@ -282,7 +282,7 @@ jobs:
             echo "❌ Code formatting issues found" >> quality-report.md
           fi
           echo "" >> quality-report.md
-          
+
           # TypeScript check
           echo "### Type Checking (TypeScript)" >> quality-report.md
           if npx tsc --noEmit; then
@@ -303,7 +303,7 @@ jobs:
     name: Bundle Size Analysis
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -328,28 +328,28 @@ jobs:
         run: |
           # Install bundle analyzer
           npm install -g @next/bundle-analyzer
-          
+
           # Create bundle analysis report
           echo "## 📦 Bundle Size Analysis" > bundle-report.md
           echo "" >> bundle-report.md
-          
+
           # Get build output size
           if [ -d ".next/static" ]; then
             total_size=$(du -sh .next/static | cut -f1)
             echo "**Total Bundle Size:** $total_size" >> bundle-report.md
             echo "" >> bundle-report.md
           fi
-          
+
           # List largest files
           echo "### Largest Files:" >> bundle-report.md
           echo "\`\`\`" >> bundle-report.md
           find .next/static -name "*.js" -type f -exec du -h {} + | sort -hr | head -10 >> bundle-report.md
           echo "\`\`\`" >> bundle-report.md
-          
+
           # Check for bundle size limits
           js_size=$(find .next/static -name "*.js" -type f -exec cat {} + | wc -c)
           js_size_mb=$((js_size / 1024 / 1024))
-          
+
           echo "" >> bundle-report.md
           if [ $js_size_mb -gt 5 ]; then
             echo "⚠️ **Warning:** JavaScript bundle size ($js_size_mb MB) exceeds recommended 5MB limit" >> bundle-report.md
@@ -365,18 +365,18 @@ jobs:
             const fs = require('fs');
             try {
               const report = fs.readFileSync('frontend/bundle-report.md', 'utf8');
-              
+
               // Find existing bundle comment
               const { data: comments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
               });
-              
-              const botComment = comments.find(comment => 
+
+              const botComment = comments.find(comment =>
                 comment.user.type === 'Bot' && comment.body.includes('Bundle Size Analysis')
               );
-              
+
               if (botComment) {
                 // Update existing comment
                 await github.rest.issues.updateComment({
@@ -405,7 +405,7 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.action == 'opened'
     permissions:
       pull-requests: write
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -419,9 +419,9 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.issue.number,
             });
-            
+
             const reviewers = new Set();
-            
+
             // Add reviewers based on file paths
             files.forEach(file => {
               if (file.filename.startsWith('backend/')) {
@@ -437,12 +437,12 @@ jobs:
                 reviewers.add('qa-team'); // Replace with actual username/team
               }
             });
-            
+
             // Convert to array and filter out author
-            const reviewerList = Array.from(reviewers).filter(reviewer => 
+            const reviewerList = Array.from(reviewers).filter(reviewer =>
               reviewer !== context.payload.pull_request.user.login
             );
-            
+
             if (reviewerList.length > 0) {
               try {
                 await github.rest.pulls.requestReviewers({
@@ -465,7 +465,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    
+
     steps:
       - name: Dependabot metadata
         id: dependabot-metadata
@@ -484,17 +484,17 @@ jobs:
             echo "CI checks failed, skipping auto-merge"
             exit 1
           }
-          
+
           # Verify security scans passed
           echo "Verifying security scans passed..."
           if ! gh pr status --json statusCheckRollup --jq '.statusCheckRollup[] | select(.name | contains("security")) | .conclusion' | grep -q "SUCCESS"; then
             echo "Security checks not all passing, skipping auto-merge"
             exit 1
           fi
-          
+
           # Auto-approve the PR after CI passes
           gh pr review --approve --body "Auto-approving dependabot minor/patch update after successful CI" ${{ github.event.number }}
-          
+
           # Enable auto-merge with squash
           gh pr merge --squash --auto ${{ github.event.number }}
 
@@ -507,7 +507,7 @@ jobs:
       pull-requests: write
       contents: read
       issues: write
-    
+
     steps:
       - name: Check PR readiness
         uses: actions/github-script@v7
@@ -518,30 +518,30 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.issue.number,
             });
-            
+
             const checks = [];
-            
+
             // Check if PR has description
             if (!pr.body || pr.body.length < 20) {
               checks.push('❌ PR needs a detailed description');
             } else {
               checks.push('✅ PR has description');
             }
-            
+
             // Check if PR is not a draft
             if (pr.draft) {
               checks.push('⚠️ PR is marked as draft');
             } else {
               checks.push('✅ PR is ready for review');
             }
-            
+
             // Check if PR has labels
             if (pr.labels.length === 0) {
               checks.push('⚠️ PR has no labels (will be auto-labeled)');
             } else {
               checks.push('✅ PR has labels');
             }
-            
+
             // Check title format
             const titlePattern = /^(feat|fix|docs|style|refactor|test|chore)(\(.+\))?: .+/;
             if (!titlePattern.test(pr.title)) {
@@ -549,7 +549,7 @@ jobs:
             } else {
               checks.push('✅ PR title follows conventional format');
             }
-            
+
             // Create status comment
             const statusComment = [
               '## 📋 PR Readiness Checklist',
@@ -564,7 +564,7 @@ jobs:
               '---',
               '*This check runs automatically on every PR. Address any issues above for faster review.*'
             ].join('\n');
-            
+
             try {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -583,7 +583,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [pr-labeling, conflict-check, code-quality, bundle-analysis, reviewer-assignment, pr-readiness]
     if: always() && github.event_name == 'pull_request'
-    
+
     steps:
       - name: Create workflow summary
         run: |

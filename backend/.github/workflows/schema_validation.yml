@@ -17,7 +17,7 @@ on:
 jobs:
   schema-validation:
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:13
@@ -34,12 +34,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
-        
+
     - name: Cache dependencies
       uses: actions/cache@v3
       with:
@@ -47,49 +47,49 @@ jobs:
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
-    
+
     - name: Install dependencies
       run: |
         cd backend
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
-        
+
     - name: Install pre-commit
       run: |
         cd backend
         pip install pre-commit
-        
+
     - name: Run schema validation checks
       run: |
         cd backend
         python scripts/pre_commit_schema_check.py app/api/v1/endpoints/*.py
-        
+
     - name: Run type checking
       run: |
         cd backend
         mypy app/ --ignore-missing-imports --strict-optional
-        
+
     - name: Start test database
       run: |
         cd backend
         export DATABASE_URL="postgresql://postgres:testpassword@localhost:5432/testdb"
         export DEBUG=true
         python -c "from app.db.session import engine; from app.db.base import Base; Base.metadata.create_all(bind=engine)"
-        
+
     - name: Run endpoint schema tests
       run: |
         cd backend
         export DATABASE_URL="postgresql://postgres:testpassword@localhost:5432/testdb"
         export DEBUG=true
         python -m pytest tests/test_api_schema_validation.py -v
-        
+
     - name: Generate schema validation report
       if: failure()
       run: |
         cd backend
         python test_endpoint_schemas.py --output schema_validation_report.txt || true
-        
+
     - name: Upload schema validation report
       if: failure()
       uses: actions/upload-artifact@v3

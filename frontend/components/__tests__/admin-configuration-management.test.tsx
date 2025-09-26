@@ -86,10 +86,10 @@ jest.mock('@/components/ui/card', () => ({
 
 jest.mock('@/components/ui/button', () => ({
   Button: ({ children, onClick, className, disabled, ...props }: any) => (
-    <button 
-      data-testid="button" 
-      className={className} 
-      onClick={onClick} 
+    <button
+      data-testid="button"
+      className={className}
+      onClick={onClick}
       disabled={disabled}
       {...props}
     >
@@ -151,7 +151,7 @@ jest.mock('@/components/ui/dialog', () => ({
 
 jest.mock('@/components/ui/input', () => ({
   Input: ({ value, onChange, placeholder, type, id }: any) => (
-    <input 
+    <input
       data-testid="input"
       type={type || 'text'}
       id={id}
@@ -164,7 +164,7 @@ jest.mock('@/components/ui/input', () => ({
 
 jest.mock('@/components/ui/textarea', () => ({
   Textarea: ({ value, onChange, placeholder, id }: any) => (
-    <textarea 
+    <textarea
       data-testid="textarea"
       id={id}
       value={value}
@@ -290,13 +290,13 @@ describe.skip('AdminConfigurationManagement Component', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    
+
     // Setup default API mocks
     mockApi.admin.getScholarshipConfigTypes.mockResolvedValue({
       success: true,
       data: mockScholarshipTypes
     })
-    
+
     mockApi.admin.getScholarshipConfigurations.mockResolvedValue({
       success: true,
       data: mockConfigurations
@@ -305,7 +305,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
 
   it('should render component with loading state initially', () => {
     render(<AdminConfigurationManagement scholarshipTypes={[]} />)
-    
+
     expect(screen.getByText('尚無獎學金類型')).toBeInTheDocument()
   })
 
@@ -332,12 +332,12 @@ describe.skip('AdminConfigurationManagement Component', () => {
 
   it('should load configurations when scholarship type is selected', async () => {
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     // Wait for initial load
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigTypes).toHaveBeenCalled()
     })
-    
+
     // Check that configurations are loaded
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledWith({
@@ -350,7 +350,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
 
   it('should display configurations in table', async () => {
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('PhD獎學金114學年度第一學期')).toBeInTheDocument()
       expect(screen.getByText('50,000 TWD')).toBeInTheDocument()
@@ -365,7 +365,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
     })
 
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('尚無配置資料')).toBeInTheDocument()
       expect(screen.getByText('點擊「新增配置」開始建立獎學金配置')).toBeInTheDocument()
@@ -375,14 +375,14 @@ describe.skip('AdminConfigurationManagement Component', () => {
   it('should open create dialog when create button is clicked', async () => {
     const user = userEvent.setup()
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('新增配置')).toBeInTheDocument()
     })
-    
+
     const createButton = screen.getByText('新增配置')
     await user.click(createButton)
-    
+
     await waitFor(() => {
       expect(screen.getByText('新增獎學金配置')).toBeInTheDocument()
       expect(screen.getByText('為選定的獎學金類型建立新的配置設定')).toBeInTheDocument()
@@ -397,25 +397,25 @@ describe.skip('AdminConfigurationManagement Component', () => {
     })
 
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     // Wait for load and click create button
     await waitFor(() => {
       expect(screen.getByText('新增配置')).toBeInTheDocument()
     })
-    
+
     const createButton = screen.getByText('新增配置')
     await user.click(createButton)
-    
+
     // Fill form (simplified for testing)
     await waitFor(() => {
       const nameInput = screen.getAllByTestId('input')[0] // First input should be config_name
       fireEvent.change(nameInput, { target: { value: 'Test Configuration' } })
     })
-    
+
     // Submit form
     const submitButton = screen.getByText('建立配置')
     await user.click(submitButton)
-    
+
     await waitFor(() => {
       expect(mockApi.admin.createScholarshipConfiguration).toHaveBeenCalled()
     })
@@ -430,17 +430,17 @@ describe.skip('AdminConfigurationManagement Component', () => {
     })
 
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('新增配置')).toBeInTheDocument()
     })
-    
+
     const createButton = screen.getByText('新增配置')
     await user.click(createButton)
-    
+
     const submitButton = screen.getByText('建立配置')
     await user.click(submitButton)
-    
+
     await waitFor(() => {
       expect(screen.getByText('Creation failed')).toBeInTheDocument()
     })
@@ -449,11 +449,11 @@ describe.skip('AdminConfigurationManagement Component', () => {
   it('should open edit dialog when edit button is clicked', async () => {
     const user = userEvent.setup()
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       const editButtons = screen.getAllByTestId('button')
       // Find the edit button (with Edit icon, should be one of the action buttons)
-      const editButton = editButtons.find(button => 
+      const editButton = editButtons.find(button =>
         button.getAttribute('onClick')?.includes('openEditDialog') ||
         button.textContent?.includes('Edit')
       )
@@ -469,7 +469,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
     })
 
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     // This is a simplified test - in reality would need to properly trigger edit dialog
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalled()
@@ -483,7 +483,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
     })
 
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalled()
     })
@@ -496,7 +496,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
     })
 
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalled()
     })
@@ -504,7 +504,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
 
   it('should filter configurations by academic year', async () => {
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledWith({
         scholarship_type_id: 1,
@@ -516,7 +516,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
 
   it('should filter configurations by semester', async () => {
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     // Initial load
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledTimes(1)
@@ -526,14 +526,14 @@ describe.skip('AdminConfigurationManagement Component', () => {
   it('should refresh configurations when refresh button is clicked', async () => {
     const user = userEvent.setup()
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('重新載入')).toBeInTheDocument()
     })
-    
+
     const refreshButton = screen.getByText('重新載入')
     await user.click(refreshButton)
-    
+
     // Should call API again
     await waitFor(() => {
       expect(mockApi.admin.getScholarshipConfigurations).toHaveBeenCalledTimes(2)
@@ -542,7 +542,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
 
   it('should display active/inactive status correctly', async () => {
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       // Active configuration should show "啟用"
       expect(screen.getByText('啟用')).toBeInTheDocument()
@@ -558,7 +558,7 @@ describe.skip('AdminConfigurationManagement Component', () => {
     })
 
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('Server error')).toBeInTheDocument()
     })
@@ -573,14 +573,14 @@ describe.skip('AdminConfigurationManagement Component', () => {
     })
 
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('Test error message')).toBeInTheDocument()
     })
-    
+
     const closeButton = screen.getByText('×')
     await user.click(closeButton)
-    
+
     await waitFor(() => {
       expect(screen.queryByText('Test error message')).not.toBeInTheDocument()
     })
@@ -589,20 +589,20 @@ describe.skip('AdminConfigurationManagement Component', () => {
   it('should validate form data before submission', async () => {
     const user = userEvent.setup()
     render(<AdminConfigurationManagement scholarshipTypes={mockScholarshipTypes} />)
-    
+
     await waitFor(() => {
       expect(screen.getByText('新增配置')).toBeInTheDocument()
     })
-    
+
     const createButton = screen.getByText('新增配置')
     await user.click(createButton)
-    
+
     // Try to submit without filling required fields
     await waitFor(() => {
       const submitButton = screen.getByText('建立配置')
       expect(submitButton).toBeInTheDocument()
     })
-    
+
     // The form should have validation - specific validation testing would require more detailed form interaction
   })
 })

@@ -5,7 +5,7 @@ This document outlines the database migration strategy for the scholarship syste
 
 ## Migration History
 
-### `fdbf3cdbfe6d_initial_database_schema.py` 
+### `fdbf3cdbfe6d_initial_database_schema.py`
 - **Type**: Fresh schema initialization
 - **Purpose**: Consolidates all previous fragmented migrations into a single, clean initial schema
 - **Impact**: This represents a schema reset/optimization rather than incremental changes
@@ -34,7 +34,7 @@ This document outlines the database migration strategy for the scholarship syste
 - **No Indexes**: Full table scans on frequently queried columns
 - **Response Time**: ~2-5 seconds for quota dashboard
 
-### After Optimization  
+### After Optimization
 - **Single Aggregated Query**: 1 query with GROUP BY for all usage data
 - **Proper Indexes**: O(log n) lookup time instead of O(n) scans
 - **Expected Response Time**: ~50-200ms for quota dashboard
@@ -75,7 +75,7 @@ DROP INDEX IF EXISTS idx_applications_quota_usage;
 
 ### Key Metrics to Monitor
 1. **Query Execution Time**: Matrix quota status endpoint response time
-2. **Database Load**: CPU and I/O usage during quota operations  
+2. **Database Load**: CPU and I/O usage during quota operations
 3. **Index Usage**: `pg_stat_user_indexes` to verify index effectiveness
 4. **Lock Contention**: Monitor for blocking during index creation
 
@@ -102,7 +102,7 @@ After migration deployment:
 \di+ idx_applications_quota_usage
 
 -- Check index usage
-SELECT * FROM pg_stat_user_indexes 
+SELECT * FROM pg_stat_user_indexes
 WHERE indexrelname LIKE 'idx_%quota%';
 
 -- Monitor query performance

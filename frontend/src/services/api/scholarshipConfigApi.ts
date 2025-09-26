@@ -5,7 +5,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const apiCall = async (url: string, options: RequestInit = {}) => {
   // Get auth token from localStorage if available
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  
+
   const response = await fetch(`${API_BASE}${url}`, {
     headers: {
       'Content-Type': 'application/json',
@@ -14,11 +14,11 @@ const apiCall = async (url: string, options: RequestInit = {}) => {
     },
     ...options,
   });
-  
+
   if (!response.ok) {
     throw new Error(`API call failed: ${response.statusText}`);
   }
-  
+
   return response.json();
 };
 
@@ -73,7 +73,7 @@ export const scholarshipConfigApi = {
     if (params?.is_active !== undefined) {
       queryParams.append('is_active', params.is_active.toString());
     }
-    
+
     const queryString = queryParams.toString();
     const url = `/api/v1/scholarship-configurations/${queryString ? `?${queryString}` : ''}`;
     return apiCall(url);
@@ -160,19 +160,19 @@ export const scholarshipConfigApi = {
     const params = new URLSearchParams();
     params.append('format', format);
     if (semester) params.append('semester', semester);
-    
+
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    
+
     const response = await fetch(`${API_BASE}/api/v1/scholarship-configurations/${configId}/export-qualified?${params.toString()}`, {
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),
       },
     });
-    
+
     if (!response.ok) {
       throw new Error(`Export failed: ${response.statusText}`);
     }
-    
+
     if (format === 'csv') {
       return { data: await response.text() };
     } else {

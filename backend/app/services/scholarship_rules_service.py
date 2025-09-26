@@ -166,7 +166,7 @@ class ScholarshipRulesService:
         """Copy rules from one period to another"""
 
         # Build source query
-        source_stmt = select(ScholarshipRule).filter(ScholarshipRule.is_template == False)
+        source_stmt = select(ScholarshipRule).filter(ScholarshipRule.is_template.is_(False))
 
         if source_academic_year:
             source_stmt = source_stmt.filter(ScholarshipRule.academic_year == source_academic_year)
@@ -288,7 +288,7 @@ class ScholarshipRulesService:
         # Get all rules with the same template name
         stmt = select(ScholarshipRule).filter(
             and_(
-                ScholarshipRule.is_template == True,
+                ScholarshipRule.is_template.is_(True),
                 ScholarshipRule.template_name == template_rule.template_name,
                 ScholarshipRule.scholarship_type_id == template_rule.scholarship_type_id,
             )

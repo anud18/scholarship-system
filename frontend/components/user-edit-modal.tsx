@@ -121,7 +121,7 @@ export function UserEditModal({
         {/* 權限設置區域 */}
         <div className="border-t pt-4">
           <h3 className="text-lg font-medium mb-4">權限設置</h3>
-          
+
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>角色 *</Label>
@@ -175,7 +175,7 @@ export function UserEditModal({
               <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
               <h3 className="text-lg font-semibold text-gray-900">獎學金管理權限設置</h3>
             </div>
-            
+
             {/* 獎學金選擇區域 */}
             <div className="space-y-6">
               {/* 選擇器區域 */}
@@ -186,7 +186,7 @@ export function UserEditModal({
                     {selectedScholarshipIds.length} / {availableScholarships.length}
                   </span>
                 </div>
-                
+
                 <div className="relative group">
                   <div className="border border-gray-200 rounded-lg bg-white shadow-sm group-hover:border-gray-300 group-focus-within:border-blue-500 group-focus-within:ring-1 group-focus-within:ring-blue-500 transition-all duration-200">
                     <select
@@ -194,20 +194,20 @@ export function UserEditModal({
                       value={selectedScholarshipIds.map(String)}
                       onChange={(e) => {
                         const selectedOptions = Array.from(e.target.selectedOptions, option => parseInt(option.value))
-                        
+
                         // 立即更新狀態
                         setSelectedScholarshipIds(selectedOptions)
-                        
+
                         // 簡化的權限更新邏輯
                         const newPermissions = []
-                        
+
                         for (const scholarshipId of selectedOptions) {
                           const scholarship = availableScholarships.find(s => s.id === scholarshipId)
                           if (!scholarship) continue
-                          
+
                           // 檢查是否已存在此權限（保留現有權限的 ID）
                           const existingPermission = scholarshipPermissions.find(p => p.scholarship_id === scholarshipId && p.user_id === Number(editingUser?.id))
-                          
+
                           if (existingPermission) {
                             // 保留現有權限（包括 ID）
                             newPermissions.push(existingPermission)
@@ -223,14 +223,14 @@ export function UserEditModal({
                             })
                           }
                         }
-                        
+
                         onPermissionChange?.(newPermissions)
                       }}
                       className="w-full px-4 py-3 text-sm border-0 focus:ring-0 focus:outline-none min-h-[140px] bg-transparent resize-none"
                     >
                       {availableScholarships.map((scholarship) => (
-                        <option 
-                          key={scholarship.id} 
+                        <option
+                          key={scholarship.id}
                           value={scholarship.id}
                           className="px-4 py-2 hover:bg-gray-50"
                         >
@@ -239,7 +239,7 @@ export function UserEditModal({
                       ))}
                     </select>
                   </div>
-                  
+
                   <div className="mt-3 flex items-center gap-3 text-xs text-gray-500">
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full">
                       <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
@@ -258,10 +258,10 @@ export function UserEditModal({
               {/* 已選擇的獎學金顯示 */}
               {(() => {
                 // 只顯示當前編輯用戶的權限
-                const userPermissions = editingUser?.id 
+                const userPermissions = editingUser?.id
                   ? scholarshipPermissions.filter(p => p.user_id === Number(editingUser.id))
                   : scholarshipPermissions.filter(p => p.user_id === -1) // 新用戶的臨時權限
-                
+
                 if (userPermissions.length > 0) {
                   return (
                     <div className="space-y-3">
@@ -272,7 +272,7 @@ export function UserEditModal({
                           <span className="text-xs text-green-700 font-medium">{userPermissions.length} 個</span>
                         </div>
                       </div>
-                      
+
                       <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200 shadow-sm">
                         <div className="flex flex-wrap gap-2">
                           {userPermissions.map((permission, index) => (
@@ -288,7 +288,7 @@ export function UserEditModal({
                             </div>
                           ))}
                         </div>
-                        
+
                         <div className="mt-4 pt-3 border-t border-gray-200">
                           <div className="flex items-center justify-between">
                             <p className="text-xs text-gray-500">
@@ -361,4 +361,4 @@ export function UserEditModal({
       </div>
     </Modal>
   )
-} 
+}

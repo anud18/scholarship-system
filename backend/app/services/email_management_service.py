@@ -267,9 +267,9 @@ class EmailManagementService:
                     ScheduledEmail.scheduled_for <= now,
                     ScheduledEmail.status == ScheduleStatus.PENDING,
                     or_(
-                        ScheduledEmail.requires_approval == False,
+                        ScheduledEmail.requires_approval.is_(False),
                         and_(
-                            ScheduledEmail.requires_approval == True,
+                            ScheduledEmail.requires_approval.is_(True),
                             ScheduledEmail.approved_by_user_id.is_not(None),
                         ),
                     ),

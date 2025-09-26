@@ -29,7 +29,7 @@ services:
 
   # FastAPI Backend
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: scholarship_backend_prod

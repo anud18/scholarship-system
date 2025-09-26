@@ -36,12 +36,12 @@ export function FileUpload({
   const [uploadStatus, setUploadStatus] = useState<{ [key: string]: "uploading" | "success" | "error" }>({})
   const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; type: string } | null>(null)
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
-  
+
   const inputRef = useRef<HTMLInputElement>(null)
 
   // 為每個組件生成穩定的唯一 ID
-  const inputId = useMemo(() => 
-    `file-upload-${fileType || 'default'}-${Math.random().toString(36).substr(2, 9)}`, 
+  const inputId = useMemo(() =>
+    `file-upload-${fileType || 'default'}-${Math.random().toString(36).substr(2, 9)}`,
     [fileType]
   )
 
@@ -106,7 +106,7 @@ export function FileUpload({
     validFiles.forEach((file) => {
       // 跳過已上傳的文件
       if (isUploadedFile(file)) return
-      
+
       const fileName = `${fileType}_${file.name}` // Add fileType prefix to avoid conflicts
       setUploadStatus((prev) => ({ ...prev, [fileName]: "uploading" }))
 
@@ -128,7 +128,7 @@ export function FileUpload({
     const updatedFiles = files.filter((_, i) => i !== index)
     setFiles(updatedFiles)
     onFilesChange(updatedFiles)
-    
+
     // Clean up progress and status for removed file
     if (fileToRemove) {
       const fileName = `${fileType}_${fileToRemove.name}`
@@ -187,7 +187,7 @@ export function FileUpload({
   const handleFilePreview = (file: File) => {
     const previewUrl = getFilePreviewUrl(file)
     const fileType = getFileType(file)
-    
+
     setPreviewFile({
       url: previewUrl,
       filename: file.name,
@@ -273,8 +273,8 @@ export function FileUpload({
 
                 <div className="flex items-center space-x-2">
                   {/* 預覽按鈕 */}
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     size="sm"
                     onClick={() => handleFilePreview(file)}
                   >
@@ -284,7 +284,7 @@ export function FileUpload({
                   {(() => {
                     const fileName = `${fileType}_${file.name}`
                     const isUploaded = isUploadedFile(file)
-                    
+
                     // 如果是已上傳的文件，顯示已上傳狀態
                     if (isUploaded) {
                       return (
@@ -294,7 +294,7 @@ export function FileUpload({
                         </Badge>
                       )
                     }
-                    
+
                     // 新上傳文件的狀態顯示
                     return (
                       <>
@@ -333,7 +333,7 @@ export function FileUpload({
           ))}
         </div>
       )}
-      
+
       {/* 文件預覽對話框 */}
       <FilePreviewDialog
         isOpen={isPreviewDialogOpen}

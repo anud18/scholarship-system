@@ -10,11 +10,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
-
 from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
 from app.models.application import Application, ApplicationStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
+
+logger = logging.getLogger(__name__)
 
 
 class EligibilityService:
@@ -225,8 +225,8 @@ class EligibilityService:
         # Get applicable rules for this scholarship configuration (exclude template rules)
         stmt = select(ScholarshipRule).filter(
             ScholarshipRule.scholarship_type_id == config.scholarship_type_id,
-            ScholarshipRule.is_active == True,
-            ScholarshipRule.is_template == False,  # Exclude template rules from filtering
+            ScholarshipRule.is_active.is_(True),
+            ScholarshipRule.is_template.is_(False),  # Exclude template rules from filtering
         )
 
         # Filter by academic year and semester if specified
@@ -311,8 +311,8 @@ class EligibilityService:
         # Get applicable rules for this scholarship configuration (exclude template rules)
         stmt = select(ScholarshipRule).filter(
             ScholarshipRule.scholarship_type_id == config.scholarship_type_id,
-            ScholarshipRule.is_active == True,
-            ScholarshipRule.is_template == False,  # Exclude template rules from filtering
+            ScholarshipRule.is_active.is_(True),
+            ScholarshipRule.is_template.is_(False),  # Exclude template rules from filtering
         )
 
         # Filter by academic year and semester if specified
@@ -419,8 +419,8 @@ class EligibilityService:
         # Get applicable rules for this scholarship configuration (exclude template rules)
         stmt = select(ScholarshipRule).filter(
             ScholarshipRule.scholarship_type_id == config.scholarship_type_id,
-            ScholarshipRule.is_active == True,
-            ScholarshipRule.is_template == False,  # Exclude template rules from filtering
+            ScholarshipRule.is_active.is_(True),
+            ScholarshipRule.is_template.is_(False),  # Exclude template rules from filtering
         )
 
         # Filter by academic year and semester if specified

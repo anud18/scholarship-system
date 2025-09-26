@@ -252,4 +252,4 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 NODE_ENV=production
 ```
 
-For any issues or questions, check the logs using `./test-docker.sh logs` or refer to the individual service documentation. 
+For any issues or questions, check the logs using `./test-docker.sh logs` or refer to the individual service documentation.

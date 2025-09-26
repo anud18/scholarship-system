@@ -247,19 +247,27 @@ class EligibilityVerificationService:
                     }
                 )
 
-        # GPA check
-        if scholarship_type.min_gpa and term_record.gpa:
-            gpa_eligible = float(term_record.gpa) >= float(scholarship_type.min_gpa)
-            details["scores"]["gpa"] = float(term_record.gpa)
-            details["scores"]["required_gpa"] = float(scholarship_type.min_gpa)
+        # Attempt to locate GPA information from available student data
+        term_record = student.get("latest_term") or student.get("term_record") or {}
+        if not isinstance(term_record, dict):
+            term_record = {}
+        term_gpa = term_record.get("gpa") or student.get("gpa")
+
+        min_gpa = scholarship_type.min_gpa
+        if min_gpa and term_gpa is not None:
+            gpa_value = float(term_gpa)
+            required_gpa = float(min_gpa)
+            gpa_eligible = gpa_value >= required_gpa
+            details["scores"]["gpa"] = gpa_value
+            details["scores"]["required_gpa"] = required_gpa
 
             if not gpa_eligible:
-                details["failures"].append(f"GPA {term_record.gpa} below minimum {scholarship_type.min_gpa}")
+                details["failures"].append(f"GPA {term_gpa} below minimum {min_gpa}")
                 details["checks"].append(
                     {
                         "check": "gpa_requirement",
                         "passed": False,
-                        "details": f"GPA {term_record.gpa} < {scholarship_type.min_gpa}",
+                        "details": f"GPA {term_gpa} < {min_gpa}",
                     }
                 )
             else:
@@ -267,7 +275,7 @@ class EligibilityVerificationService:
                     {
                         "check": "gpa_requirement",
                         "passed": True,
-                        "details": f"GPA {term_record.gpa} meets requirement",
+                        "details": f"GPA {term_gpa} meets requirement",
                     }
                 )
 
@@ -289,7 +297,7 @@ class EligibilityVerificationService:
             .where(
                 and_(
                     ScholarshipRule.scholarship_type_id == scholarship_type.id,
-                    ScholarshipRule.is_active == True,
+                    ScholarshipRule.is_active.is_(True),
                 )
             )
             .order_by(ScholarshipRule.priority.desc())

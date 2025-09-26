@@ -17,7 +17,7 @@ from app.db.deps import get_db
 # Student model removed - student data now fetched from external API
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
-from app.models.user import AdminScholarship, User, UserRole
+from app.models.user import AdminScholarship, User
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -80,7 +80,7 @@ async def get_available_semesters(
 
         # Build query conditions
         conditions = [
-            ScholarshipConfiguration.is_active == True,
+            ScholarshipConfiguration.is_active.is_(True),
             ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
         ]
 
@@ -224,7 +224,7 @@ async def get_matrix_quota_status(
                     ScholarshipConfiguration.semester == semester
                     if semester
                     else ScholarshipConfiguration.semester.is_(None),
-                    ScholarshipConfiguration.is_active == True,
+                    ScholarshipConfiguration.is_active.is_(True),
                 )
             )
             .options(selectinload(ScholarshipConfiguration.scholarship_type))
@@ -366,7 +366,7 @@ async def update_matrix_quota(
         # Get the configuration for the specified academic year, or the most recent if not specified
         config_conditions = [
             ScholarshipConfiguration.scholarship_type_id == phd_scholarship.id,
-            ScholarshipConfiguration.is_active == True,
+            ScholarshipConfiguration.is_active.is_(True),
         ]
 
         if academic_year:
@@ -503,7 +503,7 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
                 .where(
                     and_(
                         ScholarshipConfiguration.scholarship_type_id == stype.id,
-                        ScholarshipConfiguration.is_active == True,
+                        ScholarshipConfiguration.is_active.is_(True),
                     )
                 )
                 .order_by(ScholarshipConfiguration.academic_year.desc())
@@ -576,7 +576,7 @@ async def get_quota_overview(
                     ScholarshipConfiguration.semester == semester
                     if semester
                     else ScholarshipConfiguration.semester.is_(None),
-                    ScholarshipConfiguration.is_active == True,
+                    ScholarshipConfiguration.is_active.is_(True),
                 )
             )
             .options(selectinload(ScholarshipConfiguration.scholarship_type))
@@ -686,7 +686,7 @@ async def create_scholarship_configuration(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == config_data.get("academic_year"),
                 ScholarshipConfiguration.semester == config_data.get("semester"),
-                ScholarshipConfiguration.is_active == True,
+                ScholarshipConfiguration.is_active.is_(True),
             )
         )
         existing_result = await db.execute(existing_stmt)
@@ -1046,7 +1046,7 @@ async def duplicate_scholarship_configuration(
                 ScholarshipConfiguration.scholarship_type_id == source_config.scholarship_type_id,
                 ScholarshipConfiguration.academic_year == target_academic_year,
                 ScholarshipConfiguration.semester == target_semester,
-                ScholarshipConfiguration.is_active == True,
+                ScholarshipConfiguration.is_active.is_(True),
             )
         )
         existing_result = await db.execute(existing_stmt)

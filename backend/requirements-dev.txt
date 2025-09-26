@@ -24,4 +24,4 @@ watchdog==3.0.0
 
 # API documentation
 mkdocs==1.5.3
-mkdocs-material==9.4.8 
+mkdocs-material==9.4.8

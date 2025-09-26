@@ -194,4 +194,4 @@ describe('ScholarshipTimeline Component', () => {
       expect(screen.getByText('重試')).toBeInTheDocument()
     })
   })
-}) 
+})
