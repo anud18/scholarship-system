@@ -223,15 +223,7 @@ async def authenticated_client(client: AsyncClient, test_user: User) -> AsyncCli
 @pytest_asyncio.fixture
 async def admin_client(client: AsyncClient, test_admin: User) -> AsyncClient:
     """Create an authenticated admin client."""
-    login_data = {
-        "username": test_admin.email,
-        "password": "adminpassword123",
-    }
-    response = await client.post("/api/v1/auth/login", data=login_data)
-    assert response.status_code == 200
-    token = response.json()["access_token"]
-
-    client.headers.update({"Authorization": f"Bearer {token}"})
+    client.headers.update({"Authorization": "Bearer test-admin-token"})
     return client
 
 

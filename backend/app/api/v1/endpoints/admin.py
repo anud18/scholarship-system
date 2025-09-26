@@ -33,6 +33,7 @@ from app.schemas.application import (
     ApplicationResponse,
     HistoricalApplicationResponse,
     ProfessorAssignmentRequest,
+    BulkApproveRequest,
 )
 from app.schemas.common import (
     ApiResponse,
@@ -56,6 +57,7 @@ from app.schemas.scholarship import (
     ScholarshipSubTypeConfigUpdate,
 )
 from app.services.application_service import ApplicationService
+from app.services.bulk_approval_service import BulkApprovalService
 from app.services.system_setting_service import EmailTemplateService, SystemSettingService
 
 logger = logging.getLogger(__name__)
@@ -425,6 +427,45 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
 @router.get("/system/health", response_model=ApiResponse[Dict[str, Any]])
 async def get_system_health(current_user: User = Depends(require_admin)):
     """Get system health status"""
+    from app.integrations.nycu_emp import create_nycu_emp_client_from_env, NYCUEmpError
+
+    # Test NYCU Employee API connection
+    nycu_emp_status = "unknown"
+    nycu_emp_details = {}
+
+    try:
+        client = create_nycu_emp_client_from_env()
+
+        # Use context manager for HTTP client if available
+        if hasattr(client, '__aenter__'):
+            async with client as c:
+                test_result = await c.get_employee_page(page_row="1", status="01")
+        else:
+            test_result = await client.get_employee_page(page_row="1", status="01")
+
+        if test_result.is_success:
+            nycu_emp_status = "connected"
+            nycu_emp_details = {
+                "total_employees": test_result.total_count,
+                "total_pages": test_result.total_page,
+                "sample_employees": len(test_result.empDataList),
+                "response_status": test_result.status,
+                "api_mode": "mock" if hasattr(client, '_get_sample_employees') else "http"
+            }
+        else:
+            nycu_emp_status = "error"
+            nycu_emp_details = {
+                "error": f"API returned status: {test_result.status}",
+                "message": test_result.message
+            }
+
+    except NYCUEmpError as e:
+        nycu_emp_status = "error"
+        nycu_emp_details = {"error": str(e), "type": type(e).__name__}
+    except Exception as e:
+        nycu_emp_status = "error"
+        nycu_emp_details = {"error": str(e), "type": "UnexpectedError"}
+
     return ApiResponse(
         success=True,
         message="System health status retrieved successfully",
@@ -433,8 +474,124 @@ async def get_system_health(current_user: User = Depends(require_admin)):
             "database": "connected",
             "redis": "connected",
             "storage": "available",
-            "timestamp": "2025-06-15T10:30:00Z",
+            "nycu_employee_api": {
+                "status": nycu_emp_status,
+                "details": nycu_emp_details
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         },
+    )
+
+
+@router.get("/debug/nycu-employee", response_model=ApiResponse[Dict[str, Any]])
+async def debug_nycu_employee_api(
+    page: int = Query(1, ge=1, description="Page number"),
+    status: str = Query("01", description="Employee status filter"),
+    current_user: User = Depends(require_admin)
+):
+    """Debug endpoint for NYCU Employee API integration"""
+    from app.integrations.nycu_emp import (
+        create_nycu_emp_client_from_env,
+        NYCUEmpError,
+        NYCUEmpConnectionError,
+        NYCUEmpAuthenticationError,
+        NYCUEmpTimeoutError,
+        NYCUEmpValidationError
+    )
+    from app.core.config import settings
+    import os
+
+    debug_info = {
+        "configuration": {
+            "mode": getattr(settings, 'nycu_emp_mode', 'mock'),
+            "endpoint": getattr(settings, 'nycu_emp_endpoint', None),
+            "account": getattr(settings, 'nycu_emp_account', None),
+            "has_key": bool(getattr(settings, 'nycu_emp_key_hex', None) or getattr(settings, 'nycu_emp_key_raw', None)),
+            "timeout": getattr(settings, 'nycu_emp_timeout', 10.0),
+            "retries": getattr(settings, 'nycu_emp_retries', 3),
+            "env_vars": {
+                "NYCU_EMP_MODE": os.getenv("NYCU_EMP_MODE"),
+                "NYCU_EMP_ACCOUNT": os.getenv("NYCU_EMP_ACCOUNT"),
+                "NYCU_EMP_ENDPOINT": os.getenv("NYCU_EMP_ENDPOINT"),
+                "NYCU_EMP_KEY_HEX": "***" if os.getenv("NYCU_EMP_KEY_HEX") else None,
+                "NYCU_EMP_KEY_RAW": "***" if os.getenv("NYCU_EMP_KEY_RAW") else None,
+            }
+        },
+        "test_results": {}
+    }
+
+    try:
+        client = create_nycu_emp_client_from_env()
+        debug_info["client_type"] = type(client).__name__
+        debug_info["client_mode"] = "mock" if hasattr(client, '_get_sample_employees') else "http"
+
+        # Test single page request
+        if hasattr(client, '__aenter__'):
+            async with client as c:
+                result = await c.get_employee_page(page_row=str(page), status=status)
+        else:
+            result = await client.get_employee_page(page_row=str(page), status=status)
+
+        debug_info["test_results"] = {
+            "status": "success",
+            "api_status": result.status,
+            "api_message": result.message,
+            "is_success": result.is_success,
+            "total_pages": result.total_page,
+            "total_count": result.total_count,
+            "current_page_employees": len(result.empDataList),
+            "sample_employee": result.empDataList[0].__dict__ if result.empDataList else None,
+            "requested_page": page,
+            "requested_status": status
+        }
+
+    except NYCUEmpAuthenticationError as e:
+        debug_info["test_results"] = {
+            "status": "authentication_error",
+            "error": str(e),
+            "type": "NYCUEmpAuthenticationError",
+            "suggestion": "Check NYCU_EMP_ACCOUNT and NYCU_EMP_KEY_HEX/NYCU_EMP_KEY_RAW"
+        }
+    except NYCUEmpConnectionError as e:
+        debug_info["test_results"] = {
+            "status": "connection_error",
+            "error": str(e),
+            "type": "NYCUEmpConnectionError",
+            "suggestion": "Check NYCU_EMP_ENDPOINT and network connectivity"
+        }
+    except NYCUEmpTimeoutError as e:
+        debug_info["test_results"] = {
+            "status": "timeout_error",
+            "error": str(e),
+            "type": "NYCUEmpTimeoutError",
+            "suggestion": "Consider increasing NYCU_EMP_TIMEOUT value"
+        }
+    except NYCUEmpValidationError as e:
+        debug_info["test_results"] = {
+            "status": "validation_error",
+            "error": str(e),
+            "type": "NYCUEmpValidationError",
+            "suggestion": "Check page and status parameter values"
+        }
+    except NYCUEmpError as e:
+        debug_info["test_results"] = {
+            "status": "api_error",
+            "error": str(e),
+            "type": type(e).__name__,
+            "suggestion": "Check API endpoint and credentials"
+        }
+    except Exception as e:
+        debug_info["test_results"] = {
+            "status": "unexpected_error",
+            "error": str(e),
+            "type": type(e).__name__,
+            "suggestion": "Check system logs for more details"
+        }
+
+    return ApiResponse(
+        success=True,
+        message="NYCU Employee API debug information retrieved",
+        data=debug_info
     )
 
 
@@ -1144,11 +1301,11 @@ async def get_scholarship_statistics(current_user: User = Depends(require_admin)
 
 
 @router.get(
-    "/scholarships/{scholarship_code}/applications",
+    "/scholarships/{scholarship_identifier}/applications",
     response_model=ApiResponse[List[ApplicationListResponse]],
 )
 async def get_applications_by_scholarship(
-    scholarship_code: str,
+    scholarship_identifier: str,
     sub_type: Optional[str] = Query(None, description="Filter by sub-type"),
     status: Optional[str] = Query(None, description="Filter by status"),
     current_user: User = Depends(require_admin),
@@ -1157,8 +1314,19 @@ async def get_applications_by_scholarship(
     """Get applications for a specific scholarship type"""
 
     # Verify scholarship exists
-    stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_code)
-    result = await db.execute(stmt)
+    scholarship_stmt: Select[tuple[ScholarshipType]]
+
+    try:
+        scholarship_id = int(scholarship_identifier)
+    except ValueError:
+        scholarship_id = None
+
+    if scholarship_id is not None:
+        scholarship_stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
+    else:
+        scholarship_stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_identifier)
+
+    result = await db.execute(scholarship_stmt)
     scholarship = result.scalar_one_or_none()
 
     if not scholarship:
@@ -3074,27 +3242,45 @@ async def get_available_professors(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Get list of available professors for assignment
-    - College admins see only professors in their college
-    - Admin/Super Admin see all professors
-    """
+    """Get list of available professors for assignment."""
+
     try:
-        service = ApplicationService(db)
-        professors = await service.get_available_professors(current_user, search)
+        stmt = select(User).where(User.role == UserRole.PROFESSOR)
+
+        if search:
+            search_term = f"%{search.lower()}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(User.name).like(search_term),
+                    func.lower(User.nycu_id).like(search_term),
+                )
+            )
+
+        result = await db.execute(stmt)
+        professors = result.scalars().all() if result else []
+
+        serialized = [
+            {
+                "id": getattr(professor, "id", None),
+                "name": getattr(professor, "name", ""),
+                "email": getattr(professor, "email", ""),
+                "nycu_id": getattr(professor, "nycu_id", ""),
+            }
+            for professor in professors
+        ]
 
         return ApiResponse(
             success=True,
-            message=f"Retrieved {len(professors)} professors",
-            data=professors,
+            message=f"Retrieved {len(serialized)} professors",
+            data=serialized,
         )
 
-    except Exception as e:
-        logger.error(f"Error fetching professors: {str(e)}")
+    except Exception as exc:  # pragma: no cover - unexpected failure path
+        logger.error(f"Error fetching professors: {exc}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch professors: {str(e)}",
-        )
+            detail=f"Failed to fetch professors: {exc}",
+        ) from exc
 
 
 @router.put(
@@ -3164,3 +3350,27 @@ async def assign_professor_to_application(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to assign professor: {str(e)}",
         )
+@router.post(
+    "/applications/bulk-approve",
+    response_model=ApiResponse[Dict[str, Any]],
+)
+async def bulk_approve_applications_endpoint(
+    payload: BulkApproveRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk approve multiple applications."""
+
+    service = BulkApprovalService(db)
+    result = await service.bulk_approve_applications(
+        application_ids=payload.application_ids,
+        approver_user_id=current_user.id,
+        approval_notes=payload.comments,
+        send_notifications=payload.send_notifications,
+    )
+
+    return ApiResponse(
+        success=True,
+        message="Bulk approval processed successfully",
+        data=result,
+    )

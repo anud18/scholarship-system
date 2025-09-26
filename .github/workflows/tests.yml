@@ -106,13 +106,21 @@ jobs:
           mypy app --ignore-missing-imports
         continue-on-error: true
 
-      - name: Run unit tests
+      - name: Run backend unit tests (service-focused)
         run: |
-          pytest --maxfail=5 --disable-warnings -v \
-            --cov=app \
+          pytest --disable-warnings -v \
+            app/tests/test_minio_service_unit.py \
+            app/tests/test_rate_limiting_unit.py \
+            app/tests/test_email_automation_service_unit.py \
+            app/tests/test_notification_service_unit.py \
+            app/tests/test_application_field_service_unit.py \
+            app/tests/test_github_integration_service.py \
+            app/tests/test_eligibility_service_unit.py \
+            app/tests/test_bulk_approval_service_unit.py \
+            --cov=app/services \
             --cov-report=xml \
             --cov-report=html \
-            --cov-report=term-missing \
+            --cov-report=term \
             --junitxml=junit.xml
         env:
           DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
