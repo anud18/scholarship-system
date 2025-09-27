@@ -136,6 +136,20 @@ async def test_bulk_approve_applications_handles_invalid_status():
 
 
 @pytest.mark.asyncio
+async def test_bulk_approve_handles_missing_ids_and_no_notifications():
+    app = DummyApplication("APP-missing", ApplicationStatus.SUBMITTED.value)
+    session = StubSession([StubResult([app])])
+    service = make_service(session)
+
+    result = await service.bulk_approve_applications([app.id, 999], approver_user_id=2, send_notifications=False)
+
+    assert result["total_requested"] == 2
+    assert len(result["successful_approvals"]) == 1
+    assert result["notifications_sent"] == 0
+    assert result["notifications_failed"] == 0
+
+
+@pytest.mark.asyncio
 async def test_bulk_approve_records_notification_error(monkeypatch):
     app = DummyApplication("APP-4", ApplicationStatus.RECOMMENDED.value)
     session = StubSession([StubResult([app])])
@@ -228,6 +242,18 @@ async def test_bulk_reject_commit_failure():
     assert result["successful_rejections"] == []
     assert result["failed_rejections"][0]["app_id"] == app.app_id
     assert session.rollbacks == 1
+
+
+@pytest.mark.asyncio
+async def test_bulk_reject_no_notifications():
+    app = DummyApplication("APP-reject2", ApplicationStatus.UNDER_REVIEW.value)
+    session = StubSession([StubResult([app])])
+    service = make_service(session)
+
+    result = await service.bulk_reject_applications([app.id], rejector_user_id=5, rejection_reason="late", send_notifications=False)
+
+    assert result["notifications_sent"] == 0
+    assert result["notifications_failed"] == 0
 
 
 @pytest.mark.asyncio
@@ -412,3 +438,43 @@ async def test_batch_process_with_notifications_admin_email(monkeypatch):
     # Invalid operation should raise
     with pytest.raises(ValueError):
         await service.batch_process_with_notifications("unknown", [1], operator_user_id=1, operation_params={})
+
+
+@pytest.mark.asyncio
+async def test_batch_process_with_notifications_reject_path(monkeypatch):
+    session = StubSession()
+    service = make_service(session)
+
+    service.bulk_reject_applications = AsyncMock(
+        return_value={"success_count": 1, "failure_count": 0, "total_requested": 1}
+    )
+
+    result = await service.batch_process_with_notifications(
+        "reject",
+        [1],
+        operator_user_id=9,
+        operation_params={"rejection_reason": "bad docs", "send_notifications": False},
+    )
+
+    assert result["operation_metadata"]["operation_type"] == "reject"
+    service.bulk_reject_applications.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_batch_process_with_notifications_update_status(monkeypatch):
+    session = StubSession()
+    service = make_service(session)
+
+    service.bulk_status_update = AsyncMock(
+        return_value={"success_count": 0, "failure_count": 1, "total_requested": 1}
+    )
+
+    result = await service.batch_process_with_notifications(
+        "update_status",
+        [1],
+        operator_user_id=9,
+        operation_params={"new_status": ApplicationStatus.REJECTED.value, "update_notes": "note"},
+    )
+
+    assert result["operation_metadata"]["operation_type"] == "update_status"
+    service.bulk_status_update.assert_awaited()

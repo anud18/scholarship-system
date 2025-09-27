@@ -191,3 +191,60 @@ def test_extract_object_name_from_url_variants(minio_service):
     assert extracted.endswith("bankbook.pdf")
 
     assert service.extract_object_name_from_url("/some/other/path.pdf") is None
+
+
+def test_minio_service_bucket_creation(monkeypatch):
+    events = []
+
+    class FakeMinio:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def bucket_exists(self, bucket):
+            events.append("exists")
+            return False
+
+        def make_bucket(self, bucket):
+            events.append(f"create:{bucket}")
+
+    monkeypatch.setattr("app.services.minio_service.settings", _make_settings(testing=False))
+    monkeypatch.setattr("app.services.minio_service.Minio", FakeMinio)
+
+    service = MinIOService()
+    assert service.bucket_name == BASE_CONFIG["minio_bucket"]
+    assert events == ["exists", f"create:{BASE_CONFIG['minio_bucket']}"]
+
+
+def test_minio_service_bucket_exists(monkeypatch):
+    class FakeMinio:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def bucket_exists(self, bucket):
+            return True
+
+        def make_bucket(self, bucket):
+            raise AssertionError("should not create bucket")
+
+    monkeypatch.setattr("app.services.minio_service.settings", _make_settings(testing=False))
+    monkeypatch.setattr("app.services.minio_service.Minio", FakeMinio)
+
+    service = MinIOService()
+    assert service.bucket_name == BASE_CONFIG["minio_bucket"]
+
+
+def test_minio_service_bucket_error(monkeypatch):
+    class FakeMinio:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def bucket_exists(self, bucket):
+            raise S3Error("code", "msg", "resource", "request", "host", "response")
+
+    monkeypatch.setattr("app.services.minio_service.settings", _make_settings(testing=False))
+    monkeypatch.setattr("app.services.minio_service.Minio", FakeMinio)
+
+    with pytest.raises(HTTPException) as exc:
+        MinIOService()
+
+    assert exc.value.status_code == 500
