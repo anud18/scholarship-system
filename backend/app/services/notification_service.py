@@ -346,18 +346,83 @@ class NotificationService:
                 self._websocket_connections[user_id].remove(ws)
 
     async def _send_email_notification(self, notification: Notification):
-        """Send notification via email (placeholder)"""
-        # TODO: Implement email delivery
-        pass
+        """Send notification via email"""
+        from app.core.config import settings
+
+        if not all([settings.smtp_host, settings.smtp_username, settings.smtp_password, settings.smtp_from_email]):
+            logger.warning("SMTP configuration incomplete, skipping email notification")
+            return
+
+        if not notification.user:
+            logger.warning(f"No user found for notification {notification.id}, skipping email")
+            return
+
+        if not notification.user.email:
+            logger.warning(f"No email found for user {notification.user_id}, skipping email notification")
+            return
+
+        try:
+            from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
+
+            # Configure email connection
+            conf = ConnectionConfig(
+                MAIL_USERNAME=settings.smtp_username,
+                MAIL_PASSWORD=settings.smtp_password,
+                MAIL_FROM=settings.smtp_from_email,
+                MAIL_FROM_NAME=settings.smtp_from_name,
+                MAIL_PORT=settings.smtp_port,
+                MAIL_SERVER=settings.smtp_host,
+                MAIL_STARTTLS=settings.smtp_use_tls,
+                MAIL_SSL_TLS=False,
+                USE_CREDENTIALS=True,
+                VALIDATE_CERTS=True
+            )
+
+            # Create email message
+            message = MessageSchema(
+                subject=notification.title or "NYCU Scholarship System Notification",
+                recipients=[notification.user.email],
+                body=f"""
+                <html>
+                <body>
+                    <h2>{notification.title or 'Notification'}</h2>
+                    <p>{notification.message}</p>
+
+                    <hr>
+                    <p style="color: gray; font-size: 12px;">
+                        This is an automated message from NYCU Scholarship System.<br>
+                        Please do not reply to this email.
+                    </p>
+                </body>
+                </html>
+                """,
+                subtype="html"
+            )
+
+            # Send email
+            fm = FastMail(conf)
+            await fm.send_message(message)
+
+            logger.info(f"Email notification sent to {notification.user.email} for notification {notification.id}")
+
+        except Exception as e:
+            logger.error(f"Failed to send email notification {notification.id}: {str(e)}")
+            # Don't raise exception to avoid breaking the notification flow
 
     async def _send_sms_notification(self, notification: Notification):
-        """Send notification via SMS (placeholder)"""
-        # TODO: Implement SMS delivery
+        """Send notification via SMS (placeholder implementation)
+
+        This is a placeholder implementation for SMS delivery.
+        Can be extended in the future to integrate with SMS providers like Twilio, AWS SNS, etc.
+        """
         pass
 
     async def _send_push_notification(self, notification: Notification):
-        """Send push notification (placeholder)"""
-        # TODO: Implement push notification delivery
+        """Send push notification (placeholder implementation)
+
+        This is a placeholder implementation for push notifications.
+        Can be extended in the future to integrate with push services like FCM, OneSignal, etc.
+        """
         pass
 
     async def _get_notification_template(self, notification_type: NotificationType) -> Optional[NotificationTemplate]:

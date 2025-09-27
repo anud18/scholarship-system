@@ -25,6 +25,7 @@ from app.schemas.application import (
     ApplicationUpdate,
     StudentDataSchema,
 )
+from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
@@ -330,9 +331,17 @@ class ApplicationService:
         # Get and validate scholarship type and configuration
         scholarship, config = await self._get_scholarship_and_config(application_data)
 
-        # TODO: Add eligibility verification here
-        # We should verify that the student is actually eligible for this specific configuration
-        # by calling the eligibility service to check if this configuration appears in their eligible scholarships
+        # Eligibility verification
+        eligibility_service = EligibilityService(self.db)
+        is_eligible, eligibility_errors = await eligibility_service.check_student_eligibility(
+            student_data=student_snapshot,
+            config=config,
+            user_id=user.id
+        )
+
+        if not is_eligible:
+            error_message = "Student is not eligible for this scholarship. " + "; ".join(eligibility_errors)
+            raise ValidationError(error_message)
 
         # Create application instance using helper method
         application = await self._create_application_instance(
@@ -625,9 +634,9 @@ class ApplicationService:
             if application.user_id != current_user.id:
                 return None
         elif current_user.role == UserRole.PROFESSOR:
-            # TODO: Add professor-student relationship check when implemented
-            # For now, allow professors to access all applications
-            pass
+            # Check if professor has access to this student's data
+            if not current_user.can_access_student_data(application.user_id, "view_applications"):
+                return None
         elif current_user.role in [
             UserRole.COLLEGE,
             UserRole.ADMIN,
@@ -1080,9 +1089,13 @@ class ApplicationService:
         )
 
         if current_user.role == UserRole.PROFESSOR:
-            # TODO: Add professor-student relationship filter when implemented
-            # For now, professors can see all applications
-            pass
+            # Filter applications to only those from accessible students
+            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            if accessible_student_ids:
+                query = query.where(Application.user_id.in_(accessible_student_ids))
+            else:
+                # No accessible students, return empty result
+                return []
         elif current_user.role in [
             UserRole.COLLEGE,
             UserRole.ADMIN,
@@ -1317,9 +1330,8 @@ class ApplicationService:
                 raise AuthorizationError("Cannot upload files to other students' applications")
         elif user.role == UserRole.PROFESSOR:
             # Professors can upload files to their students' applications
-            # TODO: Add professor-student relationship check when implemented
-            # For now, allow professors to upload to any application
-            pass
+            if not user.can_access_student_data(application.user_id, "upload_documents"):
+                raise AuthorizationError("Cannot upload files - no access to this student's data")
         elif user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
             # College, Admin, and Super Admin can upload to any application
             pass
@@ -1414,9 +1426,13 @@ class ApplicationService:
             # Students can only see their own applications
             query = query.where(Application.user_id == current_user.id)
         elif current_user.role == UserRole.PROFESSOR:
-            # TODO: Add professor-student relationship filter when implemented
-            # For now, professors can see all applications
-            pass
+            # Filter applications to only those from accessible students
+            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            if accessible_student_ids:
+                query = query.where(Application.user_id.in_(accessible_student_ids))
+            else:
+                # No accessible students, return empty result
+                return []
         elif current_user.role in [
             UserRole.COLLEGE,
             UserRole.ADMIN,

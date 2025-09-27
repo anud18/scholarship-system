@@ -322,8 +322,26 @@ class ScholarshipConfigurationService:
             raise ValueError("Configuration not found")
 
         # Check if there are active applications using this configuration
-        # For now, we'll just perform the soft delete
-        # TODO: Add proper validation for active applications
+        active_applications_query = select(func.count(Application.id)).where(
+            and_(
+                Application.config_code == config.config_code,
+                Application.scholarship_type_id == config.scholarship_type_id,
+                Application.status.not_in([
+                    ApplicationStatus.REJECTED,
+                    ApplicationStatus.WITHDRAWN,
+                    ApplicationStatus.CANCELLED
+                ])
+            )
+        )
+
+        active_apps_result = await self.db.execute(active_applications_query)
+        active_applications_count = active_apps_result.scalar() or 0
+
+        if active_applications_count > 0:
+            raise ValueError(
+                f"Cannot delete configuration with {active_applications_count} active applications. "
+                "Please reject or withdraw all applications first, or use deactivation instead."
+            )
 
         config.is_active = False
         config.updated_by = updated_by_user_id
