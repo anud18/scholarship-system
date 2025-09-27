@@ -68,10 +68,11 @@ class Settings(BaseSettings):
     minio_bucket: str = "scholarship-files"
     minio_secure: bool = False
 
-    # OCR Service
+    # OCR Service (Gemini API)
     ocr_service_enabled: bool = False
-    ocr_api_key: Optional[str] = None
-    ocr_endpoint: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    gemini_model: str = "gemini-2.0-flash"  # Best model for OCR tasks
+    ocr_timeout: int = 30  # seconds
 
     # Redis Cache
     redis_url: str = "redis://localhost:6379/0"
@@ -114,6 +115,15 @@ class Settings(BaseSettings):
     nycu_emp_insecure: bool = False
     nycu_emp_timeout: float = 10.0
     nycu_emp_retries: int = 3
+
+    # Email Configuration
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from_email: Optional[str] = None
+    smtp_from_name: str = "NYCU Scholarship System"
+    smtp_use_tls: bool = True
 
     @field_validator("database_url", mode="before")
     @classmethod

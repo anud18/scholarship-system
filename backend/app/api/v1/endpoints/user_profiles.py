@@ -25,6 +25,7 @@ from app.schemas.user_profile import (
     UserProfileResponse,
     UserProfileUpdate,
 )
+from app.services.ocr_service import get_ocr_service
 from app.services.user_profile_service import UserProfileService
 
 router = APIRouter()
@@ -448,3 +449,146 @@ async def get_user_profile_history_by_id(
         "message": "使用者個人資料異動紀錄獲取成功",
         "data": [ProfileHistoryResponse.model_validate(entry) for entry in history],
     }
+
+
+@router.post("/bank-passbook-ocr")
+async def extract_bank_info_from_passbook(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Extract bank account information from passbook image using Gemini OCR
+
+    This endpoint accepts an image file of a bank passbook and uses Google's Gemini AI
+    to extract bank account details like bank name, bank code, account number, etc.
+    """
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be an image (JPEG, PNG, etc.)"
+            )
+
+        # Check file size (max 10MB)
+        file_content = await file.read()
+        if len(file_content) > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size must be less than 10MB"
+            )
+
+        # Get OCR service
+        try:
+            ocr_service = get_ocr_service()
+        except Exception as e:
+            logger.error(f"OCR service initialization failed: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OCR service is not available. Please contact administrator."
+            )
+
+        # Extract bank information
+        try:
+            result = await ocr_service.extract_bank_info_from_image(file_content)
+
+            # Log successful extraction
+            logger.info(f"Bank OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}")
+
+            # If extraction was successful and auto-update is requested, update user profile
+            response_data = {
+                "success": True,
+                "message": "銀行資訊提取成功" if result.get("success") else "銀行資訊提取失敗",
+                "data": result
+            }
+
+            # Add suggestion for manual review if confidence is low
+            if result.get("success") and result.get("confidence", 0) < 0.8:
+                response_data["warning"] = "提取結果信心度較低，建議人工檢查提取的資訊是否正確"
+
+            return response_data
+
+        except Exception as e:
+            logger.error(f"Bank OCR failed for user {current_user.id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Failed to process image: {str(e)}"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in bank OCR: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during processing"
+        )
+
+
+@router.post("/document-ocr")
+async def extract_text_from_document(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Extract text from any document image using Gemini OCR
+
+    This endpoint accepts an image file and uses Google's Gemini AI
+    to extract all visible text content.
+    """
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be an image (JPEG, PNG, etc.)"
+            )
+
+        # Check file size (max 10MB)
+        file_content = await file.read()
+        if len(file_content) > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size must be less than 10MB"
+            )
+
+        # Get OCR service
+        try:
+            ocr_service = get_ocr_service()
+        except Exception as e:
+            logger.error(f"OCR service initialization failed: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="OCR service is not available. Please contact administrator."
+            )
+
+        # Extract text
+        try:
+            result = await ocr_service.extract_general_text_from_image(file_content)
+
+            # Log successful extraction
+            logger.info(f"Document OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}")
+
+            return {
+                "success": True,
+                "message": "文字提取成功" if result.get("success") else "文字提取失敗",
+                "data": result
+            }
+
+        except Exception as e:
+            logger.error(f"Document OCR failed for user {current_user.id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Failed to process image: {str(e)}"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in document OCR: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during processing"
+        )
