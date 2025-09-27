@@ -230,8 +230,8 @@ async def seed_test_users(session: AsyncSession):
         await session.execute(
             text(
                 """
-            INSERT INTO users (nycu_id, name, email, user_type, status, dept_code, dept_name, role)
-            VALUES (:nycu_id, :name, :email, :user_type, :status, :dept_code, :dept_name, :role)
+            INSERT INTO users (nycu_id, name, email, user_type, status, dept_code, dept_name, role, created_at, updated_at)
+            VALUES (:nycu_id, :name, :email, :user_type, :status, :dept_code, :dept_name, :role, NOW(), NOW())
             ON CONFLICT (nycu_id) DO UPDATE
             SET name = EXCLUDED.name,
                 email = EXCLUDED.email,
@@ -239,7 +239,8 @@ async def seed_test_users(session: AsyncSession):
                 status = EXCLUDED.status,
                 dept_code = EXCLUDED.dept_code,
                 dept_name = EXCLUDED.dept_name,
-                role = EXCLUDED.role
+                role = EXCLUDED.role,
+                updated_at = NOW()
         """
             ),
             {
@@ -271,12 +272,15 @@ async def seed_admin_user(session: AsyncSession):
     await session.execute(
         text(
             """
-        INSERT INTO users (nycu_id, name, email, user_type, status, role)
-        VALUES (:nycu_id, :name, :email, 'employee', '在職', 'admin')
+        INSERT INTO users (nycu_id, name, email, user_type, status, role, created_at, updated_at)
+        VALUES (:nycu_id, :name, :email, 'EMPLOYEE', 'ACTIVE', 'ADMIN', NOW(), NOW())
         ON CONFLICT (nycu_id) DO UPDATE
-        SET role = 'admin',
+        SET role = 'ADMIN',
             email = EXCLUDED.email,
-            name = EXCLUDED.name
+            name = EXCLUDED.name,
+            user_type = 'EMPLOYEE',
+            status = 'ACTIVE',
+            updated_at = NOW()
     """
         ),
         {"nycu_id": admin_email.split("@")[0], "name": "System Administrator", "email": admin_email},
@@ -413,6 +417,7 @@ async def seed_application_fields(session: AsyncSession):
             "max_length": 200,
             "display_order": 2,
             "is_active": True,
+            "help_text": "請填寫您的研究題目",
             "created_by": admin_id,
             "updated_by": admin_id,
         },

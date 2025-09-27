@@ -14,27 +14,38 @@ from app.db.base_class import Base
 class UserRole(enum.Enum):
     """User role enum"""
 
-    STUDENT = "student"
-    PROFESSOR = "professor"
-    COLLEGE = "college"
-    ADMIN = "admin"
-    SUPER_ADMIN = "super_admin"
+    STUDENT = "STUDENT"
+    PROFESSOR = "PROFESSOR"
+    COLLEGE = "COLLEGE"
+    ADMIN = "ADMIN"
+    SUPER_ADMIN = "SUPER_ADMIN"
 
 
 class UserType(enum.Enum):
     """Portal user type enum"""
 
-    STUDENT = "student"
-    EMPLOYEE = "employee"
+    STUDENT = "STUDENT"
+    EMPLOYEE = "EMPLOYEE"
 
 
 class EmployeeStatus(enum.Enum):
     """Employee status enum"""
 
-    ACTIVE = "在職"
-    RETIRED = "退休"
-    STUDENT = "在學"
-    GRADUATED = "畢業"
+    ACTIVE = "ACTIVE"
+    RETIRED = "RETIRED"
+    STUDENT = "STUDENT"
+    GRADUATED = "GRADUATED"
+
+    @property
+    def display_name(self) -> str:
+        """Get Chinese display name for status"""
+        display_names = {
+            "ACTIVE": "在職",
+            "RETIRED": "退休",
+            "STUDENT": "在學",
+            "GRADUATED": "畢業",
+        }
+        return display_names.get(self.value, self.value)
 
 
 class User(Base):
