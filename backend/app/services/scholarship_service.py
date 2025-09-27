@@ -371,7 +371,7 @@ class ScholarshipApplicationService:
     def __init__(self, db: Session):
         self.db = db
 
-    # TODO: Refactor this method to work with external API student data
+    # Application creation has been moved to ApplicationService with external API integration
     # def create_application(
     #     self,
     #     user_id: int,

@@ -87,6 +87,18 @@ class User(Base):
     audit_logs = relationship("AuditLog", back_populates="user")
     admin_scholarships = relationship("AdminScholarship", back_populates="admin")
 
+    # Professor-Student relationships
+    professor_relationships = relationship(
+        "ProfessorStudentRelationship",
+        foreign_keys="[ProfessorStudentRelationship.professor_id]",
+        lazy="select"
+    )
+    student_relationships = relationship(
+        "ProfessorStudentRelationship",
+        foreign_keys="[ProfessorStudentRelationship.student_id]",
+        lazy="select"
+    )
+
     def __repr__(self):
         return f"<User(id={self.id}, nycu_id={self.nycu_id}, role={self.role.value})>"
 
@@ -149,6 +161,43 @@ class User(Base):
             )
 
         # Other roles don't have scholarship management permissions
+        return False
+
+    def can_access_student_data(self, student_id: int, permission: str = "view_applications") -> bool:
+        """Check if this professor can access a specific student's data"""
+        if not self.is_professor():
+            return False
+
+        # Check for active professor-student relationship with required permission
+        for relationship in self.professor_relationships:
+            if (relationship.student_id == student_id and
+                relationship.is_active and
+                relationship.has_permission(permission)):
+                return True
+
+        return False
+
+    def get_accessible_student_ids(self, permission: str = "view_applications") -> list[int]:
+        """Get list of student IDs this professor can access"""
+        if not self.is_professor():
+            return []
+
+        return [
+            rel.student_id for rel in self.professor_relationships
+            if rel.is_active and rel.has_permission(permission)
+        ]
+
+    def is_advisor_of(self, student_id: int) -> bool:
+        """Check if this professor is an advisor of the specified student"""
+        if not self.is_professor():
+            return False
+
+        for relationship in self.professor_relationships:
+            if (relationship.student_id == student_id and
+                relationship.is_active and
+                relationship.is_advisor):
+                return True
+
         return False
 
 
