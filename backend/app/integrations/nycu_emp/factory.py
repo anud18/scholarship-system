@@ -42,10 +42,10 @@ def create_nycu_emp_client(
     # Get mode from parameter or environment
     client_mode = mode or os.getenv("NYCU_EMP_MODE", "mock")
 
-    if client_mode.lower() == "mock":
+    if client_mode and client_mode.lower() == "mock":
         return NYCUEmpMockClient()
 
-    elif client_mode.lower() == "http":
+    elif client_mode and client_mode.lower() == "http":
         # Validate required parameters for HTTP client
         if not account:
             raise ValueError("account is required for HTTP client mode")

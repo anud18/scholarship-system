@@ -248,7 +248,7 @@ class TestEmailManagementService:
             "category": EmailCategory.ANNOUNCEMENT,
         }
 
-        mock_scheduled_email = Mock(id=1)
+        Mock(id=1)
         mock_db_session.add = Mock()
         mock_db_session.commit = AsyncMock()
         mock_db_session.refresh = AsyncMock()
@@ -256,7 +256,7 @@ class TestEmailManagementService:
         # Act
         with patch.object(ScheduledEmail, "__init__", return_value=None) as mock_init:
             mock_init.return_value = None
-            result = await email_service.create_scheduled_email(db=mock_db_session, user=admin_user, **email_data)
+            await email_service.create_scheduled_email(db=mock_db_session, user=admin_user, **email_data)
 
         # Assert
         mock_db_session.add.assert_called_once()
@@ -305,7 +305,7 @@ class TestEmailManagementService:
         mock_db_session.commit = AsyncMock()
 
         # Act
-        result = await email_service.cancel_scheduled_email(db=mock_db_session, user=admin_user, email_id=email_id)
+        await email_service.cancel_scheduled_email(db=mock_db_session, user=admin_user, email_id=email_id)
 
         # Assert
         assert mock_email.status == ScheduleStatus.CANCELLED
@@ -359,7 +359,7 @@ class TestEmailManagementService:
         mock_db_session.refresh = AsyncMock()
 
         # Act
-        result = await email_service.update_scheduled_email(
+        await email_service.update_scheduled_email(
             db=mock_db_session, user=admin_user, email_id=email_id, **update_data
         )
 
@@ -372,12 +372,6 @@ class TestEmailManagementService:
     async def test_get_email_statistics_admin(self, email_service, mock_db_session, admin_user):
         """Test email statistics retrieval for admin"""
         # Arrange
-        mock_stats = {
-            "total_sent": 100,
-            "total_pending": 25,
-            "total_failed": 5,
-            "success_rate": 95.2,
-        }
 
         # Mock multiple query results for statistics
         mock_results = [Mock(scalar=Mock(return_value=value)) for value in [100, 25, 5]]

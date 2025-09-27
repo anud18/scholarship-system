@@ -355,7 +355,7 @@ class TestAuthService:
         """Test that token data contains expected fields"""
         with patch("app.services.auth_service.create_access_token") as mock_access_token, patch(
             "app.services.auth_service.create_refresh_token"
-        ) as mock_refresh_token, patch("app.schemas.user.UserResponse.model_validate"):
+        ), patch("app.schemas.user.UserResponse.model_validate"):
             await service.create_tokens(mock_user)
 
             # Get the token data that was passed to token creation functions

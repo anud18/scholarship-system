@@ -2,8 +2,7 @@
 Pydantic models for NYCU Employee API responses.
 """
 
-from datetime import datetime
-from typing import List, Optional
+from typing import List
 
 from pydantic import BaseModel, Field
 

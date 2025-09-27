@@ -3,13 +3,11 @@ Comprehensive tests for ScholarshipConfigurationService
 Target: 0% → 80% coverage
 """
 
-from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.services.scholarship_configuration_service import ScholarshipConfigurationService
@@ -254,7 +252,7 @@ class TestScholarshipConfigurationServiceCRUD:
         service.db.commit = AsyncMock()
         service.db.refresh = AsyncMock()
 
-        config = await service.create_configuration(config_data, created_by=1)
+        await service.create_configuration(config_data, created_by=1)
 
         assert service.db.add.called
         assert service.db.commit.called
@@ -272,7 +270,7 @@ class TestScholarshipConfigurationServiceCRUD:
         service.db.commit = AsyncMock()
         service.db.refresh = AsyncMock()
 
-        config = await service.update_configuration(config_id, update_data, updated_by=1)
+        await service.update_configuration(config_id, update_data, updated_by=1)
 
         assert service.db.commit.called
 
@@ -287,7 +285,7 @@ class TestScholarshipConfigurationServiceCRUD:
         service.db.execute = AsyncMock(return_value=mock_result)
         service.db.commit = AsyncMock()
 
-        config = await service.deactivate_configuration(1, deactivated_by=1)
+        await service.deactivate_configuration(1, deactivated_by=1)
 
         assert mock_config.is_active is False
         assert service.db.commit.called
@@ -321,7 +319,7 @@ class TestScholarshipConfigurationServiceDuplicate:
         service.db.commit = AsyncMock()
         service.db.refresh = AsyncMock()
 
-        new_config = await service.duplicate_configuration(
+        await service.duplicate_configuration(
             source_config_id=1,
             new_code="DUPLICATED_001",
             academic_year=114,

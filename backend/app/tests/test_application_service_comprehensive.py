@@ -295,7 +295,7 @@ class TestApplicationService:
         application_service.db.refresh = AsyncMock()
 
         # Act
-        result = await application_service.update_application(
+        await application_service.update_application(
             user=student_user, application_id=1, update_data=update_data
         )
 
@@ -351,7 +351,7 @@ class TestApplicationService:
 
         with patch.object(application_service, "_validate_application_completeness", return_value=True):
             # Act
-            result = await application_service.submit_application(user=student_user, application_id=1)
+            await application_service.submit_application(user=student_user, application_id=1)
 
             # Assert
             assert mock_application.status == ApplicationStatus.SUBMITTED.value
@@ -390,7 +390,7 @@ class TestApplicationService:
         application_service.db.commit = AsyncMock()
 
         # Act
-        result = await application_service.withdraw_application(
+        await application_service.withdraw_application(
             user=student_user, application_id=1, reason="Changed my mind"
         )
 
@@ -451,7 +451,7 @@ class TestApplicationService:
         application_service.db.commit = AsyncMock()
 
         # Act
-        result = await application_service.update_application_status(
+        await application_service.update_application_status(
             user=admin_user,
             application_id=1,
             new_status=ApplicationStatus.UNDER_REVIEW,
@@ -510,8 +510,8 @@ class TestApplicationService:
         incomplete_application = Mock(submitted_form_data={"personal_statement": "Too short"}, agree_terms=False)
 
         # Act & Assert
-        assert application_service._validate_application_completeness(complete_application) == True
-        assert application_service._validate_application_completeness(incomplete_application) == False
+        assert application_service._validate_application_completeness(complete_application)
+        assert not application_service._validate_application_completeness(incomplete_application)
 
     @pytest.mark.asyncio
     async def test_generate_app_id_uniqueness(self, application_service):

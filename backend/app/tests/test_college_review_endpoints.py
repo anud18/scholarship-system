@@ -12,14 +12,13 @@ Tests critical API functionality including:
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.core.exceptions import NotFoundError
 from app.models.application import Application
 from app.models.college_review import CollegeReview
 from app.models.user import EmployeeStatus, User, UserRole, UserType
-from app.services.college_review_service import CollegeReviewService, RankingNotFoundError, ReviewPermissionError
+from app.services.college_review_service import CollegeReviewService
 
 
 class TestCollegeReviewEndpoints:
@@ -195,12 +194,6 @@ class TestCollegeReviewEndpoints:
 
     def test_error_handling_specificity(self):
         """Test that specific error types return appropriate HTTP status codes"""
-        test_cases = [
-            (NotFoundError, status.HTTP_404_NOT_FOUND),
-            (ReviewPermissionError, status.HTTP_403_FORBIDDEN),
-            (ValueError, status.HTTP_400_BAD_REQUEST),
-            (RankingNotFoundError, status.HTTP_404_NOT_FOUND),
-        ]
 
         # Each exception type should map to correct HTTP status
         # Real test would trigger these exceptions and verify response codes
@@ -228,11 +221,6 @@ class TestCollegeReviewEndpoints:
 
     def test_input_sanitization(self):
         """Test that user inputs are properly sanitized"""
-        malicious_inputs = [
-            "<script>alert('xss')</script>",
-            "'; DROP TABLE applications; --",
-            "../../../etc/passwd",
-        ]
 
         # Each input should be properly sanitized
         # Real test would send these inputs and verify safe handling
@@ -263,13 +251,6 @@ class TestCollegeReviewEndpointsIntegration:
     @pytest.mark.integration
     async def test_authorization_matrix(self, client: TestClient):
         """Test authorization for different user roles"""
-        test_matrix = [
-            (UserRole.STUDENT, status.HTTP_403_FORBIDDEN),
-            (UserRole.PROFESSOR, status.HTTP_403_FORBIDDEN),
-            (UserRole.COLLEGE, status.HTTP_200_OK),
-            (UserRole.ADMIN, status.HTTP_200_OK),
-            (UserRole.SUPER_ADMIN, status.HTTP_200_OK),
-        ]
 
         # Test each role's access to college review endpoints
         pass

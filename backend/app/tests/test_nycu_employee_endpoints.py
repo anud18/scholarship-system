@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
 
 from app.integrations.nycu_emp import NYCUEmpItem, NYCUEmpPage
 from app.integrations.nycu_emp.exceptions import (

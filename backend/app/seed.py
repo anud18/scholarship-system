@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+from typing import Any, Dict, List
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,7 +82,7 @@ async def seed_test_users(session: AsyncSession):
     print("👥 Creating/updating test users...")
 
     # 測試用戶數據
-    test_users_data = [
+    test_users_data: List[Dict[str, Any]] = [
         {
             "nycu_id": "admin",
             "name": "系統管理員",
@@ -230,7 +231,8 @@ async def seed_test_users(session: AsyncSession):
         await session.execute(
             text(
                 """
-            INSERT INTO users (nycu_id, name, email, user_type, status, dept_code, dept_name, role, created_at, updated_at)
+            INSERT INTO users (nycu_id, name, email, user_type, status, dept_code, dept_name,
+                               role, created_at, updated_at)
             VALUES (:nycu_id, :name, :email, :user_type, :status, :dept_code, :dept_name, :role, NOW(), NOW())
             ON CONFLICT (nycu_id) DO UPDATE
             SET name = EXCLUDED.name,

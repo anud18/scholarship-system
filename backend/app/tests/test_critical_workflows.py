@@ -10,13 +10,12 @@ import pytest
 
 from app.core.exceptions import AuthorizationError, ConflictError, ValidationError
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import QuotaManagementMode, Semester, SubTypeSelectionMode
-from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.enums import QuotaManagementMode, Semester
+from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import User, UserRole
 from app.schemas.application import ApplicationCreate, ApplicationFormData
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
-from app.services.college_review_service import CollegeReviewService
 
 
 @pytest.mark.integration

@@ -210,7 +210,7 @@ class TestNotificationAPI:
             select(Notification)
             .where(
                 Notification.user_id == test_user_with_notifications.id,
-                Notification.is_read == False,
+                not Notification.is_read,
             )
             .limit(1)
         )

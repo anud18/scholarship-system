@@ -82,16 +82,9 @@ class TestCombinedScholarship:
             ],
         )
 
-        parent = await service.create_combined_phd_scholarship(data)
+        await service.create_combined_phd_scholarship(data)
 
         # Test sub-scholarship validation
-        sub_scholarship_data = {
-            "code": "test_nstc",
-            "name": "測試國科會獎學金",
-            "sub_type": "nstc",
-            "amount": 40000,
-            "min_gpa": 3.7,
-        }
 
     async def test_get_eligible_combined_scholarships(self, db_session: AsyncSession, test_student):
         """Test that combined scholarships appear in eligible list"""
@@ -128,10 +121,3 @@ class TestCombinedScholarship:
         assert len(sub_scholarships) == 0
 
         # Test sub-scholarship validation
-        sub_scholarship_data = {
-            "code": "test_nstc",
-            "name": "測試國科會獎學金",
-            "sub_type": "nstc",
-            "amount": 40000,
-            "min_gpa": 3.7,
-        }

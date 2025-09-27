@@ -12,7 +12,6 @@ from app.integrations.nycu_emp import (
     NYCUEmpConnectionError,
     NYCUEmpError,
     NYCUEmpItem,
-    NYCUEmpPage,
     NYCUEmpTimeoutError,
     NYCUEmpValidationError,
     create_nycu_emp_client_from_env,
