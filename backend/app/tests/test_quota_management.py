@@ -4,7 +4,10 @@ Tests for quota management functionality
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import Column, Integer, String
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.base_class import Base
 
 from app.core.college_mappings import get_all_colleges, is_valid_college_code
 from app.models.application import Application, ApplicationStatus
@@ -13,6 +16,18 @@ from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode, Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import AdminScholarship, User
+
+
+class Student(Base):  # pragma: no cover - lightweight model for tests only
+    """Minimal student model used by quota management tests."""
+
+    __tablename__ = "test_students"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(String(20), unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    dept_code = Column(String(10), nullable=False)
+    year = Column(Integer, nullable=False)
 
 
 class TestQuotaManagementPermissions:

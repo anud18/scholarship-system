@@ -213,15 +213,17 @@ def get_default_value_for_field(field_name: str, field_info: Any, source_data: D
     # Type-based defaults
     field_type = getattr(field_info, "annotation", None)
     if field_type:
-        if field_type == list or get_origin(field_type) is list:
+        origin = get_origin(field_type)
+
+        if field_type is list or origin is list:
             return []
-        elif field_type == dict:
+        if field_type is dict or origin is dict:
             return {}
-        elif field_type == str:
+        if field_type is str or origin is str:
             return ""
-        elif field_type == int:
+        if field_type is int or origin is int:
             return 0
-        elif field_type == bool:
+        if field_type is bool or origin is bool:
             return False
 
     return None

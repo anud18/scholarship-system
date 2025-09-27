@@ -79,9 +79,9 @@ class User(Base):
     # Relationships
     applications = relationship("Application", foreign_keys="[Application.user_id]", back_populates="student")
     reviews = relationship("ApplicationReview", back_populates="reviewer")
-    # college_reviews = relationship("CollegeReview",
-    #                                foreign_keys="[CollegeReview.reviewer_id]",
-    #                                back_populates="reviewer")  # Temporarily commented for testing
+    college_reviews = relationship("CollegeReview",
+                                   foreign_keys="[CollegeReview.reviewer_id]",
+                                   back_populates="reviewer")
     notifications = relationship("Notification", back_populates="user")
     notification_reads = relationship("NotificationRead", back_populates="user")
     audit_logs = relationship("AuditLog", back_populates="user")

@@ -1484,7 +1484,7 @@ async def get_applications_by_scholarship(
 
     return ApiResponse(
         success=True,
-        message=f"Applications for scholarship {scholarship_code} retrieved successfully",
+        message=f"Applications for scholarship {scholarship.code} retrieved successfully",
         data=response_list,
     )
 

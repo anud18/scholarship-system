@@ -15,8 +15,9 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
-from app.models.application import Application, ApplicationStatus, Semester
+from app.models.application import Application, ApplicationStatus
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus
 from app.models.enums import Semester
 from app.models.notification import Notification, NotificationPriority, NotificationType

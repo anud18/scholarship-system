@@ -204,7 +204,7 @@ class TestRateLimitIntegration:
             r = redis.Redis(host="localhost", port=6379, db=0)
             r.ping()
             return True
-        except:
+        except Exception:
             return False
 
     @pytest.mark.asyncio

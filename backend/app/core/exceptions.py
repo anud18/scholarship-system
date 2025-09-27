@@ -88,6 +88,24 @@ class FileUploadError(ScholarshipException):
         super().__init__(message=message, status_code=400, error_code="FILE_UPLOAD_ERROR")
 
 
+class FileStorageError(ScholarshipException):
+    """Raised when interacting with persistent storage backends fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        file_name: Optional[str] = None,
+        storage_path: Optional[str] = None,
+    ) -> None:
+        details: Dict[str, Any] = {}
+        if file_name is not None:
+            details["file_name"] = file_name
+        if storage_path is not None:
+            details["storage_path"] = storage_path
+        super().__init__(message=message, status_code=500, error_code="FILE_STORAGE_ERROR", details=details)
+
+
 class OCRError(ScholarshipException):
     """OCR processing error exception"""
 

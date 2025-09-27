@@ -115,7 +115,7 @@ class CollegeReview(Base):
 
     # Relationships using string references to avoid circular dependencies
     application = relationship("Application", lazy="select", foreign_keys=[application_id])
-    reviewer = relationship("User", lazy="select", foreign_keys=[reviewer_id])
+    reviewer = relationship("User", lazy="select", foreign_keys=[reviewer_id], back_populates="college_reviews")
 
     def __repr__(self):
         return (

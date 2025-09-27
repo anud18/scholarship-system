@@ -13,6 +13,12 @@ from app.core.exceptions import NotFoundError
 from app.services.student_service import StudentService
 
 
+class Student:  # pragma: no cover - runtime spec used for mocks only
+    """Lightweight placeholder representing the legacy Student model."""
+
+    pass
+
+
 class TestStudentService:
     """Test cases for StudentService"""
 
