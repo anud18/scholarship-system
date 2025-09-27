@@ -155,3 +155,39 @@ def test_clone_file_to_application_creates_placeholder(minio_service, monkeypatc
     minio_service.client.put_object.assert_called_once()
     assert new_name.startswith("applications/APP-2/documents/")
     assert new_name.endswith(".jpg")
+
+
+@pytest.mark.asyncio
+async def test_upload_file_unexpected_error(minio_service, monkeypatch):
+    monkeypatch.setattr("app.services.minio_service.settings", _make_settings())
+
+    upload = _build_upload_file("doc.pdf", b"data")
+    minio_service.client.put_object.side_effect = ValueError("boom")
+
+    with pytest.raises(HTTPException) as exc:
+        await MinIOService.upload_file(minio_service, upload, application_id=3, file_type="doc")
+
+    assert exc.value.status_code == 500
+
+
+def test_clone_file_to_application_placeholder_failure(minio_service, monkeypatch):
+    monkeypatch.setattr("app.services.minio_service.uuid", SimpleNamespace(uuid4=lambda: SimpleNamespace(hex="abcd")))
+
+    minio_service.client.copy_object.side_effect = Exception("missing")
+    minio_service.client.put_object.side_effect = S3Error("code", "msg", "resource", "request", "host", "response")
+
+    with pytest.raises(HTTPException) as exc:
+        minio_service.clone_file_to_application("user-profiles/1/placeholder.pdf", application_id="APP-3")
+
+    assert exc.value.status_code == 500
+
+
+def test_extract_object_name_from_url_variants(minio_service):
+    service = minio_service
+
+    extracted = service.extract_object_name_from_url(
+        "/api/v1/user-profiles/files/bank_documents/bankbook.pdf?token=abc"
+    )
+    assert extracted.endswith("bankbook.pdf")
+
+    assert service.extract_object_name_from_url("/some/other/path.pdf") is None

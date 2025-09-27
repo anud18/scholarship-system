@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -149,6 +150,42 @@ async def test_bulk_approve_records_notification_error(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_bulk_approve_handles_commit_failure():
+    app = DummyApplication("APP-commit", ApplicationStatus.SUBMITTED.value)
+    session = StubSession([StubResult([app])])
+
+    async def failing_commit():
+        session.commits += 1
+        raise RuntimeError("db write failure")
+
+    session.commit = failing_commit
+    service = make_service(session)
+
+    result = await service.bulk_approve_applications([app.id], approver_user_id=1)
+
+    assert result["successful_approvals"] == []
+    assert result["failed_approvals"][0]["app_id"] == app.app_id
+    assert "Approval failed" in result["failed_approvals"][0]["reason"]
+    assert session.rollbacks == 1
+
+
+@pytest.mark.asyncio
+async def test_bulk_approve_outer_exception_triggers_rollback():
+    session = StubSession()
+
+    async def failing_execute(_):
+        raise RuntimeError("query failed")
+
+    session.execute = failing_execute
+    service = make_service(session)
+
+    with pytest.raises(RuntimeError):
+        await service.bulk_approve_applications([1], approver_user_id=1)
+
+    assert session.rollbacks == 1
+
+
+@pytest.mark.asyncio
 async def test_bulk_reject_applications_success():
     app = DummyApplication("APP-5", ApplicationStatus.SUBMITTED.value)
     session = StubSession([StubResult([app])])
@@ -175,6 +212,25 @@ async def test_bulk_reject_handles_failure():
 
 
 @pytest.mark.asyncio
+async def test_bulk_reject_commit_failure():
+    app = DummyApplication("APP-reject", ApplicationStatus.SUBMITTED.value)
+    session = StubSession([StubResult([app])])
+
+    async def failing_commit():
+        session.commits += 1
+        raise RuntimeError("write failed")
+
+    session.commit = failing_commit
+    service = make_service(session)
+
+    result = await service.bulk_reject_applications([app.id], rejector_user_id=3, rejection_reason="reason")
+
+    assert result["successful_rejections"] == []
+    assert result["failed_rejections"][0]["app_id"] == app.app_id
+    assert session.rollbacks == 1
+
+
+@pytest.mark.asyncio
 async def test_auto_approve_by_criteria_filters(monkeypatch):
     app1 = DummyApplication("APP-7", ApplicationStatus.SUBMITTED.value, priority_score=50)
     app2 = DummyApplication("APP-8", ApplicationStatus.UNDER_REVIEW.value, priority_score=5)
@@ -191,6 +247,39 @@ async def test_auto_approve_by_criteria_filters(monkeypatch):
     assert result["success_count"] == 1
     assert result["auto_approved"][0]["app_id"] == "APP-7"
     assert session.commits == 1
+
+
+@pytest.mark.asyncio
+async def test_auto_approve_by_criteria_commit_failure():
+    app = DummyApplication("APP-commit-fail", ApplicationStatus.SUBMITTED.value)
+    session = StubSession([StubResult([app])])
+
+    async def failing_commit():
+        session.commits += 1
+        raise RuntimeError("commit boom")
+
+    session.commit = failing_commit
+    service = make_service(session)
+
+    result = await service.auto_approve_by_criteria()
+
+    assert result["success_count"] == 0
+    assert result["failure_count"] == 1
+    assert session.rollbacks == 1
+
+
+@pytest.mark.asyncio
+async def test_auto_approve_by_criteria_execute_failure():
+    session = StubSession()
+
+    async def failing_execute(_):
+        raise RuntimeError("select failed")
+
+    session.execute = failing_execute
+    service = make_service(session)
+
+    with pytest.raises(RuntimeError):
+        await service.auto_approve_by_criteria()
 
 
 def test_meets_approval_criteria_checks_values(caplog):
@@ -218,6 +307,29 @@ def test_meets_approval_criteria_checks_values(caplog):
     assert service._meets_approval_criteria(broken_app, {"min_gpa": 2.0}) is False
 
 
+def test_meets_approval_criteria_happy_path():
+    app = DummyApplication(
+        "APP-criteria",
+        ApplicationStatus.SUBMITTED.value,
+        gpa="3.5",
+        class_ranking_percent="25",
+        is_renewal=True,
+        priority_score=42,
+    )
+    service = make_service(StubSession())
+
+    assert service._meets_approval_criteria(
+        app,
+        {
+            "min_gpa": 3.0,
+            "max_ranking": 30,
+            "require_renewal": True,
+            "min_priority_score": 20,
+            "require_complete_documents": True,
+        },
+    ) is True
+
+
 @pytest.mark.asyncio
 async def test_bulk_status_update_success():
     app = DummyApplication("APP-10", ApplicationStatus.SUBMITTED.value)
@@ -232,6 +344,24 @@ async def test_bulk_status_update_success():
     assert result["successful_updates"][0]["old_status"] == ApplicationStatus.SUBMITTED.value
     assert session.commits == 1
     assert app.reviewer_id == 55
+
+
+@pytest.mark.asyncio
+async def test_bulk_status_update_commit_failure():
+    app = DummyApplication("APP-status", ApplicationStatus.SUBMITTED.value)
+    session = StubSession([StubResult([app])])
+
+    async def failing_commit():
+        session.commits += 1
+        raise RuntimeError("commit failed")
+
+    session.commit = failing_commit
+    service = make_service(session)
+
+    result = await service.bulk_status_update([app.id], ApplicationStatus.APPROVED.value, updater_user_id=9)
+
+    assert result["failure_count"] == 1
+    assert session.rollbacks == 1
 
 
 @pytest.mark.asyncio
@@ -258,6 +388,27 @@ async def test_batch_process_with_notifications(monkeypatch):
     assert result["operation_metadata"]["operation_type"] == "approve"
     assert notification_stub.batch_calls == []  # bulk approve payload lacks success_count key
 
+
+@pytest.mark.asyncio
+async def test_batch_process_with_notifications_admin_email(monkeypatch):
+    session = StubSession()
+    notification_stub = StubNotificationService()
+    service = make_service(session, notification_stub)
+
+    service.bulk_approve_applications = AsyncMock(
+        return_value={"success_count": 2, "failure_count": 0, "total_requested": 2}
+    )
+
+    await service.batch_process_with_notifications(
+        "approve",
+        [1, 2],
+        operator_user_id=42,
+        operation_params={"approval_notes": "ok", "send_notifications": True},
+        admin_email="ops@example.com",
+    )
+
+    assert notification_stub.batch_calls[0][0] == "ops@example.com"
+
     # Invalid operation should raise
     with pytest.raises(ValueError):
-        await service.batch_process_with_notifications("unknown", [app.id], operator_user_id=1, operation_params={})
+        await service.batch_process_with_notifications("unknown", [1], operator_user_id=1, operation_params={})
