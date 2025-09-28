@@ -137,7 +137,8 @@ async def invalidate_connection_pools():
         sync_pool = sync_engine.pool
 
         logger.info(
-            f"Before invalidation - Async pool: {async_pool.size()} connections, Sync pool: {sync_pool.size()} connections"
+            f"Before invalidation - Async pool: {async_pool.size()} connections, "
+            f"Sync pool: {sync_pool.size()} connections"
         )
 
         # Dispose and recreate pools (SQLAlchemy 2.0 approach)
@@ -166,7 +167,8 @@ def invalidate_connection_pools_sync():
 
         # For async engine, we can't dispose it synchronously, but we can log the issue
         logger.warning(
-            "Async engine disposal requires async context - consider using invalidate_connection_pools() in async context"
+            "Async engine disposal requires async context - consider using "
+            "invalidate_connection_pools() in async context"
         )
 
     except Exception as e:

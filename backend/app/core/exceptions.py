@@ -240,14 +240,4 @@ class StudentVerificationError(ScholarshipException):
         )
 
 
-class FileStorageError(ScholarshipException):
-    """Raised when file storage operations fail"""
-
-    def __init__(self, message: str, file_path: Optional[str] = None):
-        details = {"file_path": file_path} if file_path else {}
-        super().__init__(
-            message=message,
-            status_code=500,
-            error_code="FILE_STORAGE_ERROR",
-            details=details,
-        )
+# FileStorageError is already defined above at line 91
