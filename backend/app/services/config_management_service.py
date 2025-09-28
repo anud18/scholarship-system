@@ -14,12 +14,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.system_setting import (
-    ConfigCategory,
-    ConfigDataType,
-    ConfigurationAuditLog,
-    SystemSetting,
-)
+from app.models.system_setting import ConfigCategory, ConfigDataType, ConfigurationAuditLog, SystemSetting
 from app.models.user import User
 
 
@@ -28,9 +23,10 @@ class ConfigEncryption:
 
     def __init__(self):
         # Use a key derived from SECRET_KEY for configuration encryption
-        key_material = settings.secret_key.encode()[:32].ljust(32, b'0')  # Ensure 32 bytes
+        key_material = settings.secret_key.encode()[:32].ljust(32, b"0")  # Ensure 32 bytes
         import base64
         import hashlib
+
         key = base64.urlsafe_b64encode(hashlib.sha256(key_material).digest())
         self.fernet = Fernet(key)
 
@@ -56,9 +52,7 @@ class ConfigurationService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_configurations_by_category(
-        self, category: ConfigCategory
-    ) -> List[SystemSetting]:
+    async def get_configurations_by_category(self, category: ConfigCategory) -> List[SystemSetting]:
         """Get all configurations in a category"""
         stmt = select(SystemSetting).where(SystemSetting.category == category)
         result = await self.db.execute(stmt)
@@ -84,7 +78,7 @@ class ConfigurationService:
 
         # Convert to appropriate type
         if setting.data_type == ConfigDataType.BOOLEAN:
-            return value.lower() in ('true', '1', 'yes', 'on')
+            return value.lower() in ("true", "1", "yes", "on")
         elif setting.data_type == ConfigDataType.INTEGER:
             return int(value)
         elif setting.data_type == ConfigDataType.FLOAT:
@@ -174,9 +168,7 @@ class ConfigurationService:
         await self.db.refresh(setting)
         return setting
 
-    async def delete_configuration(
-        self, key: str, user_id: int, change_reason: str = None
-    ) -> bool:
+    async def delete_configuration(self, key: str, user_id: int, change_reason: str = None) -> bool:
         """Delete a configuration"""
         setting = await self.get_configuration(key)
         if not setting:
@@ -236,7 +228,7 @@ class ConfigurationService:
             elif data_type == ConfigDataType.FLOAT:
                 float(value)
             elif data_type == ConfigDataType.BOOLEAN:
-                if str(value).lower() not in ('true', 'false', '1', '0', 'yes', 'no', 'on', 'off'):
+                if str(value).lower() not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
                     return False, "Boolean value must be true/false, 1/0, yes/no, or on/off"
             elif data_type == ConfigDataType.JSON:
                 json.loads(str(value))
@@ -246,10 +238,7 @@ class ConfigurationService:
             return False, f"Validation error: {str(e)}"
 
     async def get_audit_logs(
-        self,
-        setting_key: str = None,
-        user_id: int = None,
-        limit: int = 100
+        self, setting_key: str = None, user_id: int = None, limit: int = 100
     ) -> List[ConfigurationAuditLog]:
         """Get audit logs for configuration changes"""
         stmt = select(ConfigurationAuditLog).order_by(ConfigurationAuditLog.changed_at.desc())
@@ -298,7 +287,6 @@ class ConfigurationService:
                 "default_value": "30",
                 "validation_regex": r"^[1-9]\d*$",
             },
-
             # Email Settings
             "smtp_host": {
                 "category": ConfigCategory.EMAIL,
@@ -334,7 +322,6 @@ class ConfigurationService:
                 "description": "Default sender email address",
                 "validation_regex": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
             },
-
             # File Storage Settings
             "minio_endpoint": {
                 "category": ConfigCategory.FILE_STORAGE,
@@ -370,7 +357,6 @@ class ConfigurationService:
                 "default_value": "10485760",
                 "validation_regex": r"^[1-9]\d*$",
             },
-
             # Security Settings
             "cors_origins": {
                 "category": ConfigCategory.SECURITY,
@@ -387,7 +373,6 @@ class ConfigurationService:
                 "default_value": "30",
                 "validation_regex": r"^[1-9]\d*$",
             },
-
             # API Integration Settings
             "nycu_emp_account": {
                 "category": ConfigCategory.INTEGRATIONS,
@@ -413,7 +398,6 @@ class ConfigurationService:
                 "is_sensitive": True,
                 "description": "Student API HMAC key for authentication",
             },
-
             # Feature Flags
             "enable_mock_sso": {
                 "category": ConfigCategory.FEATURES,

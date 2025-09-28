@@ -250,7 +250,9 @@ async def test_bulk_reject_no_notifications():
     session = StubSession([StubResult([app])])
     service = make_service(session)
 
-    result = await service.bulk_reject_applications([app.id], rejector_user_id=5, rejection_reason="late", send_notifications=False)
+    result = await service.bulk_reject_applications(
+        [app.id], rejector_user_id=5, rejection_reason="late", send_notifications=False
+    )
 
     assert result["notifications_sent"] == 0
     assert result["notifications_failed"] == 0
@@ -344,16 +346,19 @@ def test_meets_approval_criteria_happy_path():
     )
     service = make_service(StubSession())
 
-    assert service._meets_approval_criteria(
-        app,
-        {
-            "min_gpa": 3.0,
-            "max_ranking": 30,
-            "require_renewal": True,
-            "min_priority_score": 20,
-            "require_complete_documents": True,
-        },
-    ) is True
+    assert (
+        service._meets_approval_criteria(
+            app,
+            {
+                "min_gpa": 3.0,
+                "max_ranking": 30,
+                "require_renewal": True,
+                "min_priority_score": 20,
+                "require_complete_documents": True,
+            },
+        )
+        is True
+    )
 
 
 @pytest.mark.asyncio
@@ -465,9 +470,7 @@ async def test_batch_process_with_notifications_update_status(monkeypatch):
     session = StubSession()
     service = make_service(session)
 
-    service.bulk_status_update = AsyncMock(
-        return_value={"success_count": 0, "failure_count": 1, "total_requested": 1}
-    )
+    service.bulk_status_update = AsyncMock(return_value={"success_count": 0, "failure_count": 1, "total_requested": 1})
 
     result = await service.batch_process_with_notifications(
         "update_status",

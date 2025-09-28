@@ -31,9 +31,9 @@ from app.models.user import AdminScholarship, User, UserRole
 from app.schemas.application import (
     ApplicationListResponse,
     ApplicationResponse,
+    BulkApproveRequest,
     HistoricalApplicationResponse,
     ProfessorAssignmentRequest,
-    BulkApproveRequest,
 )
 from app.schemas.common import (
     ApiResponse,
@@ -447,7 +447,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
 @router.get("/system/health", response_model=ApiResponse[Dict[str, Any]])
 async def get_system_health(current_user: User = Depends(require_admin)):
     """Get system health status"""
-    from app.integrations.nycu_emp import create_nycu_emp_client_from_env, NYCUEmpError
+    from app.integrations.nycu_emp import NYCUEmpError, create_nycu_emp_client_from_env
 
     # Test NYCU Employee API connection
     nycu_emp_status = "unknown"
@@ -457,7 +457,7 @@ async def get_system_health(current_user: User = Depends(require_admin)):
         client = create_nycu_emp_client_from_env()
 
         # Use context manager for HTTP client if available
-        if hasattr(client, '__aenter__'):
+        if hasattr(client, "__aenter__"):
             async with client as c:
                 test_result = await c.get_employee_page(page_row="1", status="01")
         else:
@@ -470,14 +470,11 @@ async def get_system_health(current_user: User = Depends(require_admin)):
                 "total_pages": test_result.total_page,
                 "sample_employees": len(test_result.empDataList),
                 "response_status": test_result.status,
-                "api_mode": "mock" if hasattr(client, '_get_sample_employees') else "http"
+                "api_mode": "mock" if hasattr(client, "_get_sample_employees") else "http",
             }
         else:
             nycu_emp_status = "error"
-            nycu_emp_details = {
-                "error": f"API returned status: {test_result.status}",
-                "message": test_result.message
-            }
+            nycu_emp_details = {"error": f"API returned status: {test_result.status}", "message": test_result.message}
 
     except NYCUEmpError as e:
         nycu_emp_status = "error"
@@ -494,10 +491,7 @@ async def get_system_health(current_user: User = Depends(require_admin)):
             "database": "connected",
             "redis": "connected",
             "storage": "available",
-            "nycu_employee_api": {
-                "status": nycu_emp_status,
-                "details": nycu_emp_details
-            },
+            "nycu_employee_api": {"status": nycu_emp_status, "details": nycu_emp_details},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -507,46 +501,47 @@ async def get_system_health(current_user: User = Depends(require_admin)):
 async def debug_nycu_employee_api(
     page: int = Query(1, ge=1, description="Page number"),
     status: str = Query("01", description="Employee status filter"),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(require_admin),
 ):
     """Debug endpoint for NYCU Employee API integration"""
-    from app.integrations.nycu_emp import (
-        create_nycu_emp_client_from_env,
-        NYCUEmpError,
-        NYCUEmpConnectionError,
-        NYCUEmpAuthenticationError,
-        NYCUEmpTimeoutError,
-        NYCUEmpValidationError
-    )
-    from app.core.config import settings
     import os
+
+    from app.core.config import settings
+    from app.integrations.nycu_emp import (
+        NYCUEmpAuthenticationError,
+        NYCUEmpConnectionError,
+        NYCUEmpError,
+        NYCUEmpTimeoutError,
+        NYCUEmpValidationError,
+        create_nycu_emp_client_from_env,
+    )
 
     debug_info = {
         "configuration": {
-            "mode": getattr(settings, 'nycu_emp_mode', 'mock'),
-            "endpoint": getattr(settings, 'nycu_emp_endpoint', None),
-            "account": getattr(settings, 'nycu_emp_account', None),
-            "has_key": bool(getattr(settings, 'nycu_emp_key_hex', None) or getattr(settings, 'nycu_emp_key_raw', None)),
-            "timeout": getattr(settings, 'nycu_emp_timeout', 10.0),
-            "retries": getattr(settings, 'nycu_emp_retries', 3),
+            "mode": getattr(settings, "nycu_emp_mode", "mock"),
+            "endpoint": getattr(settings, "nycu_emp_endpoint", None),
+            "account": getattr(settings, "nycu_emp_account", None),
+            "has_key": bool(getattr(settings, "nycu_emp_key_hex", None) or getattr(settings, "nycu_emp_key_raw", None)),
+            "timeout": getattr(settings, "nycu_emp_timeout", 10.0),
+            "retries": getattr(settings, "nycu_emp_retries", 3),
             "env_vars": {
                 "NYCU_EMP_MODE": os.getenv("NYCU_EMP_MODE"),
                 "NYCU_EMP_ACCOUNT": os.getenv("NYCU_EMP_ACCOUNT"),
                 "NYCU_EMP_ENDPOINT": os.getenv("NYCU_EMP_ENDPOINT"),
                 "NYCU_EMP_KEY_HEX": "***" if os.getenv("NYCU_EMP_KEY_HEX") else None,
                 "NYCU_EMP_KEY_RAW": "***" if os.getenv("NYCU_EMP_KEY_RAW") else None,
-            }
+            },
         },
-        "test_results": {}
+        "test_results": {},
     }
 
     try:
         client = create_nycu_emp_client_from_env()
         debug_info["client_type"] = type(client).__name__
-        debug_info["client_mode"] = "mock" if hasattr(client, '_get_sample_employees') else "http"
+        debug_info["client_mode"] = "mock" if hasattr(client, "_get_sample_employees") else "http"
 
         # Test single page request
-        if hasattr(client, '__aenter__'):
+        if hasattr(client, "__aenter__"):
             async with client as c:
                 result = await c.get_employee_page(page_row=str(page), status=status)
         else:
@@ -562,7 +557,7 @@ async def debug_nycu_employee_api(
             "current_page_employees": len(result.empDataList),
             "sample_employee": result.empDataList[0].__dict__ if result.empDataList else None,
             "requested_page": page,
-            "requested_status": status
+            "requested_status": status,
         }
 
     except NYCUEmpAuthenticationError as e:
@@ -570,49 +565,45 @@ async def debug_nycu_employee_api(
             "status": "authentication_error",
             "error": str(e),
             "type": "NYCUEmpAuthenticationError",
-            "suggestion": "Check NYCU_EMP_ACCOUNT and NYCU_EMP_KEY_HEX/NYCU_EMP_KEY_RAW"
+            "suggestion": "Check NYCU_EMP_ACCOUNT and NYCU_EMP_KEY_HEX/NYCU_EMP_KEY_RAW",
         }
     except NYCUEmpConnectionError as e:
         debug_info["test_results"] = {
             "status": "connection_error",
             "error": str(e),
             "type": "NYCUEmpConnectionError",
-            "suggestion": "Check NYCU_EMP_ENDPOINT and network connectivity"
+            "suggestion": "Check NYCU_EMP_ENDPOINT and network connectivity",
         }
     except NYCUEmpTimeoutError as e:
         debug_info["test_results"] = {
             "status": "timeout_error",
             "error": str(e),
             "type": "NYCUEmpTimeoutError",
-            "suggestion": "Consider increasing NYCU_EMP_TIMEOUT value"
+            "suggestion": "Consider increasing NYCU_EMP_TIMEOUT value",
         }
     except NYCUEmpValidationError as e:
         debug_info["test_results"] = {
             "status": "validation_error",
             "error": str(e),
             "type": "NYCUEmpValidationError",
-            "suggestion": "Check page and status parameter values"
+            "suggestion": "Check page and status parameter values",
         }
     except NYCUEmpError as e:
         debug_info["test_results"] = {
             "status": "api_error",
             "error": str(e),
             "type": type(e).__name__,
-            "suggestion": "Check API endpoint and credentials"
+            "suggestion": "Check API endpoint and credentials",
         }
     except Exception as e:
         debug_info["test_results"] = {
             "status": "unexpected_error",
             "error": str(e),
             "type": type(e).__name__,
-            "suggestion": "Check system logs for more details"
+            "suggestion": "Check system logs for more details",
         }
 
-    return ApiResponse(
-        success=True,
-        message="NYCU Employee API debug information retrieved",
-        data=debug_info
-    )
+    return ApiResponse(success=True, message="NYCU Employee API debug information retrieved", data=debug_info)
 
 
 @router.get("/system-setting", response_model=ApiResponse[SystemSettingSchema])
@@ -3370,6 +3361,8 @@ async def assign_professor_to_application(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to assign professor: {str(e)}",
         )
+
+
 @router.post(
     "/applications/bulk-approve",
     response_model=ApiResponse[Dict[str, Any]],
@@ -3399,6 +3392,7 @@ async def bulk_approve_applications_endpoint(
 # ============================================
 # Configuration Management Endpoints
 # ============================================
+
 
 @router.get("/configurations", response_model=ApiResponse[List[ConfigurationCategorySchema]])
 async def get_all_configurations(
@@ -3438,22 +3432,24 @@ async def get_all_configurations(
                     modifier = modifier_result.scalar_one_or_none()
                     modifier_username = modifier.nycu_id if modifier else None
 
-                config_items.append(ConfigurationItemWithDecryptedValueSchema(
-                    key=setting.key,
-                    decrypted_value=decrypted_value,
-                    display_value=display_value,
-                    category=setting.category,
-                    data_type=setting.data_type,
-                    is_sensitive=setting.is_sensitive,
-                    is_readonly=setting.is_readonly,
-                    description=setting.description,
-                    validation_regex=setting.validation_regex,
-                    default_value=setting.default_value,
-                    last_modified_by=setting.last_modified_by,
-                    modified_by_username=modifier_username,
-                    created_at=setting.created_at,
-                    updated_at=setting.updated_at,
-                ))
+                config_items.append(
+                    ConfigurationItemWithDecryptedValueSchema(
+                        key=setting.key,
+                        decrypted_value=decrypted_value,
+                        display_value=display_value,
+                        category=setting.category,
+                        data_type=setting.data_type,
+                        is_sensitive=setting.is_sensitive,
+                        is_readonly=setting.is_readonly,
+                        description=setting.description,
+                        validation_regex=setting.validation_regex,
+                        default_value=setting.default_value,
+                        last_modified_by=setting.last_modified_by,
+                        modified_by_username=modifier_username,
+                        created_at=setting.created_at,
+                        updated_at=setting.updated_at,
+                    )
+                )
 
             category_schema = ConfigurationCategorySchema(
                 category=cat,
@@ -3493,9 +3489,7 @@ async def create_configuration(
         config_service = ConfigurationService(db)
 
         # Validate the configuration
-        is_valid, message = await config_service.validate_configuration(
-            config.key, config.value, config.data_type
-        )
+        is_valid, message = await config_service.validate_configuration(config.key, config.value, config.data_type)
         if not is_valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -3589,17 +3583,19 @@ async def bulk_update_configurations(
         updates_data = []
         for update in update_request.updates:
             existing = await config_service.get_configuration(update.key)
-            updates_data.append({
-                "key": update.key,
-                "value": update.value,
-                "category": existing.category,
-                "data_type": existing.data_type,
-                "is_sensitive": existing.is_sensitive,
-                "is_readonly": existing.is_readonly,
-                "description": existing.description,
-                "validation_regex": existing.validation_regex,
-                "default_value": existing.default_value,
-            })
+            updates_data.append(
+                {
+                    "key": update.key,
+                    "value": update.value,
+                    "category": existing.category,
+                    "data_type": existing.data_type,
+                    "is_sensitive": existing.is_sensitive,
+                    "is_readonly": existing.is_readonly,
+                    "description": existing.description,
+                    "validation_regex": existing.validation_regex,
+                    "default_value": existing.default_value,
+                }
+            )
 
         updated_settings = await config_service.bulk_update_configurations(
             updates_data, current_user.id, update_request.change_reason
@@ -3611,22 +3607,24 @@ async def bulk_update_configurations(
             decrypted_value = await config_service.get_decrypted_value(setting)
             display_value = mask_sensitive_value(str(decrypted_value), setting.is_sensitive)
 
-            response_data.append(ConfigurationItemWithDecryptedValueSchema(
-                key=setting.key,
-                decrypted_value=decrypted_value,
-                display_value=display_value,
-                category=setting.category,
-                data_type=setting.data_type,
-                is_sensitive=setting.is_sensitive,
-                is_readonly=setting.is_readonly,
-                description=setting.description,
-                validation_regex=setting.validation_regex,
-                default_value=setting.default_value,
-                last_modified_by=setting.last_modified_by,
-                modified_by_username=current_user.nycu_id,
-                created_at=setting.created_at,
-                updated_at=setting.updated_at,
-            ))
+            response_data.append(
+                ConfigurationItemWithDecryptedValueSchema(
+                    key=setting.key,
+                    decrypted_value=decrypted_value,
+                    display_value=display_value,
+                    category=setting.category,
+                    data_type=setting.data_type,
+                    is_sensitive=setting.is_sensitive,
+                    is_readonly=setting.is_readonly,
+                    description=setting.description,
+                    validation_regex=setting.validation_regex,
+                    default_value=setting.default_value,
+                    last_modified_by=setting.last_modified_by,
+                    modified_by_username=current_user.nycu_id,
+                    created_at=setting.created_at,
+                    updated_at=setting.updated_at,
+                )
+            )
 
         return ApiResponse(
             success=True,
@@ -3655,14 +3653,13 @@ async def validate_configuration(
         config_service = ConfigurationService(db)
 
         is_valid, message = await config_service.validate_configuration(
-            validation_request.key,
-            validation_request.value,
-            validation_request.data_type
+            validation_request.key, validation_request.value, validation_request.data_type
         )
 
         # Additional regex validation if provided
         if is_valid and validation_request.validation_regex:
             import re
+
             try:
                 if not re.match(validation_request.validation_regex, str(validation_request.value)):
                     is_valid = False
@@ -3672,9 +3669,7 @@ async def validate_configuration(
                 message = f"Invalid regex pattern: {str(e)}"
 
         result = ConfigurationValidationResultSchema(
-            is_valid=is_valid,
-            message=message,
-            suggested_value=None  # Could implement smart suggestions in the future
+            is_valid=is_valid, message=message, suggested_value=None  # Could implement smart suggestions in the future
         )
 
         return ApiResponse(
@@ -3702,9 +3697,7 @@ async def delete_configuration(
     try:
         config_service = ConfigurationService(db)
 
-        success = await config_service.delete_configuration(
-            key, current_user.id, change_reason
-        )
+        success = await config_service.delete_configuration(key, current_user.id, change_reason)
 
         if not success:
             raise HTTPException(
@@ -3734,6 +3727,7 @@ async def delete_configuration(
 # ============================================
 # Bank Account Verification Endpoints
 # ============================================
+
 
 @router.post("/bank-verification", response_model=ApiResponse[BankVerificationResultSchema])
 async def verify_bank_account(

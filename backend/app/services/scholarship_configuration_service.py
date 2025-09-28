@@ -326,11 +326,9 @@ class ScholarshipConfigurationService:
             and_(
                 Application.config_code == config.config_code,
                 Application.scholarship_type_id == config.scholarship_type_id,
-                Application.status.not_in([
-                    ApplicationStatus.REJECTED,
-                    ApplicationStatus.WITHDRAWN,
-                    ApplicationStatus.CANCELLED
-                ])
+                Application.status.not_in(
+                    [ApplicationStatus.REJECTED, ApplicationStatus.WITHDRAWN, ApplicationStatus.CANCELLED]
+                ),
             )
         )
 

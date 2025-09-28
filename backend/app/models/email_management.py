@@ -62,7 +62,9 @@ class EmailHistory(Base):
 
     # Template and categorization
     template_key = Column(String(100), ForeignKey("email_templates.key"), nullable=True)
-    email_category = Column(Enum(EmailCategory, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True)
+    email_category = Column(
+        Enum(EmailCategory, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True
+    )
 
     # Related entities (for permission filtering)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
@@ -73,7 +75,12 @@ class EmailHistory(Base):
     sent_by_system = Column(Boolean, default=True, nullable=False)  # True for system auto, False for manual
 
     # Status tracking
-    status = Column(Enum(EmailStatus, values_callable=lambda obj: [e.value for e in obj]), default=EmailStatus.SENT, nullable=False, index=True)
+    status = Column(
+        Enum(EmailStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=EmailStatus.SENT,
+        nullable=False,
+        index=True,
+    )
     error_message = Column(Text)
     sent_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
@@ -119,7 +126,12 @@ class ScheduledEmail(Base):
 
     # Scheduling information
     scheduled_for = Column(DateTime(timezone=True), nullable=False, index=True)
-    status = Column(Enum(ScheduleStatus, values_callable=lambda obj: [e.value for e in obj]), default=ScheduleStatus.PENDING, nullable=False, index=True)
+    status = Column(
+        Enum(ScheduleStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=ScheduleStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
 
     # Related entities (for permission filtering)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)

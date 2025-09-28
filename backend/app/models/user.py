@@ -165,11 +165,7 @@ class User(Base):
 
         # Check for active professor-student relationship with required permission
         for rel in self.professor_relationships:
-            if (
-                rel.student_id == student_id
-                and rel.is_active
-                and rel.has_permission(permission)
-            ):
+            if rel.student_id == student_id and rel.is_active and rel.has_permission(permission):
                 return True
 
         return False

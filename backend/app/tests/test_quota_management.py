@@ -7,8 +7,6 @@ from httpx import AsyncClient
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base_class import Base
-
 from app.core.college_mappings import get_all_colleges, is_valid_college_code
 from app.db.base_class import Base
 from app.models.application import Application, ApplicationStatus

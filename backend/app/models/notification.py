@@ -117,7 +117,11 @@ class Notification(Base):
     )
 
     # Delivery channel
-    channel = Column(Enum(NotificationChannel, values_callable=lambda obj: [e.value for e in obj]), default=NotificationChannel.IN_APP, nullable=False)
+    channel = Column(
+        Enum(NotificationChannel, values_callable=lambda obj: [e.value for e in obj]),
+        default=NotificationChannel.IN_APP,
+        nullable=False,
+    )
 
     # Enhanced metadata and context
     data = Column(JSON, default={})  # Facebook-style flexible data storage
@@ -300,7 +304,9 @@ class NotificationPreference(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    notification_type = Column(Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    notification_type = Column(
+        Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]), nullable=False
+    )
 
     # Channel preferences
     in_app_enabled = Column(Boolean, default=True, nullable=False)
@@ -371,7 +377,9 @@ class NotificationTemplate(Base):
     __tablename__ = "notification_templates"
 
     id = Column(Integer, primary_key=True, index=True)
-    type = Column(Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]), unique=True, nullable=False)
+    type = Column(
+        Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]), unique=True, nullable=False
+    )
 
     # Template content
     title_template = Column(String(255), nullable=False)
@@ -382,7 +390,10 @@ class NotificationTemplate(Base):
 
     # Default settings
     default_channels = Column(JSON, default=["in_app"])  # Default delivery channels
-    default_priority = Column(Enum(NotificationPriority, values_callable=lambda obj: [e.value for e in obj]), default=NotificationPriority.NORMAL)
+    default_priority = Column(
+        Enum(NotificationPriority, values_callable=lambda obj: [e.value for e in obj]),
+        default=NotificationPriority.NORMAL,
+    )
 
     # Template variables documentation
     variables = Column(JSON, default={})  # Available template variables and their descriptions
@@ -431,8 +442,13 @@ class NotificationQueue(Base):
 
     # Queue metadata
     batch_id = Column(String(50), nullable=False, index=True)
-    notification_type = Column(Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
-    priority = Column(Enum(NotificationPriority, values_callable=lambda obj: [e.value for e in obj]), default=NotificationPriority.NORMAL)
+    notification_type = Column(
+        Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]), nullable=False
+    )
+    priority = Column(
+        Enum(NotificationPriority, values_callable=lambda obj: [e.value for e in obj]),
+        default=NotificationPriority.NORMAL,
+    )
 
     # Content
     notifications_data = Column(JSON, nullable=False)  # Array of notification data

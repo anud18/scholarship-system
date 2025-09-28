@@ -362,7 +362,7 @@ class NotificationService:
             return
 
         try:
-            from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
+            from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
 
             # Configure email connection
             conf = ConnectionConfig(
@@ -375,7 +375,7 @@ class NotificationService:
                 MAIL_STARTTLS=settings.smtp_use_tls,
                 MAIL_SSL_TLS=False,
                 USE_CREDENTIALS=True,
-                VALIDATE_CERTS=True
+                VALIDATE_CERTS=True,
             )
 
             # Create email message
@@ -396,7 +396,7 @@ class NotificationService:
                 </body>
                 </html>
                 """,
-                subtype="html"
+                subtype="html",
             )
 
             # Send email

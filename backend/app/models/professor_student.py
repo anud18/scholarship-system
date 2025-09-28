@@ -56,9 +56,7 @@ class ProfessorStudentRelationship(Base):
     creator = relationship("User", foreign_keys=[created_by], lazy="select")
 
     # Constraints
-    __table_args__ = (
-        UniqueConstraint("professor_id", "student_id", "relationship_type", name="uq_prof_student_type"),
-    )
+    __table_args__ = (UniqueConstraint("professor_id", "student_id", "relationship_type", name="uq_prof_student_type"),)
 
     def __repr__(self):
         return (

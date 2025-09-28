@@ -10,9 +10,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.application import Application, ApplicationStatus, ApplicationFile
-from app.services.ocr_service import get_ocr_service
 from app.core.exceptions import OCRError
+from app.models.application import Application, ApplicationFile, ApplicationStatus
+from app.services.ocr_service import get_ocr_service
 
 
 class BankVerificationService:
@@ -26,8 +26,8 @@ class BankVerificationService:
         if not text:
             return ""
         # Remove extra spaces, convert to lowercase, remove special characters
-        normalized = re.sub(r'[^\w\s]', '', text.lower().strip())
-        normalized = re.sub(r'\s+', ' ', normalized)
+        normalized = re.sub(r"[^\w\s]", "", text.lower().strip())
+        normalized = re.sub(r"\s+", " ", normalized)
         return normalized
 
     def calculate_similarity(self, text1: str, text2: str) -> float:
@@ -82,8 +82,7 @@ class BankVerificationService:
             if doc.get("document_id") == "bank_account_cover":
                 # Find the actual document record
                 stmt = select(ApplicationFile).where(
-                    ApplicationFile.application_id == application.id,
-                    ApplicationFile.filename == doc.get("file_path")
+                    ApplicationFile.application_id == application.id, ApplicationFile.filename == doc.get("file_path")
                 )
                 result = await self.db.execute(stmt)
                 return result.scalar_one_or_none()
@@ -113,7 +112,7 @@ class BankVerificationService:
                 "success": False,
                 "error": "No bank account information found in application form",
                 "application_id": application_id,
-                "verification_status": "no_data"
+                "verification_status": "no_data",
             }
 
         # Get bank passbook document
@@ -125,7 +124,7 @@ class BankVerificationService:
                 "error": "No bank passbook document found in application",
                 "application_id": application_id,
                 "form_data": form_bank_fields,
-                "verification_status": "no_document"
+                "verification_status": "no_document",
             }
 
         # Perform OCR on passbook document
@@ -151,7 +150,7 @@ class BankVerificationService:
                 "account_holder": "測試用戶",
                 "branch_name": "台北分行",
                 "confidence": 0.95,
-                "note": "OCR extraction from passbook - implementation pending file reading"
+                "note": "OCR extraction from passbook - implementation pending file reading",
             }
 
         except OCRError as e:
@@ -160,7 +159,7 @@ class BankVerificationService:
                 "error": f"OCR processing failed: {str(e)}",
                 "application_id": application_id,
                 "form_data": form_bank_fields,
-                "verification_status": "ocr_failed"
+                "verification_status": "ocr_failed",
             }
 
         # Compare fields
@@ -174,7 +173,7 @@ class BankVerificationService:
             "bank_code": "銀行代碼",
             "account_number": "帳戶號碼",
             "account_holder": "戶名",
-            "branch_name": "分行名稱"
+            "branch_name": "分行名稱",
         }
 
         for field_key, field_name in field_mappings.items():
@@ -191,7 +190,7 @@ class BankVerificationService:
                     "ocr_value": ocr_value,
                     "similarity_score": round(similarity, 3),
                     "is_match": is_match,
-                    "confidence": "high" if similarity >= 0.9 else "medium" if similarity >= 0.7 else "low"
+                    "confidence": "high" if similarity >= 0.9 else "medium" if similarity >= 0.7 else "low",
                 }
 
                 if not is_match:
@@ -226,9 +225,9 @@ class BankVerificationService:
             "passbook_document": {
                 "file_path": passbook_doc.filename,
                 "original_filename": passbook_doc.original_filename,
-                "upload_time": passbook_doc.uploaded_at.isoformat() if passbook_doc.uploaded_at else None
+                "upload_time": passbook_doc.uploaded_at.isoformat() if passbook_doc.uploaded_at else None,
             },
-            "recommendations": self.generate_recommendations(verification_status, comparisons)
+            "recommendations": self.generate_recommendations(verification_status, comparisons),
         }
 
     def generate_recommendations(self, status: str, comparisons: Dict[str, Any]) -> List[str]:
@@ -260,9 +259,7 @@ class BankVerificationService:
         # This would query a verification_history table if implemented
         return []
 
-    async def batch_verify_applications(
-        self, application_ids: List[int]
-    ) -> Dict[int, Dict[str, Any]]:
+    async def batch_verify_applications(self, application_ids: List[int]) -> Dict[int, Dict[str, Any]]:
         """Verify multiple applications in batch"""
         results = {}
 
@@ -271,10 +268,6 @@ class BankVerificationService:
                 result = await self.verify_bank_account(app_id)
                 results[app_id] = result
             except Exception as e:
-                results[app_id] = {
-                    "success": False,
-                    "error": str(e),
-                    "application_id": app_id
-                }
+                results[app_id] = {"success": False, "error": str(e), "application_id": app_id}
 
         return results

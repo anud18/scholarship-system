@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     professor,
     quota_dashboard,
     reference_data,
+    roster_schedules,
     scholarship_configurations,
     scholarship_management,
     scholarship_rules,
@@ -57,4 +58,5 @@ api_router.include_router(college_review.router, prefix="/college", tags=["Colle
 api_router.include_router(email_management.router, prefix="/email-management", tags=["Email Management"])
 api_router.include_router(nycu_employee.router, prefix="/nycu-employee", tags=["NYCU Employee"])
 api_router.include_router(payment_rosters.router, prefix="/payment-rosters", tags=["Payment Rosters"])
+api_router.include_router(roster_schedules.router, prefix="/roster-schedules", tags=["Roster Schedules"])
 api_router.include_router(system_settings.router, prefix="/system-settings", tags=["System Settings"])

@@ -2,13 +2,14 @@
 Tests for Configuration Management System
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.models.system_setting import ConfigCategory, ConfigDataType, SystemSetting
-from app.services.config_management_service import ConfigurationService, ConfigEncryption
 from app.schemas.config_management import ConfigurationCreateSchema
+from app.services.config_management_service import ConfigEncryption, ConfigurationService
 
 
 class TestConfigEncryption:
@@ -70,7 +71,7 @@ class TestConfigurationService:
             value="test_value",
             category=ConfigCategory.FEATURES,
             data_type=ConfigDataType.STRING,
-            is_sensitive=False
+            is_sensitive=False,
         )
 
         mock_result = MagicMock()
@@ -96,12 +97,7 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_get_decrypted_value_non_sensitive(self, config_service):
         """Test getting decrypted value for non-sensitive setting"""
-        setting = SystemSetting(
-            key="test_key",
-            value="test_value",
-            data_type=ConfigDataType.STRING,
-            is_sensitive=False
-        )
+        setting = SystemSetting(key="test_key", value="test_value", data_type=ConfigDataType.STRING, is_sensitive=False)
 
         result = await config_service.get_decrypted_value(setting)
         assert result == "test_value"
@@ -109,12 +105,7 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_get_decrypted_value_boolean(self, config_service):
         """Test getting decrypted value for boolean setting"""
-        setting = SystemSetting(
-            key="test_bool",
-            value="true",
-            data_type=ConfigDataType.BOOLEAN,
-            is_sensitive=False
-        )
+        setting = SystemSetting(key="test_bool", value="true", data_type=ConfigDataType.BOOLEAN, is_sensitive=False)
 
         result = await config_service.get_decrypted_value(setting)
         assert result is True
@@ -126,12 +117,7 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_get_decrypted_value_integer(self, config_service):
         """Test getting decrypted value for integer setting"""
-        setting = SystemSetting(
-            key="test_int",
-            value="42",
-            data_type=ConfigDataType.INTEGER,
-            is_sensitive=False
-        )
+        setting = SystemSetting(key="test_int", value="42", data_type=ConfigDataType.INTEGER, is_sensitive=False)
 
         result = await config_service.get_decrypted_value(setting)
         assert result == 42
@@ -140,10 +126,7 @@ class TestConfigurationService:
     async def test_get_decrypted_value_json(self, config_service):
         """Test getting decrypted value for JSON setting"""
         setting = SystemSetting(
-            key="test_json",
-            value='{"key": "value", "number": 123}',
-            data_type=ConfigDataType.JSON,
-            is_sensitive=False
+            key="test_json", value='{"key": "value", "number": 123}', data_type=ConfigDataType.JSON, is_sensitive=False
         )
 
         result = await config_service.get_decrypted_value(setting)
@@ -164,7 +147,7 @@ class TestConfigurationService:
             category=ConfigCategory.API_KEYS,
             data_type=ConfigDataType.STRING,
             is_sensitive=True,
-            description="Test configuration"
+            description="Test configuration",
         )
 
         mock_db.add.assert_called()
@@ -174,29 +157,19 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_set_configuration_readonly_error(self, config_service, mock_db):
         """Test that readonly configurations cannot be modified"""
-        existing_setting = SystemSetting(
-            key="readonly_key",
-            value="old_value",
-            is_readonly=True
-        )
+        existing_setting = SystemSetting(key="readonly_key", value="old_value", is_readonly=True)
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = existing_setting
         mock_db.execute.return_value = mock_result
 
         with pytest.raises(ValueError, match="readonly and cannot be modified"):
-            await config_service.set_configuration(
-                key="readonly_key",
-                value="new_value",
-                user_id=1
-            )
+            await config_service.set_configuration(key="readonly_key", value="new_value", user_id=1)
 
     @pytest.mark.asyncio
     async def test_validate_configuration_valid_integer(self, config_service):
         """Test validation of valid integer configuration"""
-        is_valid, message = await config_service.validate_configuration(
-            "test_key", "42", ConfigDataType.INTEGER
-        )
+        is_valid, message = await config_service.validate_configuration("test_key", "42", ConfigDataType.INTEGER)
 
         assert is_valid is True
         assert message == "Valid"
@@ -237,15 +210,11 @@ class TestConfigurationService:
         valid_booleans = ["true", "false", "1", "0", "yes", "no", "on", "off"]
 
         for value in valid_booleans:
-            is_valid, message = await config_service.validate_configuration(
-                "test_key", value, ConfigDataType.BOOLEAN
-            )
+            is_valid, message = await config_service.validate_configuration("test_key", value, ConfigDataType.BOOLEAN)
             assert is_valid is True, f"Failed for value: {value}"
 
         # Test invalid boolean
-        is_valid, message = await config_service.validate_configuration(
-            "test_key", "maybe", ConfigDataType.BOOLEAN
-        )
+        is_valid, message = await config_service.validate_configuration("test_key", "maybe", ConfigDataType.BOOLEAN)
         assert is_valid is False
         assert "Boolean value must be" in message
 
@@ -277,8 +246,22 @@ class TestConfigurationService:
         """Test bulk update of configurations"""
         # Mock existing configurations
         existing_configs = [
-            SystemSetting(key="key1", value="old1", category=ConfigCategory.FEATURES, data_type=ConfigDataType.STRING, is_sensitive=False, is_readonly=False),
-            SystemSetting(key="key2", value="old2", category=ConfigCategory.FEATURES, data_type=ConfigDataType.STRING, is_sensitive=False, is_readonly=False)
+            SystemSetting(
+                key="key1",
+                value="old1",
+                category=ConfigCategory.FEATURES,
+                data_type=ConfigDataType.STRING,
+                is_sensitive=False,
+                is_readonly=False,
+            ),
+            SystemSetting(
+                key="key2",
+                value="old2",
+                category=ConfigCategory.FEATURES,
+                data_type=ConfigDataType.STRING,
+                is_sensitive=False,
+                is_readonly=False,
+            ),
         ]
 
         mock_result = MagicMock()
@@ -288,10 +271,7 @@ class TestConfigurationService:
         mock_db.refresh = AsyncMock()
         mock_db.add = MagicMock()
 
-        updates = [
-            {"key": "key1", "value": "new1"},
-            {"key": "key2", "value": "new2"}
-        ]
+        updates = [{"key": "key1", "value": "new1"}, {"key": "key2", "value": "new2"}]
 
         result = await config_service.bulk_update_configurations(updates, user_id=1)
 
@@ -301,11 +281,7 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_delete_configuration_success(self, config_service, mock_db):
         """Test successful deletion of configuration"""
-        existing_setting = SystemSetting(
-            key="deletable_key",
-            value="some_value",
-            is_readonly=False
-        )
+        existing_setting = SystemSetting(key="deletable_key", value="some_value", is_readonly=False)
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = existing_setting
@@ -323,11 +299,7 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_delete_configuration_readonly_error(self, config_service, mock_db):
         """Test that readonly configurations cannot be deleted"""
-        existing_setting = SystemSetting(
-            key="readonly_key",
-            value="some_value",
-            is_readonly=True
-        )
+        existing_setting = SystemSetting(key="readonly_key", value="some_value", is_readonly=True)
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = existing_setting

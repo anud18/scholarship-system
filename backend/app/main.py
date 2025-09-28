@@ -6,6 +6,7 @@ Configures middleware, exception handlers, and API routes.
 import json
 import logging
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,6 +18,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
+
+# Import scheduler
+from app.services.roster_scheduler_service import init_scheduler, shutdown_scheduler
 
 # Configure logging
 logging.basicConfig(
@@ -51,6 +55,34 @@ if settings.log_format == "json":
     handler.setFormatter(JsonFormatter())
     root_logger.addHandler(handler)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan events"""
+    # Startup
+    logger = logging.getLogger(__name__)
+    try:
+        logger.info("Starting application...")
+
+        # Initialize the roster scheduler
+        await init_scheduler()
+        logger.info("Roster scheduler initialized")
+
+        yield
+
+    except Exception as e:
+        logger.error(f"Error during application startup: {e}")
+        raise
+    finally:
+        # Shutdown
+        logger.info("Shutting down application...")
+        try:
+            await shutdown_scheduler()
+            logger.info("Roster scheduler shut down")
+        except Exception as e:
+            logger.error(f"Error during scheduler shutdown: {e}")
+
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
@@ -58,6 +90,7 @@ app = FastAPI(
     openapi_url="/api/v1/openapi.json",
     docs_url="/api/v1/docs",
     redoc_url="/api/v1/redoc",
+    lifespan=lifespan,
 )
 
 # Configure CORS

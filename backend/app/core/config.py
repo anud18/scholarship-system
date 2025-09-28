@@ -125,7 +125,6 @@ class Settings(BaseSettings):
     nycu_emp_timeout: float = 10.0
     nycu_emp_retries: int = 3
 
-
     @field_validator("database_url", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:

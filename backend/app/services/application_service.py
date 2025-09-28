@@ -334,9 +334,7 @@ class ApplicationService:
         # Eligibility verification
         eligibility_service = EligibilityService(self.db)
         is_eligible, eligibility_errors = await eligibility_service.check_student_eligibility(
-            student_data=student_snapshot,
-            config=config,
-            user_id=user.id
+            student_data=student_snapshot, config=config, user_id=user.id
         )
 
         if not is_eligible:
