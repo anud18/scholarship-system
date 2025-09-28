@@ -23,7 +23,7 @@ class ScholarshipConfigurationBase(BaseModel):
     # 配額限制配置
     has_quota_limit: bool = False
     has_college_quota: bool = False
-    quota_management_mode: QuotaManagementMode = QuotaManagementMode.NONE
+    quota_management_mode: QuotaManagementMode = QuotaManagementMode.none
 
     # 配額詳細設定
     total_quota: Optional[int] = Field(None, ge=0)

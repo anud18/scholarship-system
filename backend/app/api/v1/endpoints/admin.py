@@ -271,9 +271,9 @@ async def get_historical_applications(
 
     if semester and semester != "all":
         if semester == "first":
-            stmt = stmt.where(Application.semester == Semester.FIRST)
+            stmt = stmt.where(Application.semester == Semester.first)
         elif semester == "second":
-            stmt = stmt.where(Application.semester == Semester.SECOND)
+            stmt = stmt.where(Application.semester == Semester.second)
 
     if search:
         search_term = f"%{search}%"
@@ -363,7 +363,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
     if current_user.is_super_admin():
         # Super admin can see all applications
         pass
-    elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
+    elif current_user.role in [UserRole.admin, UserRole.college]:
         # Get user's scholarship permissions
         permission_stmt = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
         permission_result = await db.execute(permission_stmt)
@@ -376,14 +376,14 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
 
     # Total applications (filtered by permissions)
     stmt = select(func.count(Application.id))
-    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+    if current_user.role in [UserRole.admin, UserRole.college] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     total_applications = result.scalar()
 
     # Applications by status (filtered by permissions)
     stmt = select(Application.status, func.count(Application.id)).group_by(Application.status)
-    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+    if current_user.role in [UserRole.admin, UserRole.college] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     status_counts = {row[0]: row[1] for row in result.fetchall()}
@@ -399,7 +399,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
         Application.status == ApplicationStatus.APPROVED.value,
         Application.approved_at >= this_month,
     )
-    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+    if current_user.role in [UserRole.admin, UserRole.college] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     approved_this_month = result.scalar() or 0
@@ -425,7 +425,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
         Application.submitted_at.isnot(None),
         Application.status.in_([ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]),
     )
-    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+    if current_user.role in [UserRole.admin, UserRole.college] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     avg_days = result.scalar()
@@ -765,7 +765,7 @@ async def get_recent_applications(
     if current_user.is_super_admin():
         # Super admin can see all applications
         pass
-    elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
+    elif current_user.role in [UserRole.admin, UserRole.college]:
         # Get user's scholarship permissions
         permission_stmt = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
         permission_result = await db.execute(permission_stmt)
@@ -785,7 +785,7 @@ async def get_recent_applications(
     )
 
     # Apply scholarship permission filtering
-    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+    if current_user.role in [UserRole.admin, UserRole.college] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
 
     stmt = stmt.order_by(desc(Application.created_at)).limit(limit)
@@ -1246,10 +1246,10 @@ async def get_scholarship_statistics(current_user: User = Depends(require_admin)
 
     # Get user's scholarship permissions
     allowed_scholarship_ids = []
-    if current_user.role == UserRole.SUPER_ADMIN:
+    if current_user.role == UserRole.super_admin:
         # Super admin can see all scholarships
         pass
-    elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
+    elif current_user.role in [UserRole.admin, UserRole.college]:
         # Get user's scholarship permissions
         permission_stmt = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
         permission_result = await db.execute(permission_stmt)
@@ -1257,7 +1257,7 @@ async def get_scholarship_statistics(current_user: User = Depends(require_admin)
 
     # Get all scholarship types (filtered by permissions)
     stmt = select(ScholarshipType).where(ScholarshipType.status == ScholarshipStatus.ACTIVE.value)
-    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+    if current_user.role in [UserRole.admin, UserRole.college] and allowed_scholarship_ids:
         stmt = stmt.where(ScholarshipType.id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     scholarships = result.scalars().all()
@@ -1990,9 +1990,9 @@ async def get_current_user_scholarship_permissions(
 
     # Only admin and college roles can have scholarship permissions
     if current_user.role not in [
-        UserRole.ADMIN,
-        UserRole.COLLEGE,
-        UserRole.SUPER_ADMIN,
+        UserRole.admin,
+        UserRole.college,
+        UserRole.super_admin,
     ]:
         return ApiResponse(
             success=True,
@@ -2053,7 +2053,7 @@ async def create_scholarship_permission(
         raise HTTPException(status_code=400, detail="user_id and scholarship_id are required")
 
     # Check if admin is trying to modify their own permissions (not allowed)
-    if current_user.role == UserRole.ADMIN and user_id == current_user.id:
+    if current_user.role == UserRole.admin and user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin users cannot modify their own permissions",
@@ -2184,7 +2184,7 @@ async def delete_scholarship_permission(
         raise HTTPException(status_code=404, detail="Permission not found")
 
     # Check if admin is trying to delete their own permissions (not allowed)
-    if current_user.role == UserRole.ADMIN and permission.admin_id == current_user.id:
+    if current_user.role == UserRole.admin and permission.admin_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin users cannot delete their own permissions",
@@ -2347,7 +2347,7 @@ async def get_scholarship_rules(
         stmt = stmt.where(ScholarshipRule.academic_year == academic_year)
 
     if semester:
-        semester_enum = Semester.FIRST if semester == "first" else Semester.SECOND if semester == "second" else None
+        semester_enum = Semester.first if semester == "first" else Semester.second if semester == "second" else None
         if semester_enum:
             stmt = stmt.where(ScholarshipRule.semester == semester_enum)
 
@@ -3103,7 +3103,7 @@ async def apply_rule_template(
     if not template_request.overwrite_existing:
         target_semester_enum = None
         if template_request.semester:
-            target_semester_enum = Semester.FIRST if template_request.semester == "first" else Semester.SECOND
+            target_semester_enum = Semester.first if template_request.semester == "first" else Semester.second
 
         existing_stmt = select(ScholarshipRule).where(
             ScholarshipRule.scholarship_type_id == template_request.scholarship_type_id,
@@ -3125,7 +3125,7 @@ async def apply_rule_template(
     new_rules = []
     target_semester_enum = None
     if template_request.semester:
-        target_semester_enum = Semester.FIRST if template_request.semester == "first" else Semester.SECOND
+        target_semester_enum = Semester.first if template_request.semester == "first" else Semester.second
 
     for template_rule in template_rules:
         new_rule = ScholarshipRule(
@@ -3265,7 +3265,7 @@ async def get_available_professors(
     """Get list of available professors for assignment."""
 
     try:
-        stmt = select(User).where(User.role == UserRole.PROFESSOR)
+        stmt = select(User).where(User.role == UserRole.professor)
 
         if search:
             search_term = f"%{search.lower()}%"

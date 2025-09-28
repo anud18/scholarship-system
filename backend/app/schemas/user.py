@@ -20,7 +20,7 @@ class UserBase(BaseModel):
     status: EmployeeStatus
     dept_code: Optional[str] = Field(None, max_length=20)
     dept_name: Optional[str] = Field(None, max_length=100)
-    role: UserRole = UserRole.STUDENT
+    role: UserRole = UserRole.student
 
 
 class UserCreate(UserBase):

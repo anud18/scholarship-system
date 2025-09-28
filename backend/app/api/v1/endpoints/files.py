@@ -69,18 +69,18 @@ async def get_file_proxy(
         application = file_record.application
 
         # Check access permissions based on role
-        if current_user.role == UserRole.STUDENT:
+        if current_user.role == UserRole.student:
             # Students can only access their own files
             if application.user_id != current_user.id:
                 raise HTTPException(status_code=403, detail="Access denied")
-        elif current_user.role == UserRole.PROFESSOR:
+        elif current_user.role == UserRole.professor:
             # Professors can access files from their students
             if not current_user.can_access_student_data(application.user_id, "view_applications"):
                 raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
         elif current_user.role in [
-            UserRole.COLLEGE,
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
         ]:
             # College, Admin, and Super Admin can access any file
             pass
@@ -169,18 +169,18 @@ async def download_file_proxy(
         application = file_record.application
 
         # Check access permissions based on role
-        if current_user.role == UserRole.STUDENT:
+        if current_user.role == UserRole.student:
             # Students can only access their own files
             if application.user_id != current_user.id:
                 raise HTTPException(status_code=403, detail="Access denied")
-        elif current_user.role == UserRole.PROFESSOR:
+        elif current_user.role == UserRole.professor:
             # Professors can access files from their students
             if not current_user.can_access_student_data(application.user_id, "view_applications"):
                 raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
         elif current_user.role in [
-            UserRole.COLLEGE,
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
         ]:
             # College, Admin, and Super Admin can access any file
             pass

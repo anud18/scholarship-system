@@ -51,7 +51,7 @@ async def get_student_info(current_user: User = Depends(get_current_user), db: A
     """Get student information"""
     from app.services.application_service import get_student_data_from_user
 
-    if current_user.role.value != "student":
+    if current_user.role != UserRole.student:
         raise HTTPException(status_code=403, detail="Only students can access student information")
 
     # Get student profile

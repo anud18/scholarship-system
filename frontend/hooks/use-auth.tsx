@@ -38,7 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const userData = JSON.parse(userJson)
           console.log('Parsed user data:', userData)
           apiClient.setToken(token)
-          setUser({ ...userData, name: userData.full_name || userData.name })
+          // Convert role to lowercase for frontend consistency
+          const normalizedUser = {
+            ...userData,
+            name: userData.full_name || userData.name,
+            role: userData.role?.toLowerCase()
+          }
+          setUser(normalizedUser)
           console.log('Authentication restored from localStorage')
         } catch (err) {
           console.error('Failed to parse stored user data:', err)
@@ -76,11 +82,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const devUser = {
         ...userData,
         name: userData.full_name || userData.name,
+        role: userData.role?.toLowerCase()
       }
       console.log('💾 Storing dev_user for backwards compatibility...')
       localStorage.setItem('dev_user', JSON.stringify(devUser))
-
-      const finalUser = { ...userData, name: userData.full_name || userData.name }
+      const finalUser = {
+        ...userData,
+        name: userData.full_name || userData.name,
+        role: userData.role?.toLowerCase() as 'student' | 'professor' | 'college' | 'admin' | 'super_admin'
+      }
       console.log('👤 Setting user state:', finalUser)
       setUser(finalUser)
       setError(null)

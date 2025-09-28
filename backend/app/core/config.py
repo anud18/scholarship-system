@@ -106,6 +106,15 @@ class Settings(BaseSettings):
     student_api_timeout: float = 10.0
     student_api_encode_type: Optional[str] = "UTF-8"
 
+    # Payment Roster Configuration
+    roster_template_dir: str = "./app/templates"
+    roster_export_dir: str = "./exports"
+    roster_excel_template: str = "STD_UP_MIXLISTA.xlsx"
+
+    # Student Verification Configuration
+    student_verification_api_url: Optional[str] = None
+    student_verification_api_key: Optional[str] = None
+    student_verification_mock_mode: bool = True
     # NYCU Employee API Configuration
     nycu_emp_mode: str = "mock"  # "mock" or "http"
     nycu_emp_account: Optional[str] = None
@@ -116,14 +125,6 @@ class Settings(BaseSettings):
     nycu_emp_timeout: float = 10.0
     nycu_emp_retries: int = 3
 
-    # Email Configuration
-    smtp_host: Optional[str] = None
-    smtp_port: int = 587
-    smtp_username: Optional[str] = None
-    smtp_password: Optional[str] = None
-    smtp_from_email: Optional[str] = None
-    smtp_from_name: str = "NYCU Scholarship System"
-    smtp_use_tls: bool = True
 
     @field_validator("database_url", mode="before")
     @classmethod
@@ -184,6 +185,20 @@ class Settings(BaseSettings):
     @classmethod
     def create_upload_directory(cls, v: str) -> str:
         """Ensure upload directory exists"""
+        os.makedirs(v, exist_ok=True)
+        return v
+
+    @field_validator("roster_template_dir", mode="before")
+    @classmethod
+    def create_roster_template_directory(cls, v: str) -> str:
+        """Ensure roster template directory exists"""
+        os.makedirs(v, exist_ok=True)
+        return v
+
+    @field_validator("roster_export_dir", mode="before")
+    @classmethod
+    def create_roster_export_directory(cls, v: str) -> str:
+        """Ensure roster export directory exists"""
         os.makedirs(v, exist_ok=True)
         return v
 

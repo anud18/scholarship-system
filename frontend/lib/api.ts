@@ -204,6 +204,152 @@ export interface SystemSetting {
   value: string
 }
 
+// === System Configuration Management Types === //
+export interface SystemConfiguration {
+  id: number
+  key: string
+  value: string
+  category: 'FEATURES' | 'SECURITY' | 'EMAIL' | 'DATABASE' | 'API_KEYS' | 'FILE_STORAGE' | 'NOTIFICATION' | 'OCR' | 'INTEGRATIONS'
+  data_type: 'STRING' | 'INTEGER' | 'FLOAT' | 'BOOLEAN' | 'JSON'
+  is_sensitive: boolean
+  description?: string
+  validation_regex?: string
+  is_active: boolean
+  created_at: string
+  updated_at?: string
+  created_by?: number
+  updated_by?: number
+}
+
+export interface SystemConfigurationCreate {
+  key: string
+  value: string
+  category: 'FEATURES' | 'SECURITY' | 'EMAIL' | 'DATABASE' | 'API_KEYS' | 'FILE_STORAGE' | 'NOTIFICATION' | 'OCR' | 'INTEGRATIONS'
+  data_type: 'STRING' | 'INTEGER' | 'FLOAT' | 'BOOLEAN' | 'JSON'
+  is_sensitive?: boolean
+  description?: string
+  validation_regex?: string
+}
+
+export interface SystemConfigurationUpdate {
+  value?: string
+  category?: 'FEATURES' | 'SECURITY' | 'EMAIL' | 'DATABASE' | 'API_KEYS' | 'FILE_STORAGE' | 'NOTIFICATION' | 'OCR' | 'INTEGRATIONS'
+  data_type?: 'STRING' | 'INTEGER' | 'FLOAT' | 'BOOLEAN' | 'JSON'
+  is_sensitive?: boolean
+  description?: string
+  validation_regex?: string
+}
+
+export interface SystemConfigurationValidation {
+  value: string
+  data_type: 'STRING' | 'INTEGER' | 'FLOAT' | 'BOOLEAN' | 'JSON'
+  validation_regex?: string
+}
+
+export interface ConfigurationValidationResult {
+  is_valid: boolean
+  error_message?: string
+}
+
+// === Bank Verification Types === //
+export interface BankVerificationResult {
+  application_id: number
+  verification_status: 'verified' | 'failed' | 'partial' | 'no_document'
+  verification_details: {
+    bank_name?: {
+      form_value: string
+      ocr_value: string
+      similarity: number
+      match: boolean
+    }
+    bank_code?: {
+      form_value: string
+      ocr_value: string
+      similarity: number
+      match: boolean
+    }
+    account_number?: {
+      form_value: string
+      ocr_value: string
+      similarity: number
+      match: boolean
+    }
+    account_holder?: {
+      form_value: string
+      ocr_value: string
+      similarity: number
+      match: boolean
+    }
+    branch_name?: {
+      form_value: string
+      ocr_value: string
+      similarity: number
+      match: boolean
+    }
+  }
+  overall_confidence: number
+  recommendations: string[]
+  processed_at: string
+}
+
+export interface BankVerificationBatchResult {
+  total_applications: number
+  processed_count: number
+  verified_count: number
+  failed_count: number
+  results: BankVerificationResult[]
+  processing_time: number
+}
+
+// === Professor-Student Relationship Types === //
+export interface ProfessorStudentRelationship {
+  id: number
+  professor_id: number
+  student_id: number
+  relationship_type: 'advisor' | 'supervisor' | 'committee_member' | 'co_advisor'
+  status: 'active' | 'inactive' | 'pending' | 'terminated'
+  start_date: string
+  end_date?: string
+  notes?: string
+  created_at: string
+  updated_at: string
+  professor?: {
+    id: number
+    name: string
+    nycu_id?: string
+    email?: string
+    department?: string
+  }
+  student?: {
+    id: number
+    name: string
+    student_no?: string
+    email?: string
+    department?: string
+  }
+}
+
+export interface ProfessorStudentRelationshipCreate {
+  professor_id: number
+  student_id: number
+  relationship_type: 'advisor' | 'supervisor' | 'committee_member' | 'co_advisor'
+  status: 'active' | 'inactive' | 'pending' | 'terminated'
+  start_date: string
+  end_date?: string
+  notes?: string
+}
+
+export interface ProfessorStudentRelationshipUpdate {
+  id: number
+  professor_id?: number
+  student_id?: number
+  relationship_type?: 'advisor' | 'supervisor' | 'committee_member' | 'co_advisor'
+  status?: 'active' | 'inactive' | 'pending' | 'terminated'
+  start_date?: string
+  end_date?: string
+  notes?: string
+}
+
 export interface AnnouncementCreate {
   title: string
   title_en?: string
@@ -663,6 +809,7 @@ export interface ScholarshipFormConfig {
   hasWhitelist?: boolean
   whitelist_student_ids?: Record<string, number[]>
 }
+
 
 export interface FormConfigSaveRequest {
   fields: Array<{
@@ -2008,6 +2155,88 @@ class ApiClient {
       const params = search ? `?search=${encodeURIComponent(search)}` : '';
       return this.request(`/admin/professors${params}`)
     },
+
+    // === System Configuration Management === //
+    getConfigurations: async (): Promise<ApiResponse<SystemConfiguration[]>> => {
+      return this.request('/admin/configurations')
+    },
+
+    createConfiguration: async (configData: SystemConfigurationCreate): Promise<ApiResponse<SystemConfiguration>> => {
+      return this.request('/admin/configurations', {
+        method: 'POST',
+        body: JSON.stringify(configData)
+      })
+    },
+
+    updateConfigurationsBulk: async (configurations: SystemConfigurationUpdate[]): Promise<ApiResponse<SystemConfiguration[]>> => {
+      return this.request('/admin/configurations/bulk', {
+        method: 'PUT',
+        body: JSON.stringify(configurations)
+      })
+    },
+
+    validateConfiguration: async (configData: SystemConfigurationValidation): Promise<ApiResponse<ConfigurationValidationResult>> => {
+      return this.request('/admin/configurations/validate', {
+        method: 'POST',
+        body: JSON.stringify(configData)
+      })
+    },
+
+    deleteConfiguration: async (key: string): Promise<ApiResponse<string>> => {
+      return this.request(`/admin/configurations/${encodeURIComponent(key)}`, {
+        method: 'DELETE'
+      })
+    },
+
+    // === Bank Verification === //
+    verifyBankAccount: async (applicationId: number): Promise<ApiResponse<BankVerificationResult>> => {
+      return this.request('/admin/bank-verification', {
+        method: 'POST',
+        body: JSON.stringify({ application_id: applicationId })
+      })
+    },
+
+    verifyBankAccountsBatch: async (applicationIds: number[]): Promise<ApiResponse<BankVerificationBatchResult>> => {
+      return this.request('/admin/bank-verification/batch', {
+        method: 'POST',
+        body: JSON.stringify({ application_ids: applicationIds })
+      })
+    },
+
+    // === Professor-Student Relationships === //
+    getProfessorStudentRelationships: async (params?: {
+      professor_id?: number;
+      student_id?: number;
+      is_active?: boolean;
+    }): Promise<ApiResponse<ProfessorStudentRelationship[]>> => {
+      const queryParams = new URLSearchParams()
+      if (params?.professor_id) queryParams.append('professor_id', params.professor_id.toString())
+      if (params?.student_id) queryParams.append('student_id', params.student_id.toString())
+      if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString())
+
+      const queryString = queryParams.toString()
+      return this.request(`/admin/professor-student-relationships${queryString ? `?${queryString}` : ''}`)
+    },
+
+    createProfessorStudentRelationship: async (relationshipData: ProfessorStudentRelationshipCreate): Promise<ApiResponse<ProfessorStudentRelationship>> => {
+      return this.request('/admin/professor-student-relationships', {
+        method: 'POST',
+        body: JSON.stringify(relationshipData)
+      })
+    },
+
+    updateProfessorStudentRelationship: async (id: number, relationshipData: ProfessorStudentRelationshipUpdate): Promise<ApiResponse<ProfessorStudentRelationship>> => {
+      return this.request(`/admin/professor-student-relationships/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(relationshipData)
+      })
+    },
+
+    deleteProfessorStudentRelationship: async (id: number): Promise<ApiResponse<{ message: string }>> => {
+      return this.request(`/admin/professor-student-relationships/${id}`, {
+        method: 'DELETE'
+      })
+    },
   }
 
   // Application Fields Configuration
@@ -2471,6 +2700,120 @@ class ApiClient {
       semesters: string[];
     }>> => {
       return this.request('/college/available-combinations')
+    }
+  }
+
+  // System Configuration Management endpoints
+  system = {
+    getConfigurations: async (category?: string, includeSensitive?: boolean): Promise<ApiResponse<SystemConfiguration[]>> => {
+      const params = new URLSearchParams()
+      if (category) params.append('category', category)
+      if (includeSensitive) params.append('include_sensitive', 'true')
+      const queryString = params.toString()
+      return this.request(`/system-settings${queryString ? `?${queryString}` : ''}`)
+    },
+
+    getConfiguration: async (key: string, includeSensitive?: boolean): Promise<ApiResponse<SystemConfiguration>> => {
+      const params = includeSensitive ? '?include_sensitive=true' : ''
+      return this.request(`/system-settings/${encodeURIComponent(key)}${params}`)
+    },
+
+    createConfiguration: async (configData: SystemConfigurationCreate): Promise<ApiResponse<SystemConfiguration>> => {
+      return this.request('/system-settings', {
+        method: 'POST',
+        body: JSON.stringify(configData)
+      })
+    },
+
+    updateConfiguration: async (key: string, configData: SystemConfigurationUpdate): Promise<ApiResponse<SystemConfiguration>> => {
+      return this.request(`/system-settings/${encodeURIComponent(key)}`, {
+        method: 'PUT',
+        body: JSON.stringify(configData)
+      })
+    },
+
+    validateConfiguration: async (configData: SystemConfigurationValidation): Promise<ApiResponse<ConfigurationValidationResult>> => {
+      return this.request('/system-settings/validate', {
+        method: 'POST',
+        body: JSON.stringify(configData)
+      })
+    },
+
+    deleteConfiguration: async (key: string): Promise<ApiResponse<{ message: string }>> => {
+      return this.request(`/system-settings/${encodeURIComponent(key)}`, {
+        method: 'DELETE'
+      })
+    },
+
+    getCategories: async (): Promise<ApiResponse<string[]>> => {
+      return this.request('/system-settings/categories/')
+    },
+
+    getDataTypes: async (): Promise<ApiResponse<string[]>> => {
+      return this.request('/system-settings/data-types/')
+    },
+
+    getAuditLogs: async (configKey: string, limit: number = 50): Promise<ApiResponse<any[]>> => {
+      return this.request(`/system-settings/audit-logs/${encodeURIComponent(configKey)}?limit=${limit}`)
+    }
+  }
+
+  // Bank Verification endpoints
+  bankVerification = {
+    verifyBankAccount: async (applicationId: number): Promise<ApiResponse<BankVerificationResult>> => {
+      return this.request(`/bank-verification/verify/${applicationId}`, {
+        method: 'POST'
+      })
+    },
+
+    verifyBankAccountsBatch: async (applicationIds: number[]): Promise<ApiResponse<BankVerificationBatchResult>> => {
+      return this.request('/bank-verification/verify-batch', {
+        method: 'POST',
+        body: JSON.stringify({ application_ids: applicationIds })
+      })
+    }
+  }
+
+  // Professor-Student Relationship endpoints
+  professorStudent = {
+    getProfessorStudentRelationships: async (params?: {
+      professor_id?: number;
+      student_id?: number;
+      relationship_type?: string;
+      status?: string;
+      page?: number;
+      size?: number;
+    }): Promise<ApiResponse<ProfessorStudentRelationship[]>> => {
+      const queryParams = new URLSearchParams()
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined) {
+            queryParams.append(key, value.toString())
+          }
+        })
+      }
+      const query = queryParams.toString()
+      return this.request(`/professor-student${query ? `?${query}` : ''}`)
+    },
+
+    createProfessorStudentRelationship: async (relationshipData: ProfessorStudentRelationshipCreate): Promise<ApiResponse<ProfessorStudentRelationship>> => {
+      return this.request('/professor-student', {
+        method: 'POST',
+        body: JSON.stringify(relationshipData)
+      })
+    },
+
+    updateProfessorStudentRelationship: async (id: number, relationshipData: ProfessorStudentRelationshipUpdate): Promise<ApiResponse<ProfessorStudentRelationship>> => {
+      return this.request(`/professor-student/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(relationshipData)
+      })
+    },
+
+    deleteProfessorStudentRelationship: async (id: number): Promise<ApiResponse<void>> => {
+      return this.request(`/professor-student/${id}`, {
+        method: 'DELETE'
+      })
     }
   }
 }

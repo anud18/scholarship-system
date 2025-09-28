@@ -196,3 +196,45 @@ class FileSizeExceededError(FileUploadError):
     def __init__(self, file_size: int, max_size: int):
         message = f"File size {file_size} bytes exceeds maximum size of {max_size} bytes"
         super().__init__(message)
+
+
+# Roster-specific exceptions
+class RosterGenerationError(ScholarshipException):
+    """Raised when roster generation fails"""
+
+    def __init__(self, message: str):
+        super().__init__(message=message, status_code=500, error_code="ROSTER_GENERATION_ERROR")
+
+
+class RosterNotFoundError(NotFoundError):
+    """Raised when roster is not found"""
+
+    def __init__(self, roster_identifier: str):
+        super().__init__(resource="Roster", identifier=roster_identifier)
+
+
+class RosterAlreadyExistsError(ConflictError):
+    """Raised when trying to create roster that already exists"""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class RosterLockedError(BusinessLogicError):
+    """Raised when trying to modify locked roster"""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class StudentVerificationError(ScholarshipException):
+    """Raised when student verification fails"""
+
+    def __init__(self, message: str, student_id: Optional[str] = None):
+        details = {"student_id": student_id} if student_id else {}
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="STUDENT_VERIFICATION_ERROR",
+            details=details,
+        )

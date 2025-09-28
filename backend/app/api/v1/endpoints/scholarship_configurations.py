@@ -110,9 +110,22 @@ async def get_available_semesters(
             from app.models.enums import QuotaManagementMode
 
             try:
-                mode_enum = QuotaManagementMode(quota_management_mode)
+                # Find the enum by its value, not by its name
+                mode_enum = None
+                for mode in QuotaManagementMode:
+                    if mode.value == quota_management_mode:
+                        mode_enum = mode
+                        break
+
+                if mode_enum is None:
+                    return ApiResponse(
+                        success=False,
+                        message=f"Invalid quota management mode: {quota_management_mode}",
+                        data=[],
+                    )
+
                 conditions.append(ScholarshipConfiguration.quota_management_mode == mode_enum)
-            except ValueError:
+            except Exception:
                 return ApiResponse(
                     success=False,
                     message=f"Invalid quota management mode: {quota_management_mode}",
@@ -169,6 +182,16 @@ async def get_available_semesters(
         )
 
     except Exception as e:
+        import logging
+        import traceback
+
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Error in get_available_semesters: {type(e).__name__}: {str(e)}",
+            exc_info=True,
+        )
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve available semesters: {str(e)}",
@@ -188,7 +211,7 @@ async def get_matrix_quota_status(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.FIRST if semester_str == "1" else Semester.SECOND
+            semester = Semester.first if semester_str == "1" else Semester.second
         else:
             academic_year = int(period)
             semester = None
@@ -556,7 +579,7 @@ async def get_quota_overview(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.FIRST if semester_str == "1" else Semester.SECOND
+            semester = Semester.first if semester_str == "1" else Semester.second
         else:
             academic_year = int(period)
             semester = None
@@ -1155,9 +1178,9 @@ async def list_scholarship_configurations(
 
         if semester:
             if semester == "first":
-                conditions.append(ScholarshipConfiguration.semester == Semester.FIRST)
+                conditions.append(ScholarshipConfiguration.semester == Semester.first)
             elif semester == "second":
-                conditions.append(ScholarshipConfiguration.semester == Semester.SECOND)
+                conditions.append(ScholarshipConfiguration.semester == Semester.second)
 
         # Execute query
         stmt = (

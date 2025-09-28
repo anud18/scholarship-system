@@ -36,8 +36,8 @@ class SystemSetting(Base):
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(100), unique=True, nullable=False, index=True)
     value = Column(Text, nullable=False)
-    category = Column(Enum(ConfigCategory), nullable=False, default=ConfigCategory.FEATURES)
-    data_type = Column(Enum(ConfigDataType), nullable=False, default=ConfigDataType.STRING)
+    category = Column(Enum(ConfigCategory, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=ConfigCategory.FEATURES)
+    data_type = Column(Enum(ConfigDataType, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=ConfigDataType.STRING)
     is_sensitive = Column(Boolean, nullable=False, default=False)
     is_readonly = Column(Boolean, nullable=False, default=False)
     description = Column(Text, nullable=True)
@@ -82,7 +82,7 @@ class EmailTemplate(Base):
     body_template = Column(Text, nullable=False)
     cc = Column(Text, nullable=True)  # 逗號分隔或 JSON
     bcc = Column(Text, nullable=True)
-    sending_type = Column(Enum(SendingType), nullable=False, default=SendingType.SINGLE)
+    sending_type = Column(Enum(SendingType, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=SendingType.SINGLE)
     recipient_options = Column(JSON, nullable=True)  # JSON array of recipient options
     requires_approval = Column(Boolean, nullable=False, default=False)
     max_recipients = Column(Integer, nullable=True)

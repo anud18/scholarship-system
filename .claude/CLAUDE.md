@@ -69,6 +69,107 @@ CREATE TABLE scholarship_configurations (
 );
 ```
 
+### 4. Enum Consistency Guidelines
+**CRITICAL**: Maintain strict consistency between Python enums, PostgreSQL enums, and TypeScript enums to prevent runtime errors.
+
+#### Enum Definition Standards
+
+##### Python Backend (app/models/enums.py)
+- Use **lowercase** enum member names that match database values exactly
+- Always include `values_callable` parameter in SQLAlchemy columns
+
+```python
+# ✅ CORRECT - Lowercase member names matching database
+class Semester(enum.Enum):
+    first = "first"
+    second = "second"
+    annual = "annual"
+
+# SQLAlchemy column definition
+semester = Column(
+    Enum(Semester, values_callable=lambda obj: [e.value for e in obj]),
+    nullable=True
+)
+
+# ❌ WRONG - Uppercase member names not matching database
+class Semester(enum.Enum):
+    FIRST = "first"  # Will cause LookupError!
+    SECOND = "second"
+```
+
+##### TypeScript Frontend (lib/enums.ts)
+- Use **UPPERCASE** enum member names (TypeScript convention)
+- Values must match backend/database exactly (lowercase)
+
+```typescript
+// ✅ CORRECT - Uppercase members, lowercase values
+export enum Semester {
+    FIRST = 'first',
+    SECOND = 'second',
+    ANNUAL = 'annual'
+}
+
+// Update label functions when enum changes
+export const getSemesterLabel = (semester: Semester, locale: 'zh' | 'en' = 'zh'): string => {
+    const labels = {
+        zh: {
+            [Semester.FIRST]: '第一學期',
+            [Semester.SECOND]: '第二學期',
+            [Semester.ANNUAL]: '全年'
+        }
+    }
+    return labels[locale][semester]
+}
+```
+
+##### PostgreSQL Database
+- Enum values are always **lowercase**
+- Match Python enum values exactly
+
+```sql
+-- ✅ CORRECT - Lowercase values matching Python
+CREATE TYPE semester AS ENUM ('first', 'second', 'annual');
+
+-- ❌ WRONG - Uppercase values will cause mismatch
+CREATE TYPE semester AS ENUM ('FIRST', 'SECOND', 'ANNUAL');
+```
+
+#### Enum Synchronization Checklist
+When adding/modifying enums:
+1. **Update Python enum** in `backend/app/models/enums.py`
+2. **Update TypeScript enum** in `frontend/lib/enums.ts`
+3. **Create Alembic migration** for database enum changes
+4. **Update all code references** using find/replace or bulk sed commands
+5. **Test all three layers** together to ensure consistency
+
+#### Current System Enums Reference
+- **Semester**: `first`, `second`, `annual`
+- **UserRole**: `student`, `professor`, `college`, `admin`, `super_admin`
+- **ApplicationCycle**: `semester`, `yearly`
+- **QuotaManagementMode**: `none`, `simple`, `college_based`, `matrix_based`
+- **SubTypeSelectionMode**: `single`, `multiple`, `hierarchical`
+- **UserType**: `student`, `employee`
+- **EmployeeStatus**: `在職`, `退休`, `在學`, `畢業` (Chinese values)
+
+#### Troubleshooting Enum Errors
+If you see `LookupError: 'value' is not among the defined enum values`:
+
+1. **Check Python enum member names** match database values exactly
+2. **Verify `values_callable` parameter** is set in SQLAlchemy columns
+3. **Ensure frontend sends lowercase values** to backend APIs
+4. **Use bulk find/replace** to update all code references consistently
+
+```bash
+# Example: Fix enum references across codebase
+find /path/to/backend -name "*.py" -exec sed -i 's/UserRole\.ADMIN/UserRole.admin/g' {} \;
+```
+
+#### Enum Migration Best Practices
+- **Never change existing enum values** without migration
+- **When removing enum values**, check for existing data first
+- **Use database transactions** for enum updates
+- **Update all layers simultaneously** to avoid inconsistency
+
 ## Implementation Standards
 
 ### Frontend Configuration Handling

@@ -124,8 +124,8 @@ async def test_user(db: AsyncSession) -> User:
         nycu_id="testuser",
         name="Test User",
         email="test@university.edu",
-        user_type=UserType.STUDENT,
-        role=UserRole.STUDENT,
+        user_type=UserType.student,
+        role=UserRole.student,
     )
     db.add(user)
     await db.commit()
@@ -140,8 +140,8 @@ async def test_admin(db: AsyncSession) -> User:
         nycu_id="adminuser",
         name="Admin User",
         email="admin@university.edu",
-        user_type=UserType.EMPLOYEE,
-        role=UserRole.ADMIN,
+        user_type=UserType.employee,
+        role=UserRole.admin,
     )
     db.add(admin)
     await db.commit()
@@ -156,8 +156,8 @@ async def test_professor(db: AsyncSession) -> User:
         nycu_id="profuser",
         name="Professor User",
         email="professor@university.edu",
-        user_type=UserType.EMPLOYEE,
-        role=UserRole.PROFESSOR,
+        user_type=UserType.employee,
+        role=UserRole.professor,
     )
     db.add(professor)
     await db.commit()
@@ -239,8 +239,8 @@ def admin_user():
     user.nycu_id = "adminuser"
     user.name = "Admin User"
     user.email = "admin@university.edu"
-    user.user_type = UserType.EMPLOYEE
-    user.role = UserRole.ADMIN
+    user.user_type = UserType.employee
+    user.role = UserRole.admin
     return user
 
 
@@ -254,8 +254,8 @@ def regular_user():
     user.nycu_id = "testuser"
     user.name = "Test User"
     user.email = "test@university.edu"
-    user.user_type = UserType.STUDENT
-    user.role = UserRole.STUDENT
+    user.user_type = UserType.student
+    user.role = UserRole.student
     return user
 
 
@@ -269,8 +269,8 @@ def student_user():
     user.nycu_id = "student123"
     user.name = "Student User"
     user.email = "student@university.edu"
-    user.user_type = UserType.STUDENT
-    user.role = UserRole.STUDENT
+    user.user_type = UserType.student
+    user.role = UserRole.student
     return user
 
 

@@ -658,35 +658,35 @@ export default function UserProfileManagement() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>{t("profile_management.name")}</Label>
-                  <Input value={profile.user_info.name} disabled />
+                  <Input value={profile.user_info.name} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.id_number")}</Label>
-                  <Input value={profile.user_info.nycu_id} disabled />
+                  <Input value={profile.user_info.nycu_id} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.email")}</Label>
-                  <Input value={profile.user_info.email} disabled />
+                  <Input value={profile.user_info.email} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.user_type")}</Label>
-                  <Input value={profile.user_info.user_type} disabled />
+                  <Input value={profile.user_info.user_type} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.status")}</Label>
-                  <Input value={profile.user_info.status} disabled />
+                  <Input value={profile.user_info.status} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.dept_code")}</Label>
-                  <Input value={profile.user_info.dept_code || ''} disabled />
+                  <Input value={profile.user_info.dept_code || ''} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.dept_name")}</Label>
-                  <Input value={profile.user_info.dept_name || ''} disabled />
+                  <Input value={profile.user_info.dept_name || ''} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.system_role")}</Label>
-                  <Input value={profile.user_info.role} disabled />
+                  <Input value={profile.user_info.role} disabled readOnly />
                 </div>
               </div>
 
@@ -698,19 +698,19 @@ export default function UserProfileManagement() {
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>{t("profile_management.degree")}</Label>
-                      <Input value={profile.student_info.student?.std_degree || ''} disabled />
+                      <Input value={profile.student_info.student?.std_degree || ''} disabled readOnly />
                     </div>
                     <div className="space-y-2">
                       <Label>{t("profile_management.enrollment_status")}</Label>
-                      <Input value={profile.student_info.student?.std_studingstatus || ''} disabled />
+                      <Input value={profile.student_info.student?.std_studingstatus || ''} disabled readOnly />
                     </div>
                     <div className="space-y-2">
                       <Label>{t("profile_management.enrollment_year")}</Label>
-                      <Input value={profile.student_info.student?.std_enrollyear || ''} disabled />
+                      <Input value={profile.student_info.student?.std_enrollyear || ''} disabled readOnly />
                     </div>
                     <div className="space-y-2">
                       <Label>{t("profile_management.semester_count")}</Label>
-                      <Input value={profile.student_info.student?.std_termcount || ''} disabled />
+                      <Input value={profile.student_info.student?.std_termcount || ''} disabled readOnly />
                     </div>
                   </div>
                 </div>

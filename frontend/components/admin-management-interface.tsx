@@ -22,6 +22,7 @@ import { AdminConfigurationManagement } from "@/components/admin-configuration-m
 import { EmailHistoryTable } from "@/components/email-history-table"
 import { ScheduledEmailsTable } from "@/components/scheduled-emails-table"
 import { ScholarshipWorkflowMermaid } from "@/components/ScholarshipWorkflowMermaid"
+import SystemConfigurationManagement from "@/components/system-configuration-management"
 
 
 
@@ -964,7 +965,8 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       if (user.role === 'admin') {
         rolesParam = 'college,admin,professor'; // admin 使用者不能看到 super_admin
       }
-
+      // 轉換為大寫傳送給後端
+      rolesParam = rolesParam.split(',').map(role => role.trim().toUpperCase()).join(',');
       const params: any = {
         page: userPagination.page,
         size: userPagination.size,
@@ -1498,15 +1500,22 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   // 獲取獎學金類型列表
   const fetchScholarshipTypes = async () => {
+    console.log('🔍 Fetching scholarship types for user:', user?.role, user?.nycu_id);
     setLoadingScholarshipTypes(true);
     try {
       // Use the new API that returns only scholarships the user has permission to manage
       const response = await apiClient.admin.getMyScholarships();
+      console.log('📊 Scholarship types response:', response);
+
       if (response.success && response.data) {
+        console.log('✅ Found scholarship types:', response.data.length, 'types');
         setScholarshipTypes(response.data);
+      } else {
+        console.log('❌ Failed to get scholarship types:', response.message);
+        setScholarshipTypes([]);
       }
     } catch (error) {
-      console.error('Failed to fetch scholarship types:', error);
+      console.error('❌ Failed to fetch scholarship types:', error);
       // Fallback to empty array so UI doesn't break
       setScholarshipTypes([]);
     } finally {
@@ -1816,11 +1825,49 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         </TabsContent>
 
         <TabsContent value="rules" className="space-y-4">
-          <AdminRuleManagement scholarshipTypes={scholarshipTypes} />
+          {loadingScholarshipTypes ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
+                  <span className="text-nycu-navy-600">載入獎學金類型中...</span>
+                </div>
+              </CardContent>
+            </Card>
+          ) : scholarshipTypes.length === 0 ? (
+            <Card>
+              <CardContent className="text-center py-12">
+                <AlertCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium text-gray-600 mb-2">沒有可管理的獎學金</p>
+                <p className="text-sm text-gray-500">請聯繫系統管理員分配獎學金管理權限</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <AdminRuleManagement scholarshipTypes={scholarshipTypes} />
+          )}
         </TabsContent>
 
         <TabsContent value="configurations" className="space-y-4">
-          <AdminConfigurationManagement scholarshipTypes={scholarshipTypes} />
+          {loadingScholarshipTypes ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
+                  <span className="text-nycu-navy-600">載入獎學金類型中...</span>
+                </div>
+              </CardContent>
+            </Card>
+          ) : scholarshipTypes.length === 0 ? (
+            <Card>
+              <CardContent className="text-center py-12">
+                <AlertCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium text-gray-600 mb-2">沒有可管理的獎學金</p>
+                <p className="text-sm text-gray-500">請聯繫系統管理員分配獎學金管理權限</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <AdminConfigurationManagement scholarshipTypes={scholarshipTypes} />
+          )}
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">
@@ -2926,91 +2973,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
 
         <TabsContent value="settings" className="space-y-4">
-          <div className="grid gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>系統設定</CardTitle>
-                <CardDescription>管理系統全域設定與參數</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>系統名稱</Label>
-                    <Input value="獎學金申請與簽核作業管理系統" />
-                  </div>
-                  <div>
-                    <Label>系統版本</Label>
-                    <Input value="v1.0.0" disabled />
-                  </div>
-                  <div>
-                    <Label>預設語言</Label>
-                    <Input value="繁體中文" />
-                  </div>
-                  <div>
-                    <Label>時區設定</Label>
-                    <Input value="Asia/Taipei" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>通知設定</CardTitle>
-                <CardDescription>管理系統通知與郵件設定</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>每日審核提醒</Label>
-                    <p className="text-sm text-muted-foreground">每晚22:00發送待審核案件提醒</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>申請狀態更新通知</Label>
-                    <p className="text-sm text-muted-foreground">申請狀態變更時通知申請人</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>系統維護通知</Label>
-                    <p className="text-sm text-muted-foreground">系統維護前24小時發送通知</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>安全設定</CardTitle>
-                <CardDescription>管理系統安全與存取控制</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Session 逾時時間 (分鐘)</Label>
-                    <Input type="number" value="30" />
-                  </div>
-                  <div>
-                    <Label>密碼最小長度</Label>
-                    <Input type="number" value="8" />
-                  </div>
-                  <div>
-                    <Label>檔案上傳大小限制 (MB)</Label>
-                    <Input type="number" value="10" />
-                  </div>
-                  <div>
-                    <Label>API 請求頻率限制 (次/分鐘)</Label>
-                    <Input type="number" value="100" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <SystemConfigurationManagement />
         </TabsContent>
 
         <TabsContent value="email" className="space-y-4">

@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { toast } from "@/hooks/use-toast"
 import { ProgressTimeline } from "@/components/progress-timeline"
 import { FilePreviewDialog } from "@/components/file-preview-dialog"
-import { FileText, Eye, Loader2, User, AlertCircle } from "lucide-react"
+import { FileText, Eye, Loader2, User, AlertCircle, CreditCard, Shield, ShieldCheck, ShieldX } from "lucide-react"
 import { Locale } from "@/lib/validators"
 import { Application, User as UserType } from "@/lib/api"
 import api from "@/lib/api"
@@ -52,6 +53,7 @@ export function ApplicationDetailDialog({
   const [error, setError] = useState<string | null>(null)
   const [professorInfo, setProfessorInfo] = useState<any>(null)
   const [professorReview, setProfessorReview] = useState<any>(null)
+  const [bankVerificationLoading, setBankVerificationLoading] = useState(false)
 
   // 獲取欄位標籤（優先使用動態標籤，後備使用靜態標籤）
   const getFieldLabel = (fieldName: string, locale: Locale, fieldLabels?: {[key: string]: { zh?: string, en?: string }}) => {
@@ -67,10 +69,88 @@ export function ApplicationDetailDialog({
   // Check if user can assign professors
   const canAssignProfessor = user && ['admin', 'super_admin', 'college'].includes(user.role)
 
+  // Check if user can verify bank accounts
+  const canVerifyBank = user && ['admin', 'super_admin', 'college'].includes(user.role)
+
   // Handle professor assignment
   const handleProfessorAssigned = (professor: any) => {
     setProfessorInfo(professor)
     // You might want to refresh the application data here
+  }
+
+  // Handle bank verification
+  const handleBankVerification = async () => {
+    if (!application) return
+
+    setBankVerificationLoading(true)
+    try {
+      const response = await api.bankVerification.verifyBankAccount(application.id)
+      if (response.success) {
+        toast({
+          title: '銀行驗證成功',
+          description: '銀行帳戶驗證已完成',
+        })
+        // You might want to refresh the application data here to show updated status
+      } else {
+        toast({
+          title: '銀行驗證失敗',
+          description: response.message || '無法完成銀行帳戶驗證',
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      console.error('Bank verification error:', error)
+      toast({
+        title: '銀行驗證錯誤',
+        description: '銀行帳戶驗證過程中發生錯誤',
+        variant: 'destructive',
+      })
+    } finally {
+      setBankVerificationLoading(false)
+    }
+  }
+
+  // Get bank verification status
+  const getBankVerificationStatus = () => {
+    if (!application) return null
+
+    const bankVerified = application.meta_data?.bank_verification_status === 'verified'
+    const bankVerificationFailed = application.meta_data?.bank_verification_status === 'failed'
+    const bankVerificationPending = application.meta_data?.bank_verification_status === 'pending'
+
+    if (bankVerified) {
+      return {
+        status: 'verified',
+        icon: <ShieldCheck className="h-5 w-5 text-green-600" />,
+        label: locale === 'zh' ? '已驗證' : 'Verified',
+        description: locale === 'zh' ? '銀行帳戶已通過驗證' : 'Bank account has been verified',
+        variant: 'default' as const
+      }
+    } else if (bankVerificationFailed) {
+      return {
+        status: 'failed',
+        icon: <ShieldX className="h-5 w-5 text-red-600" />,
+        label: locale === 'zh' ? '驗證失敗' : 'Verification Failed',
+        description: locale === 'zh' ? '銀行帳戶驗證失敗' : 'Bank account verification failed',
+        variant: 'destructive' as const
+      }
+    } else if (bankVerificationPending) {
+      return {
+        status: 'pending',
+        icon: <Shield className="h-5 w-5 text-yellow-600" />,
+        label: locale === 'zh' ? '驗證中' : 'Verification Pending',
+        description: locale === 'zh' ? '銀行帳戶驗證進行中' : 'Bank account verification in progress',
+        variant: 'secondary' as const
+      }
+    } else {
+      return {
+        status: 'not_verified',
+        icon: <CreditCard className="h-5 w-5 text-gray-500" />,
+        label: locale === 'zh' ? '未驗證' : 'Not Verified',
+        description: locale === 'zh' ? '銀行帳戶尚未驗證' : 'Bank account not verified yet',
+        variant: 'outline' as const
+      }
+    }
   }
 
   // Get professor review status badge variant
@@ -522,6 +602,110 @@ export function ApplicationDetailDialog({
                 </CardContent>
               </Card>
             )}
+
+            {/* Bank Verification Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <CreditCard className="h-5 w-5" />
+                  {locale === "zh" ? "銀行帳戶驗證" : "Bank Account Verification"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {(() => {
+                    const bankStatus = getBankVerificationStatus()
+                    if (!bankStatus) return null
+
+                    return (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {bankStatus.icon}
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{bankStatus.label}</span>
+                                <Badge variant={bankStatus.variant}>
+                                  {bankStatus.label}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {bankStatus.description}
+                              </p>
+                            </div>
+                          </div>
+                          {canVerifyBank && bankStatus.status === 'not_verified' && (
+                            <Button
+                              onClick={handleBankVerification}
+                              disabled={bankVerificationLoading}
+                              size="sm"
+                            >
+                              {bankVerificationLoading ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  {locale === "zh" ? "驗證中..." : "Verifying..."}
+                                </>
+                              ) : (
+                                <>
+                                  <Shield className="h-4 w-4 mr-2" />
+                                  {locale === "zh" ? "開始驗證" : "Start Verification"}
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Bank verification details */}
+                        {application.meta_data?.bank_verification_details && (
+                          <div className="p-3 bg-muted rounded-lg">
+                            <h4 className="text-sm font-medium mb-2">
+                              {locale === "zh" ? "驗證詳情" : "Verification Details"}
+                            </h4>
+                            <div className="text-sm text-muted-foreground space-y-1">
+                              {application.meta_data.bank_verification_details.verified_at && (
+                                <p>
+                                  {locale === "zh" ? "驗證時間: " : "Verified at: "}
+                                  {new Date(application.meta_data.bank_verification_details.verified_at).toLocaleString()}
+                                </p>
+                              )}
+                              {application.meta_data.bank_verification_details.account_holder && (
+                                <p>
+                                  {locale === "zh" ? "帳戶持有人: " : "Account holder: "}
+                                  {application.meta_data.bank_verification_details.account_holder}
+                                </p>
+                              )}
+                              {application.meta_data.bank_verification_details.bank_name && (
+                                <p>
+                                  {locale === "zh" ? "銀行名稱: " : "Bank name: "}
+                                  {application.meta_data.bank_verification_details.bank_name}
+                                </p>
+                              )}
+                              {application.meta_data.bank_verification_details.confidence_score && (
+                                <p>
+                                  {locale === "zh" ? "信心分數: " : "Confidence score: "}
+                                  {(application.meta_data.bank_verification_details.confidence_score * 100).toFixed(1)}%
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Show error message if verification failed */}
+                        {bankStatus.status === 'failed' && application.meta_data?.bank_verification_error && (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                              {locale === "zh" ? "驗證失敗原因: " : "Verification failed: "}
+                              {application.meta_data.bank_verification_error}
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                      </>
+                    )
+                  })()}
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Professor Review Section - Only show if scholarship requires professor review */}
             {requiresProfessorReview && (

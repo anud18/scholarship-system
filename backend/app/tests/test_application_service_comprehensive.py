@@ -295,9 +295,7 @@ class TestApplicationService:
         application_service.db.refresh = AsyncMock()
 
         # Act
-        await application_service.update_application(
-            user=student_user, application_id=1, update_data=update_data
-        )
+        await application_service.update_application(user=student_user, application_id=1, update_data=update_data)
 
         # Assert
         assert mock_application.submitted_form_data["personal_statement"] == "Updated statement"
@@ -390,9 +388,7 @@ class TestApplicationService:
         application_service.db.commit = AsyncMock()
 
         # Act
-        await application_service.withdraw_application(
-            user=student_user, application_id=1, reason="Changed my mind"
-        )
+        await application_service.withdraw_application(user=student_user, application_id=1, reason="Changed my mind")
 
         # Assert
         assert mock_application.status == ApplicationStatus.WITHDRAWN.value

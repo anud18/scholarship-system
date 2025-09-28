@@ -89,11 +89,11 @@ class MockSSOService:
     def _map_role_to_user_type(self, role: UserRole) -> str:
         """Map internal role to portal userType"""
         role_mapping = {
-            UserRole.STUDENT: "student",
-            UserRole.PROFESSOR: "employee",
-            UserRole.COLLEGE: "employee",
-            UserRole.ADMIN: "employee",
-            UserRole.SUPER_ADMIN: "employee",
+            UserRole.student: "student",
+            UserRole.professor: "employee",
+            UserRole.college: "employee",
+            UserRole.admin: "employee",
+            UserRole.super_admin: "employee",
         }
         return role_mapping.get(role, "employee")
 

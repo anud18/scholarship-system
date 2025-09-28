@@ -14,38 +14,33 @@ from app.db.base_class import Base
 class UserRole(enum.Enum):
     """User role enum"""
 
-    STUDENT = "STUDENT"
-    PROFESSOR = "PROFESSOR"
-    COLLEGE = "COLLEGE"
-    ADMIN = "ADMIN"
-    SUPER_ADMIN = "SUPER_ADMIN"
+    student = "student"
+    professor = "professor"
+    college = "college"
+    admin = "admin"
+    super_admin = "super_admin"
 
 
 class UserType(enum.Enum):
     """Portal user type enum"""
 
-    STUDENT = "STUDENT"
-    EMPLOYEE = "EMPLOYEE"
+    student = "student"
+    employee = "employee"
 
 
 class EmployeeStatus(enum.Enum):
     """Employee status enum"""
 
-    ACTIVE = "ACTIVE"
-    RETIRED = "RETIRED"
-    STUDENT = "STUDENT"
-    GRADUATED = "GRADUATED"
+    active = "在職"
+    retired = "退休"
+    student = "在學"
+    graduated = "畢業"
 
     @property
     def display_name(self) -> str:
         """Get Chinese display name for status"""
-        display_names = {
-            "ACTIVE": "在職",
-            "RETIRED": "退休",
-            "STUDENT": "在學",
-            "GRADUATED": "畢業",
-        }
-        return display_names.get(self.value, self.value)
+        # Values are already in Chinese, so return directly
+        return self.value
 
 
 class User(Base):
@@ -57,11 +52,15 @@ class User(Base):
     nycu_id = Column(String(50), unique=True, nullable=False)  # nycuID
     name = Column(String(100), nullable=False)  # txtName
     email = Column(String(100))  # mail
-    user_type = Column(Enum(UserType), nullable=False)  # employee / student
-    status = Column(Enum(EmployeeStatus))  # 在學 / 畢業 / 在職 / 退休
+    user_type = Column(
+        Enum(UserType, values_callable=lambda obj: [e.value for e in obj]), nullable=False
+    )  # employee / student
+    status = Column(Enum(EmployeeStatus, values_callable=lambda obj: [e.value for e in obj]))  # 在學 / 畢業 / 在職 / 退休
     dept_code = Column(String(20))  # deptCode
     dept_name = Column(String(100))  # dept
-    role = Column(Enum(UserRole), default=UserRole.STUDENT)  # 系統內部使用角色
+    role = Column(
+        Enum(UserRole, values_callable=lambda obj: [e.value for e in obj]), default=UserRole.student
+    )  # 系統內部使用角色
 
     # 註記欄位
     comment = Column(String(255))
@@ -79,9 +78,9 @@ class User(Base):
     # Relationships
     applications = relationship("Application", foreign_keys="[Application.user_id]", back_populates="student")
     reviews = relationship("ApplicationReview", back_populates="reviewer")
-    college_reviews = relationship("CollegeReview",
-                                   foreign_keys="[CollegeReview.reviewer_id]",
-                                   back_populates="reviewer")
+    college_reviews = relationship(
+        "CollegeReview", foreign_keys="[CollegeReview.reviewer_id]", back_populates="reviewer"
+    )
     notifications = relationship("Notification", back_populates="user")
     notification_reads = relationship("NotificationRead", back_populates="user")
     audit_logs = relationship("AuditLog", back_populates="user")
@@ -89,14 +88,10 @@ class User(Base):
 
     # Professor-Student relationships
     professor_relationships = relationship(
-        "ProfessorStudentRelationship",
-        foreign_keys="[ProfessorStudentRelationship.professor_id]",
-        lazy="select"
+        "ProfessorStudentRelationship", foreign_keys="[ProfessorStudentRelationship.professor_id]", lazy="select"
     )
     student_relationships = relationship(
-        "ProfessorStudentRelationship",
-        foreign_keys="[ProfessorStudentRelationship.student_id]",
-        lazy="select"
+        "ProfessorStudentRelationship", foreign_keys="[ProfessorStudentRelationship.student_id]", lazy="select"
     )
 
     def __repr__(self):
@@ -113,40 +108,40 @@ class User(Base):
 
     def is_admin(self) -> bool:
         """Check if user is admin"""
-        return bool(self.role == UserRole.ADMIN)
+        return bool(self.role == UserRole.admin)
 
     def is_student(self) -> bool:
         """Check if user is student"""
-        return bool(self.role == UserRole.STUDENT)
+        return bool(self.role == UserRole.student)
 
     def is_professor(self) -> bool:
         """Check if user is professor"""
-        return bool(self.role == UserRole.PROFESSOR)
+        return bool(self.role == UserRole.professor)
 
     def is_college(self) -> bool:
         """Check if user is college"""
-        return bool(self.role == UserRole.COLLEGE)
+        return bool(self.role == UserRole.college)
 
     def is_super_admin(self) -> bool:
         """Check if user is super admin"""
-        return bool(self.role == UserRole.SUPER_ADMIN)
+        return bool(self.role == UserRole.super_admin)
 
     def is_employee(self) -> bool:
         """Check if user is employee (professor, college, admin, super_admin)"""
         return self.role in [
-            UserRole.PROFESSOR,
-            UserRole.COLLEGE,
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.professor,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
         ]
 
     def can_manage_scholarships(self) -> bool:
         """Check if user can manage scholarships"""
-        return self.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]
+        return self.role in [UserRole.college, UserRole.admin, UserRole.super_admin]
 
     def can_assign_roles(self) -> bool:
         """Check if user can assign roles to others"""
-        return self.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]
+        return self.role in [UserRole.admin, UserRole.super_admin]
 
     def has_scholarship_permission(self, scholarship_type_id: int) -> bool:
         """Check if user has permission to manage a specific scholarship"""
@@ -169,10 +164,12 @@ class User(Base):
             return False
 
         # Check for active professor-student relationship with required permission
-        for relationship in self.professor_relationships:
-            if (relationship.student_id == student_id and
-                relationship.is_active and
-                relationship.has_permission(permission)):
+        for rel in self.professor_relationships:
+            if (
+                rel.student_id == student_id
+                and rel.is_active
+                and rel.has_permission(permission)
+            ):
                 return True
 
         return False
@@ -183,8 +180,7 @@ class User(Base):
             return []
 
         return [
-            rel.student_id for rel in self.professor_relationships
-            if rel.is_active and rel.has_permission(permission)
+            rel.student_id for rel in self.professor_relationships if rel.is_active and rel.has_permission(permission)
         ]
 
     def is_advisor_of(self, student_id: int) -> bool:
@@ -192,13 +188,41 @@ class User(Base):
         if not self.is_professor():
             return False
 
-        for relationship in self.professor_relationships:
-            if (relationship.student_id == student_id and
-                relationship.is_active and
-                relationship.is_advisor):
+        for rel in self.professor_relationships:
+            if rel.student_id == student_id and rel.is_active and rel.is_advisor:
                 return True
 
         return False
+
+    def has_permission(self, permission: str) -> bool:
+        """Check if user has specific permission"""
+        # Permission mapping based on user roles
+        permission_map = {
+            # Roster permissions
+            "roster_create": [UserRole.admin, UserRole.super_admin],
+            "roster_view_all": [UserRole.admin, UserRole.super_admin, UserRole.college],
+            "roster_lock": [UserRole.admin, UserRole.super_admin],
+            "roster_unlock": [UserRole.admin, UserRole.super_admin],
+            "roster_export": [UserRole.admin, UserRole.super_admin, UserRole.college],
+            "roster_download": [UserRole.admin, UserRole.super_admin, UserRole.college],
+            "roster_delete": [UserRole.super_admin],
+            "roster_audit_view": [UserRole.admin, UserRole.super_admin],
+            # Default permissions for existing functionality
+            "application_view": [
+                UserRole.student,
+                UserRole.professor,
+                UserRole.college,
+                UserRole.admin,
+                UserRole.super_admin,
+            ],
+            "application_create": [UserRole.student],
+            "application_review": [UserRole.professor, UserRole.college, UserRole.admin, UserRole.super_admin],
+            "scholarship_manage": [UserRole.college, UserRole.admin, UserRole.super_admin],
+            "user_manage": [UserRole.admin, UserRole.super_admin],
+        }
+
+        allowed_roles = permission_map.get(permission, [])
+        return self.role in allowed_roles
 
 
 class AdminScholarship(Base):

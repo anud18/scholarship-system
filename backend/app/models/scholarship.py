@@ -48,12 +48,12 @@ class ScholarshipCategory(enum.Enum):
 class ScholarshipSubType(enum.Enum):
     """Scholarship sub-type enum for combined scholarships"""
 
-    GENERAL = "general"  # 作為無子獎學金類型時的預設值
+    GENERAL = "GENERAL"  # 作為無子獎學金類型時的預設值
 
     # For PhD scholarships
-    NSTC = "nstc"  # 國科會 (National Science and Technology Council)
-    MOE_1W = "moe_1w"  # 教育部 (Ministry of Education) + 指導教授配合款一萬
-    MOE_2W = "moe_2w"  # 教育部 (Ministry of Education) + 指導教授配合款兩萬
+    NSTC = "NSTC"  # 國科會 (National Science and Technology Council)
+    MOE_1W = "MOE_1W"  # 教育部 (Ministry of Education) + 指導教授配合款一萬
+    MOE_2W = "MOE_2W"  # 教育部 (Ministry of Education) + 指導教授配合款兩萬
 
 
 class ScholarshipType(Base):
@@ -77,12 +77,16 @@ class ScholarshipType(Base):
     # 類別設定
     category = Column(String(50), nullable=False)
     sub_type_list = Column(JSON, default=[ScholarshipSubType.GENERAL.value])  # ["nstc", "moe_1w", "moe_2w"]
-    sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), default=SubTypeSelectionMode.SINGLE, nullable=False)
+    sub_type_selection_mode = Column(
+        Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]),
+        default=SubTypeSelectionMode.single,
+        nullable=False
+    )
 
     # 申請週期設定
     application_cycle = Column(
         Enum(ApplicationCycle, values_callable=lambda obj: [e.value for e in obj]),
-        default=ApplicationCycle.SEMESTER,
+        default=ApplicationCycle.semester,
         nullable=False,
     )
 
@@ -177,11 +181,11 @@ class ScholarshipType(Base):
 
     def is_valid_sub_type_selection(self, selected: List[str]) -> bool:
         """Validate sub-type selection based on selection mode"""
-        if self.sub_type_selection_mode == SubTypeSelectionMode.SINGLE:
+        if self.sub_type_selection_mode == SubTypeSelectionMode.single:
             return len(selected) == 1 and selected[0] in self.sub_type_list
-        elif self.sub_type_selection_mode == SubTypeSelectionMode.MULTIPLE:
+        elif self.sub_type_selection_mode == SubTypeSelectionMode.multiple:
             return all(s in self.sub_type_list for s in selected)
-        elif self.sub_type_selection_mode == SubTypeSelectionMode.HIERARCHICAL:
+        elif self.sub_type_selection_mode == SubTypeSelectionMode.hierarchical:
             expected = self.sub_type_list[: len(selected)]
             return selected == expected
         return False
@@ -252,18 +256,10 @@ class ScholarshipType(Base):
         """Get sub-type translations for all supported languages"""
         translations = {"zh": {}, "en": {}}
 
-        # 添加已配置的子類型
+        # 只添加已配置的子類型，所有翻譯都從資料庫撈
         for config in self.get_active_sub_type_configs():
             translations["zh"][config.sub_type_code] = config.name
             translations["en"][config.sub_type_code] = config.name_en or config.name
-
-        # 為 general 子類型添加預設翻譯（如果沒有配置）
-        if ScholarshipSubType.GENERAL.value in self.sub_type_list:
-            general_config = self.get_sub_type_config(ScholarshipSubType.GENERAL.value)
-            if not general_config:
-                # 使用預設翻譯
-                translations["zh"][ScholarshipSubType.GENERAL.value] = "一般獎學金"
-                translations["en"][ScholarshipSubType.GENERAL.value] = "General Scholarship"
 
         return translations
 
@@ -444,7 +440,7 @@ class ScholarshipRule(Base):
 
     # Academic context - rules can be specific to academic year and semester
     academic_year = Column(Integer, nullable=True, index=True)  # 民國年，如 113 表示 113 學年度
-    semester = Column(Enum(Semester), nullable=True, index=True)  # 學期，學年制可為 NULL
+    semester = Column(Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True)  # 學期，學年制可為 NULL
 
     # Rule template information
     is_template = Column(Boolean, default=False, nullable=False)  # 是否為規則模板
@@ -508,8 +504,8 @@ class ScholarshipRule(Base):
             return "通用"
         if self.semester:
             semester_label = {
-                Semester.FIRST: "第一學期",
-                Semester.SECOND: "第二學期",
+                Semester.first: "第一學期",
+                Semester.second: "第二學期",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
@@ -575,7 +571,7 @@ class ScholarshipConfiguration(Base):
 
     # 週期識別 - 作為唯一標識符
     academic_year = Column(Integer, nullable=False, index=True)  # 民國年，如 113 表示 113 學年度
-    semester = Column(Enum(Semester), nullable=True, index=True)  # 學期制獎學金需要，學年制可為 NULL
+    semester = Column(Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True)  # 學期制獎學金需要，學年制可為 NULL
 
     # 基本配置資訊
     config_name = Column(String(200), nullable=False)  # 配置名稱
@@ -586,7 +582,11 @@ class ScholarshipConfiguration(Base):
     # 配額限制配置
     has_quota_limit = Column(Boolean, default=False, nullable=False)  # 是否有配額限制
     has_college_quota = Column(Boolean, default=False, nullable=False)  # 是否有學院配額
-    quota_management_mode = Column(Enum(QuotaManagementMode), default=QuotaManagementMode.NONE, nullable=False)
+    quota_management_mode = Column(
+        Enum(QuotaManagementMode, values_callable=lambda obj: [e.value for e in obj]),
+        default=QuotaManagementMode.none,
+        nullable=False,
+    )
 
     # 配額詳細設定
     total_quota = Column(Integer, nullable=True)  # 總配額數量
@@ -670,8 +670,8 @@ class ScholarshipConfiguration(Base):
         """Get academic year label for display"""
         if self.semester:
             semester_label = {
-                Semester.FIRST: "第一學期",
-                Semester.SECOND: "第二學期",
+                Semester.first: "第一學期",
+                Semester.second: "第二學期",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
@@ -777,7 +777,7 @@ class ScholarshipConfiguration(Base):
         if not self.has_quota_limit:
             return -1  # Unlimited
 
-        if self.quota_management_mode == QuotaManagementMode.NONE:
+        if self.quota_management_mode == QuotaManagementMode.none:
             return -1  # Unlimited
 
         return self.total_quota or 0

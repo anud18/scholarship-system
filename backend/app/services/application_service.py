@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
     """Get student data from external API using user's nycu_id"""
-    if user.role != UserRole.STUDENT or not user.nycu_id:
+    if user.role != UserRole.student or not user.nycu_id:
         return None
 
     student_service = StudentService()
@@ -273,7 +273,7 @@ class ApplicationService:
         logger.debug(f"Generated app_id: {app_id}")
 
         # Determine sub_type_selection_mode from scholarship configuration
-        sub_type_selection_mode = SubTypeSelectionMode.SINGLE  # Default
+        sub_type_selection_mode = SubTypeSelectionMode.single  # Default
         if scholarship.sub_type_selection_mode:
             sub_type_selection_mode = scholarship.sub_type_selection_mode
 
@@ -630,17 +630,17 @@ class ApplicationService:
             return None
 
         # Check access permissions
-        if current_user.role == UserRole.STUDENT:
+        if current_user.role == UserRole.student:
             if application.user_id != current_user.id:
                 return None
-        elif current_user.role == UserRole.PROFESSOR:
+        elif current_user.role == UserRole.professor:
             # Check if professor has access to this student's data
             if not current_user.can_access_student_data(application.user_id, "view_applications"):
                 return None
         elif current_user.role in [
-            UserRole.COLLEGE,
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
         ]:
             # College, Admin, and Super Admin can access any application
             pass
@@ -848,9 +848,9 @@ class ApplicationService:
 
         # 檢查權限
         if current_user.role not in [
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
-            UserRole.COLLEGE,
+            UserRole.admin,
+            UserRole.super_admin,
+            UserRole.college,
         ]:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only update your own application data")
@@ -1088,7 +1088,7 @@ class ApplicationService:
             selectinload(Application.student),  # Eagerly load student to avoid N+1 queries
         )
 
-        if current_user.role == UserRole.PROFESSOR:
+        if current_user.role == UserRole.professor:
             # Filter applications to only those from accessible students
             accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
             if accessible_student_ids:
@@ -1097,9 +1097,9 @@ class ApplicationService:
                 # No accessible students, return empty result
                 return []
         elif current_user.role in [
-            UserRole.COLLEGE,
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
         ]:
             # College, Admin, and Super Admin can see all applications
             pass
@@ -1208,10 +1208,10 @@ class ApplicationService:
     ) -> ApplicationResponse:
         """Update application status (staff only)"""
         if not (
-            user.has_role(UserRole.ADMIN)
-            or user.has_role(UserRole.COLLEGE)
-            or user.has_role(UserRole.PROFESSOR)
-            or user.has_role(UserRole.SUPER_ADMIN)
+            user.has_role(UserRole.admin)
+            or user.has_role(UserRole.college)
+            or user.has_role(UserRole.professor)
+            or user.has_role(UserRole.super_admin)
         ):
             raise AuthorizationError("Staff access required")
 
@@ -1324,15 +1324,15 @@ class ApplicationService:
             raise NotFoundError("Application", str(application_id))
 
         # Check upload permissions based on role
-        if user.role == UserRole.STUDENT:
+        if user.role == UserRole.student:
             # Students can only upload to their own applications
             if application.user_id != user.id:
                 raise AuthorizationError("Cannot upload files to other students' applications")
-        elif user.role == UserRole.PROFESSOR:
+        elif user.role == UserRole.professor:
             # Professors can upload files to their students' applications
             if not user.can_access_student_data(application.user_id, "upload_documents"):
                 raise AuthorizationError("Cannot upload files - no access to this student's data")
-        elif user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        elif user.role in [UserRole.college, UserRole.admin, UserRole.super_admin]:
             # College, Admin, and Super Admin can upload to any application
             pass
         else:
@@ -1422,10 +1422,10 @@ class ApplicationService:
             selectinload(Application.student),  # Eagerly load student to avoid N+1 queries
         )
 
-        if current_user.role == UserRole.STUDENT:
+        if current_user.role == UserRole.student:
             # Students can only see their own applications
             query = query.where(Application.user_id == current_user.id)
-        elif current_user.role == UserRole.PROFESSOR:
+        elif current_user.role == UserRole.professor:
             # Filter applications to only those from accessible students
             accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
             if accessible_student_ids:
@@ -1434,9 +1434,9 @@ class ApplicationService:
                 # No accessible students, return empty result
                 return []
         elif current_user.role in [
-            UserRole.COLLEGE,
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
         ]:
             # College, Admin, and Super Admin can see all applications
             pass
@@ -1546,10 +1546,10 @@ class ApplicationService:
             raise NotFoundError("Application", application_id)
 
         # Check if user has permission to delete this application
-        if current_user.role == UserRole.STUDENT:
+        if current_user.role == UserRole.student:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only delete your own applications")
-        elif current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        elif current_user.role not in [UserRole.admin, UserRole.super_admin]:
             raise AuthorizationError("You don't have permission to delete applications")
 
         # Only draft applications can be deleted
@@ -2344,10 +2344,10 @@ class ApplicationService:
         try:
             from app.models.user import UserRole
 
-            query = select(User).where(User.role == UserRole.PROFESSOR)
+            query = select(User).where(User.role == UserRole.professor)
 
             # Filter by college for college admins
-            if user.role == UserRole.COLLEGE:
+            if user.role == UserRole.college:
                 query = query.where(User.dept_code == user.dept_code)
 
             # Add search filter
@@ -2412,12 +2412,12 @@ class ApplicationService:
                 raise NotFoundError(f"Application {application_id} not found")
 
             # Check access permissions (similar to get_application_by_id logic)
-            if assigned_by.role == UserRole.STUDENT:
+            if assigned_by.role == UserRole.student:
                 if application.user_id != assigned_by.id:
                     raise ValidationError("Access denied")
 
             # Get professor
-            stmt = select(User).where(User.nycu_id == professor_nycu_id, User.role == UserRole.PROFESSOR)
+            stmt = select(User).where(User.nycu_id == professor_nycu_id, User.role == UserRole.professor)
             result = await self.db.execute(stmt)
             professor = result.scalar_one_or_none()
 
@@ -2430,7 +2430,7 @@ class ApplicationService:
                 raise ValidationError("This scholarship does not require professor review")
 
             # Check permission for college admins
-            if assigned_by.role == UserRole.COLLEGE:
+            if assigned_by.role == UserRole.college:
                 if assigned_by.dept_code != professor.dept_code:
                     raise ValidationError("College admins can only assign professors from their own college")
 

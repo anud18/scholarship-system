@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { JSX } from 'react'
 import { X, Bug, ChevronDown, ChevronRight, Copy, CheckCircle2, Server, Cloud, Settings, Database, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
@@ -24,6 +24,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
     environment: 'unknown' as 'dev' | 'test' | 'prod' | 'unknown'
   })
   const { user, token } = useAuth()
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   // Only show in test/development mode
   const shouldShow = isTestMode || process.env.NODE_ENV === 'development' ||
@@ -31,6 +32,35 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
       window.location.hostname === '140.113.7.148' ||
       window.location.hostname === 'localhost'
     ))
+
+  // Handle modal focus management and escape key
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+      }
+    }
+
+    // Focus the dialog when it opens
+    if (dialogRef.current) {
+      dialogRef.current.focus()
+    }
+
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden'
+
+    // Add keydown listener
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      // Restore body scroll
+      document.body.style.overflow = ''
+      // Remove keydown listener
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
 
   // Helper functions to detect data sources
   const detectEnvironment = (): 'dev' | 'test' | 'prod' | 'unknown' => {
@@ -406,16 +436,27 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
       {/* Debug Panel */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setIsOpen(false)}>
+        <div
+          ref={dialogRef}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setIsOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="debug-panel-title"
+          tabIndex={-1}
+        >
           <div
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
             className="bg-white rounded-lg shadow-xl w-[90%] max-w-4xl h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
+            role="document"
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b bg-gray-50">
               <div className="flex items-center gap-2">
                 <Bug className="w-5 h-5 text-orange-500" />
-                <h2 className="text-lg font-semibold">Debug Panel - API Data Inspector</h2>
+                <h2 id="debug-panel-title" className="text-lg font-semibold">Debug Panel - API Data Inspector</h2>
                 <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
                   {isTestMode ? 'TEST MODE' : 'DEV MODE'}
                 </span>

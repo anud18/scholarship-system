@@ -64,7 +64,7 @@ class ScholarshipConfigurationService:
         self, config: ScholarshipConfiguration, college_code: Optional[str] = None
     ) -> Tuple[bool, Dict[str, Any]]:
         """Check if quota is available for application"""
-        if config.quota_management_mode == QuotaManagementMode.NONE:
+        if config.quota_management_mode == QuotaManagementMode.none:
             return True, {"unlimited": True}
 
         # Get current approved applications
@@ -432,11 +432,11 @@ class ScholarshipConfigurationService:
             if semester == "first":
                 from app.models.enums import Semester
 
-                stmt = stmt.where(ScholarshipConfiguration.semester == Semester.FIRST)
+                stmt = stmt.where(ScholarshipConfiguration.semester == Semester.first)
             elif semester == "second":
                 from app.models.enums import Semester
 
-                stmt = stmt.where(ScholarshipConfiguration.semester == Semester.SECOND)
+                stmt = stmt.where(ScholarshipConfiguration.semester == Semester.second)
 
         stmt = stmt.where(ScholarshipConfiguration.is_active.is_(is_active))
         stmt = stmt.order_by(

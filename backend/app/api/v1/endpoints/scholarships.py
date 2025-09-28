@@ -39,9 +39,9 @@ async def get_all_scholarships(
         # Convert semester string to enum for configuration lookup
         semester_enum = None
         if display_semester == "first":
-            semester_enum = Semester.FIRST
+            semester_enum = Semester.first
         elif display_semester == "second":
-            semester_enum = Semester.SECOND
+            semester_enum = Semester.second
 
         # Get active configuration for this scholarship and academic year
         # For yearly scholarships, look for configurations with semester = None

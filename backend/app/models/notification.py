@@ -16,74 +16,74 @@ from app.db.base_class import Base
 class NotificationChannel(enum.Enum):
     """Notification delivery channels"""
 
-    IN_APP = "IN_APP"
-    EMAIL = "EMAIL"
-    SMS = "SMS"
-    PUSH = "PUSH"
+    IN_APP = "in_app"
+    EMAIL = "email"
+    SMS = "sms"
+    PUSH = "push"
 
 
 class NotificationType(enum.Enum):
     """Enhanced notification types for scholarship platform"""
 
     # Legacy types (maintain backward compatibility)
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ERROR = "ERROR"
-    SUCCESS = "SUCCESS"
-    REMINDER = "REMINDER"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    SUCCESS = "success"
+    REMINDER = "reminder"
 
     # Application lifecycle
-    APPLICATION_SUBMITTED = "APPLICATION_SUBMITTED"
-    APPLICATION_APPROVED = "APPLICATION_APPROVED"
-    APPLICATION_REJECTED = "APPLICATION_REJECTED"
-    APPLICATION_REQUIRES_REVIEW = "APPLICATION_REQUIRES_REVIEW"
-    APPLICATION_UNDER_REVIEW = "APPLICATION_UNDER_REVIEW"
+    APPLICATION_SUBMITTED = "application_submitted"
+    APPLICATION_APPROVED = "application_approved"
+    APPLICATION_REJECTED = "application_rejected"
+    APPLICATION_REQUIRES_REVIEW = "application_requires_review"
+    APPLICATION_UNDER_REVIEW = "application_under_review"
 
     # Document management
-    DOCUMENT_REQUIRED = "DOCUMENT_REQUIRED"
-    DOCUMENT_APPROVED = "DOCUMENT_APPROVED"
-    DOCUMENT_REJECTED = "DOCUMENT_REJECTED"
+    DOCUMENT_REQUIRED = "document_required"
+    DOCUMENT_APPROVED = "document_approved"
+    DOCUMENT_REJECTED = "document_rejected"
 
     # Deadlines and reminders
-    DEADLINE_APPROACHING = "DEADLINE_APPROACHING"
-    DEADLINE_EXTENDED = "DEADLINE_EXTENDED"
-    REVIEW_DEADLINE = "REVIEW_DEADLINE"
-    APPLICATION_DEADLINE = "APPLICATION_DEADLINE"
+    DEADLINE_APPROACHING = "deadline_approaching"
+    DEADLINE_EXTENDED = "deadline_extended"
+    REVIEW_DEADLINE = "review_deadline"
+    APPLICATION_DEADLINE = "application_deadline"
 
     # New opportunities
-    NEW_SCHOLARSHIP_AVAILABLE = "NEW_SCHOLARSHIP_AVAILABLE"
-    MATCHING_SCHOLARSHIP = "MATCHING_SCHOLARSHIP"
-    SCHOLARSHIP_OPENING_SOON = "SCHOLARSHIP_OPENING_SOON"
+    NEW_SCHOLARSHIP_AVAILABLE = "new_scholarship_available"
+    MATCHING_SCHOLARSHIP = "matching_scholarship"
+    SCHOLARSHIP_OPENING_SOON = "scholarship_opening_soon"
 
     # Review process
-    PROFESSOR_REVIEW_REQUESTED = "PROFESSOR_REVIEW_REQUESTED"
-    PROFESSOR_REVIEW_COMPLETED = "PROFESSOR_REVIEW_COMPLETED"
-    PROFESSOR_ASSIGNMENT = "PROFESSOR_ASSIGNMENT"
-    ADMIN_REVIEW_REQUESTED = "ADMIN_REVIEW_REQUESTED"
+    PROFESSOR_REVIEW_REQUESTED = "professor_review_requested"
+    PROFESSOR_REVIEW_COMPLETED = "professor_review_completed"
+    PROFESSOR_ASSIGNMENT = "professor_assignment"
+    ADMIN_REVIEW_REQUESTED = "admin_review_requested"
 
     # System and admin
-    SYSTEM_MAINTENANCE = "SYSTEM_MAINTENANCE"
-    ADMIN_MESSAGE = "ADMIN_MESSAGE"
-    ACCOUNT_UPDATE = "ACCOUNT_UPDATE"
-    SECURITY_ALERT = "SECURITY_ALERT"
+    SYSTEM_MAINTENANCE = "system_maintenance"
+    ADMIN_MESSAGE = "admin_message"
+    ACCOUNT_UPDATE = "account_update"
+    SECURITY_ALERT = "security_alert"
 
 
 class NotificationPriority(enum.Enum):
     """Enhanced notification priority levels"""
 
-    CRITICAL = "CRITICAL"  # System alerts, security issues
-    HIGH = "HIGH"  # Application approvals/rejections
-    NORMAL = "NORMAL"  # Status updates, deadlines
-    LOW = "LOW"  # General announcements
+    CRITICAL = "critical"  # System alerts, security issues
+    HIGH = "high"  # Application approvals/rejections
+    NORMAL = "normal"  # Status updates, deadlines
+    LOW = "low"  # General announcements
 
 
 class NotificationFrequency(enum.Enum):
     """Notification delivery frequency"""
 
-    IMMEDIATE = "IMMEDIATE"
-    DAILY = "DAILY"
-    WEEKLY = "WEEKLY"
-    DISABLED = "DISABLED"
+    IMMEDIATE = "immediate"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    DISABLED = "disabled"
 
 
 class Notification(Base):
@@ -117,7 +117,7 @@ class Notification(Base):
     )
 
     # Delivery channel
-    channel = Column(Enum(NotificationChannel), default=NotificationChannel.IN_APP, nullable=False)
+    channel = Column(Enum(NotificationChannel, values_callable=lambda obj: [e.value for e in obj]), default=NotificationChannel.IN_APP, nullable=False)
 
     # Enhanced metadata and context
     data = Column(JSON, default={})  # Facebook-style flexible data storage
@@ -300,7 +300,7 @@ class NotificationPreference(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    notification_type = Column(Enum(NotificationType), nullable=False)
+    notification_type = Column(Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
 
     # Channel preferences
     in_app_enabled = Column(Boolean, default=True, nullable=False)
@@ -371,7 +371,7 @@ class NotificationTemplate(Base):
     __tablename__ = "notification_templates"
 
     id = Column(Integer, primary_key=True, index=True)
-    type = Column(Enum(NotificationType), unique=True, nullable=False)
+    type = Column(Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]), unique=True, nullable=False)
 
     # Template content
     title_template = Column(String(255), nullable=False)
@@ -382,7 +382,7 @@ class NotificationTemplate(Base):
 
     # Default settings
     default_channels = Column(JSON, default=["in_app"])  # Default delivery channels
-    default_priority = Column(Enum(NotificationPriority), default=NotificationPriority.NORMAL)
+    default_priority = Column(Enum(NotificationPriority, values_callable=lambda obj: [e.value for e in obj]), default=NotificationPriority.NORMAL)
 
     # Template variables documentation
     variables = Column(JSON, default={})  # Available template variables and their descriptions
@@ -431,8 +431,8 @@ class NotificationQueue(Base):
 
     # Queue metadata
     batch_id = Column(String(50), nullable=False, index=True)
-    notification_type = Column(Enum(NotificationType), nullable=False)
-    priority = Column(Enum(NotificationPriority), default=NotificationPriority.NORMAL)
+    notification_type = Column(Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    priority = Column(Enum(NotificationPriority, values_callable=lambda obj: [e.value for e in obj]), default=NotificationPriority.NORMAL)
 
     # Content
     notifications_data = Column(JSON, nullable=False)  # Array of notification data

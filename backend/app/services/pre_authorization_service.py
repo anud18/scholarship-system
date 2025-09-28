@@ -42,8 +42,8 @@ class PreAuthorizationService:
             nycu_id=nycu_id,
             name=f"Pre-authorized {role.value.title()}",  # Placeholder name
             email=f"{nycu_id}@nycu.edu.tw",  # Placeholder email
-            user_type=UserType.EMPLOYEE if role != UserRole.STUDENT else UserType.STUDENT,
-            status=EmployeeStatus.ACTIVE,
+            user_type=UserType.employee if role != UserRole.student else UserType.student,
+            status=EmployeeStatus.active,
             role=role,
             comment=comment or f"Pre-authorized by {assigned_by}",
         )
@@ -167,30 +167,30 @@ class PreAuthorizationService:
         user_type = portal_data.get("userType")
 
         if user_type == "student":
-            return UserRole.STUDENT
+            return UserRole.student
         else:
             # All employees default to professor
-            return UserRole.PROFESSOR
+            return UserRole.professor
 
     def _map_user_type(self, portal_user_type: Optional[str]) -> UserType:
         """Map portal userType to internal UserType enum"""
         if portal_user_type == "student":
-            return UserType.STUDENT
+            return UserType.student
         elif portal_user_type == "employee":
-            return UserType.EMPLOYEE
-        return UserType.EMPLOYEE  # Default to employee
+            return UserType.employee
+        return UserType.employee  # Default to employee
 
     def _map_employee_status(self, portal_status: Optional[str]) -> EmployeeStatus:
         """Map portal employeestatus to internal EmployeeStatus enum"""
         if portal_status == "在職":
-            return EmployeeStatus.ACTIVE
+            return EmployeeStatus.active
         elif portal_status == "退休":
-            return EmployeeStatus.RETIRED
+            return EmployeeStatus.retired
         elif portal_status == "在學":
-            return EmployeeStatus.STUDENT
+            return EmployeeStatus.student
         elif portal_status == "畢業":
-            return EmployeeStatus.GRADUATED
-        return EmployeeStatus.ACTIVE  # Default to active
+            return EmployeeStatus.graduated
+        return EmployeeStatus.active  # Default to active
 
     async def _can_assign_role(self, assigned_by: str, role: UserRole) -> bool:
         """Check if user can assign the specified role"""
@@ -203,8 +203,8 @@ class PreAuthorizationService:
             return True
 
         # Admin can assign college and professor roles
-        if assigner.role == UserRole.ADMIN:
-            return role in [UserRole.COLLEGE, UserRole.PROFESSOR]
+        if assigner.role == UserRole.admin:
+            return role in [UserRole.college, UserRole.professor]
 
         return False
 
@@ -216,11 +216,11 @@ class PreAuthorizationService:
 
         # Super admin can assign to any admin
         if assigner.is_super_admin():
-            return admin.role in [UserRole.ADMIN, UserRole.COLLEGE]
+            return admin.role in [UserRole.admin, UserRole.college]
 
         # Admin can assign to college users
-        if assigner.role == UserRole.ADMIN:
-            return admin.role == UserRole.COLLEGE
+        if assigner.role == UserRole.admin:
+            return admin.role == UserRole.college
 
         return False
 

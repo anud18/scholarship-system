@@ -15,35 +15,35 @@ from app.db.base_class import Base
 class EmailStatus(enum.Enum):
     """Email status enum"""
 
-    SENT = "SENT"
-    FAILED = "FAILED"
-    BOUNCED = "BOUNCED"
-    PENDING = "PENDING"
+    SENT = "sent"
+    FAILED = "failed"
+    BOUNCED = "bounced"
+    PENDING = "pending"
 
 
 class ScheduleStatus(enum.Enum):
     """Schedule status enum"""
 
-    PENDING = "PENDING"
-    SENT = "SENT"
-    CANCELLED = "CANCELLED"
-    FAILED = "FAILED"
+    PENDING = "pending"
+    SENT = "sent"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
 
 
 class EmailCategory(enum.Enum):
     """Email category enum for different notification types"""
 
-    APPLICATION_WHITELIST = "APPLICATION_WHITELIST"  # 申請通知－白名單
-    APPLICATION_STUDENT = "APPLICATION_STUDENT"  # 申請通知－申請者
-    RECOMMENDATION_PROFESSOR = "RECOMMENDATION_PROFESSOR"  # 推薦通知－指導教授
-    REVIEW_COLLEGE = "REVIEW_COLLEGE"  # 審核通知－學院
-    SUPPLEMENT_STUDENT = "SUPPLEMENT_STUDENT"  # 補件通知－申請者
-    RESULT_PROFESSOR = "RESULT_PROFESSOR"  # 結果通知－指導教授
-    RESULT_COLLEGE = "RESULT_COLLEGE"  # 結果通知－學院
-    RESULT_STUDENT = "RESULT_STUDENT"  # 結果通知－申請者
-    ROSTER_STUDENT = "ROSTER_STUDENT"  # 造冊通知－申請者
-    SYSTEM = "SYSTEM"  # 系統通知
-    OTHER = "OTHER"  # 其他
+    APPLICATION_WHITELIST = "application_whitelist"  # 申請通知－白名單
+    APPLICATION_STUDENT = "application_student"  # 申請通知－申請者
+    RECOMMENDATION_PROFESSOR = "recommendation_professor"  # 推薦通知－指導教授
+    REVIEW_COLLEGE = "review_college"  # 審核通知－學院
+    SUPPLEMENT_STUDENT = "supplement_student"  # 補件通知－申請者
+    RESULT_PROFESSOR = "result_professor"  # 結果通知－指導教授
+    RESULT_COLLEGE = "result_college"  # 結果通知－學院
+    RESULT_STUDENT = "result_student"  # 結果通知－申請者
+    ROSTER_STUDENT = "roster_student"  # 造冊通知－申請者
+    SYSTEM = "system"  # 系統通知
+    OTHER = "other"  # 其他
 
 
 class EmailHistory(Base):
@@ -62,7 +62,7 @@ class EmailHistory(Base):
 
     # Template and categorization
     template_key = Column(String(100), ForeignKey("email_templates.key"), nullable=True)
-    email_category = Column(Enum(EmailCategory), nullable=True, index=True)
+    email_category = Column(Enum(EmailCategory, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True)
 
     # Related entities (for permission filtering)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
@@ -73,7 +73,7 @@ class EmailHistory(Base):
     sent_by_system = Column(Boolean, default=True, nullable=False)  # True for system auto, False for manual
 
     # Status tracking
-    status = Column(Enum(EmailStatus), default=EmailStatus.SENT, nullable=False, index=True)
+    status = Column(Enum(EmailStatus, values_callable=lambda obj: [e.value for e in obj]), default=EmailStatus.SENT, nullable=False, index=True)
     error_message = Column(Text)
     sent_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
@@ -115,11 +115,11 @@ class ScheduledEmail(Base):
 
     # Template and categorization
     template_key = Column(String(100), ForeignKey("email_templates.key"), nullable=True)
-    email_category = Column(Enum(EmailCategory), nullable=True)
+    email_category = Column(Enum(EmailCategory, values_callable=lambda obj: [e.value for e in obj]), nullable=True)
 
     # Scheduling information
     scheduled_for = Column(DateTime(timezone=True), nullable=False, index=True)
-    status = Column(Enum(ScheduleStatus), default=ScheduleStatus.PENDING, nullable=False, index=True)
+    status = Column(Enum(ScheduleStatus, values_callable=lambda obj: [e.value for e in obj]), default=ScheduleStatus.PENDING, nullable=False, index=True)
 
     # Related entities (for permission filtering)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
