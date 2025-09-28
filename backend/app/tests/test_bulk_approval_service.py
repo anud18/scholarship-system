@@ -3,7 +3,6 @@ Comprehensive tests for BulkApprovalService
 Target: 0% → 80% coverage
 """
 
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -91,7 +90,7 @@ class TestBulkApprovalServiceApprove:
             "send_status_change_notification",
             return_value=True,
         ):
-            results = await service.bulk_approve_applications(
+            await service.bulk_approve_applications(
                 application_ids=[1],
                 approver_user_id=2,
                 approval_notes="Excellent application",
@@ -327,42 +326,42 @@ class TestBulkApprovalServiceCriteria:
     def test_meets_approval_criteria_gpa(self, service, mock_application):
         """Test GPA criteria check"""
         criteria = {"min_gpa": 3.0}
-        assert service._meets_approval_criteria(mock_application, criteria) == True
+        assert service._meets_approval_criteria(mock_application, criteria)
 
         criteria = {"min_gpa": 3.8}
-        assert service._meets_approval_criteria(mock_application, criteria) == False
+        assert not service._meets_approval_criteria(mock_application, criteria)
 
     def test_meets_approval_criteria_ranking(self, service, mock_application):
         """Test ranking criteria check"""
         criteria = {"max_ranking": 20.0}
-        assert service._meets_approval_criteria(mock_application, criteria) == True
+        assert service._meets_approval_criteria(mock_application, criteria)
 
         criteria = {"max_ranking": 10.0}
-        assert service._meets_approval_criteria(mock_application, criteria) == False
+        assert not service._meets_approval_criteria(mock_application, criteria)
 
     def test_meets_approval_criteria_renewal(self, service, mock_application):
         """Test renewal criteria check"""
         criteria = {"require_renewal": True}
-        assert service._meets_approval_criteria(mock_application, criteria) == True
+        assert service._meets_approval_criteria(mock_application, criteria)
 
         mock_application.is_renewal = False
-        assert service._meets_approval_criteria(mock_application, criteria) == False
+        assert not service._meets_approval_criteria(mock_application, criteria)
 
     def test_meets_approval_criteria_priority_score(self, service, mock_application):
         """Test priority score criteria check"""
         criteria = {"min_priority_score": 80}
-        assert service._meets_approval_criteria(mock_application, criteria) == True
+        assert service._meets_approval_criteria(mock_application, criteria)
 
         criteria = {"min_priority_score": 90}
-        assert service._meets_approval_criteria(mock_application, criteria) == False
+        assert not service._meets_approval_criteria(mock_application, criteria)
 
     def test_meets_approval_criteria_multiple(self, service, mock_application):
         """Test multiple criteria check"""
         criteria = {"min_gpa": 3.0, "max_ranking": 20.0, "min_priority_score": 80}
-        assert service._meets_approval_criteria(mock_application, criteria) == True
+        assert service._meets_approval_criteria(mock_application, criteria)
 
         criteria = {"min_gpa": 3.8, "max_ranking": 20.0}
-        assert service._meets_approval_criteria(mock_application, criteria) == False
+        assert not service._meets_approval_criteria(mock_application, criteria)
 
     def test_meets_approval_criteria_error_handling(self, service, mock_application):
         """Test criteria check with None values"""
@@ -370,4 +369,4 @@ class TestBulkApprovalServiceCriteria:
         criteria = {"min_gpa": 3.0}
 
         result = service._meets_approval_criteria(mock_application, criteria)
-        assert result == True
+        assert result

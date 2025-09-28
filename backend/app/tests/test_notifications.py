@@ -26,7 +26,7 @@ class TestNotificationService:
             username="testuser",
             hashed_password="hashed_password",
             full_name="Test User",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
         db_session.add(user)
         await db_session.commit()
@@ -89,7 +89,7 @@ class TestNotificationService:
             username="student",
             hashed_password="hashed_password",
             full_name="Student User",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
         db_session.add(user)
         await db_session.commit()
@@ -125,7 +125,7 @@ class TestNotificationAPI:
             username="user",
             hashed_password="hashed_password",
             full_name="Test User",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
         db_session.add(user)
         await db_session.commit()
@@ -210,7 +210,7 @@ class TestNotificationAPI:
             select(Notification)
             .where(
                 Notification.user_id == test_user_with_notifications.id,
-                Notification.is_read == False,
+                not Notification.is_read,
             )
             .limit(1)
         )
@@ -266,14 +266,14 @@ class TestNotificationIntegration:
             username="student",
             hashed_password="hashed_password",
             full_name="Student User",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
         admin = User(
             email="admin@example.com",
             username="admin",
             hashed_password="hashed_password",
             full_name="Admin User",
-            role=UserRole.ADMIN,
+            role=UserRole.admin,
         )
 
         db_session.add_all([student, admin])

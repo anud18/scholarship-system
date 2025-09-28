@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+from typing import Any, Dict, List
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,7 +82,7 @@ async def seed_test_users(session: AsyncSession):
     print("👥 Creating/updating test users...")
 
     # 測試用戶數據
-    test_users_data = [
+    test_users_data: List[Dict[str, Any]] = [
         {
             "nycu_id": "admin",
             "name": "系統管理員",
@@ -230,8 +231,9 @@ async def seed_test_users(session: AsyncSession):
         await session.execute(
             text(
                 """
-            INSERT INTO users (nycu_id, name, email, user_type, status, dept_code, dept_name, role)
-            VALUES (:nycu_id, :name, :email, :user_type, :status, :dept_code, :dept_name, :role)
+            INSERT INTO users (nycu_id, name, email, user_type, status, dept_code, dept_name,
+                               role, created_at, updated_at)
+            VALUES (:nycu_id, :name, :email, :user_type, :status, :dept_code, :dept_name, :role, NOW(), NOW())
             ON CONFLICT (nycu_id) DO UPDATE
             SET name = EXCLUDED.name,
                 email = EXCLUDED.email,
@@ -239,7 +241,8 @@ async def seed_test_users(session: AsyncSession):
                 status = EXCLUDED.status,
                 dept_code = EXCLUDED.dept_code,
                 dept_name = EXCLUDED.dept_name,
-                role = EXCLUDED.role
+                role = EXCLUDED.role,
+                updated_at = NOW()
         """
             ),
             {
@@ -258,6 +261,85 @@ async def seed_test_users(session: AsyncSession):
     print(f"  ✓ {len(test_users_data)} test users created/updated")
 
 
+async def seed_professor_student_relationships(session: AsyncSession):
+    """Create test professor-student relationships"""
+    print("🔗 Creating professor-student relationships...")
+
+    # Get professor and student IDs
+    professor_result = await session.execute(
+        text("SELECT id FROM users WHERE nycu_id = 'professor'")
+    )
+    professor_id = professor_result.scalar()
+
+    student_phd_result = await session.execute(
+        text("SELECT id FROM users WHERE nycu_id = 'stu_phd'")
+    )
+    student_phd_id = student_phd_result.scalar()
+
+    student_under_result = await session.execute(
+        text("SELECT id FROM users WHERE nycu_id = 'stu_under'")
+    )
+    student_under_id = student_under_result.scalar()
+
+    if not all([professor_id, student_phd_id, student_under_id]):
+        print("  ❌ Could not find required users for relationships")
+        return
+
+    # Create relationships
+    relationships = [
+        {
+            "professor_id": professor_id,
+            "student_id": student_phd_id,
+            "relationship_type": "advisor",
+            "department": "資訊工程學系",
+            "academic_year": 113,
+            "semester": "first",
+            "is_active": True,
+            "can_view_applications": True,
+            "can_upload_documents": True,
+            "can_review_applications": True,
+            "notes": "PhD advisor relationship"
+        },
+        {
+            "professor_id": professor_id,
+            "student_id": student_under_id,
+            "relationship_type": "supervisor",
+            "department": "資訊工程學系",
+            "academic_year": 113,
+            "semester": "first",
+            "is_active": True,
+            "can_view_applications": True,
+            "can_upload_documents": False,
+            "can_review_applications": False,
+            "notes": "Undergraduate project supervisor"
+        }
+    ]
+
+    for rel_data in relationships:
+        await session.execute(
+            text("""
+                INSERT INTO professor_student_relationships
+                (professor_id, student_id, relationship_type, department, academic_year,
+                 semester, is_active, can_view_applications, can_upload_documents,
+                 can_review_applications, created_at, updated_at, notes)
+                VALUES (:professor_id, :student_id, :relationship_type, :department,
+                        :academic_year, :semester, :is_active, :can_view_applications,
+                        :can_upload_documents, :can_review_applications, NOW(), NOW(), :notes)
+                ON CONFLICT (professor_id, student_id, relationship_type)
+                DO UPDATE SET
+                    is_active = EXCLUDED.is_active,
+                    can_view_applications = EXCLUDED.can_view_applications,
+                    can_upload_documents = EXCLUDED.can_upload_documents,
+                    can_review_applications = EXCLUDED.can_review_applications,
+                    updated_at = NOW()
+            """),
+            rel_data
+        )
+
+    await session.commit()
+    print(f"  ✓ {len(relationships)} professor-student relationships created/updated")
+
+
 async def seed_admin_user(session: AsyncSession):
     """
     建立或更新第一個 admin 用戶（production 環境）
@@ -271,12 +353,15 @@ async def seed_admin_user(session: AsyncSession):
     await session.execute(
         text(
             """
-        INSERT INTO users (nycu_id, name, email, user_type, status, role)
-        VALUES (:nycu_id, :name, :email, 'employee', '在職', 'admin')
+        INSERT INTO users (nycu_id, name, email, user_type, status, role, created_at, updated_at)
+        VALUES (:nycu_id, :name, :email, 'EMPLOYEE', 'ACTIVE', 'ADMIN', NOW(), NOW())
         ON CONFLICT (nycu_id) DO UPDATE
-        SET role = 'admin',
+        SET role = 'ADMIN',
             email = EXCLUDED.email,
-            name = EXCLUDED.name
+            name = EXCLUDED.name,
+            user_type = 'EMPLOYEE',
+            status = 'ACTIVE',
+            updated_at = NOW()
     """
         ),
         {"nycu_id": admin_email.split("@")[0], "name": "System Administrator", "email": admin_email},
@@ -413,6 +498,7 @@ async def seed_application_fields(session: AsyncSession):
             "max_length": 200,
             "display_order": 2,
             "is_active": True,
+            "help_text": "請填寫您的研究題目",
             "created_by": admin_id,
             "updated_by": admin_id,
         },
@@ -468,6 +554,9 @@ async def seed_development():
 
             # 2. Test users
             await seed_test_users(session)
+
+            # 2.1. Professor-student relationships
+            await seed_professor_student_relationships(session)
 
             # 3. Scholarships
             await seed_scholarships(session)

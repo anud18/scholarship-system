@@ -14,27 +14,38 @@ from app.db.base_class import Base
 class UserRole(enum.Enum):
     """User role enum"""
 
-    STUDENT = "student"
-    PROFESSOR = "professor"
-    COLLEGE = "college"
-    ADMIN = "admin"
-    SUPER_ADMIN = "super_admin"
+    STUDENT = "STUDENT"
+    PROFESSOR = "PROFESSOR"
+    COLLEGE = "COLLEGE"
+    ADMIN = "ADMIN"
+    SUPER_ADMIN = "SUPER_ADMIN"
 
 
 class UserType(enum.Enum):
     """Portal user type enum"""
 
-    STUDENT = "student"
-    EMPLOYEE = "employee"
+    STUDENT = "STUDENT"
+    EMPLOYEE = "EMPLOYEE"
 
 
 class EmployeeStatus(enum.Enum):
     """Employee status enum"""
 
-    ACTIVE = "在職"
-    RETIRED = "退休"
-    STUDENT = "在學"
-    GRADUATED = "畢業"
+    ACTIVE = "ACTIVE"
+    RETIRED = "RETIRED"
+    STUDENT = "STUDENT"
+    GRADUATED = "GRADUATED"
+
+    @property
+    def display_name(self) -> str:
+        """Get Chinese display name for status"""
+        display_names = {
+            "ACTIVE": "在職",
+            "RETIRED": "退休",
+            "STUDENT": "在學",
+            "GRADUATED": "畢業",
+        }
+        return display_names.get(self.value, self.value)
 
 
 class User(Base):
@@ -68,11 +79,25 @@ class User(Base):
     # Relationships
     applications = relationship("Application", foreign_keys="[Application.user_id]", back_populates="student")
     reviews = relationship("ApplicationReview", back_populates="reviewer")
-    # college_reviews = relationship("CollegeReview", foreign_keys="[CollegeReview.reviewer_id]", back_populates="reviewer")  # Temporarily commented for testing
+    college_reviews = relationship("CollegeReview",
+                                   foreign_keys="[CollegeReview.reviewer_id]",
+                                   back_populates="reviewer")
     notifications = relationship("Notification", back_populates="user")
     notification_reads = relationship("NotificationRead", back_populates="user")
     audit_logs = relationship("AuditLog", back_populates="user")
     admin_scholarships = relationship("AdminScholarship", back_populates="admin")
+
+    # Professor-Student relationships
+    professor_relationships = relationship(
+        "ProfessorStudentRelationship",
+        foreign_keys="[ProfessorStudentRelationship.professor_id]",
+        lazy="select"
+    )
+    student_relationships = relationship(
+        "ProfessorStudentRelationship",
+        foreign_keys="[ProfessorStudentRelationship.student_id]",
+        lazy="select"
+    )
 
     def __repr__(self):
         return f"<User(id={self.id}, nycu_id={self.nycu_id}, role={self.role.value})>"
@@ -136,6 +161,43 @@ class User(Base):
             )
 
         # Other roles don't have scholarship management permissions
+        return False
+
+    def can_access_student_data(self, student_id: int, permission: str = "view_applications") -> bool:
+        """Check if this professor can access a specific student's data"""
+        if not self.is_professor():
+            return False
+
+        # Check for active professor-student relationship with required permission
+        for relationship in self.professor_relationships:
+            if (relationship.student_id == student_id and
+                relationship.is_active and
+                relationship.has_permission(permission)):
+                return True
+
+        return False
+
+    def get_accessible_student_ids(self, permission: str = "view_applications") -> list[int]:
+        """Get list of student IDs this professor can access"""
+        if not self.is_professor():
+            return []
+
+        return [
+            rel.student_id for rel in self.professor_relationships
+            if rel.is_active and rel.has_permission(permission)
+        ]
+
+    def is_advisor_of(self, student_id: int) -> bool:
+        """Check if this professor is an advisor of the specified student"""
+        if not self.is_professor():
+            return False
+
+        for relationship in self.professor_relationships:
+            if (relationship.student_id == student_id and
+                relationship.is_active and
+                relationship.is_advisor):
+                return True
+
         return False
 
 

@@ -22,7 +22,7 @@ os.environ["PYTEST_CURRENT_TEST"] = "true"
 TEST_DATABASE_URL = "sqlite:///:memory:"
 TEST_DATABASE_URL_ASYNC = "sqlite+aiosqlite:///:memory:"
 
-from app.core.config import settings
+from app.core.config import settings  # noqa: E402
 
 settings.database_url_sync = TEST_DATABASE_URL
 settings.database_url = TEST_DATABASE_URL_ASYNC  # Set async URL early too
@@ -30,12 +30,12 @@ settings.database_url = TEST_DATABASE_URL_ASYNC  # Set async URL early too
 # Now import models (they will use SQLite-compatible JSON type)
 # Note: Password functions removed since system uses SSO authentication
 # from app.core.security import get_password_hash
-from app.db.base_class import Base  # Use the correct Base class that models use
-from app.db.deps import get_db
-from app.main import app
-from app.models.application import Application, ApplicationStatus
-from app.models.scholarship import ScholarshipType
-from app.models.user import User, UserRole, UserType
+from app.db.base_class import Base  # Use the correct Base class that models use  # noqa: E402
+from app.db.deps import get_db  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models.application import Application, ApplicationStatus  # noqa: E402
+from app.models.scholarship import ScholarshipType  # noqa: E402
+from app.models.user import User, UserRole, UserType  # noqa: E402
 
 # Create test engines - use sync only for service tests
 test_engine_sync = create_engine(
@@ -223,15 +223,7 @@ async def authenticated_client(client: AsyncClient, test_user: User) -> AsyncCli
 @pytest_asyncio.fixture
 async def admin_client(client: AsyncClient, test_admin: User) -> AsyncClient:
     """Create an authenticated admin client."""
-    login_data = {
-        "username": test_admin.email,
-        "password": "adminpassword123",
-    }
-    response = await client.post("/api/v1/auth/login", data=login_data)
-    assert response.status_code == 200
-    token = response.json()["access_token"]
-
-    client.headers.update({"Authorization": f"Bearer {token}"})
+    client.headers.update({"Authorization": "Bearer test-admin-token"})
     return client
 
 

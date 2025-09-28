@@ -10,13 +10,12 @@ import pytest
 
 from app.core.exceptions import AuthorizationError, ConflictError, ValidationError
 from app.models.application import Application, ApplicationStatus
-from app.models.enums import QuotaManagementMode, Semester, SubTypeSelectionMode
-from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.enums import QuotaManagementMode, Semester
+from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import User, UserRole
 from app.schemas.application import ApplicationCreate, ApplicationFormData
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
-from app.services.college_review_service import CollegeReviewService
 
 
 @pytest.mark.integration
@@ -32,7 +31,7 @@ class TestCriticalApplicationWorkflow:
             config_code="TEST_CONFIG_001",
             config_name="Test Configuration",
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             amount=50000,
             is_active=True,
             effective_start_date=datetime.now(timezone.utc) - timedelta(days=1),
@@ -41,7 +40,7 @@ class TestCriticalApplicationWorkflow:
             application_end_date=datetime.now(timezone.utc) + timedelta(days=30),
             has_quota_limit=True,
             total_quota=100,
-            quota_management_mode=QuotaManagementMode.SIMPLE,
+            quota_management_mode=QuotaManagementMode.simple,
         )
         db.add(config)
         await db.commit()
@@ -167,7 +166,7 @@ class TestCriticalAuthorizationPaths:
             name="Other User",
             email="other@university.edu",
             user_type="student",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
         db.add(other_user)
         await db.commit()
@@ -257,14 +256,14 @@ class TestCriticalBusinessLogic:
             config_code="QUOTA_TEST",
             config_name="Quota Test Configuration",
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             amount=50000,
             is_active=True,
             effective_start_date=datetime.now(timezone.utc),
             effective_end_date=datetime.now(timezone.utc) + timedelta(days=30),
             has_quota_limit=True,
             total_quota=2,  # Only 2 spots
-            quota_management_mode=QuotaManagementMode.SIMPLE,
+            quota_management_mode=QuotaManagementMode.simple,
         )
         db.add(config)
         await db.commit()
@@ -277,7 +276,7 @@ class TestCriticalBusinessLogic:
                 name=f"Student {i}",
                 email=f"student{i}@university.edu",
                 user_type="student",
-                role=UserRole.STUDENT,
+                role=UserRole.student,
             )
             db.add(user)
             await db.commit()
@@ -390,7 +389,7 @@ class TestCriticalDataIntegrity:
             scholarship_type_id=test_scholarship.id,
             config_code="UNIQUE_TEST",
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             is_active=True,
             effective_date_start=datetime.now(timezone.utc),
             effective_date_end=datetime.now(timezone.utc) + timedelta(days=30),
@@ -403,7 +402,7 @@ class TestCriticalDataIntegrity:
             scholarship_type_id=test_scholarship.id,
             config_code="UNIQUE_TEST",  # Same code
             academic_year=113,
-            semester=Semester.SECOND,
+            semester=Semester.second,
             is_active=True,
             effective_date_start=datetime.now(timezone.utc),
             effective_date_end=datetime.now(timezone.utc) + timedelta(days=30),

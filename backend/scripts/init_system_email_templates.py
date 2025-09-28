@@ -10,10 +10,10 @@ import sys
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import select
+from sqlalchemy import select  # noqa: E402
 
-from app.db.session import AsyncSessionLocal
-from app.models.system_setting import EmailTemplate, SendingType
+from app.db.session import AsyncSessionLocal  # noqa: E402
+from app.models.system_setting import EmailTemplate, SendingType  # noqa: E402
 
 
 async def initialize_system_email_templates():

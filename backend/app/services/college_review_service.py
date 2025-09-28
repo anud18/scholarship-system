@@ -395,8 +395,6 @@ class CollegeReviewService:
         college_reviews = college_reviews_result.scalars().all()
 
         # Ensure all applications have college reviews (create default ones if needed)
-        from app.models.college_review import CollegeReview
-
         college_review_lookup = {review.application_id: review for review in college_reviews}
 
         # Create default college reviews for applications that don't have them

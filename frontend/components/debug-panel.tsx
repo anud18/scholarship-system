@@ -496,11 +496,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
               {/* Portal SSO Data */}
               <div className="border rounded-lg">
-                <button
-                  onClick={() => toggleSection('portal')}
-                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <div
+                    className="flex items-center gap-2 flex-1 cursor-pointer"
+                    onClick={() => toggleSection('portal')}
+                  >
                     <span className="font-semibold">Portal SSO Data</span>
                     {getSourceBadge(dataSourceInfo.portalSource, 'SSO')}
                   </div>
@@ -516,13 +516,18 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                     >
                       <RefreshCw className={`w-3 h-3 ${isRefreshing.has('portal') ? 'animate-spin' : ''}`} />
                     </button>
-                    {expandedSections.has('portal') ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
+                    <div
+                      className="cursor-pointer p-1"
+                      onClick={() => toggleSection('portal')}
+                    >
+                      {expandedSections.has('portal') ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                    </div>
                   </div>
-                </button>
+                </div>
                 {expandedSections.has('portal') && (
                   <div className="p-4 bg-gray-50">
                     {portalData ? (
@@ -551,11 +556,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
               {/* Student API Data */}
               <div className="border rounded-lg">
-                <button
-                  onClick={() => toggleSection('student')}
-                  className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <div
+                    className="flex items-center gap-2 flex-1 cursor-pointer"
+                    onClick={() => toggleSection('student')}
+                  >
                     <span className="font-semibold">Student API Data</span>
                     {getSourceBadge(dataSourceInfo.studentApiSource, 'API')}
                   </div>
@@ -571,13 +576,18 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                     >
                       <RefreshCw className={`w-3 h-3 ${isRefreshing.has('student') ? 'animate-spin' : ''}`} />
                     </button>
-                    {expandedSections.has('student') ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
+                    <div
+                      className="cursor-pointer p-1"
+                      onClick={() => toggleSection('student')}
+                    >
+                      {expandedSections.has('student') ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                    </div>
                   </div>
-                </button>
+                </div>
                 {expandedSections.has('student') && (
                   <div className="p-4 bg-gray-50">
                     {studentData ? (

@@ -3,7 +3,6 @@ Comprehensive tests for ScholarshipRulesService
 Target: 0% → 80% coverage
 """
 
-from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -38,7 +37,7 @@ class TestScholarshipRulesServiceCreate:
         rule_data = ScholarshipRuleCreate(
             scholarship_type_id=1,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             rule_name="GPA Check",
             rule_type="academic",
             condition_field="std_gpa",
@@ -53,7 +52,7 @@ class TestScholarshipRulesServiceCreate:
         ), patch.object(service.db, "commit", new_callable=AsyncMock), patch.object(
             service.db, "refresh", new_callable=AsyncMock
         ):
-            result = await service.create_rule(rule_data, created_by=1)
+            await service.create_rule(rule_data, created_by=1)
 
             service.db.add.assert_called_once()
             assert service.db.commit.called
@@ -65,7 +64,7 @@ class TestScholarshipRulesServiceCreate:
             scholarship_type_id=1,
             sub_type="type_a",
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             rule_name="Test Rule",
             rule_type="academic",
             condition_field="std_gpa",
@@ -120,7 +119,7 @@ class TestScholarshipRulesServiceUpdate:
         with patch.object(service, "_get_rule_by_id", return_value=existing_rule), patch.object(
             service.db, "commit", new_callable=AsyncMock
         ), patch.object(service.db, "refresh", new_callable=AsyncMock):
-            result = await service.update_rule(1, rule_update, updated_by=2)
+            await service.update_rule(1, rule_update, updated_by=2)
 
             assert existing_rule.expected_value == "3.5"
             assert existing_rule.message == "Updated message"
@@ -165,7 +164,7 @@ class TestScholarshipRulesServiceDelete:
         ), patch.object(service.db, "commit", new_callable=AsyncMock):
             result = await service.delete_rule(1)
 
-            assert result == True
+            assert result
             service.db.delete.assert_called_once_with(rule)
             assert service.db.commit.called
 
@@ -188,7 +187,7 @@ class TestScholarshipRulesServiceFilters:
         rules = await service.get_rules_by_filters(
             scholarship_type_id=1,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             is_active=True,
         )
 
@@ -253,9 +252,9 @@ class TestScholarshipRulesServiceCopy:
         ), patch.object(service.db, "commit", new_callable=AsyncMock):
             copied, skipped = await service.copy_rules_to_period(
                 source_academic_year=112,
-                source_semester=Semester.FIRST,
+                source_semester=Semester.first,
                 target_academic_year=113,
-                target_semester=Semester.FIRST,
+                target_semester=Semester.first,
                 created_by=1,
             )
 
@@ -275,9 +274,9 @@ class TestScholarshipRulesServiceCopy:
         ):
             copied, skipped = await service.copy_rules_to_period(
                 source_academic_year=112,
-                source_semester=Semester.FIRST,
+                source_semester=Semester.first,
                 target_academic_year=113,
-                target_semester=Semester.FIRST,
+                target_semester=Semester.first,
                 overwrite_existing=False,
                 created_by=1,
             )
@@ -298,9 +297,9 @@ class TestScholarshipRulesServiceCopy:
         ), patch.object(service.db, "commit", new_callable=AsyncMock):
             copied, skipped = await service.copy_rules_to_period(
                 source_academic_year=112,
-                source_semester=Semester.FIRST,
+                source_semester=Semester.first,
                 target_academic_year=113,
-                target_semester=Semester.FIRST,
+                target_semester=Semester.first,
                 overwrite_existing=True,
                 created_by=1,
             )
@@ -373,7 +372,7 @@ class TestScholarshipRulesServiceTemplate:
                 template_id=1,
                 scholarship_type_id=1,
                 academic_year=113,
-                semester=Semester.FIRST,
+                semester=Semester.first,
                 created_by=1,
             )
 
@@ -390,7 +389,7 @@ class TestScholarshipRulesServiceTemplate:
                 template_id=1,
                 scholarship_type_id=1,
                 academic_year=113,
-                semester=Semester.FIRST,
+                semester=Semester.first,
                 created_by=1,
             )
 
@@ -410,7 +409,7 @@ class TestScholarshipRulesServiceValidation:
             condition_field="std_gpa", operator=">=", expected_value="3.0"
         )
 
-        assert is_valid == True
+        assert is_valid
         assert "valid" in message.lower()
 
     async def test_validate_rule_condition_invalid_operator(self, service):
@@ -419,7 +418,7 @@ class TestScholarshipRulesServiceValidation:
             condition_field="std_gpa", operator="===", expected_value="3.0"
         )
 
-        assert is_valid == False
+        assert not is_valid
         assert "invalid operator" in message.lower()
 
     async def test_validate_rule_condition_list_operator(self, service):
@@ -428,7 +427,7 @@ class TestScholarshipRulesServiceValidation:
             condition_field="department", operator="in", expected_value="CS, EE, ME"
         )
 
-        assert is_valid == True
+        assert is_valid
 
     async def test_validate_rule_condition_with_test_data(self, service):
         """Test validation with test data"""
@@ -441,7 +440,7 @@ class TestScholarshipRulesServiceValidation:
             test_data=test_data,
         )
 
-        assert is_valid == True
+        assert is_valid
         assert "test passed" in message.lower()
 
 
@@ -473,27 +472,27 @@ class TestScholarshipRulesServiceHelpers:
 
     def test_evaluate_rule_condition_comparison(self, service):
         """Test comparison operators"""
-        assert service._evaluate_rule_condition(3.5, ">=", "3.0") == True
-        assert service._evaluate_rule_condition(3.5, "<=", "3.0") == False
-        assert service._evaluate_rule_condition(3.5, ">", "3.0") == True
-        assert service._evaluate_rule_condition(3.5, "<", "4.0") == True
+        assert service._evaluate_rule_condition(3.5, ">=", "3.0")
+        assert not service._evaluate_rule_condition(3.5, "<=", "3.0")
+        assert service._evaluate_rule_condition(3.5, ">", "3.0")
+        assert service._evaluate_rule_condition(3.5, "<", "4.0")
 
     def test_evaluate_rule_condition_equality(self, service):
         """Test equality operators"""
-        assert service._evaluate_rule_condition("CS", "==", "CS") == True
-        assert service._evaluate_rule_condition("CS", "!=", "EE") == True
+        assert service._evaluate_rule_condition("CS", "==", "CS")
+        assert service._evaluate_rule_condition("CS", "!=", "EE")
 
     def test_evaluate_rule_condition_list(self, service):
         """Test list operators"""
-        assert service._evaluate_rule_condition("CS", "in", "CS, EE, ME") == True
-        assert service._evaluate_rule_condition("CS", "not_in", "EE, ME") == True
+        assert service._evaluate_rule_condition("CS", "in", "CS, EE, ME")
+        assert service._evaluate_rule_condition("CS", "not_in", "EE, ME")
 
     def test_evaluate_rule_condition_contains(self, service):
         """Test contains operators"""
-        assert service._evaluate_rule_condition("Computer Science", "contains", "Computer") == True
-        assert service._evaluate_rule_condition("Computer Science", "not_contains", "Math") == True
+        assert service._evaluate_rule_condition("Computer Science", "contains", "Computer")
+        assert service._evaluate_rule_condition("Computer Science", "not_contains", "Math")
 
     def test_evaluate_rule_condition_invalid(self, service):
         """Test invalid condition handling"""
-        assert service._evaluate_rule_condition("abc", ">=", "3.0") == False
-        assert service._evaluate_rule_condition(None, "==", "test") == False
+        assert not service._evaluate_rule_condition("abc", ">=", "3.0")
+        assert not service._evaluate_rule_condition(None, "==", "test")

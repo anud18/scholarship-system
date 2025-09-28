@@ -6,7 +6,7 @@ Clean, database-driven approach for dynamic scholarship configuration management
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
@@ -15,6 +15,7 @@ from app.core.security import require_admin, require_staff
 from app.db.deps import get_db
 
 # Student model removed - student data now fetched from external API
+from app.models.application import Application, ApplicationStatus
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import AdminScholarship, User
@@ -608,9 +609,35 @@ async def get_quota_overview(
                     num_sub_types = len(stype.sub_type_list or ["general"])
                     allocated_quota = config.total_quota // num_sub_types if num_sub_types > 0 else config.total_quota
 
-                # TODO: Get actual usage from applications
-                used_quota = 0
-                applications_count = 0
+                # Get actual usage from applications
+                quota_query = select(func.count(Application.id)).where(
+                    and_(
+                        Application.scholarship_type_id == stype.id,
+                        Application.config_code == config.config_code,
+                        Application.sub_type == sub_type_code,
+                        Application.status.in_([
+                            ApplicationStatus.APPROVED,
+                            ApplicationStatus.FUNDED
+                        ])
+                    )
+                )
+                used_quota_result = await db.execute(quota_query)
+                used_quota = used_quota_result.scalar() or 0
+
+                # Get total applications count (all statuses except rejected/withdrawn)
+                total_apps_query = select(func.count(Application.id)).where(
+                    and_(
+                        Application.scholarship_type_id == stype.id,
+                        Application.config_code == config.config_code,
+                        Application.sub_type == sub_type_code,
+                        Application.status.not_in([
+                            ApplicationStatus.REJECTED,
+                            ApplicationStatus.WITHDRAWN
+                        ])
+                    )
+                )
+                total_apps_result = await db.execute(total_apps_query)
+                applications_count = total_apps_result.scalar() or 0
 
                 sub_types.append(
                     {

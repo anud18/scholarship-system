@@ -26,13 +26,14 @@ from app.models.scholarship import (
     ScholarshipSubTypeConfig,
     ScholarshipType,
 )
-from app.models.system_setting import EmailTemplate
+from app.models.system_setting import ConfigCategory, EmailTemplate
 from app.models.user import AdminScholarship, User, UserRole
 from app.schemas.application import (
     ApplicationListResponse,
     ApplicationResponse,
     HistoricalApplicationResponse,
     ProfessorAssignmentRequest,
+    BulkApproveRequest,
 )
 from app.schemas.common import (
     ApiResponse,
@@ -41,6 +42,24 @@ from app.schemas.common import (
     MessageResponse,
     PaginatedResponse,
     SystemSettingSchema,
+)
+from app.schemas.config_management import (
+    BankVerificationBatchRequestSchema,
+    BankVerificationBatchResultSchema,
+    BankVerificationRequestSchema,
+    BankVerificationResultSchema,
+    ConfigurationBulkUpdateSchema,
+    ConfigurationCategorySchema,
+    ConfigurationCreateSchema,
+    ConfigurationExportSchema,
+    ConfigurationImportResultSchema,
+    ConfigurationImportSchema,
+    ConfigurationItemWithDecryptedValueSchema,
+    ConfigurationValidationResultSchema,
+    ConfigurationValidationSchema,
+    get_category_description,
+    get_category_display_name,
+    mask_sensitive_value,
 )
 from app.schemas.notification import NotificationCreate, NotificationResponse, NotificationUpdate
 from app.schemas.scholarship import (
@@ -56,6 +75,9 @@ from app.schemas.scholarship import (
     ScholarshipSubTypeConfigUpdate,
 )
 from app.services.application_service import ApplicationService
+from app.services.bank_verification_service import BankVerificationService
+from app.services.bulk_approval_service import BulkApprovalService
+from app.services.config_management_service import ConfigurationService
 from app.services.system_setting_service import EmailTemplateService, SystemSettingService
 
 logger = logging.getLogger(__name__)
@@ -425,6 +447,45 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
 @router.get("/system/health", response_model=ApiResponse[Dict[str, Any]])
 async def get_system_health(current_user: User = Depends(require_admin)):
     """Get system health status"""
+    from app.integrations.nycu_emp import create_nycu_emp_client_from_env, NYCUEmpError
+
+    # Test NYCU Employee API connection
+    nycu_emp_status = "unknown"
+    nycu_emp_details = {}
+
+    try:
+        client = create_nycu_emp_client_from_env()
+
+        # Use context manager for HTTP client if available
+        if hasattr(client, '__aenter__'):
+            async with client as c:
+                test_result = await c.get_employee_page(page_row="1", status="01")
+        else:
+            test_result = await client.get_employee_page(page_row="1", status="01")
+
+        if test_result.is_success:
+            nycu_emp_status = "connected"
+            nycu_emp_details = {
+                "total_employees": test_result.total_count,
+                "total_pages": test_result.total_page,
+                "sample_employees": len(test_result.empDataList),
+                "response_status": test_result.status,
+                "api_mode": "mock" if hasattr(client, '_get_sample_employees') else "http"
+            }
+        else:
+            nycu_emp_status = "error"
+            nycu_emp_details = {
+                "error": f"API returned status: {test_result.status}",
+                "message": test_result.message
+            }
+
+    except NYCUEmpError as e:
+        nycu_emp_status = "error"
+        nycu_emp_details = {"error": str(e), "type": type(e).__name__}
+    except Exception as e:
+        nycu_emp_status = "error"
+        nycu_emp_details = {"error": str(e), "type": "UnexpectedError"}
+
     return ApiResponse(
         success=True,
         message="System health status retrieved successfully",
@@ -433,8 +494,124 @@ async def get_system_health(current_user: User = Depends(require_admin)):
             "database": "connected",
             "redis": "connected",
             "storage": "available",
-            "timestamp": "2025-06-15T10:30:00Z",
+            "nycu_employee_api": {
+                "status": nycu_emp_status,
+                "details": nycu_emp_details
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         },
+    )
+
+
+@router.get("/debug/nycu-employee", response_model=ApiResponse[Dict[str, Any]])
+async def debug_nycu_employee_api(
+    page: int = Query(1, ge=1, description="Page number"),
+    status: str = Query("01", description="Employee status filter"),
+    current_user: User = Depends(require_admin)
+):
+    """Debug endpoint for NYCU Employee API integration"""
+    from app.integrations.nycu_emp import (
+        create_nycu_emp_client_from_env,
+        NYCUEmpError,
+        NYCUEmpConnectionError,
+        NYCUEmpAuthenticationError,
+        NYCUEmpTimeoutError,
+        NYCUEmpValidationError
+    )
+    from app.core.config import settings
+    import os
+
+    debug_info = {
+        "configuration": {
+            "mode": getattr(settings, 'nycu_emp_mode', 'mock'),
+            "endpoint": getattr(settings, 'nycu_emp_endpoint', None),
+            "account": getattr(settings, 'nycu_emp_account', None),
+            "has_key": bool(getattr(settings, 'nycu_emp_key_hex', None) or getattr(settings, 'nycu_emp_key_raw', None)),
+            "timeout": getattr(settings, 'nycu_emp_timeout', 10.0),
+            "retries": getattr(settings, 'nycu_emp_retries', 3),
+            "env_vars": {
+                "NYCU_EMP_MODE": os.getenv("NYCU_EMP_MODE"),
+                "NYCU_EMP_ACCOUNT": os.getenv("NYCU_EMP_ACCOUNT"),
+                "NYCU_EMP_ENDPOINT": os.getenv("NYCU_EMP_ENDPOINT"),
+                "NYCU_EMP_KEY_HEX": "***" if os.getenv("NYCU_EMP_KEY_HEX") else None,
+                "NYCU_EMP_KEY_RAW": "***" if os.getenv("NYCU_EMP_KEY_RAW") else None,
+            }
+        },
+        "test_results": {}
+    }
+
+    try:
+        client = create_nycu_emp_client_from_env()
+        debug_info["client_type"] = type(client).__name__
+        debug_info["client_mode"] = "mock" if hasattr(client, '_get_sample_employees') else "http"
+
+        # Test single page request
+        if hasattr(client, '__aenter__'):
+            async with client as c:
+                result = await c.get_employee_page(page_row=str(page), status=status)
+        else:
+            result = await client.get_employee_page(page_row=str(page), status=status)
+
+        debug_info["test_results"] = {
+            "status": "success",
+            "api_status": result.status,
+            "api_message": result.message,
+            "is_success": result.is_success,
+            "total_pages": result.total_page,
+            "total_count": result.total_count,
+            "current_page_employees": len(result.empDataList),
+            "sample_employee": result.empDataList[0].__dict__ if result.empDataList else None,
+            "requested_page": page,
+            "requested_status": status
+        }
+
+    except NYCUEmpAuthenticationError as e:
+        debug_info["test_results"] = {
+            "status": "authentication_error",
+            "error": str(e),
+            "type": "NYCUEmpAuthenticationError",
+            "suggestion": "Check NYCU_EMP_ACCOUNT and NYCU_EMP_KEY_HEX/NYCU_EMP_KEY_RAW"
+        }
+    except NYCUEmpConnectionError as e:
+        debug_info["test_results"] = {
+            "status": "connection_error",
+            "error": str(e),
+            "type": "NYCUEmpConnectionError",
+            "suggestion": "Check NYCU_EMP_ENDPOINT and network connectivity"
+        }
+    except NYCUEmpTimeoutError as e:
+        debug_info["test_results"] = {
+            "status": "timeout_error",
+            "error": str(e),
+            "type": "NYCUEmpTimeoutError",
+            "suggestion": "Consider increasing NYCU_EMP_TIMEOUT value"
+        }
+    except NYCUEmpValidationError as e:
+        debug_info["test_results"] = {
+            "status": "validation_error",
+            "error": str(e),
+            "type": "NYCUEmpValidationError",
+            "suggestion": "Check page and status parameter values"
+        }
+    except NYCUEmpError as e:
+        debug_info["test_results"] = {
+            "status": "api_error",
+            "error": str(e),
+            "type": type(e).__name__,
+            "suggestion": "Check API endpoint and credentials"
+        }
+    except Exception as e:
+        debug_info["test_results"] = {
+            "status": "unexpected_error",
+            "error": str(e),
+            "type": type(e).__name__,
+            "suggestion": "Check system logs for more details"
+        }
+
+    return ApiResponse(
+        success=True,
+        message="NYCU Employee API debug information retrieved",
+        data=debug_info
     )
 
 
@@ -1144,11 +1321,11 @@ async def get_scholarship_statistics(current_user: User = Depends(require_admin)
 
 
 @router.get(
-    "/scholarships/{scholarship_code}/applications",
+    "/scholarships/{scholarship_identifier}/applications",
     response_model=ApiResponse[List[ApplicationListResponse]],
 )
 async def get_applications_by_scholarship(
-    scholarship_code: str,
+    scholarship_identifier: str,
     sub_type: Optional[str] = Query(None, description="Filter by sub-type"),
     status: Optional[str] = Query(None, description="Filter by status"),
     current_user: User = Depends(require_admin),
@@ -1157,8 +1334,19 @@ async def get_applications_by_scholarship(
     """Get applications for a specific scholarship type"""
 
     # Verify scholarship exists
-    stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_code)
-    result = await db.execute(stmt)
+    scholarship_stmt: Select[tuple[ScholarshipType]]
+
+    try:
+        scholarship_id = int(scholarship_identifier)
+    except ValueError:
+        scholarship_id = None
+
+    if scholarship_id is not None:
+        scholarship_stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
+    else:
+        scholarship_stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_identifier)
+
+    result = await db.execute(scholarship_stmt)
     scholarship = result.scalar_one_or_none()
 
     if not scholarship:
@@ -1316,7 +1504,7 @@ async def get_applications_by_scholarship(
 
     return ApiResponse(
         success=True,
-        message=f"Applications for scholarship {scholarship_code} retrieved successfully",
+        message=f"Applications for scholarship {scholarship.code} retrieved successfully",
         data=response_list,
     )
 
@@ -3074,27 +3262,45 @@ async def get_available_professors(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Get list of available professors for assignment
-    - College admins see only professors in their college
-    - Admin/Super Admin see all professors
-    """
+    """Get list of available professors for assignment."""
+
     try:
-        service = ApplicationService(db)
-        professors = await service.get_available_professors(current_user, search)
+        stmt = select(User).where(User.role == UserRole.PROFESSOR)
+
+        if search:
+            search_term = f"%{search.lower()}%"
+            stmt = stmt.where(
+                or_(
+                    func.lower(User.name).like(search_term),
+                    func.lower(User.nycu_id).like(search_term),
+                )
+            )
+
+        result = await db.execute(stmt)
+        professors = result.scalars().all() if result else []
+
+        serialized = [
+            {
+                "id": getattr(professor, "id", None),
+                "name": getattr(professor, "name", ""),
+                "email": getattr(professor, "email", ""),
+                "nycu_id": getattr(professor, "nycu_id", ""),
+            }
+            for professor in professors
+        ]
 
         return ApiResponse(
             success=True,
-            message=f"Retrieved {len(professors)} professors",
-            data=professors,
+            message=f"Retrieved {len(serialized)} professors",
+            data=serialized,
         )
 
-    except Exception as e:
-        logger.error(f"Error fetching professors: {str(e)}")
+    except Exception as exc:  # pragma: no cover - unexpected failure path
+        logger.error(f"Error fetching professors: {exc}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch professors: {str(e)}",
-        )
+            detail=f"Failed to fetch professors: {exc}",
+        ) from exc
 
 
 @router.put(
@@ -3163,4 +3369,451 @@ async def assign_professor_to_application(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to assign professor: {str(e)}",
+        )
+@router.post(
+    "/applications/bulk-approve",
+    response_model=ApiResponse[Dict[str, Any]],
+)
+async def bulk_approve_applications_endpoint(
+    payload: BulkApproveRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk approve multiple applications."""
+
+    service = BulkApprovalService(db)
+    result = await service.bulk_approve_applications(
+        application_ids=payload.application_ids,
+        approver_user_id=current_user.id,
+        approval_notes=payload.comments,
+        send_notifications=payload.send_notifications,
+    )
+
+    return ApiResponse(
+        success=True,
+        message="Bulk approval processed successfully",
+        data=result,
+    )
+
+
+# ============================================
+# Configuration Management Endpoints
+# ============================================
+
+@router.get("/configurations", response_model=ApiResponse[List[ConfigurationCategorySchema]])
+async def get_all_configurations(
+    category: Optional[ConfigCategory] = Query(None, description="Filter by category"),
+    current_user: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all system configurations organized by category (super admin only)"""
+    try:
+        config_service = ConfigurationService(db)
+
+        if category:
+            # Get specific category
+            settings = await config_service.get_configurations_by_category(category)
+            categories = [category]
+        else:
+            # Get all categories
+            settings = await config_service.get_all_configurations()
+            categories = list(ConfigCategory)
+
+        # Organize by category
+        result = []
+        for cat in categories:
+            cat_settings = [s for s in settings if s.category == cat]
+
+            # Transform settings with decrypted values
+            config_items = []
+            for setting in cat_settings:
+                decrypted_value = await config_service.get_decrypted_value(setting)
+                display_value = mask_sensitive_value(str(decrypted_value), setting.is_sensitive)
+
+                # Get modifier username
+                modifier_username = None
+                if setting.last_modified_by:
+                    modifier_stmt = select(User).where(User.id == setting.last_modified_by)
+                    modifier_result = await db.execute(modifier_stmt)
+                    modifier = modifier_result.scalar_one_or_none()
+                    modifier_username = modifier.nycu_id if modifier else None
+
+                config_items.append(ConfigurationItemWithDecryptedValueSchema(
+                    key=setting.key,
+                    decrypted_value=decrypted_value,
+                    display_value=display_value,
+                    category=setting.category,
+                    data_type=setting.data_type,
+                    is_sensitive=setting.is_sensitive,
+                    is_readonly=setting.is_readonly,
+                    description=setting.description,
+                    validation_regex=setting.validation_regex,
+                    default_value=setting.default_value,
+                    last_modified_by=setting.last_modified_by,
+                    modified_by_username=modifier_username,
+                    created_at=setting.created_at,
+                    updated_at=setting.updated_at,
+                ))
+
+            category_schema = ConfigurationCategorySchema(
+                category=cat,
+                display_name=get_category_display_name(cat),
+                description=get_category_description(cat),
+                configurations=config_items,
+                total_count=len(config_items),
+                sensitive_count=sum(1 for item in config_items if item.is_sensitive),
+                readonly_count=sum(1 for item in config_items if item.is_readonly),
+            )
+
+            if config_items or not category:  # Include empty categories only when showing all
+                result.append(category_schema)
+
+        return ApiResponse(
+            success=True,
+            message="Configurations retrieved successfully",
+            data=result,
+        )
+
+    except Exception as e:
+        logger.error(f"Error retrieving configurations: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve configurations: {str(e)}",
+        )
+
+
+@router.post("/configurations", response_model=ApiResponse[ConfigurationItemWithDecryptedValueSchema])
+async def create_configuration(
+    config: ConfigurationCreateSchema,
+    current_user: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new configuration (super admin only)"""
+    try:
+        config_service = ConfigurationService(db)
+
+        # Validate the configuration
+        is_valid, message = await config_service.validate_configuration(
+            config.key, config.value, config.data_type
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid configuration value: {message}",
+            )
+
+        # Create the configuration
+        setting = await config_service.set_configuration(
+            key=config.key,
+            value=config.value,
+            user_id=current_user.id,
+            category=config.category,
+            data_type=config.data_type,
+            is_sensitive=config.is_sensitive,
+            is_readonly=config.is_readonly,
+            description=config.description,
+            validation_regex=config.validation_regex,
+            default_value=config.default_value,
+            change_reason=config.change_reason,
+        )
+
+        # Prepare response with decrypted value
+        decrypted_value = await config_service.get_decrypted_value(setting)
+        display_value = mask_sensitive_value(str(decrypted_value), setting.is_sensitive)
+
+        response_data = ConfigurationItemWithDecryptedValueSchema(
+            key=setting.key,
+            decrypted_value=decrypted_value,
+            display_value=display_value,
+            category=setting.category,
+            data_type=setting.data_type,
+            is_sensitive=setting.is_sensitive,
+            is_readonly=setting.is_readonly,
+            description=setting.description,
+            validation_regex=setting.validation_regex,
+            default_value=setting.default_value,
+            last_modified_by=setting.last_modified_by,
+            modified_by_username=current_user.nycu_id,
+            created_at=setting.created_at,
+            updated_at=setting.updated_at,
+        )
+
+        return ApiResponse(
+            success=True,
+            message=f"Configuration '{config.key}' created successfully",
+            data=response_data,
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error creating configuration: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create configuration: {str(e)}",
+        )
+
+
+@router.put("/configurations/bulk", response_model=ApiResponse[List[ConfigurationItemWithDecryptedValueSchema]])
+async def bulk_update_configurations(
+    update_request: ConfigurationBulkUpdateSchema,
+    current_user: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk update multiple configurations (super admin only)"""
+    try:
+        config_service = ConfigurationService(db)
+
+        # Validate all updates first
+        for update in update_request.updates:
+            existing = await config_service.get_configuration(update.key)
+            if not existing:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Configuration '{update.key}' not found",
+                )
+
+            is_valid, message = await config_service.validate_configuration(
+                update.key, update.value, existing.data_type
+            )
+            if not is_valid:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid value for '{update.key}': {message}",
+                )
+
+        # Perform bulk update
+        updates_data = []
+        for update in update_request.updates:
+            existing = await config_service.get_configuration(update.key)
+            updates_data.append({
+                "key": update.key,
+                "value": update.value,
+                "category": existing.category,
+                "data_type": existing.data_type,
+                "is_sensitive": existing.is_sensitive,
+                "is_readonly": existing.is_readonly,
+                "description": existing.description,
+                "validation_regex": existing.validation_regex,
+                "default_value": existing.default_value,
+            })
+
+        updated_settings = await config_service.bulk_update_configurations(
+            updates_data, current_user.id, update_request.change_reason
+        )
+
+        # Prepare response
+        response_data = []
+        for setting in updated_settings:
+            decrypted_value = await config_service.get_decrypted_value(setting)
+            display_value = mask_sensitive_value(str(decrypted_value), setting.is_sensitive)
+
+            response_data.append(ConfigurationItemWithDecryptedValueSchema(
+                key=setting.key,
+                decrypted_value=decrypted_value,
+                display_value=display_value,
+                category=setting.category,
+                data_type=setting.data_type,
+                is_sensitive=setting.is_sensitive,
+                is_readonly=setting.is_readonly,
+                description=setting.description,
+                validation_regex=setting.validation_regex,
+                default_value=setting.default_value,
+                last_modified_by=setting.last_modified_by,
+                modified_by_username=current_user.nycu_id,
+                created_at=setting.created_at,
+                updated_at=setting.updated_at,
+            ))
+
+        return ApiResponse(
+            success=True,
+            message=f"Successfully updated {len(updated_settings)} configurations",
+            data=response_data,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in bulk configuration update: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update configurations: {str(e)}",
+        )
+
+
+@router.post("/configurations/validate", response_model=ApiResponse[ConfigurationValidationResultSchema])
+async def validate_configuration(
+    validation_request: ConfigurationValidationSchema,
+    current_user: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Validate a configuration value (super admin only)"""
+    try:
+        config_service = ConfigurationService(db)
+
+        is_valid, message = await config_service.validate_configuration(
+            validation_request.key,
+            validation_request.value,
+            validation_request.data_type
+        )
+
+        # Additional regex validation if provided
+        if is_valid and validation_request.validation_regex:
+            import re
+            try:
+                if not re.match(validation_request.validation_regex, str(validation_request.value)):
+                    is_valid = False
+                    message = f"Value does not match pattern: {validation_request.validation_regex}"
+            except re.error as e:
+                is_valid = False
+                message = f"Invalid regex pattern: {str(e)}"
+
+        result = ConfigurationValidationResultSchema(
+            is_valid=is_valid,
+            message=message,
+            suggested_value=None  # Could implement smart suggestions in the future
+        )
+
+        return ApiResponse(
+            success=True,
+            message="Validation completed",
+            data=result,
+        )
+
+    except Exception as e:
+        logger.error(f"Error validating configuration: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate configuration: {str(e)}",
+        )
+
+
+@router.delete("/configurations/{key}", response_model=ApiResponse[str])
+async def delete_configuration(
+    key: str,
+    change_reason: Optional[str] = Query(None, description="Reason for deletion"),
+    current_user: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a configuration (super admin only)"""
+    try:
+        config_service = ConfigurationService(db)
+
+        success = await config_service.delete_configuration(
+            key, current_user.id, change_reason
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Configuration '{key}' not found",
+            )
+
+        return ApiResponse(
+            success=True,
+            message=f"Configuration '{key}' deleted successfully",
+            data=key,
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error deleting configuration: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete configuration: {str(e)}",
+        )
+
+
+# ============================================
+# Bank Account Verification Endpoints
+# ============================================
+
+@router.post("/bank-verification", response_model=ApiResponse[BankVerificationResultSchema])
+async def verify_bank_account(
+    request: BankVerificationRequestSchema,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify bank account information for an application (admin only)"""
+    try:
+        verification_service = BankVerificationService(db)
+
+        result = await verification_service.verify_bank_account(request.application_id)
+
+        return ApiResponse(
+            success=True,
+            message="Bank account verification completed",
+            data=BankVerificationResultSchema(**result),
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error in bank verification: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to verify bank account: {str(e)}",
+        )
+
+
+@router.post("/bank-verification/batch", response_model=ApiResponse[BankVerificationBatchResultSchema])
+async def batch_verify_bank_accounts(
+    request: BankVerificationBatchRequestSchema,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Batch verify bank account information for multiple applications (admin only)"""
+    try:
+        verification_service = BankVerificationService(db)
+
+        results = await verification_service.batch_verify_applications(request.application_ids)
+
+        # Calculate summary statistics
+        total_processed = len(results)
+        successful_verifications = sum(1 for r in results.values() if r.get("success", False))
+        failed_verifications = total_processed - successful_verifications
+
+        # Group by verification status
+        summary = {}
+        for result in results.values():
+            if result.get("success", False):
+                status = result.get("verification_status", "unknown")
+                summary[status] = summary.get(status, 0) + 1
+            else:
+                summary["failed"] = summary.get("failed", 0) + 1
+
+        # Convert results to proper schema format
+        formatted_results = {}
+        for app_id, result in results.items():
+            formatted_results[app_id] = BankVerificationResultSchema(**result)
+
+        batch_result = BankVerificationBatchResultSchema(
+            results=formatted_results,
+            total_processed=total_processed,
+            successful_verifications=successful_verifications,
+            failed_verifications=failed_verifications,
+            summary=summary,
+        )
+
+        return ApiResponse(
+            success=True,
+            message=f"Batch verification completed for {total_processed} applications",
+            data=batch_result,
+        )
+
+    except Exception as e:
+        logger.error(f"Error in batch bank verification: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to perform batch verification: {str(e)}",
         )

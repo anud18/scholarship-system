@@ -15,8 +15,9 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
-from app.models.application import Application, ApplicationStatus, Semester
+from app.models.application import Application, ApplicationStatus
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus
 from app.models.enums import Semester
 from app.models.notification import Notification, NotificationPriority, NotificationType
@@ -36,8 +37,8 @@ class TestUserModel:
             "email": "test@university.edu",
             "name": "Test User",
             "nycu_id": "11011001",
-            "role": UserRole.STUDENT,
-            "user_type": UserType.STUDENT,
+            "role": UserRole.student,
+            "user_type": UserType.student,
             "is_active": True,
         }
 
@@ -50,7 +51,7 @@ class TestUserModel:
         # Assert
         assert user.id is not None
         assert user.email == "test@university.edu"
-        assert user.role == UserRole.STUDENT
+        assert user.role == UserRole.student
         assert user.is_active is True
         assert user.created_at is not None
 
@@ -62,13 +63,13 @@ class TestUserModel:
             email="duplicate@university.edu",
             name="User One",
             nycu_id="11011001",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
         user2 = User(
             email="duplicate@university.edu",
             name="User Two",
             nycu_id="11011002",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
 
         # Act & Assert
@@ -87,13 +88,13 @@ class TestUserModel:
             email="user1@university.edu",
             name="User One",
             nycu_id="11011001",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
         user2 = User(
             email="user2@university.edu",
             name="User Two",
             nycu_id="11011001",  # Duplicate NYCU ID
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
 
         # Act & Assert
@@ -112,7 +113,7 @@ class TestUserModel:
             email="test@university.edu",
             name="John Doe",
             nycu_id="11011001",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
 
         # Act & Assert
@@ -126,23 +127,23 @@ class TestUserModel:
     async def test_user_is_admin_property(self, db):
         """Test is_admin property"""
         # Arrange & Act & Assert
-        admin_user = User(role=UserRole.ADMIN)
+        admin_user = User(role=UserRole.admin)
         assert admin_user.is_admin is True
 
-        super_admin = User(role=UserRole.SUPER_ADMIN)
+        super_admin = User(role=UserRole.super_admin)
         assert super_admin.is_admin is True
 
-        student = User(role=UserRole.STUDENT)
+        student = User(role=UserRole.student)
         assert student.is_admin is False
 
-        professor = User(role=UserRole.PROFESSOR)
+        professor = User(role=UserRole.professor)
         assert professor.is_admin is False
 
     @pytest.mark.asyncio
     async def test_user_can_access_scholarship_method(self, db):
         """Test can_access_scholarship method"""
         # Arrange
-        user = User(role=UserRole.ADMIN)
+        user = User(role=UserRole.admin)
         scholarship = ScholarshipType(id=1, code="test", name="Test Scholarship")
 
         # Act & Assert
@@ -150,7 +151,7 @@ class TestUserModel:
         assert user.can_access_scholarship(scholarship) is True
 
         # Student should have limited access based on eligibility
-        student = User(role=UserRole.STUDENT)
+        student = User(role=UserRole.student)
         # Implementation depends on actual business logic
         # For now, assume students can access active scholarships
         scholarship.is_active = True
@@ -171,7 +172,7 @@ class TestApplicationModel:
             email="student@university.edu",
             name="Test Student",
             nycu_id="11011001",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
         db.add(user)
         await db.commit()
@@ -204,7 +205,7 @@ class TestApplicationModel:
             "status": ApplicationStatus.DRAFT.value,
             "amount": Decimal("50000"),
             "academic_year": 113,
-            "semester": Semester.FIRST,
+            "semester": Semester.first,
             "student_data": {"name": "Test Student", "gpa": 3.8},
             "submitted_form_data": {"statement": "Test statement"},
             "agree_terms": True,
@@ -364,7 +365,7 @@ class TestScholarshipTypeModel:
             "category": "undergraduate_freshman",
             "amount": Decimal("50000"),
             "academic_year": 113,
-            "semester": Semester.FIRST,
+            "semester": Semester.first,
             "is_active": True,
             "is_application_period": True,
             "application_start_date": datetime.now(timezone.utc),
@@ -622,7 +623,7 @@ class TestModelTimestamps:
         user = User(
             email="timestamp@university.edu",
             name="Timestamp User",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
 
         # Act
@@ -638,7 +639,7 @@ class TestModelTimestamps:
     async def test_updated_at_auto_update(self, db):
         """Test that updated_at is automatically updated"""
         # Arrange
-        user = User(email="update@university.edu", name="Update User", role=UserRole.STUDENT)
+        user = User(email="update@university.edu", name="Update User", role=UserRole.student)
         db.add(user)
         await db.commit()
         await db.refresh(user)

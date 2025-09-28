@@ -33,7 +33,7 @@ class TestAuthService:
             status="active",
             dept_code="CS",
             dept_name="Computer Science",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
 
     @pytest.fixture
@@ -49,7 +49,7 @@ class TestAuthService:
         user.nycu_id = "112550001"
         user.name = "Test User"
         user.email = "test@nycu.edu.tw"
-        user.role = UserRole.STUDENT
+        user.role = UserRole.student
         user.user_type = "student"
         user.status = "active"
         user.dept_code = "CS"
@@ -355,7 +355,7 @@ class TestAuthService:
         """Test that token data contains expected fields"""
         with patch("app.services.auth_service.create_access_token") as mock_access_token, patch(
             "app.services.auth_service.create_refresh_token"
-        ) as mock_refresh_token, patch("app.schemas.user.UserResponse.model_validate"):
+        ), patch("app.schemas.user.UserResponse.model_validate"):
             await service.create_tokens(mock_user)
 
             # Get the token data that was passed to token creation functions

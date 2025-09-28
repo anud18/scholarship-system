@@ -75,9 +75,8 @@ async def get_file_proxy(
                 raise HTTPException(status_code=403, detail="Access denied")
         elif current_user.role == UserRole.PROFESSOR:
             # Professors can access files from their students
-            # TODO: Add professor-student relationship check when implemented
-            # For now, allow professors to access all files
-            pass
+            if not current_user.can_access_student_data(application.user_id, "view_applications"):
+                raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
         elif current_user.role in [
             UserRole.COLLEGE,
             UserRole.ADMIN,
@@ -176,9 +175,8 @@ async def download_file_proxy(
                 raise HTTPException(status_code=403, detail="Access denied")
         elif current_user.role == UserRole.PROFESSOR:
             # Professors can access files from their students
-            # TODO: Add professor-student relationship check when implemented
-            # For now, allow professors to access all files
-            pass
+            if not current_user.can_access_student_data(application.user_id, "view_applications"):
+                raise HTTPException(status_code=403, detail="Access denied - no relationship with student")
         elif current_user.role in [
             UserRole.COLLEGE,
             UserRole.ADMIN,

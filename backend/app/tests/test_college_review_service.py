@@ -95,7 +95,7 @@ class TestCollegeReviewService:
         }
 
         # Execute
-        result = await service.create_or_update_review(application_id=1, reviewer_id=2001, review_data=review_data)
+        await service.create_or_update_review(application_id=1, reviewer_id=2001, review_data=review_data)
 
         # Verify database operations were called
         service.db.add.assert_called_once()

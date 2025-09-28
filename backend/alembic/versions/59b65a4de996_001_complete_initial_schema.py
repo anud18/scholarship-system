@@ -10,8 +10,6 @@ Create Date: 2025-09-25 02:12:21.898181
 """
 from typing import Sequence, Union
 
-import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -52,17 +50,6 @@ def upgrade() -> None:
 
     # Use Base.metadata.create_all() for all tables
     # This ensures all tables are created correctly regardless of dialect
-    import app.models.application
-    import app.models.application_field
-    import app.models.audit_log
-    import app.models.college_review
-    import app.models.email_management
-    import app.models.notification
-    import app.models.scholarship
-    import app.models.student
-    import app.models.system_setting
-    import app.models.user
-    import app.models.user_profile
     from app.db.base_class import Base
 
     # Create all tables using SQLAlchemy metadata

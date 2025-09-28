@@ -27,15 +27,15 @@ def test_user_model_creation():
         email="test@example.com",
         nycu_id="testuser",
         name="Test User",
-        user_type=UserType.STUDENT,
-        role=UserRole.STUDENT,
+        user_type=UserType.student,
+        role=UserRole.student,
     )
 
     assert user.email == "test@example.com"
     assert user.nycu_id == "testuser"
     assert user.name == "Test User"
-    assert user.user_type == UserType.STUDENT
-    assert user.role == UserRole.STUDENT
+    assert user.user_type == UserType.student
+    assert user.role == UserRole.student
 
 
 @pytest.mark.skip(reason="ApplicationResponse schema changed - needs update")
@@ -134,9 +134,9 @@ def test_application_model_properties():
         scholarship_name="Academic Excellence",
         status=ApplicationStatus.DRAFT.value,
         academic_year=113,
-        semester=Semester.FIRST,
+        semester=Semester.first,
         scholarship_subtype_list=[],
-        sub_type_selection_mode=SubTypeSelectionMode.SINGLE,
+        sub_type_selection_mode=SubTypeSelectionMode.single,
     )
 
     # Test required properties exist
