@@ -37,7 +37,7 @@ class TestScholarshipConfigurationEndpoints:
             email="config_admin@university.edu",
             username="config_admin",
             full_name="Configuration Admin",
-            role=UserRole.ADMIN,
+            role=UserRole.admin,
             is_active=True,
         )
         db.add(admin)
@@ -380,7 +380,7 @@ class TestScholarshipConfigurationEndpoints:
             email="regular@university.edu",
             username="regular",
             full_name="Regular User",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
             is_active=True,
         )
         db.add(regular_user)

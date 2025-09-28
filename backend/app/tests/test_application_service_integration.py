@@ -83,12 +83,12 @@ class TestApplicationServiceHelpers:
 
     def test_convert_semester_to_string_first(self, service):
         """Test semester conversion for first semester"""
-        result = service._convert_semester_to_string(Semester.FIRST)
+        result = service._convert_semester_to_string(Semester.first)
         assert result == "FIRST"
 
     def test_convert_semester_to_string_second(self, service):
         """Test semester conversion for second semester"""
-        result = service._convert_semester_to_string(Semester.SECOND)
+        result = service._convert_semester_to_string(Semester.second)
         assert result == "SECOND"
 
     def test_convert_semester_to_string_none(self, service):
@@ -111,7 +111,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_student_role(self):
         """Test getting student data for student role"""
         user = Mock(spec=User)
-        user.role = UserRole.STUDENT
+        user.role = UserRole.student
         user.nycu_id = "112550001"
 
         with patch("app.services.application_service.StudentService") as mock_service:
@@ -125,7 +125,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_non_student(self):
         """Test getting student data for non-student role"""
         user = Mock(spec=User)
-        user.role = UserRole.ADMIN
+        user.role = UserRole.admin
         user.nycu_id = "admin001"
 
         result = await get_student_data_from_user(user)
@@ -134,7 +134,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_no_nycu_id(self):
         """Test getting student data with no nycu_id"""
         user = Mock(spec=User)
-        user.role = UserRole.STUDENT
+        user.role = UserRole.student
         user.nycu_id = None
 
         result = await get_student_data_from_user(user)
@@ -225,7 +225,7 @@ class TestApplicationServiceListResponse:
         application.status_name = "草稿"
         application.is_renewal = False
         application.academic_year = 113
-        application.semester = Semester.FIRST
+        application.semester = Semester.first
         application.created_at = datetime.now(timezone.utc)
         application.submitted_at = None
         application.approved_at = None

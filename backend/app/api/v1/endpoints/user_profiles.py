@@ -465,19 +465,15 @@ async def extract_bank_info_from_passbook(
     """
     try:
         # Validate file type
-        if not file.content_type or not file.content_type.startswith('image/'):
+        if not file.content_type or not file.content_type.startswith("image/"):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must be an image (JPEG, PNG, etc.)"
+                status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image (JPEG, PNG, etc.)"
             )
 
         # Check file size (max 10MB)
         file_content = await file.read()
         if len(file_content) > 10 * 1024 * 1024:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File size must be less than 10MB"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File size must be less than 10MB")
 
         # Get OCR service
         try:
@@ -486,7 +482,7 @@ async def extract_bank_info_from_passbook(
             logger.error(f"OCR service initialization failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="OCR service is not available. Please contact administrator."
+                detail="OCR service is not available. Please contact administrator.",
             )
 
         # Extract bank information
@@ -500,7 +496,7 @@ async def extract_bank_info_from_passbook(
             response_data = {
                 "success": True,
                 "message": "銀行資訊提取成功" if result.get("success") else "銀行資訊提取失敗",
-                "data": result
+                "data": result,
             }
 
             # Add suggestion for manual review if confidence is low
@@ -512,8 +508,7 @@ async def extract_bank_info_from_passbook(
         except Exception as e:
             logger.error(f"Bank OCR failed for user {current_user.id}: {str(e)}")
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Failed to process image: {str(e)}"
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Failed to process image: {str(e)}"
             )
 
     except HTTPException:
@@ -521,8 +516,7 @@ async def extract_bank_info_from_passbook(
     except Exception as e:
         logger.error(f"Unexpected error in bank OCR: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred during processing"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred during processing"
         )
 
 
@@ -540,19 +534,15 @@ async def extract_text_from_document(
     """
     try:
         # Validate file type
-        if not file.content_type or not file.content_type.startswith('image/'):
+        if not file.content_type or not file.content_type.startswith("image/"):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must be an image (JPEG, PNG, etc.)"
+                status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image (JPEG, PNG, etc.)"
             )
 
         # Check file size (max 10MB)
         file_content = await file.read()
         if len(file_content) > 10 * 1024 * 1024:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File size must be less than 10MB"
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File size must be less than 10MB")
 
         # Get OCR service
         try:
@@ -561,7 +551,7 @@ async def extract_text_from_document(
             logger.error(f"OCR service initialization failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="OCR service is not available. Please contact administrator."
+                detail="OCR service is not available. Please contact administrator.",
             )
 
         # Extract text
@@ -569,19 +559,16 @@ async def extract_text_from_document(
             result = await ocr_service.extract_general_text_from_image(file_content)
 
             # Log successful extraction
-            logger.info(f"Document OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}")
+            logger.info(
+                f"Document OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}"
+            )
 
-            return {
-                "success": True,
-                "message": "文字提取成功" if result.get("success") else "文字提取失敗",
-                "data": result
-            }
+            return {"success": True, "message": "文字提取成功" if result.get("success") else "文字提取失敗", "data": result}
 
         except Exception as e:
             logger.error(f"Document OCR failed for user {current_user.id}: {str(e)}")
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Failed to process image: {str(e)}"
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Failed to process image: {str(e)}"
             )
 
     except HTTPException:
@@ -589,6 +576,5 @@ async def extract_text_from_document(
     except Exception as e:
         logger.error(f"Unexpected error in document OCR: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred during processing"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred during processing"
         )

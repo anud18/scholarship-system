@@ -142,7 +142,7 @@ class TestScholarshipConfigurationServiceQuota:
     async def test_check_quota_availability_unlimited(self, service):
         """Test quota check with unlimited quota"""
         config = Mock(spec=ScholarshipConfiguration)
-        config.quota_management_mode = QuotaManagementMode.NONE
+        config.quota_management_mode = QuotaManagementMode.none
 
         available, info = await service.check_quota_availability(config)
 
@@ -152,7 +152,7 @@ class TestScholarshipConfigurationServiceQuota:
     async def test_check_quota_availability_with_limit(self, service):
         """Test quota check with limited quota"""
         config = Mock(spec=ScholarshipConfiguration)
-        config.quota_management_mode = QuotaManagementMode.TOTAL
+        config.quota_management_mode = QuotaManagementMode.simple
         config.has_quota_limit = True
         config.total_quota = 100
         config.scholarship_type_id = 1
@@ -170,7 +170,7 @@ class TestScholarshipConfigurationServiceQuota:
     async def test_check_quota_availability_exceeded(self, service):
         """Test quota check when quota exceeded"""
         config = Mock(spec=ScholarshipConfiguration)
-        config.quota_management_mode = QuotaManagementMode.TOTAL
+        config.quota_management_mode = QuotaManagementMode.simple
         config.has_quota_limit = True
         config.total_quota = 100
         config.scholarship_type_id = 1

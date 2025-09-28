@@ -37,7 +37,7 @@ class TestScholarshipRulesServiceCreate:
         rule_data = ScholarshipRuleCreate(
             scholarship_type_id=1,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             rule_name="GPA Check",
             rule_type="academic",
             condition_field="std_gpa",
@@ -64,7 +64,7 @@ class TestScholarshipRulesServiceCreate:
             scholarship_type_id=1,
             sub_type="type_a",
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             rule_name="Test Rule",
             rule_type="academic",
             condition_field="std_gpa",
@@ -187,7 +187,7 @@ class TestScholarshipRulesServiceFilters:
         rules = await service.get_rules_by_filters(
             scholarship_type_id=1,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             is_active=True,
         )
 
@@ -252,9 +252,9 @@ class TestScholarshipRulesServiceCopy:
         ), patch.object(service.db, "commit", new_callable=AsyncMock):
             copied, skipped = await service.copy_rules_to_period(
                 source_academic_year=112,
-                source_semester=Semester.FIRST,
+                source_semester=Semester.first,
                 target_academic_year=113,
-                target_semester=Semester.FIRST,
+                target_semester=Semester.first,
                 created_by=1,
             )
 
@@ -274,9 +274,9 @@ class TestScholarshipRulesServiceCopy:
         ):
             copied, skipped = await service.copy_rules_to_period(
                 source_academic_year=112,
-                source_semester=Semester.FIRST,
+                source_semester=Semester.first,
                 target_academic_year=113,
-                target_semester=Semester.FIRST,
+                target_semester=Semester.first,
                 overwrite_existing=False,
                 created_by=1,
             )
@@ -297,9 +297,9 @@ class TestScholarshipRulesServiceCopy:
         ), patch.object(service.db, "commit", new_callable=AsyncMock):
             copied, skipped = await service.copy_rules_to_period(
                 source_academic_year=112,
-                source_semester=Semester.FIRST,
+                source_semester=Semester.first,
                 target_academic_year=113,
-                target_semester=Semester.FIRST,
+                target_semester=Semester.first,
                 overwrite_existing=True,
                 created_by=1,
             )
@@ -372,7 +372,7 @@ class TestScholarshipRulesServiceTemplate:
                 template_id=1,
                 scholarship_type_id=1,
                 academic_year=113,
-                semester=Semester.FIRST,
+                semester=Semester.first,
                 created_by=1,
             )
 
@@ -389,7 +389,7 @@ class TestScholarshipRulesServiceTemplate:
                 template_id=1,
                 scholarship_type_id=1,
                 academic_year=113,
-                semester=Semester.FIRST,
+                semester=Semester.first,
                 created_by=1,
             )
 

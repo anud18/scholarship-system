@@ -84,10 +84,7 @@ class OCRService:
             """
 
             # Send request to Gemini
-            response = self.model.generate_content([
-                prompt,
-                image
-            ])
+            response = self.model.generate_content([prompt, image])
 
             # Parse response
             result = self._parse_gemini_response(response.text)
@@ -138,10 +135,7 @@ class OCRService:
             """
 
             # Send request to Gemini
-            response = self.model.generate_content([
-                prompt,
-                image
-            ])
+            response = self.model.generate_content([prompt, image])
 
             # Parse response
             result = self._parse_gemini_response(response.text)
@@ -160,8 +154,8 @@ class OCRService:
             image = Image.open(io.BytesIO(image_data))
 
             # Convert to RGB if necessary
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
+            if image.mode != "RGB":
+                image = image.convert("RGB")
 
             # Validate image size
             width, height = image.size
@@ -185,9 +179,9 @@ class OCRService:
         try:
             # Clean up response text (remove markdown formatting if present)
             cleaned_text = response_text.strip()
-            if cleaned_text.startswith('```json'):
+            if cleaned_text.startswith("```json"):
                 cleaned_text = cleaned_text[7:]
-            if cleaned_text.endswith('```'):
+            if cleaned_text.endswith("```"):
                 cleaned_text = cleaned_text[:-3]
             cleaned_text = cleaned_text.strip()
 
@@ -198,7 +192,7 @@ class OCRService:
             if not isinstance(result, dict):
                 raise ValueError("Response is not a valid JSON object")
 
-            if 'success' not in result:
+            if "success" not in result:
                 raise ValueError("Response missing 'success' field")
 
             return result
@@ -209,26 +203,20 @@ class OCRService:
                 "success": False,
                 "error": f"Invalid response format: {str(e)}",
                 "confidence": 0.0,
-                "raw_response": response_text
+                "raw_response": response_text,
             }
         except Exception as e:
             logger.error(f"Error processing Gemini response: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Response processing error: {str(e)}",
-                "confidence": 0.0
-            }
+            return {"success": False, "error": f"Response processing error: {str(e)}", "confidence": 0.0}
 
     def is_enabled(self) -> bool:
         """Check if OCR service is enabled and configured"""
-        return (
-            settings.ocr_service_enabled and
-            settings.gemini_api_key is not None
-        )
+        return settings.ocr_service_enabled and settings.gemini_api_key is not None
 
 
 # Global OCR service instance
 ocr_service: Optional[OCRService] = None
+
 
 def get_ocr_service() -> OCRService:
     """Get or create OCR service instance"""

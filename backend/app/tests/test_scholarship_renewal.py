@@ -23,7 +23,7 @@ class TestScholarshipRenewalPeriod:
             name="測試獎學金",
             category=ScholarshipCategory.PHD.value,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             amount=50000,
             status=ScholarshipStatus.ACTIVE.value,
             # 續領申請期間（優先處理）
@@ -149,7 +149,7 @@ class TestApplicationRenewal:
             scholarship_type_id=1,
             is_renewal=True,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             status=ApplicationStatus.SUBMITTED.value,
         )
 
@@ -166,7 +166,7 @@ class TestApplicationRenewal:
             scholarship_type_id=1,
             is_renewal=False,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             status=ApplicationStatus.SUBMITTED.value,
         )
 

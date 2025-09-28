@@ -51,7 +51,7 @@ class TestApplicationService:
             email="student@university.edu",
             name="Test Student",
             nycu_id="11011001",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
             is_active=True,
         )
 
@@ -62,7 +62,7 @@ class TestApplicationService:
             id=2,
             email="admin@university.edu",
             name="Admin User",
-            role=UserRole.ADMIN,
+            role=UserRole.admin,
             is_active=True,
         )
 
@@ -73,7 +73,7 @@ class TestApplicationService:
             id=3,
             email="professor@university.edu",
             name="Professor User",
-            role=UserRole.PROFESSOR,
+            role=UserRole.professor,
             is_active=True,
         )
 
@@ -89,7 +89,7 @@ class TestApplicationService:
             is_active=True,
             is_application_period=True,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
         )
 
     @pytest.fixture
@@ -101,7 +101,7 @@ class TestApplicationService:
             sub_scholarship_type="general",
             amount=Decimal("50000"),
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             student_data={
                 "name": "Test Student",
                 "student_id": "11011001",
@@ -129,7 +129,7 @@ class TestApplicationService:
             sub_scholarship_type="general",
             amount=Decimal("50000"),
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             student_data={
                 "name": "Test Student",
                 "student_id": "11011001",
@@ -589,7 +589,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_success(self):
         """Test successful student data retrieval"""
         # Arrange
-        user = User(id=1, role=UserRole.STUDENT, nycu_id="11011001")
+        user = User(id=1, role=UserRole.student, nycu_id="11011001")
 
         mock_student_data = {
             "name": "Test Student",
@@ -612,7 +612,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_non_student_user(self):
         """Test student data retrieval for non-student user"""
         # Arrange
-        user = User(id=1, role=UserRole.PROFESSOR, nycu_id="11011001")
+        user = User(id=1, role=UserRole.professor, nycu_id="11011001")
 
         # Act
         result = await get_student_data_from_user(user)
@@ -624,7 +624,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_no_nycu_id(self):
         """Test student data retrieval without NYCU ID"""
         # Arrange
-        user = User(id=1, role=UserRole.STUDENT, nycu_id=None)
+        user = User(id=1, role=UserRole.student, nycu_id=None)
 
         # Act
         result = await get_student_data_from_user(user)

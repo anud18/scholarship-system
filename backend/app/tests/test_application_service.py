@@ -337,7 +337,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -361,7 +361,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -383,7 +383,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.ADMIN
+        mock_user.role = UserRole.admin
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -406,7 +406,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -444,7 +444,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -471,7 +471,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -498,7 +498,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -520,7 +520,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id

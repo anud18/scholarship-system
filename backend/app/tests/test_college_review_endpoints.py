@@ -32,11 +32,11 @@ class TestCollegeReviewEndpoints:
             nycu_id="college_admin",
             name="College Admin",
             email="college@university.edu",
-            user_type=UserType.EMPLOYEE,
-            status=EmployeeStatus.ACTIVE,
+            user_type=UserType.employee,
+            status=EmployeeStatus.active,
             dept_code="COL",
             dept_name="College Office",
-            role=UserRole.COLLEGE,
+            role=UserRole.college,
         )
 
     @pytest.fixture
@@ -47,11 +47,11 @@ class TestCollegeReviewEndpoints:
             nycu_id="student123",
             name="Test Student",
             email="student@university.edu",
-            user_type=UserType.STUDENT,
-            status=EmployeeStatus.STUDENT,
+            user_type=UserType.student,
+            status=EmployeeStatus.student,
             dept_code="CS",
             dept_name="Computer Science",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
 
     @pytest.fixture

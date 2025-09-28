@@ -43,7 +43,7 @@ class TestEmailManagementService:
             id=1,
             email="admin@university.edu",
             name="Admin User",
-            role=UserRole.ADMIN,
+            role=UserRole.admin,
             is_active=True,
         )
 
@@ -54,7 +54,7 @@ class TestEmailManagementService:
             id=2,
             email="user@university.edu",
             name="Regular User",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
             is_active=True,
         )
 

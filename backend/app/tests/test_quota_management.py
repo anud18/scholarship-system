@@ -50,7 +50,7 @@ class TestQuotaManagementPermissions:
             scholarship_type_id=phd_scholarship.id,
             academic_year=113,
             semester=None,
-            quota_management_mode=QuotaManagementMode.MATRIX_BASED,
+            quota_management_mode=QuotaManagementMode.matrix_based,
             is_active=True,
             quotas={"nstc": {"E": 5, "C": 3}, "moe_1w": {"E": 2, "C": 1}},
         )
@@ -127,7 +127,7 @@ class TestMatrixQuotaOperations:
             scholarship_type_id=phd_scholarship.id,
             academic_year=113,
             semester=None,
-            quota_management_mode=QuotaManagementMode.MATRIX_BASED,
+            quota_management_mode=QuotaManagementMode.matrix_based,
             is_active=True,
             quotas={
                 "nstc": {"E": 5, "C": 3, "I": 2},
@@ -177,7 +177,7 @@ class TestMatrixQuotaOperations:
             scholarship_type_id=phd_scholarship.id,
             academic_year=113,
             semester=None,
-            quota_management_mode=QuotaManagementMode.MATRIX_BASED,
+            quota_management_mode=QuotaManagementMode.matrix_based,
             is_active=True,
             quotas={"nstc": {"E": 5, "C": 3}, "moe_1w": {"E": 2, "C": 1}},
             total_quota=11,
@@ -253,7 +253,7 @@ class TestQuotaUsageCalculation:
             scholarship_type_id=phd_scholarship.id,
             academic_year=113,
             semester=None,
-            quota_management_mode=QuotaManagementMode.MATRIX_BASED,
+            quota_management_mode=QuotaManagementMode.matrix_based,
             is_active=True,
             quotas={"nstc": {"E": 5, "C": 3}},
         )
@@ -336,7 +336,7 @@ class TestPeriodFiltering:
             scholarship_type_id=phd_scholarship.id,
             academic_year=113,
             semester=None,  # No semester for yearly scholarships
-            quota_management_mode=QuotaManagementMode.MATRIX_BASED,
+            quota_management_mode=QuotaManagementMode.matrix_based,
             is_active=True,
         )
 
@@ -344,8 +344,8 @@ class TestPeriodFiltering:
         undergrad_config = ScholarshipConfiguration(
             scholarship_type_id=undergrad_scholarship.id,
             academic_year=113,
-            semester=Semester.FIRST,  # Has semester
-            quota_management_mode=QuotaManagementMode.SIMPLE,
+            semester=Semester.first,  # Has semester
+            quota_management_mode=QuotaManagementMode.simple,
             is_active=True,
         )
 

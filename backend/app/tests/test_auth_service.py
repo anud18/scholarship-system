@@ -33,7 +33,7 @@ class TestAuthService:
             status="active",
             dept_code="CS",
             dept_name="Computer Science",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
 
     @pytest.fixture
@@ -49,7 +49,7 @@ class TestAuthService:
         user.nycu_id = "112550001"
         user.name = "Test User"
         user.email = "test@nycu.edu.tw"
-        user.role = UserRole.STUDENT
+        user.role = UserRole.student
         user.user_type = "student"
         user.status = "active"
         user.dept_code = "CS"

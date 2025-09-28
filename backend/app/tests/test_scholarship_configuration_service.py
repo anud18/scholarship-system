@@ -41,7 +41,7 @@ class TestScholarshipConfigurationServiceCRUD:
             email="admin@university.edu",
             username="admin",
             full_name="Test Admin",
-            role=UserRole.ADMIN,
+            role=UserRole.admin,
             is_active=True,
         )
         db_sync.add(user)
@@ -361,7 +361,7 @@ class TestScholarshipConfigurationServiceIntegration:
             email="lifecycle@test.edu",
             username="lifecycle",
             full_name="Lifecycle User",
-            role=UserRole.ADMIN,
+            role=UserRole.admin,
         )
         db_sync.add(user)
         db_sync.commit()

@@ -73,8 +73,8 @@ class TestAdminEndpoints:
             nycu_id="testuser",
             name="Test User",
             email="test@university.edu",
-            user_type=UserType.STUDENT,
-            role=UserRole.STUDENT,
+            user_type=UserType.student,
+            role=UserRole.student,
         )
         db.add(user)
         await db.commit()
@@ -96,8 +96,8 @@ class TestAdminEndpoints:
             nycu_id="testuser2",
             name="Test User 2",
             email="test2@university.edu",
-            user_type=UserType.STUDENT,
-            role=UserRole.STUDENT,
+            user_type=UserType.student,
+            role=UserRole.student,
         )
         db.add(user2)
         await db.commit()
@@ -248,8 +248,8 @@ class TestAdminEndpoints:
             nycu_id="P001",
             name="Prof User",
             email="prof@university.edu",
-            user_type=UserType.EMPLOYEE,
-            role=UserRole.PROFESSOR,
+            user_type=UserType.employee,
+            role=UserRole.professor,
         )
         db.add(professor)
         await db.commit()
