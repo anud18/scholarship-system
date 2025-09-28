@@ -1,24 +1,27 @@
 """
-MinIO file storage service
+MinIO storage service for roster file management
+MinIO文件儲存服務
 """
 
 import hashlib
 import io
 import logging
-import time
-import uuid
-from typing import Optional, Tuple
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import BinaryIO, Dict, List, Optional, Tuple
 
-from fastapi import HTTPException, UploadFile
 from minio import Minio
 from minio.error import S3Error
 
 from app.core.config import settings
+from app.core.exceptions import FileStorageError
 
 logger = logging.getLogger(__name__)
 
 
 class MinIOService:
+    """MinIO storage service for managing roster files"""
+
     def __init__(self):
         self.client = Minio(
             endpoint=settings.minio_endpoint,
@@ -26,204 +29,267 @@ class MinIOService:
             secret_key=settings.minio_secret_key,
             secure=settings.minio_secure,
         )
-        self.bucket_name = settings.minio_bucket
+        self.roster_bucket = settings.roster_minio_bucket
+        self.default_bucket = settings.minio_bucket
 
-        # Skip bucket check during testing to avoid connection issues
-        if not getattr(settings, "testing", False):
-            self._ensure_bucket_exists()
+        # Initialize buckets
+        self._ensure_buckets_exist()
 
-    def _ensure_bucket_exists(self):
-        """Ensure the bucket exists, create if it doesn't"""
+    def _ensure_buckets_exist(self):
+        """確保必要的MinIO bucket存在"""
         try:
-            if not self.client.bucket_exists(self.bucket_name):
-                self.client.make_bucket(self.bucket_name)
-                logger.info(f"Created bucket: {self.bucket_name}")
-        except S3Error as e:
-            logger.error(f"Error ensuring bucket exists: {e}")
-            raise HTTPException(status_code=500, detail="Storage service unavailable")
+            buckets_to_create = [self.roster_bucket, self.default_bucket]
 
-    async def upload_file(self, file: UploadFile, application_id: int, file_type: str) -> Tuple[str, int]:
+            for bucket_name in buckets_to_create:
+                if not self.client.bucket_exists(bucket_name):
+                    self.client.make_bucket(bucket_name)
+                    logger.info(f"Created MinIO bucket: {bucket_name}")
+
+                    # Set bucket policy for roster files (private by default)
+                    if bucket_name == self.roster_bucket:
+                        self._set_bucket_policy(bucket_name, private=True)
+
+        except Exception as e:
+            logger.error(f"Failed to ensure buckets exist: {e}")
+            raise FileStorageError(f"MinIO bucket initialization failed: {str(e)}")
+
+    def _set_bucket_policy(self, bucket_name: str, private: bool = True):
+        """設定bucket政策"""
+        try:
+            if private:
+                # Private bucket policy - no public access
+                policy = {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Deny",
+                            "Principal": "*",
+                            "Action": "s3:GetObject",
+                            "Resource": f"arn:aws:s3:::{bucket_name}/*",
+                        }
+                    ],
+                }
+                import json
+
+                self.client.set_bucket_policy(bucket_name, json.dumps(policy))
+
+        except Exception as e:
+            logger.warning(f"Failed to set bucket policy for {bucket_name}: {e}")
+
+    def upload_roster_file(
+        self,
+        file_content: bytes,
+        filename: str,
+        roster_id: int,
+        content_type: str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        metadata: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, str]:
         """
-        Upload file to MinIO
+        上傳造冊檔案到MinIO
 
         Args:
-            file: The uploaded file
-            application_id: The application ID
-            file_type: The type of document
+            file_content: 檔案內容(bytes)
+            filename: 檔案名稱
+            roster_id: 造冊ID
+            content_type: MIME類型
+            metadata: 額外的metadata
 
         Returns:
-            Tuple of (object_name, file_size)
+            Dict[str, str]: 包含object_name, file_path, file_hash, file_size等資訊
         """
         try:
-            # Validate file size
-            file_content = await file.read()
+            # 產生檔案路徑: rosters/{year}/{month}/{roster_id}/{filename}
+            now = datetime.now()
+            object_name = f"rosters/{now.year}/{now.month:02d}/{roster_id}/{filename}"
+
+            # 計算檔案hash
+            file_hash = hashlib.sha256(file_content).hexdigest()
             file_size = len(file_content)
 
-            if file_size > settings.max_file_size:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File size exceeds limit of {settings.max_file_size} bytes",
-                )
+            # 準備metadata
+            upload_metadata = {
+                "Content-Type": content_type,
+                "roster-id": str(roster_id),
+                "upload-timestamp": now.isoformat(),
+                "file-hash": file_hash,
+                "original-filename": filename,
+            }
 
-            # Validate file type
-            file_extension = file.filename.split(".")[-1].lower() if file.filename else ""
-            if file_extension not in settings.allowed_file_types_list:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"File type '{file_extension}' not allowed. Allowed types: {', '.join(settings.allowed_file_types_list)}",
-                )
+            if metadata:
+                upload_metadata.update(metadata)
 
-            # Generate unique object name using timestamp + hash + UUID for maximum uniqueness
-            timestamp = int(time.time() * 1000000)  # Microsecond precision
-            file_content_hash = hashlib.sha256(file_content).hexdigest()[:16]  # First 16 chars of hash
-            unique_id = str(uuid.uuid4())[:8]  # First 8 chars of UUID
-            file_extension = file.filename.split(".")[-1].lower() if file.filename else ""
+            # 上傳檔案
+            file_stream = io.BytesIO(file_content)
 
-            # Format: 統一存放在 documents 資料夾，所有文件（固定和動態）都在同一位置
-            object_name = (
-                f"applications/{application_id}/documents/{timestamp}_{file_content_hash}_{unique_id}.{file_extension}"
-            )
-
-            # Upload to MinIO
             self.client.put_object(
-                bucket_name=self.bucket_name,
+                bucket_name=self.roster_bucket,
                 object_name=object_name,
-                data=io.BytesIO(file_content),
+                data=file_stream,
                 length=file_size,
-                content_type=file.content_type or "application/octet-stream",
+                content_type=content_type,
+                metadata=upload_metadata,
             )
 
-            logger.info(f"Successfully uploaded file: {object_name}")
-            return object_name, file_size
+            logger.info(f"Uploaded roster file: {object_name} (size: {file_size}, hash: {file_hash[:8]}...)")
 
-        except S3Error as e:
-            logger.error(f"MinIO upload error: {e}")
-            raise HTTPException(status_code=500, detail="File upload failed")
+            return {
+                "object_name": object_name,
+                "file_path": f"minio://{self.roster_bucket}/{object_name}",
+                "file_hash": file_hash,
+                "file_size": file_size,
+                "bucket": self.roster_bucket,
+                "content_type": content_type,
+            }
+
         except Exception as e:
-            logger.error(f"Unexpected error during file upload: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+            logger.error(f"Failed to upload roster file {filename}: {e}")
+            raise FileStorageError(f"檔案上傳失敗: {str(e)}")
 
-    def get_file_stream(self, object_name: str):
+    def download_roster_file(self, object_name: str) -> Tuple[bytes, Dict[str, str]]:
         """
-        Get file stream directly from MinIO (for backend proxy)
+        下載造冊檔案
 
         Args:
-            object_name: The object name in MinIO
+            object_name: MinIO object名稱
 
         Returns:
-            File stream and metadata
+            Tuple[bytes, Dict[str, str]]: 檔案內容和metadata
         """
         try:
-            response = self.client.get_object(self.bucket_name, object_name)
-            return response
+            # 取得檔案資訊
+            stat = self.client.stat_object(self.roster_bucket, object_name)
+
+            # 下載檔案
+            response = self.client.get_object(self.roster_bucket, object_name)
+            file_content = response.read()
+            response.close()
+            response.release_conn()
+
+            # 驗證檔案hash (如果metadata中有的話)
+            stored_hash = stat.metadata.get("file-hash")
+            if stored_hash:
+                actual_hash = hashlib.sha256(file_content).hexdigest()
+                if stored_hash != actual_hash:
+                    logger.warning(f"File hash mismatch for {object_name}: stored={stored_hash}, actual={actual_hash}")
+
+            logger.info(f"Downloaded roster file: {object_name} (size: {len(file_content)})")
+
+            return file_content, stat.metadata
+
         except S3Error as e:
-            logger.error(f"Error getting file stream for {object_name}: {e}")
-            raise HTTPException(status_code=404, detail="File not found")
+            if e.code == "NoSuchKey":
+                raise FileStorageError(f"檔案不存在: {object_name}")
+            else:
+                logger.error(f"Failed to download roster file {object_name}: {e}")
+                raise FileStorageError(f"檔案下載失敗: {str(e)}")
+        except Exception as e:
+            logger.error(f"Failed to download roster file {object_name}: {e}")
+            raise FileStorageError(f"檔案下載失敗: {str(e)}")
 
-    def delete_file(self, object_name: str) -> bool:
+    def delete_roster_file(self, object_name: str) -> bool:
         """
-        Delete file from MinIO
+        刪除造冊檔案
 
         Args:
-            object_name: The object name to delete
+            object_name: MinIO object名稱
 
         Returns:
-            True if successful
+            bool: 是否成功刪除
         """
         try:
-            self.client.remove_object(self.bucket_name, object_name)
-            logger.info(f"Successfully deleted file: {object_name}")
+            self.client.remove_object(self.roster_bucket, object_name)
+            logger.info(f"Deleted roster file: {object_name}")
             return True
+
         except S3Error as e:
-            logger.error(f"Error deleting file: {e}")
+            if e.code == "NoSuchKey":
+                logger.warning(f"File already deleted or does not exist: {object_name}")
+                return True  # 檔案不存在也算成功
+            else:
+                logger.error(f"Failed to delete roster file {object_name}: {e}")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to delete roster file {object_name}: {e}")
             return False
 
-    def clone_file_to_application(
-        self,
-        source_object_name: str,
-        application_id: str,
-        file_type: str = "bank_document",
-    ) -> str:
+    def get_presigned_url(self, object_name: str, expires: timedelta = timedelta(hours=1), method: str = "GET") -> str:
         """
-        Clone a file from user profile to application-specific path
-        將固定文件從用戶個人資料複製到申請專屬路徑，與動態上傳文件存放在一起
+        產生預簽名URL用於直接下載
 
         Args:
-            source_object_name: The source file object name (e.g., user-profiles/123/bank-documents/abc.pdf)
-            application_id: The application ID (e.g., APP-2025-12345678)
-            file_type: The file type for organization
+            object_name: MinIO object名稱
+            expires: URL有效期限
+            method: HTTP方法 (GET/PUT)
 
         Returns:
-            New object name for the cloned file
+            str: 預簽名URL
         """
         try:
-            # Extract file extension from source
-            file_extension = source_object_name.split(".")[-1] if "." in source_object_name else "jpg"
+            url = self.client.presigned_url(
+                method=method,
+                bucket_name=self.roster_bucket,
+                object_name=object_name,
+                expires=expires,
+            )
 
-            # Generate new object name in application path - 統一存放在 documents 資料夾
-            # 所有文件（固定或動態）都存放在相同路徑，統一管理
-            new_object_name = f"applications/{application_id}/documents/{uuid.uuid4().hex}.{file_extension}"
+            logger.info(f"Generated presigned URL for {object_name} (expires in {expires})")
+            return url
 
-            try:
-                # Use copy_object to clone the file
-                from minio.commonconfig import CopySource
-
-                copy_source = CopySource(self.bucket_name, source_object_name)
-
-                self.client.copy_object(
-                    bucket_name=self.bucket_name,
-                    object_name=new_object_name,
-                    source=copy_source,
-                )
-
-                logger.info(f"Successfully cloned file from {source_object_name} to {new_object_name}")
-                return new_object_name
-
-            except Exception as copy_error:
-                logger.warning(f"Source file {source_object_name} not found, creating placeholder: {copy_error}")
-                # For testing purposes, create a placeholder file
-                import io
-
-                placeholder_content = b"Placeholder bank document for testing"
-                self.client.put_object(
-                    bucket_name=self.bucket_name,
-                    object_name=new_object_name,
-                    data=io.BytesIO(placeholder_content),
-                    length=len(placeholder_content),
-                    content_type="application/octet-stream",
-                )
-                logger.info(f"Created placeholder file at {new_object_name}")
-                return new_object_name
-
-        except S3Error as e:
-            logger.error(f"Error cloning file from {source_object_name}: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to clone file: {str(e)}")
         except Exception as e:
-            logger.error(f"Unexpected error cloning file: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Failed to clone file: {str(e)}")
+            logger.error(f"Failed to generate presigned URL for {object_name}: {e}")
+            raise FileStorageError(f"下載連結產生失敗: {str(e)}")
 
-    def extract_object_name_from_url(self, file_url: str) -> Optional[str]:
+    def health_check(self) -> Dict[str, bool]:
         """
-        Extract MinIO object name from file URL
-
-        Args:
-            file_url: The file URL (e.g., /api/v1/user-profiles/files/bank_documents/abc123.pdf)
+        檢查MinIO服務健康狀態
 
         Returns:
-            Object name or None if not a MinIO path
+            Dict[str, bool]: 健康狀態資訊
         """
         try:
-            if "/user-profiles/files/bank_documents/" in file_url:
-                # Extract filename from URL
-                filename = file_url.split("/")[-1].split("?")[0]  # Remove query params
-                # Find corresponding object in user-profiles path
-                # This is a simplified approach - in production you might want to store the full object path
-                return f"user-profiles/*/bank-documents/{filename}"
-            return None
+            # 測試連線和bucket存在性
+            bucket_exists = self.client.bucket_exists(self.roster_bucket)
+
+            # 測試上傳/下載功能
+            test_object = "health-check/test.txt"
+            test_content = b"health check test"
+
+            # 上傳測試檔案
+            self.client.put_object(
+                self.roster_bucket,
+                test_object,
+                io.BytesIO(test_content),
+                len(test_content),
+            )
+
+            # 下載測試檔案
+            response = self.client.get_object(self.roster_bucket, test_object)
+            downloaded_content = response.read()
+            response.close()
+            response.release_conn()
+
+            # 刪除測試檔案
+            self.client.remove_object(self.roster_bucket, test_object)
+
+            upload_download_ok = downloaded_content == test_content
+
+            return {
+                "connection": True,
+                "bucket_exists": bucket_exists,
+                "upload_download": upload_download_ok,
+                "overall_healthy": bucket_exists and upload_download_ok,
+            }
+
         except Exception as e:
-            logger.error(f"Error extracting object name from URL {file_url}: {e}")
-            return None
+            logger.error(f"MinIO health check failed: {e}")
+            return {
+                "connection": False,
+                "bucket_exists": False,
+                "upload_download": False,
+                "overall_healthy": False,
+                "error": str(e),
+            }
 
 
-# Global instance
+# 全域MinIO服務實例
 minio_service = MinIOService()
