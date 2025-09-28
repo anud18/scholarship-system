@@ -1,24 +1,24 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
-import { Upload, File, X, CheckCircle, AlertCircle, Eye } from "lucide-react"
-import { FilePreviewDialog } from "@/components/file-preview-dialog"
-import { Locale } from "@/lib/validators"
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Upload, File, X, CheckCircle, AlertCircle, Eye } from "lucide-react";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import { Locale } from "@/lib/validators";
 
 interface FileUploadProps {
-  onFilesChange: (files: File[]) => void
-  acceptedTypes?: string[]
-  maxSize?: number
-  maxFiles?: number
-  initialFiles?: File[] // 支持初始文件
-  fileType?: string // 文件類型標識符
-  locale?: Locale // 添加語言支持
+  onFilesChange: (files: File[]) => void;
+  acceptedTypes?: string[];
+  maxSize?: number;
+  maxFiles?: number;
+  initialFiles?: File[]; // 支持初始文件
+  fileType?: string; // 文件類型標識符
+  locale?: Locale; // 添加語言支持
 }
 
 export function FileUpload({
@@ -30,195 +30,216 @@ export function FileUpload({
   fileType = "",
   locale = "zh",
 }: FileUploadProps) {
-  const [files, setFiles] = useState<File[]>(initialFiles)
-  const [dragActive, setDragActive] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({})
-  const [uploadStatus, setUploadStatus] = useState<{ [key: string]: "uploading" | "success" | "error" }>({})
-  const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; type: string } | null>(null)
-  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
+  const [files, setFiles] = useState<File[]>(initialFiles);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{
+    [key: string]: number;
+  }>({});
+  const [uploadStatus, setUploadStatus] = useState<{
+    [key: string]: "uploading" | "success" | "error";
+  }>({});
+  const [previewFile, setPreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
 
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // 為每個組件生成穩定的唯一 ID
-  const inputId = useMemo(() =>
-    `file-upload-${fileType || 'default'}-${Math.random().toString(36).substr(2, 9)}`,
+  const inputId = useMemo(
+    () =>
+      `file-upload-${fileType || "default"}-${Math.random().toString(36).substr(2, 9)}`,
     [fileType]
-  )
+  );
 
   // 檢查文件是否為已上傳的文件
   const isUploadedFile = (file: File) => {
-    return (file as any).id || (file as any).file_path || (file as any).url
-  }
+    return (file as any).id || (file as any).file_path || (file as any).url;
+  };
 
   // 初始化和同步外部文件
   useEffect(() => {
-    setFiles([...initialFiles])
-  }, [initialFiles])
+    setFiles([...initialFiles]);
+  }, [initialFiles]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+    e.preventDefault();
+    e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true)
+      setDragActive(true);
     } else if (e.type === "dragleave") {
-      setDragActive(false)
+      setDragActive(false);
     }
-  }, [])
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragActive(false)
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFiles(Array.from(e.dataTransfer.files))
+      handleFiles(Array.from(e.dataTransfer.files));
     }
-  }, [])
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault()
+    e.preventDefault();
     if (e.target.files && e.target.files[0]) {
-      handleFiles(Array.from(e.target.files))
+      handleFiles(Array.from(e.target.files));
     }
-  }
+  };
 
   const handleFiles = (newFiles: File[]) => {
-    const validFiles = newFiles.filter((file) => {
+    const validFiles = newFiles.filter(file => {
       // Check file type
-      const fileExtension = "." + file.name.split(".").pop()?.toLowerCase()
+      const fileExtension = "." + file.name.split(".").pop()?.toLowerCase();
       if (!acceptedTypes.includes(fileExtension)) {
-        return false
+        return false;
       }
 
       // Check file size
       if (file.size > maxSize) {
-        return false
+        return false;
       }
 
-      return true
-    })
+      return true;
+    });
 
-    const updatedFiles = [...files, ...validFiles].slice(0, maxFiles)
-    setFiles(updatedFiles)
-    onFilesChange(updatedFiles)
+    const updatedFiles = [...files, ...validFiles].slice(0, maxFiles);
+    setFiles(updatedFiles);
+    onFilesChange(updatedFiles);
 
     // Simulate upload progress for new files only
-    validFiles.forEach((file) => {
+    validFiles.forEach(file => {
       // 跳過已上傳的文件
-      if (isUploadedFile(file)) return
+      if (isUploadedFile(file)) return;
 
-      const fileName = `${fileType}_${file.name}` // Add fileType prefix to avoid conflicts
-      setUploadStatus((prev) => ({ ...prev, [fileName]: "uploading" }))
+      const fileName = `${fileType}_${file.name}`; // Add fileType prefix to avoid conflicts
+      setUploadStatus(prev => ({ ...prev, [fileName]: "uploading" }));
 
-      let progress = 0
+      let progress = 0;
       const interval = setInterval(() => {
-        progress += Math.random() * 30
+        progress += Math.random() * 30;
         if (progress >= 100) {
-          progress = 100
-          setUploadStatus((prev) => ({ ...prev, [fileName]: "success" }))
-          clearInterval(interval)
+          progress = 100;
+          setUploadStatus(prev => ({ ...prev, [fileName]: "success" }));
+          clearInterval(interval);
         }
-        setUploadProgress((prev) => ({ ...prev, [fileName]: progress }))
-      }, 200)
-    })
-  }
+        setUploadProgress(prev => ({ ...prev, [fileName]: progress }));
+      }, 200);
+    });
+  };
 
   const removeFile = (index: number) => {
-    const fileToRemove = files[index]
-    const updatedFiles = files.filter((_, i) => i !== index)
-    setFiles(updatedFiles)
-    onFilesChange(updatedFiles)
+    const fileToRemove = files[index];
+    const updatedFiles = files.filter((_, i) => i !== index);
+    setFiles(updatedFiles);
+    onFilesChange(updatedFiles);
 
     // Clean up progress and status for removed file
     if (fileToRemove) {
-      const fileName = `${fileType}_${fileToRemove.name}`
+      const fileName = `${fileType}_${fileToRemove.name}`;
       setUploadProgress(prev => {
-        const newProgress = { ...prev }
-        delete newProgress[fileName]
-        return newProgress
-      })
+        const newProgress = { ...prev };
+        delete newProgress[fileName];
+        return newProgress;
+      });
       setUploadStatus(prev => {
-        const newStatus = { ...prev }
-        delete newStatus[fileName]
-        return newStatus
-      })
+        const newStatus = { ...prev };
+        delete newStatus[fileName];
+        return newStatus;
+      });
     }
-  }
+  };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes"
-    const k = 1024
-    const sizes = ["Bytes", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-  }
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return (
+      Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+    );
+  };
 
   // 獲取文件的顯示大小
   const getFileDisplaySize = (file: File) => {
     // 如果是已上傳的文件，優先使用 originalSize
     if (isUploadedFile(file) && (file as any).originalSize) {
-      return formatFileSize((file as any).originalSize)
+      return formatFileSize((file as any).originalSize);
     }
-    return formatFileSize(file.size)
-  }
+    return formatFileSize(file.size);
+  };
 
   // 獲取文件的預覽URL
   const getFilePreviewUrl = (file: File) => {
     if (isUploadedFile(file)) {
       // 如果是已上傳的文件，使用其URL
-      return (file as any).url || (file as any).file_path || URL.createObjectURL(file)
+      return (
+        (file as any).url ||
+        (file as any).file_path ||
+        URL.createObjectURL(file)
+      );
     }
     // 如果是本地文件，創建臨時URL
-    return URL.createObjectURL(file)
-  }
+    return URL.createObjectURL(file);
+  };
 
   // 獲取文件類型
   const getFileType = (file: File) => {
-    const filename = file.name.toLowerCase()
-    if (filename.endsWith('.pdf')) {
-      return 'application/pdf'
-    } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].some(ext => filename.endsWith(ext))) {
-      return 'image'
+    const filename = file.name.toLowerCase();
+    if (filename.endsWith(".pdf")) {
+      return "application/pdf";
+    } else if (
+      [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some(ext =>
+        filename.endsWith(ext)
+      )
+    ) {
+      return "image";
     }
-    return 'other'
-  }
+    return "other";
+  };
 
   // 處理文件預覽
   const handleFilePreview = (file: File) => {
-    const previewUrl = getFilePreviewUrl(file)
-    const fileType = getFileType(file)
+    const previewUrl = getFilePreviewUrl(file);
+    const fileType = getFileType(file);
 
     setPreviewFile({
       url: previewUrl,
       filename: file.name,
-      type: fileType
-    })
-    setIsPreviewDialogOpen(true)
-  }
+      type: fileType,
+    });
+    setIsPreviewDialogOpen(true);
+  };
 
   // 清理臨時URL
   const cleanupTempUrl = useCallback((url: string) => {
-    if (url.startsWith('blob:')) {
-      URL.revokeObjectURL(url)
+    if (url.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
     }
-  }, [])
+  }, []);
 
   // 組件卸載時清理臨時URL
   useState(() => {
     return () => {
       files.forEach(file => {
         if (!isUploadedFile(file)) {
-          cleanupTempUrl(URL.createObjectURL(file))
+          cleanupTempUrl(URL.createObjectURL(file));
         }
-      })
-    }
-  })
+      });
+    };
+  });
 
   return (
     <div className="space-y-4">
       <Card
         className={`border-2 border-dashed transition-colors ${
-          dragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25"
+          dragActive
+            ? "border-primary bg-primary/5"
+            : "border-muted-foreground/25"
         }`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
@@ -230,7 +251,8 @@ export function FileUpload({
           <div className="space-y-2">
             <p className="text-sm font-medium">拖放檔案到此處或點擊上傳</p>
             <p className="text-xs text-muted-foreground">
-              支援格式: {acceptedTypes.join(", ")} | 最大檔案大小: {formatFileSize(maxSize)}
+              支援格式: {acceptedTypes.join(", ")} | 最大檔案大小:{" "}
+              {formatFileSize(maxSize)}
             </p>
           </div>
 
@@ -253,7 +275,7 @@ export function FileUpload({
       {files.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-sm font-medium">
-            已上傳檔案 ({files.length}/{maxFiles}) - {fileType || '未指定類型'}
+            已上傳檔案 ({files.length}/{maxFiles}) - {fileType || "未指定類型"}
           </h4>
           {files.map((file, index) => (
             <Card key={index}>
@@ -282,8 +304,8 @@ export function FileUpload({
                   </Button>
 
                   {(() => {
-                    const fileName = `${fileType}_${file.name}`
-                    const isUploaded = isUploadedFile(file)
+                    const fileName = `${fileType}_${file.name}`;
+                    const isUploaded = isUploadedFile(file);
 
                     // 如果是已上傳的文件，顯示已上傳狀態
                     if (isUploaded) {
@@ -292,7 +314,7 @@ export function FileUpload({
                           <CheckCircle className="h-3 w-3 mr-1" />
                           已存在
                         </Badge>
-                      )
+                      );
                     }
 
                     // 新上傳文件的狀態顯示
@@ -300,7 +322,10 @@ export function FileUpload({
                       <>
                         {uploadStatus[fileName] === "uploading" && (
                           <div className="flex items-center space-x-2">
-                            <Progress value={uploadProgress[fileName] || 0} className="w-20 h-2" />
+                            <Progress
+                              value={uploadProgress[fileName] || 0}
+                              className="w-20 h-2"
+                            />
                             <span className="text-xs text-muted-foreground">
                               {Math.round(uploadProgress[fileName] || 0)}%
                             </span>
@@ -321,10 +346,14 @@ export function FileUpload({
                           </Badge>
                         )}
                       </>
-                    )
+                    );
                   })()}
 
-                  <Button variant="ghost" size="sm" onClick={() => removeFile(index)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeFile(index)}
+                  >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -342,5 +371,5 @@ export function FileUpload({
         locale={locale}
       />
     </div>
-  )
+  );
 }

@@ -1,8 +1,8 @@
-export type Locale = "zh" | "en"
+export type Locale = "zh" | "en";
 
-export const defaultLocale: Locale = "zh"
+export const defaultLocale: Locale = "zh";
 
-export const locales: Locale[] = ["zh", "en"]
+export const locales: Locale[] = ["zh", "en"];
 
 export const translations = {
   zh: {
@@ -221,87 +221,88 @@ export const translations = {
 
     eligibility_tags: {
       // Basic eligibility
-      "博士生": "博士生",
-      "碩士生": "碩士生",
-      "學士生": "學士生",
-      "學士班新生": "學士班新生",
-      "在學生": "在學生",
-      "非在職生": "非在職生",
-      "非陸生": "非陸生",
-      "中華民國國籍": "中華民國國籍",
-      "三年級以下": "三年級以下",
-      "一般生": "一般生",
-      "逕博生": "逕讀博士生",
-      "第一學年": "第一學年"
+      博士生: "博士生",
+      碩士生: "碩士生",
+      學士生: "學士生",
+      學士班新生: "學士班新生",
+      在學生: "在學生",
+      非在職生: "非在職生",
+      非陸生: "非陸生",
+      中華民國國籍: "中華民國國籍",
+      三年級以下: "三年級以下",
+      一般生: "一般生",
+      逕博生: "逕讀博士生",
+      第一學年: "第一學年",
     },
     rule_types: {
-      "nstc": "國科會",
-      "moe_1w": "教育部(1萬)",
-      "moe_2w": "教育部(2萬)"
+      nstc: "國科會",
+      moe_1w: "教育部(1萬)",
+      moe_2w: "教育部(2萬)",
     },
     scholarship_sections: {
-      "eligible_programs": "可申請項目",
-      "eligibility": "申請資格",
-      "period": "申請期間",
-      "fields": "申請欄位",
-      "required_docs": "必要文件",
-      "optional_docs": "選填文件"
+      eligible_programs: "可申請項目",
+      eligibility: "申請資格",
+      period: "申請期間",
+      fields: "申請欄位",
+      required_docs: "必要文件",
+      optional_docs: "選填文件",
     },
 
     // 申請相關
     applications: {
-      "submitted_at": "提交時間",
-      "withdraw": "撤回",
-      "submit": "提交",
-      "new_application": "新增申請",
-      "edit_application": "編輯申請",
-      "save_draft": "儲存草稿",
-      "update_draft": "更新草稿",
-      "update_application": "更新申請",
-      "cancel_edit": "取消編輯",
-      "view_details": "查看詳情",
-      "delete_draft": "刪除草稿",
-      "application_id": "申請編號",
-      "application_type": "獎學金類型",
-      "application_amount": "申請金額",
-      "form_progress": "完成進度",
-      "terms_agreement": "條款同意",
-      "select_scholarship": "選擇獎學金類型",
-      "application_items": "申請項目",
-      "single_selection": "單選模式",
-      "multiple_selection": "可選擇多個項目",
-      "hierarchical_selection": "階層式選擇",
-      "select_previous_first": "請先選擇前面的項目",
-      "select_one_item": "請選擇一個項目",
-      "sequential_selection": "請依序選擇項目（需按順序選取）",
-      "select_at_least_one": "請至少選擇一個申請項目",
-      "complete_required_fields": "請完成所有必填項目",
-      "terms_must_agree": "您必須同意申請條款才能提交申請",
-      "cannot_change_type": "編輯模式下無法更改獎學金類型",
-      "editing_application_id": "正在編輯申請編號",
-      "submitting": "提交中...",
-      "updating": "更新中...",
-      "saving": "儲存中...",
-      "loading": "載入中...",
-      "retry": "重試",
-      "load_error": "載入錯誤"
+      submitted_at: "提交時間",
+      withdraw: "撤回",
+      submit: "提交",
+      new_application: "新增申請",
+      edit_application: "編輯申請",
+      save_draft: "儲存草稿",
+      update_draft: "更新草稿",
+      update_application: "更新申請",
+      cancel_edit: "取消編輯",
+      view_details: "查看詳情",
+      delete_draft: "刪除草稿",
+      application_id: "申請編號",
+      application_type: "獎學金類型",
+      application_amount: "申請金額",
+      form_progress: "完成進度",
+      terms_agreement: "條款同意",
+      select_scholarship: "選擇獎學金類型",
+      application_items: "申請項目",
+      single_selection: "單選模式",
+      multiple_selection: "可選擇多個項目",
+      hierarchical_selection: "階層式選擇",
+      select_previous_first: "請先選擇前面的項目",
+      select_one_item: "請選擇一個項目",
+      sequential_selection: "請依序選擇項目（需按順序選取）",
+      select_at_least_one: "請至少選擇一個申請項目",
+      complete_required_fields: "請完成所有必填項目",
+      terms_must_agree: "您必須同意申請條款才能提交申請",
+      cannot_change_type: "編輯模式下無法更改獎學金類型",
+      editing_application_id: "正在編輯申請編號",
+      submitting: "提交中...",
+      updating: "更新中...",
+      saving: "儲存中...",
+      loading: "載入中...",
+      retry: "重試",
+      load_error: "載入錯誤",
     },
 
     // 通用訊息
     messages: {
-      "no_eligible_scholarships": "目前沒有符合資格的獎學金",
-      "no_eligible_scholarships_desc": "很抱歉，您目前沒有符合申請資格的獎學金。請稍後再試或聯繫獎學金辦公室。",
-      "eligible": "可申請",
-      "not_eligible": "不符合申請資格",
-      "loading_data": "正在載入資料...",
-      "loading_scholarship_info": "載入獎學金資訊...",
-      "application_success": "申請提交成功！",
-      "draft_saved": "草稿已保存，您可以繼續編輯",
-      "draft_updated": "草稿已更新",
-      "draft_deleted": "草稿已成功刪除",
-      "confirm_delete_draft": "確定要刪除此草稿嗎？此操作無法復原。",
-      "delete_error": "刪除草稿時發生錯誤"
-    }
+      no_eligible_scholarships: "目前沒有符合資格的獎學金",
+      no_eligible_scholarships_desc:
+        "很抱歉，您目前沒有符合申請資格的獎學金。請稍後再試或聯繫獎學金辦公室。",
+      eligible: "可申請",
+      not_eligible: "不符合申請資格",
+      loading_data: "正在載入資料...",
+      loading_scholarship_info: "載入獎學金資訊...",
+      application_success: "申請提交成功！",
+      draft_saved: "草稿已保存，您可以繼續編輯",
+      draft_updated: "草稿已更新",
+      draft_deleted: "草稿已成功刪除",
+      confirm_delete_draft: "確定要刪除此草稿嗎？此操作無法復原。",
+      delete_error: "刪除草稿時發生錯誤",
+    },
   },
 
   en: {
@@ -327,7 +328,8 @@ export const translations = {
       title: "Personal Profile Management",
       subtitle: "Manage your personal information and academic records",
       completion: "Profile Completion",
-      completion_description: "We recommend completing your profile for better system functionality",
+      completion_description:
+        "We recommend completing your profile for better system functionality",
       tabs: {
         overview: "Overview",
         basic: "Basic Info",
@@ -348,9 +350,11 @@ export const translations = {
       // Messages and notifications
       loading: "Loading...",
       loading_profile: "Loading profile...",
-      profile_may_not_exist: "Profile may not exist yet, you can start filling in the information",
+      profile_may_not_exist:
+        "Profile may not exist yet, you can start filling in the information",
       connection_error: "Connection Error",
-      connection_error_desc: "Unable to connect to server, please check network connection",
+      connection_error_desc:
+        "Unable to connect to server, please check network connection",
       load_error: "Load Error",
       load_profile_error: "Error occurred while loading profile",
       validation_failed: "Validation Failed",
@@ -361,11 +365,13 @@ export const translations = {
       update_profile_error: "Error occurred while updating profile",
 
       // Contact info notice
-      contact_notice: "Contact information is from the academic system. Please contact the Student Affairs Office to modify.",
+      contact_notice:
+        "Contact information is from the academic system. Please contact the Student Affairs Office to modify.",
 
       // Basic info section
       basic_readonly_title: "Basic Information (From API, Read Only)",
-      basic_readonly_notice: "The following information is from the academic system. Please contact relevant departments to modify.",
+      basic_readonly_notice:
+        "The following information is from the academic system. Please contact relevant departments to modify.",
       name: "Name",
       id_number: "Student ID/Employee ID",
       email: "Email",
@@ -395,14 +401,17 @@ export const translations = {
       upload_bank_document: "Upload Bank Account Proof Document",
       file_formats: "• Accepted formats: JPG, JPEG, PNG, WebP, PDF",
       file_size_limit: "• File size limit: 10MB",
-      upload_suggestion: "• We recommend uploading a clear bank passbook cover or account opening certificate",
+      upload_suggestion:
+        "• We recommend uploading a clear bank passbook cover or account opening certificate",
       saving: "Saving...",
       save_bank_info: "Save Bank Account Information",
       select_file: "Please Select File",
-      select_file_desc: "Please select a bank account proof document to upload first",
+      select_file_desc:
+        "Please select a bank account proof document to upload first",
       file_too_large: "File Too Large",
       file_size_error: "File size cannot exceed 10MB",
-      document_uploaded_success: "Bank account proof document has been uploaded",
+      document_uploaded_success:
+        "Bank account proof document has been uploaded",
       upload_failed: "Upload Failed",
       upload_error: "Error occurred while uploading file",
       document_deleted: "Bank account proof document has been deleted",
@@ -467,7 +476,8 @@ export const translations = {
       new_application: "New Application",
       application_records: "Application Records",
       no_applications: "No application records yet",
-      click_new_application: "Click 'New Application' to start applying for scholarship",
+      click_new_application:
+        "Click 'New Application' to start applying for scholarship",
       eligibility: "Eligibility",
       form_completion: "Form Completion",
       review_progress: "Review Progress",
@@ -520,97 +530,101 @@ export const translations = {
 
     eligibility_tags: {
       // Basic eligibility
-      "碩士生": "Master Student",
-      "學士生": "Undergraduate Student",
-      "學士班新生": "Undergraduate Freshman",
-      "博士生": "PhD Student",
-      "在學生": "Current Student",
-      "非在職生": "Full-time Student",
-      "非陸生": "Non-Mainland Student",
-      "中華民國國籍": "ROC Nationality",
-      "三年級以下": "Below 3rd Year",
-      "一般生": "Regular Student",
-      "逕博生": "Direct PhD Student",
-      "第一學年": "First Academic Year"
+      碩士生: "Master Student",
+      學士生: "Undergraduate Student",
+      學士班新生: "Undergraduate Freshman",
+      博士生: "PhD Student",
+      在學生: "Current Student",
+      非在職生: "Full-time Student",
+      非陸生: "Non-Mainland Student",
+      中華民國國籍: "ROC Nationality",
+      三年級以下: "Below 3rd Year",
+      一般生: "Regular Student",
+      逕博生: "Direct PhD Student",
+      第一學年: "First Academic Year",
     },
     rule_types: {
-      "nstc": "NSTC",
-      "moe_1w": "MOE (10K)",
-      "moe_2w": "MOE (20K)"
+      nstc: "NSTC",
+      moe_1w: "MOE (10K)",
+      moe_2w: "MOE (20K)",
     },
     scholarship_sections: {
-      "eligible_programs": "Eligible Programs",
-      "eligibility": "Eligibility",
-      "period": "Application Period",
-      "fields": "Required Fields",
-      "required_docs": "Required Documents",
-      "optional_docs": "Optional Documents"
+      eligible_programs: "Eligible Programs",
+      eligibility: "Eligibility",
+      period: "Application Period",
+      fields: "Required Fields",
+      required_docs: "Required Documents",
+      optional_docs: "Optional Documents",
     },
 
     // Application related
     applications: {
-      "submitted_at": "Submitted At",
-      "withdraw": "Withdraw",
-      "submit": "Submit",
-      "new_application": "New Application",
-      "edit_application": "Edit Application",
-      "save_draft": "Save Draft",
-      "update_draft": "Update Draft",
-      "update_application": "Update Application",
-      "cancel_edit": "Cancel Edit",
-      "view_details": "View Details",
-      "delete_draft": "Delete Draft",
-      "application_id": "Application ID",
-      "application_type": "Scholarship Type",
-      "application_amount": "Application Amount",
-      "form_progress": "Progress",
-      "terms_agreement": "Terms Agreement",
-      "select_scholarship": "Select scholarship type",
-      "application_items": "Application Items",
-      "single_selection": "Single selection",
-      "multiple_selection": "Multiple selections allowed",
-      "hierarchical_selection": "Hierarchical selection",
-      "select_previous_first": "Select previous items first",
-      "select_one_item": "Please select one item",
-      "sequential_selection": "Please select items in order (sequential selection required)",
-      "select_at_least_one": "Please select at least one item",
-      "complete_required_fields": "Please complete all required fields",
-      "terms_must_agree": "You must agree to the terms and conditions to submit the application",
-      "cannot_change_type": "Cannot change scholarship type in edit mode",
-      "editing_application_id": "Editing Application ID",
-      "submitting": "Submitting...",
-      "updating": "Updating...",
-      "saving": "Saving...",
-      "loading": "Loading...",
-      "retry": "Retry",
-      "load_error": "Load Error"
+      submitted_at: "Submitted At",
+      withdraw: "Withdraw",
+      submit: "Submit",
+      new_application: "New Application",
+      edit_application: "Edit Application",
+      save_draft: "Save Draft",
+      update_draft: "Update Draft",
+      update_application: "Update Application",
+      cancel_edit: "Cancel Edit",
+      view_details: "View Details",
+      delete_draft: "Delete Draft",
+      application_id: "Application ID",
+      application_type: "Scholarship Type",
+      application_amount: "Application Amount",
+      form_progress: "Progress",
+      terms_agreement: "Terms Agreement",
+      select_scholarship: "Select scholarship type",
+      application_items: "Application Items",
+      single_selection: "Single selection",
+      multiple_selection: "Multiple selections allowed",
+      hierarchical_selection: "Hierarchical selection",
+      select_previous_first: "Select previous items first",
+      select_one_item: "Please select one item",
+      sequential_selection:
+        "Please select items in order (sequential selection required)",
+      select_at_least_one: "Please select at least one item",
+      complete_required_fields: "Please complete all required fields",
+      terms_must_agree:
+        "You must agree to the terms and conditions to submit the application",
+      cannot_change_type: "Cannot change scholarship type in edit mode",
+      editing_application_id: "Editing Application ID",
+      submitting: "Submitting...",
+      updating: "Updating...",
+      saving: "Saving...",
+      loading: "Loading...",
+      retry: "Retry",
+      load_error: "Load Error",
     },
 
     // General messages
     messages: {
-      "no_eligible_scholarships": "No Eligible Scholarships",
-      "no_eligible_scholarships_desc": "Sorry, you are not currently eligible for any scholarships. Please try again later or contact the scholarship office.",
-      "eligible": "Eligible",
-      "not_eligible": "Not Eligible",
-      "loading_data": "Loading data...",
-      "loading_scholarship_info": "Loading scholarship information...",
-      "application_success": "Application submitted successfully!",
-      "draft_saved": "Draft saved successfully. You can continue editing.",
-      "draft_updated": "Draft updated",
-      "draft_deleted": "Draft deleted successfully",
-      "confirm_delete_draft": "Are you sure you want to delete this draft? This action cannot be undone.",
-      "delete_error": "Error occurred while deleting draft"
-    }
+      no_eligible_scholarships: "No Eligible Scholarships",
+      no_eligible_scholarships_desc:
+        "Sorry, you are not currently eligible for any scholarships. Please try again later or contact the scholarship office.",
+      eligible: "Eligible",
+      not_eligible: "Not Eligible",
+      loading_data: "Loading data...",
+      loading_scholarship_info: "Loading scholarship information...",
+      application_success: "Application submitted successfully!",
+      draft_saved: "Draft saved successfully. You can continue editing.",
+      draft_updated: "Draft updated",
+      draft_deleted: "Draft deleted successfully",
+      confirm_delete_draft:
+        "Are you sure you want to delete this draft? This action cannot be undone.",
+      delete_error: "Error occurred while deleting draft",
+    },
   },
-}
+};
 
-export function getTranslation(locale: 'zh' | 'en', key: string): string {
-  const keys = key.split('.')
-  let value: any = translations[locale]
+export function getTranslation(locale: "zh" | "en", key: string): string {
+  const keys = key.split(".");
+  let value: any = translations[locale];
 
   for (const k of keys) {
-    value = value?.[k]
+    value = value?.[k];
   }
 
-  return value || key
+  return value || key;
 }

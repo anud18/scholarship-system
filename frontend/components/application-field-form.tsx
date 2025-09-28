@@ -1,16 +1,35 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   FormInput,
   Plus,
@@ -19,17 +38,23 @@ import {
   Save,
   X,
   Loader2,
-  AlertCircle
-} from "lucide-react"
-import type { ApplicationField, ApplicationFieldCreate, ApplicationFieldUpdate } from "@/lib/api"
+  AlertCircle,
+} from "lucide-react";
+import type {
+  ApplicationField,
+  ApplicationFieldCreate,
+  ApplicationFieldUpdate,
+} from "@/lib/api";
 
 interface ApplicationFieldFormProps {
-  field?: ApplicationField | null
-  scholarshipType: string
-  isOpen: boolean
-  onClose: () => void
-  onSave: (fieldData: ApplicationFieldCreate | ApplicationFieldUpdate) => Promise<void>
-  mode: "create" | "edit"
+  field?: ApplicationField | null;
+  scholarshipType: string;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (
+    fieldData: ApplicationFieldCreate | ApplicationFieldUpdate
+  ) => Promise<void>;
+  mode: "create" | "edit";
 }
 
 const FIELD_TYPES = [
@@ -40,8 +65,8 @@ const FIELD_TYPES = [
   { value: "date", label: "日期" },
   { value: "select", label: "下拉選單" },
   { value: "checkbox", label: "核取方塊" },
-  { value: "radio", label: "單選按鈕" }
-]
+  { value: "radio", label: "單選按鈕" },
+];
 
 export function ApplicationFieldForm({
   field,
@@ -49,7 +74,7 @@ export function ApplicationFieldForm({
   isOpen,
   onClose,
   onSave,
-  mode
+  mode,
 }: ApplicationFieldFormProps) {
   const [formData, setFormData] = useState<Partial<ApplicationField>>({
     field_name: "",
@@ -69,12 +94,16 @@ export function ApplicationFieldForm({
     help_text: "",
     help_text_en: "",
     validation_rules: {},
-    conditional_rules: {}
-  })
+    conditional_rules: {},
+  });
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [newOption, setNewOption] = useState({ value: "", label: "", label_en: "" })
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [newOption, setNewOption] = useState({
+    value: "",
+    label: "",
+    label_en: "",
+  });
 
   // Initialize form data when field changes
   useEffect(() => {
@@ -97,8 +126,8 @@ export function ApplicationFieldForm({
         help_text: field.help_text,
         help_text_en: field.help_text_en,
         validation_rules: field.validation_rules,
-        conditional_rules: field.conditional_rules
-      })
+        conditional_rules: field.conditional_rules,
+      });
     } else if (mode === "create") {
       setFormData({
         field_name: "",
@@ -118,72 +147,77 @@ export function ApplicationFieldForm({
         help_text: "",
         help_text_en: "",
         validation_rules: {},
-        conditional_rules: {}
-      })
+        conditional_rules: {},
+      });
     }
-  }, [field, mode])
+  }, [field, mode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
-    setError(null)
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
 
     try {
       // Validate required fields
       if (!formData.field_name || !formData.field_label) {
-        throw new Error("欄位名稱和顯示名稱為必填項目")
+        throw new Error("欄位名稱和顯示名稱為必填項目");
       }
 
       // Validate field name format
       if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.field_name)) {
-        throw new Error("欄位名稱只能包含英文字母、數字和底線，且必須以字母或底線開頭")
+        throw new Error(
+          "欄位名稱只能包含英文字母、數字和底線，且必須以字母或底線開頭"
+        );
       }
 
       // Validate options for select/radio fields
-      if ((formData.field_type === "select" || formData.field_type === "radio") &&
-          (!formData.field_options || formData.field_options.length === 0)) {
-        throw new Error("下拉選單和單選按鈕必須至少有一個選項")
+      if (
+        (formData.field_type === "select" || formData.field_type === "radio") &&
+        (!formData.field_options || formData.field_options.length === 0)
+      ) {
+        throw new Error("下拉選單和單選按鈕必須至少有一個選項");
       }
 
       const fieldData = {
         ...formData,
-        scholarship_type: scholarshipType
-      }
+        scholarship_type: scholarshipType,
+      };
 
-      await onSave(fieldData)
-      onClose()
+      await onSave(fieldData);
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "儲存失敗")
+      setError(err instanceof Error ? err.message : "儲存失敗");
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const addOption = () => {
     if (newOption.value && newOption.label) {
       setFormData(prev => ({
         ...prev,
-        field_options: [...(prev.field_options || []), { ...newOption }]
-      }))
-      setNewOption({ value: "", label: "", label_en: "" })
+        field_options: [...(prev.field_options || []), { ...newOption }],
+      }));
+      setNewOption({ value: "", label: "", label_en: "" });
     }
-  }
+  };
 
   const removeOption = (index: number) => {
     setFormData(prev => ({
       ...prev,
-      field_options: prev.field_options?.filter((_, i) => i !== index) || []
-    }))
-  }
+      field_options: prev.field_options?.filter((_, i) => i !== index) || [],
+    }));
+  };
 
   const updateOption = (index: number, field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
-      field_options: prev.field_options?.map((option, i) =>
-        i === index ? { ...option, [field]: value } : option
-      ) || []
-    }))
-  }
+      field_options:
+        prev.field_options?.map((option, i) =>
+          i === index ? { ...option, [field]: value } : option
+        ) || [],
+    }));
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -194,7 +228,9 @@ export function ApplicationFieldForm({
             {mode === "create" ? "新增申請欄位" : "編輯申請欄位"}
           </DialogTitle>
           <DialogDescription>
-            {mode === "create" ? "新增一個新的申請表單欄位" : "修改現有欄位的設定"}
+            {mode === "create"
+              ? "新增一個新的申請表單欄位"
+              : "修改現有欄位的設定"}
           </DialogDescription>
         </DialogHeader>
 
@@ -218,23 +254,32 @@ export function ApplicationFieldForm({
                   <Input
                     id="field_name"
                     value={formData.field_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, field_name: e.target.value }))}
+                    onChange={e =>
+                      setFormData(prev => ({
+                        ...prev,
+                        field_name: e.target.value,
+                      }))
+                    }
                     placeholder="例如: academic_performance"
                     disabled={mode === "edit"}
                   />
-                  <p className="text-xs text-gray-500">只能包含英文字母、數字和底線</p>
+                  <p className="text-xs text-gray-500">
+                    只能包含英文字母、數字和底線
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="field_type">欄位類型 *</Label>
                   <Select
                     value={formData.field_type}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, field_type: value }))}
+                    onValueChange={value =>
+                      setFormData(prev => ({ ...prev, field_type: value }))
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {FIELD_TYPES.map((type) => (
+                      {FIELD_TYPES.map(type => (
                         <SelectItem key={type.value} value={type.value}>
                           {type.label}
                         </SelectItem>
@@ -250,7 +295,12 @@ export function ApplicationFieldForm({
                   <Input
                     id="field_label"
                     value={formData.field_label}
-                    onChange={(e) => setFormData(prev => ({ ...prev, field_label: e.target.value }))}
+                    onChange={e =>
+                      setFormData(prev => ({
+                        ...prev,
+                        field_label: e.target.value,
+                      }))
+                    }
                     placeholder="例如: 學業表現說明"
                   />
                 </div>
@@ -259,7 +309,12 @@ export function ApplicationFieldForm({
                   <Input
                     id="field_label_en"
                     value={formData.field_label_en || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, field_label_en: e.target.value }))}
+                    onChange={e =>
+                      setFormData(prev => ({
+                        ...prev,
+                        field_label_en: e.target.value,
+                      }))
+                    }
                     placeholder="例如: Academic Performance Description"
                   />
                 </div>
@@ -271,7 +326,12 @@ export function ApplicationFieldForm({
                   <Input
                     id="placeholder"
                     value={formData.placeholder || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, placeholder: e.target.value }))}
+                    onChange={e =>
+                      setFormData(prev => ({
+                        ...prev,
+                        placeholder: e.target.value,
+                      }))
+                    }
                     placeholder="例如: 請說明您的學業表現"
                   />
                 </div>
@@ -280,7 +340,12 @@ export function ApplicationFieldForm({
                   <Input
                     id="placeholder_en"
                     value={formData.placeholder_en || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, placeholder_en: e.target.value }))}
+                    onChange={e =>
+                      setFormData(prev => ({
+                        ...prev,
+                        placeholder_en: e.target.value,
+                      }))
+                    }
                     placeholder="例如: Please describe your academic performance"
                   />
                 </div>
@@ -298,7 +363,9 @@ export function ApplicationFieldForm({
                 <Switch
                   id="is_required"
                   checked={formData.is_required}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_required: checked }))}
+                  onCheckedChange={checked =>
+                    setFormData(prev => ({ ...prev, is_required: checked }))
+                  }
                 />
                 <Label htmlFor="is_required">必填欄位</Label>
               </div>
@@ -310,7 +377,14 @@ export function ApplicationFieldForm({
                     id="max_length"
                     type="number"
                     value={formData.max_length || ""}
-                    onChange={(e) => setFormData(prev => ({ ...prev, max_length: e.target.value ? parseInt(e.target.value) : undefined }))}
+                    onChange={e =>
+                      setFormData(prev => ({
+                        ...prev,
+                        max_length: e.target.value
+                          ? parseInt(e.target.value)
+                          : undefined,
+                      }))
+                    }
                     placeholder="例如: 1000"
                   />
                 </div>
@@ -320,14 +394,19 @@ export function ApplicationFieldForm({
                     id="display_order"
                     type="number"
                     value={formData.display_order || 0}
-                    onChange={(e) => setFormData(prev => ({ ...prev, display_order: parseInt(e.target.value) || 0 }))}
+                    onChange={e =>
+                      setFormData(prev => ({
+                        ...prev,
+                        display_order: parseInt(e.target.value) || 0,
+                      }))
+                    }
                     placeholder="例如: 1"
                   />
                 </div>
               </div>
 
               {/* Number field specific settings */}
-              {(formData.field_type === "number") && (
+              {formData.field_type === "number" && (
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="min_value">最小值</Label>
@@ -335,7 +414,14 @@ export function ApplicationFieldForm({
                       id="min_value"
                       type="number"
                       value={formData.min_value || ""}
-                      onChange={(e) => setFormData(prev => ({ ...prev, min_value: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      onChange={e =>
+                        setFormData(prev => ({
+                          ...prev,
+                          min_value: e.target.value
+                            ? parseFloat(e.target.value)
+                            : undefined,
+                        }))
+                      }
                       placeholder="例如: 0"
                     />
                   </div>
@@ -345,7 +431,14 @@ export function ApplicationFieldForm({
                       id="max_value"
                       type="number"
                       value={formData.max_value || ""}
-                      onChange={(e) => setFormData(prev => ({ ...prev, max_value: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      onChange={e =>
+                        setFormData(prev => ({
+                          ...prev,
+                          max_value: e.target.value
+                            ? parseFloat(e.target.value)
+                            : undefined,
+                        }))
+                      }
                       placeholder="例如: 4.0"
                     />
                   </div>
@@ -355,7 +448,14 @@ export function ApplicationFieldForm({
                       id="step_value"
                       type="number"
                       value={formData.step_value || ""}
-                      onChange={(e) => setFormData(prev => ({ ...prev, step_value: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      onChange={e =>
+                        setFormData(prev => ({
+                          ...prev,
+                          step_value: e.target.value
+                            ? parseFloat(e.target.value)
+                            : undefined,
+                        }))
+                      }
                       placeholder="例如: 0.01"
                     />
                   </div>
@@ -365,7 +465,8 @@ export function ApplicationFieldForm({
           </Card>
 
           {/* Options for select/radio fields */}
-          {(formData.field_type === "select" || formData.field_type === "radio") && (
+          {(formData.field_type === "select" ||
+            formData.field_type === "radio") && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">選項設定</CardTitle>
@@ -377,17 +478,32 @@ export function ApplicationFieldForm({
                     <Input
                       placeholder="選項值"
                       value={newOption.value}
-                      onChange={(e) => setNewOption(prev => ({ ...prev, value: e.target.value }))}
+                      onChange={e =>
+                        setNewOption(prev => ({
+                          ...prev,
+                          value: e.target.value,
+                        }))
+                      }
                     />
                     <Input
                       placeholder="選項標籤 (中文)"
                       value={newOption.label}
-                      onChange={(e) => setNewOption(prev => ({ ...prev, label: e.target.value }))}
+                      onChange={e =>
+                        setNewOption(prev => ({
+                          ...prev,
+                          label: e.target.value,
+                        }))
+                      }
                     />
                     <Input
                       placeholder="選項標籤 (英文)"
                       value={newOption.label_en}
-                      onChange={(e) => setNewOption(prev => ({ ...prev, label_en: e.target.value }))}
+                      onChange={e =>
+                        setNewOption(prev => ({
+                          ...prev,
+                          label_en: e.target.value,
+                        }))
+                      }
                     />
                   </div>
                   <Button
@@ -406,22 +522,31 @@ export function ApplicationFieldForm({
                   <Label>現有選項</Label>
                   <div className="space-y-2">
                     {formData.field_options?.map((option, index) => (
-                      <div key={index} className="flex items-center gap-2 p-2 border rounded">
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 p-2 border rounded"
+                      >
                         <Input
                           value={option.value}
-                          onChange={(e) => updateOption(index, "value", e.target.value)}
+                          onChange={e =>
+                            updateOption(index, "value", e.target.value)
+                          }
                           placeholder="選項值"
                           className="flex-1"
                         />
                         <Input
                           value={option.label}
-                          onChange={(e) => updateOption(index, "label", e.target.value)}
+                          onChange={e =>
+                            updateOption(index, "label", e.target.value)
+                          }
                           placeholder="選項標籤 (中文)"
                           className="flex-1"
                         />
                         <Input
                           value={option.label_en || ""}
-                          onChange={(e) => updateOption(index, "label_en", e.target.value)}
+                          onChange={e =>
+                            updateOption(index, "label_en", e.target.value)
+                          }
                           placeholder="選項標籤 (英文)"
                           className="flex-1"
                         />
@@ -452,7 +577,12 @@ export function ApplicationFieldForm({
                 <Textarea
                   id="help_text"
                   value={formData.help_text || ""}
-                  onChange={(e) => setFormData(prev => ({ ...prev, help_text: e.target.value }))}
+                  onChange={e =>
+                    setFormData(prev => ({
+                      ...prev,
+                      help_text: e.target.value,
+                    }))
+                  }
                   placeholder="例如: 請詳細描述您的學業成績、排名、特殊成就等"
                   rows={3}
                 />
@@ -462,7 +592,12 @@ export function ApplicationFieldForm({
                 <Textarea
                   id="help_text_en"
                   value={formData.help_text_en || ""}
-                  onChange={(e) => setFormData(prev => ({ ...prev, help_text_en: e.target.value }))}
+                  onChange={e =>
+                    setFormData(prev => ({
+                      ...prev,
+                      help_text_en: e.target.value,
+                    }))
+                  }
                   placeholder="例如: Please describe your academic grades, ranking, special achievements, etc."
                   rows={3}
                 />
@@ -480,7 +615,9 @@ export function ApplicationFieldForm({
                 <Switch
                   id="is_active"
                   checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
+                  onCheckedChange={checked =>
+                    setFormData(prev => ({ ...prev, is_active: checked }))
+                  }
                 />
                 <Label htmlFor="is_active">啟用此欄位</Label>
               </div>
@@ -509,5 +646,5 @@ export function ApplicationFieldForm({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

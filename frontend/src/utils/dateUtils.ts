@@ -26,7 +26,7 @@ export function fromROCYear(rocYear: number): number {
  * @returns Formatted semester with ROC year (e.g., "114-1")
  */
 export function formatSemesterROC(semester: string): string {
-  const [year, term] = semester.split('-');
+  const [year, term] = semester.split("-");
   if (!year || !term) return semester;
 
   const westernYear = parseInt(year);
@@ -41,13 +41,14 @@ export function formatSemesterROC(semester: string): string {
  * @returns Formatted semester (e.g., "民國114年第1學期")
  */
 export function formatSemesterROCText(semester: string): string {
-  const [year, term] = semester.split('-');
+  const [year, term] = semester.split("-");
   if (!year || !term) return semester;
 
   const westernYear = parseInt(year);
   const rocYear = toROCYear(westernYear);
 
-  const termText = term === '1' ? '第1學期' : term === '2' ? '第2學期' : `第${term}學期`;
+  const termText =
+    term === "1" ? "第1學期" : term === "2" ? "第2學期" : `第${term}學期`;
 
   return `民國${rocYear}年${termText}`;
 }
@@ -58,7 +59,10 @@ export function formatSemesterROCText(semester: string): string {
  * @param yearsBack - Number of years to go back (default: 3)
  * @returns Array of semesters in format "ROC_YEAR-TERM"
  */
-export function generateAvailableSemesters(currentYear: number = new Date().getFullYear(), yearsBack: number = 3): string[] {
+export function generateAvailableSemesters(
+  currentYear: number = new Date().getFullYear(),
+  yearsBack: number = 3
+): string[] {
   const semesters: string[] = [];
 
   for (let i = 0; i < yearsBack; i++) {
@@ -69,8 +73,8 @@ export function generateAvailableSemesters(currentYear: number = new Date().getF
   }
 
   return semesters.sort((a, b) => {
-    const [yearA, termA] = a.split('-').map(Number);
-    const [yearB, termB] = b.split('-').map(Number);
+    const [yearA, termA] = a.split("-").map(Number);
+    const [yearB, termB] = b.split("-").map(Number);
 
     // Sort by year descending, then by term descending
     if (yearA !== yearB) return yearB - yearA;
@@ -92,7 +96,7 @@ export function getCurrentSemesterROC(): string {
   // Determine semester based on month
   // Typically: Sep-Jan = 1st semester, Feb-Aug = 2nd semester
   // Adjust this logic based on your school's calendar
-  const term = (month >= 9 || month <= 1) ? '1' : '2';
+  const term = month >= 9 || month <= 1 ? "1" : "2";
 
   return `${rocYear}-${term}`;
 }
@@ -103,7 +107,7 @@ export function getCurrentSemesterROC(): string {
  * @returns Western semester format (e.g., "2025-1")
  */
 export function parseROCSemesterToWestern(rocSemester: string): string {
-  const [rocYear, term] = rocSemester.split('-');
+  const [rocYear, term] = rocSemester.split("-");
   if (!rocYear || !term) return rocSemester;
 
   const westernYear = fromROCYear(parseInt(rocYear));
@@ -116,7 +120,7 @@ export function parseROCSemesterToWestern(rocSemester: string): string {
  * @returns true if ROC format (year < 200), false otherwise
  */
 export function isROCFormat(semester: string): boolean {
-  const [year] = semester.split('-');
+  const [year] = semester.split("-");
   if (!year) return false;
 
   const yearNum = parseInt(year);

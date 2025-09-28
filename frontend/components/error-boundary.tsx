@@ -1,46 +1,46 @@
-"use client"
+"use client";
 
-import React, { Component, ErrorInfo, ReactNode } from 'react'
-import { AlertCircle, RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import React, { Component, ErrorInfo, ReactNode } from "react";
+import { AlertCircle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Props {
-  children: ReactNode
-  fallback?: ReactNode
-  onError?: (error: Error, errorInfo: ErrorInfo) => void
+  children: ReactNode;
+  fallback?: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface State {
-  hasError: boolean
-  error?: Error
+  hasError: boolean;
+  error?: Error;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
-    hasError: false
-  }
+    hasError: false,
+  };
 
   public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error }
+    return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo)
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
 
     // Call optional error handler
-    this.props.onError?.(error, errorInfo)
+    this.props.onError?.(error, errorInfo);
   }
 
   private handleRetry = () => {
-    this.setState({ hasError: false, error: undefined })
-  }
+    this.setState({ hasError: false, error: undefined });
+  };
 
   public render() {
     if (this.state.hasError) {
       // Return custom fallback UI if provided
       if (this.props.fallback) {
-        return this.props.fallback
+        return this.props.fallback;
       }
 
       // Default error UI
@@ -63,15 +63,12 @@ export class ErrorBoundary extends Component<Props, State> {
               <span>重試</span>
             </Button>
 
-            <Button
-              variant="outline"
-              onClick={() => window.location.reload()}
-            >
+            <Button variant="outline" onClick={() => window.location.reload()}>
               重新整理頁面
             </Button>
           </div>
 
-          {process.env.NODE_ENV === 'development' && this.state.error && (
+          {process.env.NODE_ENV === "development" && this.state.error && (
             <details className="mt-4 p-4 bg-gray-100 rounded text-sm max-w-2xl">
               <summary className="cursor-pointer font-semibold">
                 開發模式錯誤詳情
@@ -82,10 +79,10 @@ export class ErrorBoundary extends Component<Props, State> {
             </details>
           )}
         </div>
-      )
+      );
     }
 
-    return this.props.children
+    return this.props.children;
   }
 }
 
@@ -100,17 +97,17 @@ export function withErrorBoundary<P extends object>(
       <ErrorBoundary fallback={fallback} onError={onError}>
         <Component {...props} />
       </ErrorBoundary>
-    )
-  }
+    );
+  };
 }
 
 // Hook for error handling in functional components
 export function useErrorHandler() {
   return (error: Error, errorInfo?: string) => {
-    console.error('Error caught by useErrorHandler:', error, errorInfo)
+    console.error("Error caught by useErrorHandler:", error, errorInfo);
     // In production, you might want to send this to an error reporting service
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === "production") {
       // Example: sendToErrorReporting(error, errorInfo)
     }
-  }
+  };
 }

@@ -1,14 +1,20 @@
-"use client"
+"use client";
 
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getTranslation } from "@/lib/i18n"
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { getTranslation } from "@/lib/i18n";
 
 interface SimplifiedNationalitySelectorProps {
-  value: string
-  onValueChange: (value: string) => void
-  locale: "zh" | "en"
-  className?: string
+  value: string;
+  onValueChange: (value: string) => void;
+  locale: "zh" | "en";
+  className?: string;
 }
 
 const nationalityOptions = [
@@ -30,7 +36,7 @@ const nationalityOptions = [
     en: "Other",
     flag: "🌍",
   },
-]
+];
 
 export function SimplifiedNationalitySelector({
   value,
@@ -38,7 +44,7 @@ export function SimplifiedNationalitySelector({
   locale,
   className,
 }: SimplifiedNationalitySelectorProps) {
-  const t = (key: string) => getTranslation(locale, key)
+  const t = (key: string) => getTranslation(locale, key);
 
   return (
     <div className={className}>
@@ -47,10 +53,16 @@ export function SimplifiedNationalitySelector({
       </Label>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger>
-          <SelectValue placeholder={locale === "zh" ? "請選擇國籍類別..." : "Select nationality category..."} />
+          <SelectValue
+            placeholder={
+              locale === "zh"
+                ? "請選擇國籍類別..."
+                : "Select nationality category..."
+            }
+          />
         </SelectTrigger>
         <SelectContent>
-          {nationalityOptions.map((option) => (
+          {nationalityOptions.map(option => (
             <SelectItem key={option.code} value={option.code}>
               <div className="flex items-center gap-2">
                 <span>{option.flag}</span>
@@ -61,5 +73,5 @@ export function SimplifiedNationalitySelector({
         </SelectContent>
       </Select>
     </div>
-  )
+  );
 }

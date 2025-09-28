@@ -1,13 +1,32 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Textarea } from "@/components/ui/textarea"
+import { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -15,28 +34,39 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { NationalityFlag } from "@/components/nationality-flag"
-import { getTranslation } from "@/lib/i18n"
-import { Search, Eye, CheckCircle, XCircle, Grid, List, Download } from "lucide-react"
+} from "@/components/ui/dialog";
+import { NationalityFlag } from "@/components/nationality-flag";
+import { getTranslation } from "@/lib/i18n";
+import {
+  Search,
+  Eye,
+  CheckCircle,
+  XCircle,
+  Grid,
+  List,
+  Download,
+} from "lucide-react";
 
 interface User {
-  id: string
-  name: string
-  email: string
-  role: string
+  id: string;
+  name: string;
+  email: string;
+  role: string;
 }
 
 interface ReviewerDashboardProps {
-  user: User
-  locale?: "zh" | "en"
+  user: User;
+  locale?: "zh" | "en";
 }
 
-export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProps) {
-  const t = (key: string) => getTranslation(locale, key)
+export function ReviewerDashboard({
+  user,
+  locale = "zh",
+}: ReviewerDashboardProps) {
+  const t = (key: string) => getTranslation(locale, key);
 
-  const [viewMode, setViewMode] = useState<"card" | "table">("card")
-  const [selectedApplication, setSelectedApplication] = useState<any>(null)
+  const [viewMode, setViewMode] = useState<"card" | "table">("card");
+  const [selectedApplication, setSelectedApplication] = useState<any>(null);
 
   const [applications] = useState([
     {
@@ -87,7 +117,7 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
       priority: "high",
       daysWaiting: 7,
     },
-  ])
+  ]);
 
   const getStatusColor = (status: string) => {
     const statusMap = {
@@ -95,36 +125,42 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
       under_review: "outline",
       approved: "default",
       rejected: "secondary",
-    }
-    return statusMap[status as keyof typeof statusMap] || "secondary"
-  }
+    };
+    return statusMap[status as keyof typeof statusMap] || "secondary";
+  };
 
   const getPriorityColor = (priority: string) => {
     const priorityMap = {
       high: "destructive",
       medium: "outline",
       low: "secondary",
-    }
-    return priorityMap[priority as keyof typeof priorityMap] || "secondary"
-  }
+    };
+    return priorityMap[priority as keyof typeof priorityMap] || "secondary";
+  };
 
   const handleApprove = (appId: string) => {
-    console.log(`Approving application ${appId}`)
-  }
+    console.log(`Approving application ${appId}`);
+  };
 
   const handleReject = (appId: string) => {
-    console.log(`Rejecting application ${appId}`)
-  }
+    console.log(`Rejecting application ${appId}`);
+  };
 
   const renderCardView = () => (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {applications.map((app) => (
+      {applications.map(app => (
         <Card key={app.id} className="relative">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CardTitle className="text-lg">{locale === "zh" ? app.studentName : app.studentNameEn}</CardTitle>
-                <NationalityFlag countryCode={app.nationality} locale={locale} showLabel={false} />
+                <CardTitle className="text-lg">
+                  {locale === "zh" ? app.studentName : app.studentNameEn}
+                </CardTitle>
+                <NationalityFlag
+                  countryCode={app.nationality}
+                  locale={locale}
+                  showLabel={false}
+                />
               </div>
               <Badge variant={getPriorityColor(app.priority) as any}>
                 {app.priority === "high"
@@ -153,21 +189,29 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
             <div className="flex items-center justify-between text-sm">
               <span>GPA: {app.gpa}</span>
               <span>
-                {locale === "zh" ? "金額" : "Amount"}: NT$ {app.amount.toLocaleString()}
+                {locale === "zh" ? "金額" : "Amount"}: NT${" "}
+                {app.amount.toLocaleString()}
               </span>
             </div>
 
             <div className="flex items-center justify-between">
-              <Badge variant={getStatusColor(app.status) as any}>{app.statusName}</Badge>
+              <Badge variant={getStatusColor(app.status) as any}>
+                {app.statusName}
+              </Badge>
               <span className="text-sm text-muted-foreground">
-                {locale === "zh" ? "等待" : "Waiting"} {app.daysWaiting} {locale === "zh" ? "天" : "days"}
+                {locale === "zh" ? "等待" : "Waiting"} {app.daysWaiting}{" "}
+                {locale === "zh" ? "天" : "days"}
               </span>
             </div>
 
             <div className="flex gap-2 pt-2">
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" onClick={() => setSelectedApplication(app)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedApplication(app)}
+                  >
                     <Eye className="h-4 w-4 mr-1" />
                     {t("form.view")}
                   </Button>
@@ -175,13 +219,16 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
                 <DialogContent className="max-w-2xl">
                   <DialogHeader>
                     <DialogTitle>
-                      {locale === "zh" ? "申請詳情" : "Application Details"} - {selectedApplication?.id}
+                      {locale === "zh" ? "申請詳情" : "Application Details"} -{" "}
+                      {selectedApplication?.id}
                     </DialogTitle>
                     <DialogDescription>
                       {selectedApplication && (
                         <span className="flex items-center gap-2">
                           <span>
-                            {locale === "zh" ? selectedApplication.studentName : selectedApplication.studentNameEn}
+                            {locale === "zh"
+                              ? selectedApplication.studentName
+                              : selectedApplication.studentNameEn}
                           </span>
                           <NationalityFlag
                             countryCode={selectedApplication.nationality}
@@ -198,13 +245,19 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="text-sm font-medium">
-                            {locale === "zh" ? "獎學金類型" : "Scholarship Type"}
+                            {locale === "zh"
+                              ? "獎學金類型"
+                              : "Scholarship Type"}
                           </label>
                           <p>{selectedApplication.typeName}</p>
                         </div>
                         <div>
-                          <label className="text-sm font-medium">{locale === "zh" ? "申請金額" : "Amount"}</label>
-                          <p>NT$ {selectedApplication.amount.toLocaleString()}</p>
+                          <label className="text-sm font-medium">
+                            {locale === "zh" ? "申請金額" : "Amount"}
+                          </label>
+                          <p>
+                            NT$ {selectedApplication.amount.toLocaleString()}
+                          </p>
                         </div>
                         <div>
                           <label className="text-sm font-medium">GPA</label>
@@ -223,17 +276,26 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
                           {locale === "zh" ? "審核意見" : "Review Comments"}
                         </label>
                         <Textarea
-                          placeholder={locale === "zh" ? "請輸入審核意見..." : "Please enter review comments..."}
+                          placeholder={
+                            locale === "zh"
+                              ? "請輸入審核意見..."
+                              : "Please enter review comments..."
+                          }
                           rows={3}
                         />
                       </div>
 
                       <div className="flex gap-2">
-                        <Button onClick={() => handleApprove(selectedApplication.id)}>
+                        <Button
+                          onClick={() => handleApprove(selectedApplication.id)}
+                        >
                           <CheckCircle className="h-4 w-4 mr-1" />
                           {t("form.approve")}
                         </Button>
-                        <Button variant="destructive" onClick={() => handleReject(selectedApplication.id)}>
+                        <Button
+                          variant="destructive"
+                          onClick={() => handleReject(selectedApplication.id)}
+                        >
                           <XCircle className="h-4 w-4 mr-1" />
                           {t("form.reject")}
                         </Button>
@@ -247,7 +309,11 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
                 <CheckCircle className="h-4 w-4 mr-1" />
                 {t("form.approve")}
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => handleReject(app.id)}>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => handleReject(app.id)}
+              >
                 <XCircle className="h-4 w-4 mr-1" />
                 {t("form.reject")}
               </Button>
@@ -256,7 +322,7 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
         </Card>
       ))}
     </div>
-  )
+  );
 
   const renderTableView = () => (
     <Card>
@@ -264,35 +330,51 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{locale === "zh" ? "申請編號" : "Application ID"}</TableHead>
+              <TableHead>
+                {locale === "zh" ? "申請編號" : "Application ID"}
+              </TableHead>
               <TableHead>{locale === "zh" ? "學生" : "Student"}</TableHead>
               <TableHead>{locale === "zh" ? "國籍" : "Nationality"}</TableHead>
-              <TableHead>{locale === "zh" ? "獎學金類型" : "Scholarship Type"}</TableHead>
+              <TableHead>
+                {locale === "zh" ? "獎學金類型" : "Scholarship Type"}
+              </TableHead>
               <TableHead>GPA</TableHead>
               <TableHead>{locale === "zh" ? "金額" : "Amount"}</TableHead>
               <TableHead>{locale === "zh" ? "狀態" : "Status"}</TableHead>
-              <TableHead>{locale === "zh" ? "等待天數" : "Days Waiting"}</TableHead>
+              <TableHead>
+                {locale === "zh" ? "等待天數" : "Days Waiting"}
+              </TableHead>
               <TableHead>{locale === "zh" ? "操作" : "Actions"}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {applications.map((app) => (
+            {applications.map(app => (
               <TableRow key={app.id}>
                 <TableCell className="font-medium">{app.id}</TableCell>
                 <TableCell>
                   <div>
-                    <p className="font-medium">{locale === "zh" ? app.studentName : app.studentNameEn}</p>
-                    <p className="text-sm text-muted-foreground">{app.studentId}</p>
+                    <p className="font-medium">
+                      {locale === "zh" ? app.studentName : app.studentNameEn}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {app.studentId}
+                    </p>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <NationalityFlag countryCode={app.nationality} locale={locale} showLabel={true} />
+                  <NationalityFlag
+                    countryCode={app.nationality}
+                    locale={locale}
+                    showLabel={true}
+                  />
                 </TableCell>
                 <TableCell>{app.typeName}</TableCell>
                 <TableCell>{app.gpa}</TableCell>
                 <TableCell>NT$ {app.amount.toLocaleString()}</TableCell>
                 <TableCell>
-                  <Badge variant={getStatusColor(app.status) as any}>{app.statusName}</Badge>
+                  <Badge variant={getStatusColor(app.status) as any}>
+                    {app.statusName}
+                  </Badge>
                 </TableCell>
                 <TableCell>
                   {app.daysWaiting} {locale === "zh" ? "天" : "days"}
@@ -305,7 +387,11 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
                     <Button size="sm" onClick={() => handleApprove(app.id)}>
                       <CheckCircle className="h-4 w-4" />
                     </Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleReject(app.id)}>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleReject(app.id)}
+                    >
                       <XCircle className="h-4 w-4" />
                     </Button>
                   </div>
@@ -316,7 +402,7 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
         </Table>
       </CardContent>
     </Card>
-  )
+  );
 
   return (
     <div className="space-y-6">
@@ -324,7 +410,9 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
         <div>
           <h2 className="text-2xl font-bold">{t("nav.review")}</h2>
           <p className="text-muted-foreground">
-            {locale === "zh" ? "管理獎學金申請的審核流程" : "Manage scholarship application review process"}
+            {locale === "zh"
+              ? "管理獎學金申請的審核流程"
+              : "Manage scholarship application review process"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -340,7 +428,11 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder={locale === "zh" ? "搜尋申請編號或學生姓名..." : "Search application ID or student name..."}
+              placeholder={
+                locale === "zh"
+                  ? "搜尋申請編號或學生姓名..."
+                  : "Search application ID or student name..."
+              }
               className="pl-8 w-64"
             />
           </div>
@@ -349,9 +441,15 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{locale === "zh" ? "全部狀態" : "All Status"}</SelectItem>
-              <SelectItem value="pending">{t("status.pending_review")}</SelectItem>
-              <SelectItem value="under_review">{t("status.under_review")}</SelectItem>
+              <SelectItem value="all">
+                {locale === "zh" ? "全部狀態" : "All Status"}
+              </SelectItem>
+              <SelectItem value="pending">
+                {t("status.pending_review")}
+              </SelectItem>
+              <SelectItem value="under_review">
+                {t("status.under_review")}
+              </SelectItem>
               <SelectItem value="approved">{t("status.approved")}</SelectItem>
               <SelectItem value="rejected">{t("status.rejected")}</SelectItem>
             </SelectContent>
@@ -359,10 +457,18 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant={viewMode === "card" ? "default" : "outline"} size="sm" onClick={() => setViewMode("card")}>
+          <Button
+            variant={viewMode === "card" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("card")}
+          >
             <Grid className="h-4 w-4" />
           </Button>
-          <Button variant={viewMode === "table" ? "default" : "outline"} size="sm" onClick={() => setViewMode("table")}>
+          <Button
+            variant={viewMode === "table" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("table")}
+          >
             <List className="h-4 w-4" />
           </Button>
         </div>
@@ -370,5 +476,5 @@ export function ReviewerDashboard({ user, locale = "zh" }: ReviewerDashboardProp
 
       {viewMode === "card" ? renderCardView() : renderTableView()}
     </div>
-  )
+  );
 }

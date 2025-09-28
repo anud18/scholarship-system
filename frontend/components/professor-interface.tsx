@@ -1,12 +1,25 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -14,43 +27,43 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Search, Eye, Edit, CheckCircle, Users, FileText } from "lucide-react"
-import apiClient from "@/lib/api"
-import { User } from "@/types/user"
+} from "@/components/ui/dialog";
+import { Search, Eye, Edit, CheckCircle, Users, FileText } from "lucide-react";
+import apiClient from "@/lib/api";
+import { User } from "@/types/user";
 
 interface ProfessorInterfaceProps {
-  user: User
+  user: User;
 }
 
 export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
-  const [studentApplications, setStudentApplications] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [selectedStudent, setSelectedStudent] = useState<any>(null)
-  const [recommendation, setRecommendation] = useState("")
-  const [selectedAwards, setSelectedAwards] = useState<string[]>([])
+  const [studentApplications, setStudentApplications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [recommendation, setRecommendation] = useState("");
+  const [selectedAwards, setSelectedAwards] = useState<string[]>([]);
 
   // Fetch applications for professor review
   useEffect(() => {
     const fetchApplications = async () => {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
         // This endpoint may need to be adjusted if a dedicated professor review list exists
         const res = await apiClient.request<any>(
           "/applications/review/list?status=pending_recommendation"
-        )
-        setStudentApplications(res.data || [])
+        );
+        setStudentApplications(res.data || []);
       } catch (e: any) {
-        setError(e.message || "Failed to load applications")
+        setError(e.message || "Failed to load applications");
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
-    fetchApplications()
-  }, [])
+    };
+    fetchApplications();
+  }, []);
 
   const getStatusColor = (status: string) => {
     const statusMap = {
@@ -59,39 +72,41 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
       under_review: "outline",
       approved: "default",
       rejected: "secondary",
-    }
-    return statusMap[status as keyof typeof statusMap] || "secondary"
-  }
+    };
+    return statusMap[status as keyof typeof statusMap] || "secondary";
+  };
 
   const handleRecommend = async (appId: number) => {
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
     try {
       await apiClient.applications.submitRecommendation(
         appId,
         "professor_recommendation",
         recommendation,
         selectedAwards
-      )
-      setSuccess("Recommendation submitted!")
-      setRecommendation("")
-      setSelectedAwards([])
+      );
+      setSuccess("Recommendation submitted!");
+      setRecommendation("");
+      setSelectedAwards([]);
       // Optionally refetch applications
       // ...
     } catch (e: any) {
-      setError(e.message || "Failed to submit recommendation")
+      setError(e.message || "Failed to submit recommendation");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">指導學生管理</h2>
-          <p className="text-muted-foreground">管理指導學生的獎學金申請與推薦</p>
+          <p className="text-muted-foreground">
+            管理指導學生的獎學金申請與推薦
+          </p>
         </div>
       </div>
 
@@ -115,7 +130,10 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {studentApplications.filter((app) => app.needsRecommendation).length}
+              {
+                studentApplications.filter(app => app.needsRecommendation)
+                  .length
+              }
             </div>
             <p className="text-xs text-muted-foreground">需要處理</p>
           </CardContent>
@@ -128,7 +146,10 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {studentApplications.filter((app) => !app.needsRecommendation).length}
+              {
+                studentApplications.filter(app => !app.needsRecommendation)
+                  .length
+              }
             </div>
             <p className="text-xs text-muted-foreground">本月完成</p>
           </CardContent>
@@ -162,12 +183,14 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {studentApplications.map((app) => (
+              {studentApplications.map(app => (
                 <TableRow key={app.id}>
                   <TableCell>
                     <div>
                       <p className="font-medium">{app.studentName}</p>
-                      <p className="text-sm text-muted-foreground">{app.studentId}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {app.studentId}
+                      </p>
                     </div>
                   </TableCell>
                   <TableCell>{app.typeName}</TableCell>
@@ -178,61 +201,96 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
                   </TableCell>
                   <TableCell>{app.gpa}</TableCell>
                   <TableCell>
-                    <Badge variant={getStatusColor(app.status) as any}>{app.statusName}</Badge>
+                    <Badge variant={getStatusColor(app.status) as any}>
+                      {app.statusName}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Dialog>
                         <DialogTrigger asChild>
-                          <Button variant="outline" size="sm" onClick={() => setSelectedStudent(app)}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedStudent(app)}
+                          >
                             <Eye className="h-4 w-4" />
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-2xl">
                           <DialogHeader>
-                            <DialogTitle>學生申請詳情 - {selectedStudent?.id}</DialogTitle>
+                            <DialogTitle>
+                              學生申請詳情 - {selectedStudent?.id}
+                            </DialogTitle>
                             <DialogDescription>
-                              {selectedStudent?.studentName} ({selectedStudent?.studentId})
+                              {selectedStudent?.studentName} (
+                              {selectedStudent?.studentId})
                             </DialogDescription>
                           </DialogHeader>
                           {selectedStudent && (
                             <div className="space-y-4">
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                  <label className="text-sm font-medium">獎學金類型</label>
+                                  <label className="text-sm font-medium">
+                                    獎學金類型
+                                  </label>
                                   <p>{selectedStudent.typeName}</p>
                                 </div>
                                 <div>
-                                  <label className="text-sm font-medium">申請金額</label>
-                                  <p>NT$ {selectedStudent.amount.toLocaleString()}</p>
+                                  <label className="text-sm font-medium">
+                                    申請金額
+                                  </label>
+                                  <p>
+                                    NT${" "}
+                                    {selectedStudent.amount.toLocaleString()}
+                                  </p>
                                 </div>
                                 <div>
-                                  <label className="text-sm font-medium">GPA</label>
+                                  <label className="text-sm font-medium">
+                                    GPA
+                                  </label>
                                   <p>{selectedStudent.gpa}</p>
                                 </div>
                                 <div>
-                                  <label className="text-sm font-medium">提交日期</label>
+                                  <label className="text-sm font-medium">
+                                    提交日期
+                                  </label>
                                   <p>{selectedStudent.submittedAt}</p>
                                 </div>
                               </div>
 
                               <div>
-                                <label className="text-sm font-medium">研究主題</label>
-                                <p className="mt-1">{selectedStudent.researchTopic}</p>
+                                <label className="text-sm font-medium">
+                                  研究主題
+                                </label>
+                                <p className="mt-1">
+                                  {selectedStudent.researchTopic}
+                                </p>
                               </div>
 
                               {selectedStudent.needsRecommendation && (
                                 <div>
-                                  <label className="text-sm font-medium">選擇可申請獎學金組合</label>
+                                  <label className="text-sm font-medium">
+                                    選擇可申請獎學金組合
+                                  </label>
                                   <div className="flex flex-col gap-2 mt-2">
                                     <label className="flex items-center gap-2">
                                       <input
                                         type="checkbox"
                                         value="phd"
                                         checked={selectedAwards.includes("phd")}
-                                        onChange={(e) => {
-                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd"])
-                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd"))
+                                        onChange={e => {
+                                          if (e.target.checked)
+                                            setSelectedAwards([
+                                              ...selectedAwards,
+                                              "phd",
+                                            ]);
+                                          else
+                                            setSelectedAwards(
+                                              selectedAwards.filter(
+                                                a => a !== "phd"
+                                              )
+                                            );
                                         }}
                                       />
                                       國科會博士生獎學金
@@ -241,10 +299,21 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
                                       <input
                                         type="checkbox"
                                         value="phd_moe_1"
-                                        checked={selectedAwards.includes("phd_moe_1")}
+                                        checked={selectedAwards.includes(
+                                          "phd_moe_1"
+                                        )}
                                         onChange={e => {
-                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd_moe_1"])
-                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd_moe_1"))
+                                          if (e.target.checked)
+                                            setSelectedAwards([
+                                              ...selectedAwards,
+                                              "phd_moe_1",
+                                            ]);
+                                          else
+                                            setSelectedAwards(
+                                              selectedAwards.filter(
+                                                a => a !== "phd_moe_1"
+                                              )
+                                            );
                                         }}
                                       />
                                       教育部博士生獎學金+1萬
@@ -253,10 +322,21 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
                                       <input
                                         type="checkbox"
                                         value="phd_moe_2"
-                                        checked={selectedAwards.includes("phd_moe_2")}
+                                        checked={selectedAwards.includes(
+                                          "phd_moe_2"
+                                        )}
                                         onChange={e => {
-                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd_moe_2"])
-                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd_moe_2"))
+                                          if (e.target.checked)
+                                            setSelectedAwards([
+                                              ...selectedAwards,
+                                              "phd_moe_2",
+                                            ]);
+                                          else
+                                            setSelectedAwards(
+                                              selectedAwards.filter(
+                                                a => a !== "phd_moe_2"
+                                              )
+                                            );
                                         }}
                                       />
                                       教育部博士生獎學金+2萬
@@ -268,7 +348,9 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
                               {selectedStudent.needsRecommendation && (
                                 <div className="flex gap-2">
                                   <Button
-                                    onClick={() => handleRecommend(selectedStudent.id)}
+                                    onClick={() =>
+                                      handleRecommend(selectedStudent.id)
+                                    }
                                     disabled={loading}
                                   >
                                     <CheckCircle className="h-4 w-4 mr-1" />
@@ -282,7 +364,10 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
                       </Dialog>
 
                       {app.needsRecommendation && (
-                        <Button size="sm" onClick={() => handleRecommend(app.id)}>
+                        <Button
+                          size="sm"
+                          onClick={() => handleRecommend(app.id)}
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
                       )}
@@ -295,5 +380,5 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

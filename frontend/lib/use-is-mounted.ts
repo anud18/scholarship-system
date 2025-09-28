@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react";
 
 /**
  * Hook to check if component is mounted on client side
  * Useful for preventing SSR mismatches with useLayoutEffect
  */
 export function useIsMounted() {
-  const [isMounted, setIsMounted] = useState(false)
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true)
-  }, [])
+    setIsMounted(true);
+  }, []);
 
-  return isMounted
+  return isMounted;
 }

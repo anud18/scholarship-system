@@ -3,13 +3,19 @@
  * 展示如何將學期選擇器整合到現有的管理介面中
  */
 
-"use client"
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
+import React, { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   FileText,
   TrendingUp,
@@ -19,26 +25,26 @@ import {
   Award,
   Loader2,
   RefreshCw,
-  Filter
-} from "lucide-react"
-import { api } from "@/lib/api"
-import SemesterSelector from "./semester-selector"
+  Filter,
+} from "lucide-react";
+import { api } from "@/lib/api";
+import SemesterSelector from "./semester-selector";
 
 interface EnhancedAdminDashboardProps {
-  stats: any
-  recentApplications: any[]
-  systemAnnouncements: any[]
-  isStatsLoading: boolean
-  isRecentLoading: boolean
-  isAnnouncementsLoading: boolean
-  error: string | null
-  isAuthenticated: boolean
-  user: any
-  login: (token: string, userData: any) => void
-  logout: () => void
-  fetchRecentApplications: () => void
-  fetchDashboardStats: () => void
-  onTabChange?: (tab: string) => void
+  stats: any;
+  recentApplications: any[];
+  systemAnnouncements: any[];
+  isStatsLoading: boolean;
+  isRecentLoading: boolean;
+  isAnnouncementsLoading: boolean;
+  error: string | null;
+  isAuthenticated: boolean;
+  user: any;
+  login: (token: string, userData: any) => void;
+  logout: () => void;
+  fetchRecentApplications: () => void;
+  fetchDashboardStats: () => void;
+  onTabChange?: (tab: string) => void;
 }
 
 export function EnhancedAdminDashboard({
@@ -55,7 +61,7 @@ export function EnhancedAdminDashboard({
   logout,
   fetchRecentApplications,
   fetchDashboardStats,
-  onTabChange
+  onTabChange,
 }: EnhancedAdminDashboardProps) {
   // 學期選擇狀態
   const [selectedCombination, setSelectedCombination] = useState<string>();
@@ -65,7 +71,11 @@ export function EnhancedAdminDashboard({
   const [filteredApplications, setFilteredApplications] = useState<any[]>([]);
 
   // 處理學期選擇變更
-  const handleSemesterChange = async (combination: string, academicYear: number, semester: string | null) => {
+  const handleSemesterChange = async (
+    combination: string,
+    academicYear: number,
+    semester: string | null
+  ) => {
     setSelectedCombination(combination);
     setCurrentAcademicYear(academicYear);
     setCurrentSemester(semester ?? undefined);
@@ -75,32 +85,41 @@ export function EnhancedAdminDashboard({
   };
 
   // 載入篩選後的資料
-  const fetchFilteredData = async (academicYear: number, semester: string | null) => {
+  const fetchFilteredData = async (
+    academicYear: number,
+    semester: string | null
+  ) => {
     try {
-      const statsResponse = await api.request<any>('/admin/dashboard/stats', {
-        method: 'GET',
+      const statsResponse = await api.request<any>("/admin/dashboard/stats", {
+        method: "GET",
         params: {
           academic_year: academicYear,
-          semester: semester ?? undefined
-        }
+          semester: semester ?? undefined,
+        },
       });
       if (statsResponse.success) {
         setFilteredStats(statsResponse.data);
       }
 
-      const applicationsResponse = await api.request<any>('/admin/recent-applications', {
-        method: 'GET',
-        params: {
-          academic_year: academicYear,
-          semester: semester ?? undefined,
-          limit: 10
+      const applicationsResponse = await api.request<any>(
+        "/admin/recent-applications",
+        {
+          method: "GET",
+          params: {
+            academic_year: academicYear,
+            semester: semester ?? undefined,
+            limit: 10,
+          },
         }
-      });
-      if (applicationsResponse.success && Array.isArray(applicationsResponse.data)) {
+      );
+      if (
+        applicationsResponse.success &&
+        Array.isArray(applicationsResponse.data)
+      ) {
         setFilteredApplications(applicationsResponse.data);
       }
     } catch (error) {
-      console.error('Error fetching filtered data:', error);
+      console.error("Error fetching filtered data:", error);
       // 如果API不支援篩選，使用原始資料
       setFilteredStats(stats);
       setFilteredApplications(recentApplications);
@@ -118,7 +137,8 @@ export function EnhancedAdminDashboard({
 
   // 取得顯示用的資料
   const displayStats = filteredStats || stats;
-  const displayApplications = filteredApplications.length > 0 ? filteredApplications : recentApplications;
+  const displayApplications =
+    filteredApplications.length > 0 ? filteredApplications : recentApplications;
 
   if (error) {
     return (
@@ -138,7 +158,7 @@ export function EnhancedAdminDashboard({
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -150,9 +170,7 @@ export function EnhancedAdminDashboard({
             <Filter className="h-5 w-5" />
             學期篩選
           </CardTitle>
-          <CardDescription>
-            選擇特定學年學期查看相關統計資料
-          </CardDescription>
+          <CardDescription>選擇特定學年學期查看相關統計資料</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -183,7 +201,7 @@ export function EnhancedAdminDashboard({
             <div className="mt-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-sm text-blue-800">
                 <strong>當前篩選：</strong> {currentAcademicYear}學年
-                {currentSemester === 'first' ? '第一學期' : '第二學期'}
+                {currentSemester === "first" ? "第一學期" : "第二學期"}
               </p>
             </div>
           )}
@@ -208,7 +226,7 @@ export function EnhancedAdminDashboard({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              {selectedCombination ? '該學期申請數' : '總申請數'}
+              {selectedCombination ? "該學期申請數" : "總申請數"}
             </p>
           </CardContent>
         </Card>
@@ -226,9 +244,7 @@ export function EnhancedAdminDashboard({
                 displayStats?.pending_applications || 0
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              待審核申請
-            </p>
+            <p className="text-xs text-muted-foreground">待審核申請</p>
           </CardContent>
         </Card>
 
@@ -245,9 +261,7 @@ export function EnhancedAdminDashboard({
                 displayStats?.approved_applications || 0
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              核准申請數
-            </p>
+            <p className="text-xs text-muted-foreground">核准申請數</p>
           </CardContent>
         </Card>
 
@@ -264,9 +278,7 @@ export function EnhancedAdminDashboard({
                 `${displayStats?.approval_rate || 0}%`
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              申請核准比例
-            </p>
+            <p className="text-xs text-muted-foreground">申請核准比例</p>
           </CardContent>
         </Card>
       </div>
@@ -280,13 +292,12 @@ export function EnhancedAdminDashboard({
               最近申請
               {selectedCombination && (
                 <Badge variant="secondary" className="ml-2">
-                  {currentAcademicYear}學年{currentSemester === 'first' ? '第一學期' : '第二學期'}
+                  {currentAcademicYear}學年
+                  {currentSemester === "first" ? "第一學期" : "第二學期"}
                 </Badge>
               )}
             </CardTitle>
-            <CardDescription>
-              最新的申請記錄
-            </CardDescription>
+            <CardDescription>最新的申請記錄</CardDescription>
           </CardHeader>
           <CardContent>
             {isRecentLoading ? (
@@ -296,21 +307,30 @@ export function EnhancedAdminDashboard({
             ) : displayApplications.length > 0 ? (
               <div className="space-y-4">
                 {displayApplications.slice(0, 5).map((application: any) => (
-                  <div key={application.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div
+                    key={application.id}
+                    className="flex items-center justify-between p-3 border rounded-lg"
+                  >
                     <div className="flex-1">
-                      <div className="font-medium">{application.scholarship_name}</div>
+                      <div className="font-medium">
+                        {application.scholarship_name}
+                      </div>
                       <div className="text-sm text-gray-500">
-                        申請人: {application.user_name || '未知'}
+                        申請人: {application.user_name || "未知"}
                       </div>
                       <div className="text-xs text-gray-400">
-                        {new Date(application.created_at).toLocaleString('zh-TW')}
+                        {new Date(application.created_at).toLocaleString(
+                          "zh-TW"
+                        )}
                       </div>
                     </div>
                     <Badge
                       variant={
-                        application.status === 'approved' ? 'default' :
-                        application.status === 'rejected' ? 'destructive' :
-                        'secondary'
+                        application.status === "approved"
+                          ? "default"
+                          : application.status === "rejected"
+                            ? "destructive"
+                            : "secondary"
                       }
                     >
                       {application.status_name || application.status}
@@ -320,7 +340,7 @@ export function EnhancedAdminDashboard({
               </div>
             ) : (
               <div className="text-center py-4 text-gray-500">
-                {selectedCombination ? '該學期暫無申請記錄' : '暫無申請記錄'}
+                {selectedCombination ? "該學期暫無申請記錄" : "暫無申請記錄"}
               </div>
             )}
           </CardContent>
@@ -333,9 +353,7 @@ export function EnhancedAdminDashboard({
               <AlertCircle className="h-5 w-5" />
               系統公告
             </CardTitle>
-            <CardDescription>
-              重要系統訊息
-            </CardDescription>
+            <CardDescription>重要系統訊息</CardDescription>
           </CardHeader>
           <CardContent>
             {isAnnouncementsLoading ? (
@@ -351,21 +369,21 @@ export function EnhancedAdminDashboard({
                       {announcement.content}
                     </div>
                     <div className="text-xs text-gray-400 mt-2">
-                      {new Date(announcement.created_at).toLocaleString('zh-TW')}
+                      {new Date(announcement.created_at).toLocaleString(
+                        "zh-TW"
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-4 text-gray-500">
-                暫無系統公告
-              </div>
+              <div className="text-center py-4 text-gray-500">暫無系統公告</div>
             )}
           </CardContent>
         </Card>
       </div>
     </div>
-  )
+  );
 }
 
 export default EnhancedAdminDashboard;

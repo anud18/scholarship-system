@@ -1,13 +1,13 @@
-"use client"
-import { Separator } from "@/components/ui/separator"
-import { Mail, Phone, MapPin, ExternalLink, GraduationCap } from "lucide-react"
+"use client";
+import { Separator } from "@/components/ui/separator";
+import { Mail, Phone, MapPin, ExternalLink, GraduationCap } from "lucide-react";
 
 interface FooterProps {
-  locale?: "zh" | "en"
+  locale?: "zh" | "en";
 }
 
 export function Footer({ locale = "zh" }: FooterProps) {
-  const currentYear = new Date().getFullYear()
+  const currentYear = new Date().getFullYear();
 
   return (
     <footer className="bg-gradient-to-br from-nycu-navy-50 to-nycu-blue-50 border-t-4 border-nycu-blue-600 mt-12">
@@ -24,7 +24,9 @@ export function Footer({ locale = "zh" }: FooterProps) {
               </div>
               <div>
                 <h3 className="font-bold text-xl text-nycu-navy-800 mb-2">
-                  {locale === "zh" ? "國立陽明交通大學" : "National Yang Ming Chiao Tung University"}
+                  {locale === "zh"
+                    ? "國立陽明交通大學"
+                    : "National Yang Ming Chiao Tung University"}
                 </h3>
                 <div className="space-y-1">
                   <p className="text-nycu-navy-700 font-semibold">
@@ -67,7 +69,9 @@ export function Footer({ locale = "zh" }: FooterProps) {
                   <MapPin className="h-5 w-5 text-nycu-blue-600 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="font-medium">
-                      {locale === "zh" ? "30010 新竹市大學路1001號" : "1001 University Road, Hsinchu City 30010"}
+                      {locale === "zh"
+                        ? "30010 新竹市大學路1001號"
+                        : "1001 University Road, Hsinchu City 30010"}
                     </p>
                     <p className="text-nycu-navy-600 text-xs mt-1">
                       {locale === "zh"
@@ -105,7 +109,9 @@ export function Footer({ locale = "zh" }: FooterProps) {
                         : "No. 155, Sec. 2, Linong St., Beitou District, Taipei City 11221"}
                     </p>
                     <p className="text-nycu-navy-600 text-xs mt-1">
-                      {locale === "zh" ? "行政大樓3樓" : "Administration Building, 3F"}
+                      {locale === "zh"
+                        ? "行政大樓3樓"
+                        : "Administration Building, 3F"}
                     </p>
                   </div>
                 </div>
@@ -205,8 +211,11 @@ export function Footer({ locale = "zh" }: FooterProps) {
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="text-sm text-nycu-navy-600">
             <p className="font-medium">
-              © {currentYear} {locale === "zh" ? "國立陽明交通大學教務處" : "NYCU Office of Academic Affairs"}.
-              {locale === "zh" ? " 版權所有" : " All rights reserved"}.
+              © {currentYear}{" "}
+              {locale === "zh"
+                ? "國立陽明交通大學教務處"
+                : "NYCU Office of Academic Affairs"}
+              .{locale === "zh" ? " 版權所有" : " All rights reserved"}.
             </p>
             <p className="text-xs text-nycu-navy-500 mt-1">
               {locale === "zh"
@@ -236,15 +245,19 @@ export function Footer({ locale = "zh" }: FooterProps) {
           <div className="flex items-center justify-between text-xs text-nycu-navy-400">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span>{locale === "zh" ? "系統正常運行" : "System Operational"}</span>
+              <span>
+                {locale === "zh" ? "系統正常運行" : "System Operational"}
+              </span>
               <span>
                 {locale === "zh" ? "最後更新" : "Last Updated"}:{" "}
-                {new Date().toLocaleDateString(locale === "zh" ? "zh-TW" : "en-US")}
+                {new Date().toLocaleDateString(
+                  locale === "zh" ? "zh-TW" : "en-US"
+                )}
               </span>
             </div>
           </div>
         </div>
       </div>
     </footer>
-  )
+  );
 }

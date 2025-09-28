@@ -1,10 +1,10 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 interface NationalityFlagProps {
-  countryCode: string
-  className?: string
-  showLabel?: boolean
-  locale?: "zh" | "en"
+  countryCode: string;
+  className?: string;
+  showLabel?: boolean;
+  locale?: "zh" | "en";
 }
 
 // 國旗 emoji 映射
@@ -27,7 +27,7 @@ const flagEmojis: Record<string, string> = {
   CAN: "🇨🇦",
   AUS: "🇦🇺",
   OTHER: "🏳️",
-}
+};
 
 // 國家名稱映射
 const countryNames = {
@@ -71,11 +71,19 @@ const countryNames = {
     AUS: "Australia",
     OTHER: "Other",
   },
-}
+};
 
-export function NationalityFlag({ countryCode, className, showLabel = false, locale = "zh" }: NationalityFlagProps) {
-  const flag = flagEmojis[countryCode] || flagEmojis["OTHER"]
-  const name = countryNames[locale][countryCode as keyof (typeof countryNames)[typeof locale]] || countryCode
+export function NationalityFlag({
+  countryCode,
+  className,
+  showLabel = false,
+  locale = "zh",
+}: NationalityFlagProps) {
+  const flag = flagEmojis[countryCode] || flagEmojis["OTHER"];
+  const name =
+    countryNames[locale][
+      countryCode as keyof (typeof countryNames)[typeof locale]
+    ] || countryCode;
 
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
@@ -84,5 +92,5 @@ export function NationalityFlag({ countryCode, className, showLabel = false, loc
       </span>
       {showLabel && <span className="text-sm">{name}</span>}
     </span>
-  )
+  );
 }
