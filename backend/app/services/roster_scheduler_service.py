@@ -1,0 +1,373 @@
+"""
+Roster Scheduler Service
+造冊排程服務 - 使用APScheduler進行自動造冊排程
+"""
+
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED
+from apscheduler.executors.asyncio import AsyncIOExecutor
+from apscheduler.jobstores.redis import RedisJobStore
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from croniter import croniter
+
+from app.core.config import settings
+from app.db.session import get_db
+from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
+from app.services.payment_roster_service import PaymentRosterService
+
+logger = logging.getLogger(__name__)
+
+
+class RosterSchedulerService:
+    """造冊排程服務"""
+
+    def __init__(self):
+        self.scheduler: Optional[AsyncIOScheduler] = None
+        self.roster_service = PaymentRosterService()
+        self._setup_scheduler()
+
+    def _setup_scheduler(self):
+        """設定APScheduler"""
+        # 設定Redis作為Job Store
+        jobstores = {
+            "default": RedisJobStore(
+                host=settings.redis_url.split("://")[1].split(":")[0],
+                port=int(settings.redis_url.split(":")[-1].split("/")[0]),
+                db=1,  # 使用不同的Redis資料庫避免衝突
+                password=None,
+            )
+        }
+
+        # 設定Executor
+        executors = {"default": AsyncIOExecutor()}
+
+        # Job預設設定
+        job_defaults = {
+            "coalesce": True,  # 合併延遲的作業
+            "max_instances": 1,  # 每個作業最多一個實例
+            "misfire_grace_time": 30,  # 錯過作業的容錯時間(秒)
+        }
+
+        self.scheduler = AsyncIOScheduler(
+            jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone=timezone.utc
+        )
+
+        # 設定事件監聽器
+        self.scheduler.add_listener(self._job_executed_listener, EVENT_JOB_EXECUTED)
+        self.scheduler.add_listener(self._job_error_listener, EVENT_JOB_ERROR)
+        self.scheduler.add_listener(self._job_missed_listener, EVENT_JOB_MISSED)
+
+    async def start_scheduler(self):
+        """啟動排程器"""
+        if not self.scheduler.running:
+            self.scheduler.start()
+            logger.info("Roster scheduler started")
+
+            # 載入現有的排程
+            await self.load_active_schedules()
+        else:
+            logger.warning("Scheduler is already running")
+
+    async def stop_scheduler(self):
+        """停止排程器"""
+        if self.scheduler and self.scheduler.running:
+            self.scheduler.shutdown(wait=False)
+            logger.info("Roster scheduler stopped")
+
+    async def load_active_schedules(self):
+        """載入啟用中的排程"""
+        try:
+            async with get_db() as db:
+                # 查詢所有啟用中的排程
+                active_schedules = await db.execute("SELECT * FROM roster_schedules WHERE status = 'active'")
+                schedules = active_schedules.fetchall()
+
+                for schedule_row in schedules:
+                    await self._add_schedule_job(schedule_row)
+
+                logger.info(f"Loaded {len(schedules)} active schedules")
+
+        except Exception as e:
+            logger.error(f"Failed to load active schedules: {e}")
+
+    async def _add_schedule_job(self, schedule_data: Dict):
+        """添加排程作業"""
+        try:
+            schedule_id = schedule_data["id"]
+            cron_expression = schedule_data["cron_expression"]
+
+            if not cron_expression:
+                logger.warning(f"Schedule {schedule_id} has no cron expression")
+                return
+
+            # 驗證Cron表達式
+            if not croniter.is_valid(cron_expression):
+                logger.error(f"Invalid cron expression for schedule {schedule_id}: {cron_expression}")
+                return
+
+            # 添加作業到排程器
+            job_id = f"roster_schedule_{schedule_id}"
+
+            # 移除現有作業（如果存在）
+            if self.scheduler.get_job(job_id):
+                self.scheduler.remove_job(job_id)
+
+            # 使用CronTrigger添加作業
+            self.scheduler.add_job(
+                func=self._execute_roster_generation,
+                trigger="cron",
+                id=job_id,
+                args=[schedule_id],
+                **self._parse_cron_expression(cron_expression),
+                replace_existing=True,
+                timezone=timezone.utc,
+            )
+
+            logger.info(f"Added schedule job: {job_id} with cron: {cron_expression}")
+
+        except Exception as e:
+            logger.error(f"Failed to add schedule job: {e}")
+
+    def _parse_cron_expression(self, cron_expr: str) -> Dict[str, Any]:
+        """解析Cron表達式為APScheduler參數"""
+        # 標準Cron格式: 分 時 日 月 星期
+        # APScheduler支援: second, minute, hour, day, month, day_of_week, year
+
+        parts = cron_expr.strip().split()
+        if len(parts) != 5:
+            raise ValueError(f"Invalid cron expression format: {cron_expr}")
+
+        minute, hour, day, month, day_of_week = parts
+
+        return {"minute": minute, "hour": hour, "day": day, "month": month, "day_of_week": day_of_week}
+
+    async def _execute_roster_generation(self, schedule_id: int):
+        """執行造冊產生"""
+        logger.info(f"Executing roster generation for schedule {schedule_id}")
+
+        error_message = None
+        success = False
+
+        try:
+            async with get_db() as db:
+                # 更新排程執行狀態
+                await self._update_schedule_execution_start(db, schedule_id)
+
+                # 取得排程配置
+                schedule = await self._get_schedule_by_id(db, schedule_id)
+                if not schedule:
+                    raise Exception(f"Schedule {schedule_id} not found")
+
+                # 執行造冊產生
+                result = await self.roster_service.create_roster_from_schedule(schedule)
+
+                if result and result.get("success"):
+                    success = True
+                    logger.info(f"Roster generation completed for schedule {schedule_id}: {result.get('roster_id')}")
+                else:
+                    error_message = result.get("error", "Unknown error occurred")
+
+        except Exception as e:
+            error_message = str(e)
+            logger.error(f"Roster generation failed for schedule {schedule_id}: {e}")
+
+        finally:
+            # 更新排程執行結果
+            try:
+                async with get_db() as db:
+                    await self._update_schedule_execution_result(db, schedule_id, success, error_message)
+            except Exception as e:
+                logger.error(f"Failed to update schedule execution result: {e}")
+
+    async def _update_schedule_execution_start(self, db, schedule_id: int):
+        """更新排程開始執行"""
+        await db.execute(
+            """
+            UPDATE roster_schedules
+            SET last_run_at = NOW(),
+                next_run_at = NULL
+            WHERE id = %s
+            """,
+            (schedule_id,),
+        )
+        await db.commit()
+
+    async def _update_schedule_execution_result(
+        self, db, schedule_id: int, success: bool, error_message: Optional[str]
+    ):
+        """更新排程執行結果"""
+        if success:
+            await db.execute(
+                """
+                UPDATE roster_schedules
+                SET successful_runs = COALESCE(successful_runs, 0) + 1,
+                    total_runs = COALESCE(total_runs, 0) + 1,
+                    last_run_result = 'success',
+                    last_error_message = NULL,
+                    status = CASE
+                        WHEN status = 'error' THEN 'active'::rosterschedulestatus
+                        ELSE status
+                    END
+                WHERE id = %s
+                """,
+                (schedule_id,),
+            )
+        else:
+            await db.execute(
+                """
+                UPDATE roster_schedules
+                SET failed_runs = COALESCE(failed_runs, 0) + 1,
+                    total_runs = COALESCE(total_runs, 0) + 1,
+                    last_run_result = 'failed',
+                    last_error_message = %s,
+                    status = 'error'::rosterschedulestatus
+                WHERE id = %s
+                """,
+                (error_message, schedule_id),
+            )
+        await db.commit()
+
+    async def _get_schedule_by_id(self, db, schedule_id: int) -> Optional[Dict]:
+        """根據ID取得排程"""
+        result = await db.execute("SELECT * FROM roster_schedules WHERE id = %s", (schedule_id,))
+        row = result.fetchone()
+        return dict(row) if row else None
+
+    async def add_schedule(self, schedule_data: Dict) -> bool:
+        """添加新排程"""
+        try:
+            # 驗證Cron表達式
+            cron_expr = schedule_data.get("cron_expression")
+            if cron_expr and not croniter.is_valid(cron_expr):
+                raise ValueError(f"Invalid cron expression: {cron_expr}")
+
+            # 添加到排程器
+            await self._add_schedule_job(schedule_data)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to add schedule: {e}")
+            return False
+
+    async def remove_schedule(self, schedule_id: int) -> bool:
+        """移除排程"""
+        try:
+            job_id = f"roster_schedule_{schedule_id}"
+
+            if self.scheduler.get_job(job_id):
+                self.scheduler.remove_job(job_id)
+                logger.info(f"Removed schedule job: {job_id}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to remove schedule: {e}")
+            return False
+
+    async def pause_schedule(self, schedule_id: int) -> bool:
+        """暫停排程"""
+        try:
+            job_id = f"roster_schedule_{schedule_id}"
+
+            if self.scheduler.get_job(job_id):
+                self.scheduler.pause_job(job_id)
+                logger.info(f"Paused schedule job: {job_id}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to pause schedule: {e}")
+            return False
+
+    async def resume_schedule(self, schedule_id: int) -> bool:
+        """恢復排程"""
+        try:
+            job_id = f"roster_schedule_{schedule_id}"
+
+            if self.scheduler.get_job(job_id):
+                self.scheduler.resume_job(job_id)
+                logger.info(f"Resumed schedule job: {job_id}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to resume schedule: {e}")
+            return False
+
+    def get_schedule_status(self, schedule_id: int) -> Optional[Dict]:
+        """取得排程狀態"""
+        try:
+            job_id = f"roster_schedule_{schedule_id}"
+            job = self.scheduler.get_job(job_id)
+
+            if job:
+                return {
+                    "job_id": job.id,
+                    "next_run_time": job.next_run_time,
+                    "trigger": str(job.trigger),
+                    "pending": job.pending,
+                }
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to get schedule status: {e}")
+            return None
+
+    def list_all_jobs(self) -> List[Dict]:
+        """列出所有作業"""
+        try:
+            jobs = []
+            for job in self.scheduler.get_jobs():
+                jobs.append(
+                    {
+                        "id": job.id,
+                        "name": job.name,
+                        "next_run_time": job.next_run_time,
+                        "trigger": str(job.trigger),
+                        "pending": job.pending,
+                    }
+                )
+            return jobs
+
+        except Exception as e:
+            logger.error(f"Failed to list jobs: {e}")
+            return []
+
+    def _job_executed_listener(self, event):
+        """作業執行完成監聽器"""
+        logger.info(f"Job {event.job_id} executed successfully")
+
+    def _job_error_listener(self, event):
+        """作業執行錯誤監聽器"""
+        logger.error(f"Job {event.job_id} failed: {event.exception}")
+
+    def _job_missed_listener(self, event):
+        """作業錯過執行監聽器"""
+        logger.warning(f"Job {event.job_id} was missed")
+
+
+# 全局排程器實例
+roster_scheduler = RosterSchedulerService()
+
+
+@asynccontextmanager
+async def get_scheduler():
+    """取得排程器實例"""
+    yield roster_scheduler
+
+
+async def init_scheduler():
+    """初始化排程器"""
+    await roster_scheduler.start_scheduler()
+
+
+async def shutdown_scheduler():
+    """關閉排程器"""
+    await roster_scheduler.stop_scheduler()
