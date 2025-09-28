@@ -9,14 +9,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.payment_roster import (
-    RosterAuditAction,
-    RosterAuditLevel,
-    RosterCycle,
-    RosterStatus,
-    RosterTriggerType,
-    StudentVerificationStatus,
-)
+from app.models.payment_roster import RosterCycle, RosterStatus, RosterTriggerType, StudentVerificationStatus
+from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
 
 
 class RosterCreateRequest(BaseModel):

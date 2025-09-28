@@ -7,8 +7,7 @@ import hashlib
 import io
 import logging
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import BinaryIO, Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from minio import Minio
 from minio.error import S3Error
@@ -23,21 +22,50 @@ class MinIOService:
     """MinIO storage service for managing roster files"""
 
     def __init__(self):
-        self.client = Minio(
-            endpoint=settings.minio_endpoint,
-            access_key=settings.minio_access_key,
-            secret_key=settings.minio_secret_key,
-            secure=settings.minio_secure,
-        )
+        self._client = None
         self.roster_bucket = settings.roster_minio_bucket
         self.default_bucket = settings.minio_bucket
+        self._initialized = False
 
-        # Initialize buckets
-        self._ensure_buckets_exist()
+    @property
+    def client(self) -> Minio:
+        """Lazy initialization of MinIO client"""
+        if self._client is None:
+            # Skip MinIO initialization in testing environments
+            if settings.testing:
+                from unittest.mock import MagicMock
+
+                self._client = MagicMock()
+                self._client.bucket_exists.return_value = True
+                self._client.make_bucket.return_value = None
+                self._client.put_object.return_value = None
+                self._client.get_object.return_value = MagicMock()
+                self._client.remove_object.return_value = None
+                self._client.list_objects.return_value = []
+                logger.info("MinIO service initialized with mock client for testing")
+            else:
+                self._client = Minio(
+                    endpoint=settings.minio_endpoint,
+                    access_key=settings.minio_access_key,
+                    secret_key=settings.minio_secret_key,
+                    secure=settings.minio_secure,
+                )
+                logger.info("MinIO service initialized with real client")
+
+            # Initialize buckets on first access (real or mock)
+            if not self._initialized:
+                self._ensure_buckets_exist()
+                self._initialized = True
+        return self._client
 
     def _ensure_buckets_exist(self):
         """確保必要的MinIO bucket存在"""
         try:
+            # Skip bucket creation in testing environments
+            if settings.testing:
+                logger.info("Skipping bucket creation in testing environment")
+                return
+
             buckets_to_create = [self.roster_bucket, self.default_bucket]
 
             for bucket_name in buckets_to_create:
@@ -291,5 +319,27 @@ class MinIOService:
             }
 
 
-# 全域MinIO服務實例
-minio_service = MinIOService()
+# 全域MinIO服務實例 - 使用懶加載
+_minio_service_instance = None
+
+
+def get_minio_service() -> MinIOService:
+    """Get the global MinIO service instance with lazy initialization"""
+    global _minio_service_instance
+    if _minio_service_instance is None:
+        _minio_service_instance = MinIOService()
+    return _minio_service_instance
+
+
+# For backward compatibility, create a lazy property that can be imported as minio_service
+class MinIOServiceProxy:
+    """Proxy to provide lazy access to MinIO service"""
+
+    def __getattr__(self, name):
+        return getattr(get_minio_service(), name)
+
+    def __call__(self, *args, **kwargs):
+        return get_minio_service()(*args, **kwargs)
+
+
+minio_service = MinIOServiceProxy()

@@ -4,16 +4,24 @@ Roster audit logging service
 """
 
 import logging
-import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db_sync
+from app.db.session import SessionLocal
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
-from app.models.user import User
+
+
+def get_db_sync():
+    """Get synchronous database session"""
+    db = SessionLocal()
+    try:
+        return db
+    finally:
+        db.close()
+
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +94,9 @@ class AuditService:
 
             # 安全地提取request payload (避免敏感資訊)
             if hasattr(request, "json") and request_method in ["POST", "PUT", "PATCH"]:
-                try:
-                    # 這裡可以實作payload過濾邏輯，移除敏感欄位
-                    # 暫時不記錄payload避免敏感資訊洩漏
-                    pass
-                except:
-                    pass
+                # 這裡可以實作payload過濾邏輯，移除敏感欄位
+                # 暫時不記錄payload避免敏感資訊洩漏
+                pass
 
         # 建立稽核日誌記錄
         audit_log = RosterAuditLog.create_audit_log(

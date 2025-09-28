@@ -6,19 +6,18 @@ Payment roster API endpoints
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
-from app.core.permissions import require_roles
+from app.core.deps import get_current_user
+from app.core.security import check_user_roles
 from app.db.session import get_db_session
 from app.models.payment_roster import (
     PaymentRoster,
     PaymentRosterItem,
-    RosterCycle,
     RosterStatus,
     RosterTriggerType,
     StudentVerificationStatus,
@@ -52,7 +51,7 @@ def generate_payment_roster(
     Generate payment roster
     """
     # 檢查權限：只有管理員和處理人員可以產生造冊
-    require_roles([UserRole.admin, UserRole.processor], current_user)
+    check_user_roles([UserRole.admin, UserRole.processor], current_user)
 
     try:
         roster_service = RosterService(db)
@@ -199,7 +198,7 @@ def lock_roster(
     Lock roster
     """
     # 檢查權限：只有管理員可以鎖定造冊
-    require_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin], current_user)
 
     try:
         roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
@@ -239,7 +238,7 @@ def unlock_roster(
     Unlock roster
     """
     # 檢查權限：只有管理員可以解鎖造冊
-    require_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin], current_user)
 
     try:
         roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
@@ -327,7 +326,7 @@ def dry_run_roster_generation(
     """
     try:
         # 檢查權限
-        require_roles([UserRole.admin, UserRole.processor], current_user)
+        check_user_roles([UserRole.admin, UserRole.processor], current_user)
 
         roster_service = RosterService(db)
 
@@ -554,13 +553,19 @@ def get_roster_statistics(
         # 統計合格/不合格人數
         qualified_count = (
             db.query(PaymentRosterItem)
-            .filter(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified == True)
+            .filter(
+                PaymentRosterItem.roster_id == roster_id,
+                PaymentRosterItem.is_qualified.is_(True),
+            )
             .count()
         )
 
         disqualified_count = (
             db.query(PaymentRosterItem)
-            .filter(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified == False)
+            .filter(
+                PaymentRosterItem.roster_id == roster_id,
+                PaymentRosterItem.is_qualified.is_(False),
+            )
             .count()
         )
 
@@ -593,7 +598,7 @@ def delete_roster(
     Delete roster (only unlocked rosters)
     """
     # 檢查權限：只有管理員可以刪除造冊
-    require_roles([UserRole.admin], current_user)
+    check_user_roles([UserRole.admin], current_user)
 
     try:
         roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
