@@ -3,10 +3,9 @@ Roster Scheduler Service
 造冊排程服務 - 使用APScheduler進行自動造冊排程
 """
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Any, Dict, List, Optional
 
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED
@@ -17,7 +16,6 @@ from croniter import croniter
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
 from app.services.payment_roster_service import PaymentRosterService
 
 logger = logging.getLogger(__name__)

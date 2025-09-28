@@ -4,18 +4,16 @@ Handles system configuration with encryption for sensitive values
 """
 
 import json
-import os
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from cryptography.fernet import Fernet
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.system_setting import ConfigCategory, ConfigDataType, ConfigurationAuditLog, SystemSetting
-from app.models.user import User
 
 
 class ConfigEncryption:

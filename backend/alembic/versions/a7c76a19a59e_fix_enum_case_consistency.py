@@ -7,8 +7,6 @@ Create Date: 2025-09-27 22:44:14.794452
 """
 from typing import Sequence, Union
 
-import sqlalchemy as sa
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -55,8 +53,8 @@ def upgrade() -> None:
             try:
                 op.execute("ALTER TABLE applications DROP COLUMN semester")
                 op.execute("ALTER TABLE applications RENAME COLUMN semester_new TO semester")
-            except:
-                print("⚠️  Semester column update in applications table skipped")
+            except Exception as exc:
+                print(f"⚠️  Semester column update in applications table skipped: {exc}")
 
         # Update scholarship_configurations table if it exists
         result = connection.execute(
@@ -78,8 +76,8 @@ def upgrade() -> None:
                     ALTER TABLE scholarship_configurations RENAME COLUMN semester_new TO semester;
                 """
                 )
-            except:
-                print("⚠️  Semester column update in scholarship_configurations table skipped")
+            except Exception as exc:
+                print(f"⚠️  Semester column update in scholarship_configurations table skipped: {exc}")
 
         # Drop old enum and rename new one
         op.execute("DROP TYPE semester CASCADE")
@@ -114,8 +112,8 @@ def upgrade() -> None:
                     ALTER TABLE applications RENAME COLUMN sub_type_selection_mode_new TO sub_type_selection_mode;
                 """
                 )
-            except:
-                print("⚠️  SubTypeSelectionMode column update in applications table skipped")
+            except Exception as exc:
+                print(f"⚠️  SubTypeSelectionMode column update in applications table skipped: {exc}")
 
         # Update scholarship_types table if it exists
         result = connection.execute(
@@ -136,8 +134,8 @@ def upgrade() -> None:
                     ALTER TABLE scholarship_types RENAME COLUMN sub_type_selection_mode_new TO sub_type_selection_mode;
                 """
                 )
-            except:
-                print("⚠️  SubTypeSelectionMode column update in scholarship_types table skipped")
+            except Exception as exc:
+                print(f"⚠️  SubTypeSelectionMode column update in scholarship_types table skipped: {exc}")
 
         op.execute("DROP TYPE subtypeselectionmode CASCADE")
         op.execute("ALTER TYPE subtypeselectionmode_new RENAME TO subtypeselectionmode")
@@ -170,8 +168,8 @@ def upgrade() -> None:
                     ALTER TABLE users RENAME COLUMN role_new TO role;
                 """
                 )
-            except:
-                print("⚠️  UserRole column update skipped")
+            except Exception as exc:
+                print(f"⚠️  UserRole column update skipped: {exc}")
 
         op.execute("DROP TYPE userrole CASCADE")
         op.execute("ALTER TYPE userrole_new RENAME TO userrole")

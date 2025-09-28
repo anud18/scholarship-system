@@ -10,10 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils.dataframe import dataframe_to_rows
 
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
@@ -209,8 +207,6 @@ class ExcelExportService:
 
         for idx, item in enumerate(roster_items, start=1):
             # 取得學生相關資訊
-            application = item.application
-            student = application.student if application else None
 
             # 驗證必填欄位
             if not item.student_id_number or not item.student_name:
@@ -581,7 +577,7 @@ class ExcelExportService:
                     db.query(ProfessorStudentRelationship)
                     .filter(
                         ProfessorStudentRelationship.student_id == student.id,
-                        ProfessorStudentRelationship.is_active == True,
+                        ProfessorStudentRelationship.is_active.is_(True),
                     )
                     .first()
                 )

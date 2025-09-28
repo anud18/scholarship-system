@@ -5,13 +5,13 @@ Compares user-entered bank information with OCR-extracted data from passbook ima
 
 import difflib
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import OCRError
-from app.models.application import Application, ApplicationFile, ApplicationStatus
+from app.models.application import Application, ApplicationFile
 from app.services.ocr_service import get_ocr_service
 
 
@@ -129,7 +129,8 @@ class BankVerificationService:
 
         # Perform OCR on passbook document
         try:
-            ocr_service = get_ocr_service()
+            # Initialize OCR service to validate configuration before processing
+            get_ocr_service()
 
             # Read the document file (assuming it's stored and accessible)
             # In a real implementation, you'd read from MinIO or file system

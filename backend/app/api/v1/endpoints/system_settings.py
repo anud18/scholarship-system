@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import require_admin
 from app.db.deps import get_db
-from app.models.system_setting import ConfigCategory, ConfigDataType, SystemSetting
+from app.models.system_setting import ConfigCategory, ConfigDataType
 from app.models.user import User
 from app.schemas.system_setting import (
     ConfigValidationRequest,

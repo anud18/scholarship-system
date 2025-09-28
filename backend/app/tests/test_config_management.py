@@ -2,13 +2,11 @@
 Tests for Configuration Management System
 """
 
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.models.system_setting import ConfigCategory, ConfigDataType, SystemSetting
-from app.schemas.config_management import ConfigurationCreateSchema
 from app.services.config_management_service import ConfigEncryption, ConfigurationService
 
 
@@ -140,7 +138,7 @@ class TestConfigurationService:
         mock_db.refresh = AsyncMock()
         mock_db.add = MagicMock()
 
-        result = await config_service.set_configuration(
+        await config_service.set_configuration(
             key="new_key",
             value="new_value",
             user_id=1,

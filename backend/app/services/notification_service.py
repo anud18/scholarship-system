@@ -3,6 +3,7 @@ Facebook-style notification service for creating and managing user notifications
 """
 
 import json
+import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,8 @@ from app.models.notification import (
     NotificationTemplate,
     NotificationType,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationService:

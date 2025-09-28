@@ -4,18 +4,14 @@ Roster audit log models for tracking all roster operations
 """
 
 import enum
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
-
-if TYPE_CHECKING:
-    from app.models.payment_roster import PaymentRoster
-    from app.models.user import User
 
 
 class RosterAuditAction(enum.Enum):

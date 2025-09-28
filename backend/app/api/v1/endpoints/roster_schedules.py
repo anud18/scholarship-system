@@ -5,17 +5,17 @@ Roster Schedule API endpoints
 
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_current_user, get_db
-from app.core.permissions import UserRole, require_permissions
-from app.models.payment_roster import RosterCycle
+from app.core.deps import get_current_user
+from app.core.security import check_user_roles
+from app.db.deps import get_db
 from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.roster_schedule import (
     RosterScheduleCreate,
     RosterScheduleListResponse,
@@ -44,7 +44,7 @@ async def list_roster_schedules(
     列出造冊排程
     List roster schedules with filtering and pagination
     """
-    require_permissions(current_user, [UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER])
+    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
 
     try:
         # Build query
@@ -100,7 +100,7 @@ async def create_roster_schedule(
     建立新的造冊排程
     Create a new roster schedule
     """
-    require_permissions(current_user, [UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER])
+    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
 
     try:
         # Validate cron expression if provided
@@ -173,7 +173,7 @@ async def get_roster_schedule(
     取得特定造冊排程詳情
     Get specific roster schedule details
     """
-    require_permissions(current_user, [UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER])
+    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
 
     schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
 
@@ -200,7 +200,7 @@ async def update_roster_schedule(
     更新造冊排程
     Update roster schedule
     """
-    require_permissions(current_user, [UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER])
+    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
 
     try:
         schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
@@ -260,7 +260,7 @@ async def update_schedule_status(
     更新排程狀態
     Update schedule status (active, paused, disabled)
     """
-    require_permissions(current_user, [UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER])
+    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
 
     try:
         schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
@@ -315,7 +315,7 @@ async def delete_roster_schedule(
     刪除造冊排程
     Delete roster schedule
     """
-    require_permissions(current_user, [UserRole.ADMIN])
+    check_user_roles([UserRole.ADMIN], current_user)
 
     try:
         schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
@@ -354,7 +354,7 @@ async def execute_schedule_now(
     立即執行排程
     Execute schedule immediately (manual trigger)
     """
-    require_permissions(current_user, [UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER])
+    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
 
     try:
         schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
@@ -382,7 +382,7 @@ async def get_scheduler_status(
     取得排程器狀態
     Get scheduler status and all active jobs
     """
-    require_permissions(current_user, [UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER])
+    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
 
     try:
         jobs = roster_scheduler.list_all_jobs()

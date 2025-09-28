@@ -5,7 +5,7 @@ Roster schedule models for automatic roster generation
 
 import enum
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, List, Optional
+from typing import Optional
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
@@ -13,11 +13,6 @@ from sqlalchemy.sql import func
 
 from app.db.base_class import Base
 from app.models.payment_roster import RosterCycle
-
-if TYPE_CHECKING:
-    from app.models.payment_roster import PaymentRoster
-    from app.models.scholarship import ScholarshipConfiguration
-    from app.models.user import User
 
 
 class RosterScheduleStatus(enum.Enum):

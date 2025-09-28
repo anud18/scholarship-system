@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, desc, or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
@@ -20,12 +20,10 @@ from app.models.payment_roster import (
     RosterTriggerType,
     StudentVerificationStatus,
 )
-from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
+from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.models.user import User
 from app.services.audit_service import audit_service
-from app.services.eligibility_service import EligibilityService
-from app.services.minio_service import minio_service
 from app.services.student_verification_service import StudentVerificationService
 
 logger = logging.getLogger(__name__)
@@ -194,7 +192,6 @@ class RosterService:
                     # 學籍API驗證並更新學生資料
                     verification_result = None
                     verification_status = StudentVerificationStatus.VERIFIED
-                    student_data_updated = False
 
                     if student_verification_enabled:
                         # 呼叫學籍API取得最新資料
@@ -241,7 +238,6 @@ class RosterService:
                                     # 更新Application的student_data欄位
                                     application.student_data = stored_student_data
                                     self.db.add(application)
-                                    student_data_updated = True
 
                                     # 記錄更新日誌
                                     audit_service.log_roster_operation(
@@ -425,7 +421,7 @@ class RosterService:
         query = self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id)
 
         if not include_excluded:
-            query = query.filter(PaymentRosterItem.is_included == True)
+            query = query.filter(PaymentRosterItem.is_included.is_(True))
 
         return query.all()
 
@@ -736,7 +732,7 @@ class RosterService:
             .filter(
                 and_(
                     ScholarshipRule.scholarship_type_id == scholarship_type_id,
-                    ScholarshipRule.is_active == True,
+                    ScholarshipRule.is_active.is_(True),
                     or_(
                         ScholarshipRule.academic_year == academic_year, ScholarshipRule.academic_year.is_(None)  # 通用規則
                     ),

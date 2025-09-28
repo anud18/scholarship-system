@@ -18,6 +18,8 @@ from sqlalchemy.pool import StaticPool
 os.environ["TESTING"] = "true"
 os.environ["PYTEST_CURRENT_TEST"] = "true"
 
+# MinIO mocking is now handled automatically in the service based on testing environment
+
 # Use in-memory SQLite for testing
 TEST_DATABASE_URL = "sqlite:///:memory:"
 TEST_DATABASE_URL_ASYNC = "sqlite+aiosqlite:///:memory:"

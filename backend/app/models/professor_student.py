@@ -3,15 +3,11 @@ Professor-Student relationship model for access control
 """
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.db.base_class import Base
-
-if TYPE_CHECKING:
-    from app.models.user import User
 
 
 class ProfessorStudentRelationship(Base):

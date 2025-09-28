@@ -5,7 +5,6 @@ Payment roster models for scholarship system
 
 import enum
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
     JSON,
@@ -25,10 +24,6 @@ from sqlalchemy.sql import func
 
 from app.db.base_class import Base
 
-if TYPE_CHECKING:
-    from app.models.application import Application
-    from app.models.scholarship import ScholarshipConfiguration
-    from app.models.user import User
 
 
 class RosterCycle(enum.Enum):

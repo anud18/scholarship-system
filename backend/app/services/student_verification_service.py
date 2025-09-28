@@ -5,7 +5,7 @@ Student verification service for checking student enrollment status
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -313,7 +313,7 @@ class StudentVerificationService:
                 timeout=5,
             )
             return response.status_code == 200
-        except:
+        except Exception:
             return False
 
     def get_verification_status_label(self, status: StudentVerificationStatus, locale: str = "zh") -> str:

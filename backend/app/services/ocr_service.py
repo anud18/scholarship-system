@@ -3,7 +3,6 @@ OCR Service using Google Gemini API
 Handles bank passbook and document text extraction
 """
 
-import base64
 import io
 import logging
 from typing import Any, Dict, Optional
