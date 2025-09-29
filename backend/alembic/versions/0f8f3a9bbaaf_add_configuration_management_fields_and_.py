@@ -71,22 +71,24 @@ def upgrade() -> None:
             # Constraint may already exist with different name, skip
             pass
 
-    # Create configuration_audit_logs table
-    op.create_table('configuration_audit_logs',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('setting_key', sa.String(length=100), nullable=False),
-        sa.Column('old_value', sa.Text(), nullable=True),
-        sa.Column('new_value', sa.Text(), nullable=False),
-        sa.Column('action', sa.String(length=20), nullable=False),
-        sa.Column('changed_by', sa.Integer(), nullable=False),
-        sa.Column('change_reason', sa.Text(), nullable=True),
-        sa.Column('changed_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.ForeignKeyConstraint(['changed_by'], ['users.id'], ),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_configuration_audit_logs_id', 'configuration_audit_logs', ['id'], unique=False)
-    op.create_index('ix_configuration_audit_logs_setting_key', 'configuration_audit_logs', ['setting_key'], unique=False)
-    op.create_index('ix_configuration_audit_logs_changed_at', 'configuration_audit_logs', ['changed_at'], unique=False)
+    # Create configuration_audit_logs table only if it doesn't exist
+    existing_tables = inspector.get_table_names()
+    if 'configuration_audit_logs' not in existing_tables:
+        op.create_table('configuration_audit_logs',
+            sa.Column('id', sa.Integer(), nullable=False),
+            sa.Column('setting_key', sa.String(length=100), nullable=False),
+            sa.Column('old_value', sa.Text(), nullable=True),
+            sa.Column('new_value', sa.Text(), nullable=False),
+            sa.Column('action', sa.String(length=20), nullable=False),
+            sa.Column('changed_by', sa.Integer(), nullable=False),
+            sa.Column('change_reason', sa.Text(), nullable=True),
+            sa.Column('changed_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+            sa.ForeignKeyConstraint(['changed_by'], ['users.id'], ),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index('ix_configuration_audit_logs_id', 'configuration_audit_logs', ['id'], unique=False)
+        op.create_index('ix_configuration_audit_logs_setting_key', 'configuration_audit_logs', ['setting_key'], unique=False)
+        op.create_index('ix_configuration_audit_logs_changed_at', 'configuration_audit_logs', ['changed_at'], unique=False)
 
 
 def downgrade() -> None:
