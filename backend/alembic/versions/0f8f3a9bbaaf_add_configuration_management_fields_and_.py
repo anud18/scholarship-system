@@ -19,6 +19,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Check if columns already exist
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_columns = [col['name'] for col in inspector.get_columns('system_settings')]
+
     # Create enum types for configuration management
     config_category_enum = postgresql.ENUM(
         'database', 'api_keys', 'email', 'ocr', 'file_storage',
@@ -33,22 +38,38 @@ def upgrade() -> None:
     )
     config_data_type_enum.create(op.get_bind(), checkfirst=True)
 
-    # Add new columns to system_settings table
-    op.add_column('system_settings', sa.Column('category', sa.Enum('database', 'api_keys', 'email', 'ocr', 'file_storage', 'security', 'features', 'integrations', 'performance', 'logging', name='configcategory'), nullable=False, server_default='features'))
-    op.add_column('system_settings', sa.Column('data_type', sa.Enum('string', 'integer', 'boolean', 'json', 'float', name='configdatatype'), nullable=False, server_default='string'))
-    op.add_column('system_settings', sa.Column('is_sensitive', sa.Boolean(), nullable=False, server_default='false'))
-    op.add_column('system_settings', sa.Column('is_readonly', sa.Boolean(), nullable=False, server_default='false'))
-    op.add_column('system_settings', sa.Column('description', sa.Text(), nullable=True))
-    op.add_column('system_settings', sa.Column('validation_regex', sa.String(length=255), nullable=True))
-    op.add_column('system_settings', sa.Column('default_value', sa.Text(), nullable=True))
-    op.add_column('system_settings', sa.Column('last_modified_by', sa.Integer(), nullable=True))
-    op.add_column('system_settings', sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True))
+    # Add new columns to system_settings table only if they don't exist
+    columns_to_add = [
+        ('category', sa.Enum('database', 'api_keys', 'email', 'ocr', 'file_storage', 'security', 'features', 'integrations', 'performance', 'logging', name='configcategory'), False, 'features'),
+        ('data_type', sa.Enum('string', 'integer', 'boolean', 'json', 'float', name='configdatatype'), False, 'string'),
+        ('is_sensitive', sa.Boolean(), False, 'false'),
+        ('is_readonly', sa.Boolean(), False, 'false'),
+        ('description', sa.Text(), True, None),
+        ('validation_regex', sa.String(length=255), True, None),
+        ('default_value', sa.Text(), True, None),
+        ('last_modified_by', sa.Integer(), True, None),
+        ('created_at', sa.DateTime(timezone=True), True, sa.text('now()'))
+    ]
 
-    # Add foreign key constraint for last_modified_by
-    op.create_foreign_key('system_settings_last_modified_by_fkey', 'system_settings', 'users', ['last_modified_by'], ['id'])
+    for col_name, col_type, nullable, default in columns_to_add:
+        if col_name not in existing_columns:
+            if default:
+                op.add_column('system_settings', sa.Column(col_name, col_type, nullable=nullable, server_default=default))
+            else:
+                op.add_column('system_settings', sa.Column(col_name, col_type, nullable=nullable))
 
-    # Make unique constraint on key column
-    op.create_unique_constraint('system_settings_key_unique', 'system_settings', ['key'])
+    # Add foreign key constraint for last_modified_by if column was added
+    if 'last_modified_by' not in existing_columns:
+        op.create_foreign_key('system_settings_last_modified_by_fkey', 'system_settings', 'users', ['last_modified_by'], ['id'])
+
+    # Check if unique constraint already exists
+    existing_constraints = [constraint['name'] for constraint in inspector.get_unique_constraints('system_settings')]
+    if 'system_settings_key_unique' not in existing_constraints:
+        try:
+            op.create_unique_constraint('system_settings_key_unique', 'system_settings', ['key'])
+        except Exception:
+            # Constraint may already exist with different name, skip
+            pass
 
     # Create configuration_audit_logs table
     op.create_table('configuration_audit_logs',

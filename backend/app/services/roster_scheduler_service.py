@@ -15,7 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from croniter import croniter
 
 from app.core.config import settings
-from app.db.session import get_db
+from app.db.session import get_db_session
 from app.services.payment_roster_service import PaymentRosterService
 
 logger = logging.getLogger(__name__)
