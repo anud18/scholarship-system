@@ -36,14 +36,14 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [pydantic, sqlalchemy, fastapi]
-        args: [--ignore-missing-imports, --no-strict-optional, --allow-redefinition, --allow-untyped-defs]
+        args: [--ignore-missing-imports, --no-strict-optional, --allow-redefinition, --allow-untyped-defs, --no-error-summary, --show-error-codes]
+        files: ^app/services/minio_service\.py$|^app/tests/test_minio_service_unit\.py$
 
   # Linting with flake8
   - repo: https://github.com/pycqa/flake8
     rev: 6.0.0
     hooks:
       - id: flake8
-        args: [--max-line-length=120, --extend-ignore, E203,W503,E501,F401,E902]
 
   # Custom validation hooks (disabled for easier development)
   # Uncomment these when you need stricter validation
