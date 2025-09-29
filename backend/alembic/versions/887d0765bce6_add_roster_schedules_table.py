@@ -20,17 +20,23 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Create RosterScheduleStatus enum if it doesn't exist
-    roster_schedule_status_enum = postgresql.ENUM(
-        "active", "paused", "disabled", "error", name="rosterschedulestatus", create_type=False
-    )
-    roster_schedule_status_enum.create(op.get_bind(), checkfirst=True)
+    # Check if roster_schedules table already exists
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_tables = inspector.get_table_names()
 
-    # Use existing rostercycle enum
-    roster_cycle_enum = postgresql.ENUM("monthly", "half_yearly", "yearly", name="rostercycle", create_type=False)
+    if 'roster_schedules' not in existing_tables:
+        # Create RosterScheduleStatus enum if it doesn't exist
+        roster_schedule_status_enum = postgresql.ENUM(
+            "active", "paused", "disabled", "error", name="rosterschedulestatus", create_type=False
+        )
+        roster_schedule_status_enum.create(op.get_bind(), checkfirst=True)
 
-    # Create roster_schedules table
-    op.create_table(
+        # Use existing rostercycle enum
+        roster_cycle_enum = postgresql.ENUM("monthly", "half_yearly", "yearly", name="rostercycle", create_type=False)
+
+        # Create roster_schedules table
+        op.create_table(
         "roster_schedules",
         sa.Column("id", sa.Integer(), nullable=False, primary_key=True),
         sa.Column("schedule_name", sa.String(length=100), nullable=False, comment="排程名稱"),
@@ -59,8 +65,8 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["scholarship_configuration_id"], ["scholarship_configurations.id"]),
         sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(op.f("ix_roster_schedules_id"), "roster_schedules", ["id"], unique=False)
+        )
+        op.create_index(op.f("ix_roster_schedules_id"), "roster_schedules", ["id"], unique=False)
 
 
 def downgrade() -> None:
