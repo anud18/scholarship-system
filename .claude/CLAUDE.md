@@ -220,6 +220,75 @@ class ScholarshipService:
         return True
 ```
 
+## Database Initialization & Migration Standards
+
+### Database Volume Recreation (CRITICAL)
+**ALWAYS** use the automated script for clean database rebuilds to avoid initialization errors:
+
+```bash
+# Clean database rebuild - removes volume and recreates from scratch
+./scripts/reset_database.sh
+
+# Preview steps before execution
+./scripts/reset_database.sh --dry-run
+```
+
+**Why this is necessary**: The database initialization has specific dependencies and potential conflicts that are automatically handled by this script.
+
+### Alembic Migration Development Rules
+**CRITICAL**: Always include existence checks in migrations to prevent conflicts with the initial schema:
+
+```python
+# ✅ CORRECT - Check before creating tables
+def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_tables = inspector.get_table_names()
+
+    if 'new_table' not in existing_tables:
+        op.create_table('new_table', ...)
+
+# ✅ CORRECT - Check before adding columns
+def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_columns = [col['name'] for col in inspector.get_columns('table_name')]
+
+    if 'new_column' not in existing_columns:
+        op.add_column('table_name', sa.Column('new_column', ...))
+
+# ❌ WRONG - Direct creation without checks
+def upgrade() -> None:
+    op.create_table('new_table', ...)  # May fail if table exists
+    op.add_column('table_name', ...)   # May fail if column exists
+```
+
+### Database Constraint Requirements
+**CRITICAL**: Ensure all constraints used in seed scripts exist in SQLAlchemy models:
+
+```python
+# ✅ CORRECT - Define constraints in models for seed script ON CONFLICT
+class ApplicationField(Base):
+    __tablename__ = "application_fields"
+    __table_args__ = (
+        UniqueConstraint('scholarship_type', 'field_name', name='uq_application_field_type_name'),
+    )
+
+    scholarship_type = Column(String(50), nullable=False)
+    field_name = Column(String(100), nullable=False)
+
+# Corresponding seed script can safely use:
+# ON CONFLICT (scholarship_type, field_name) DO UPDATE SET ...
+```
+
+### Migration Testing Checklist
+Before creating any migration:
+- [ ] Test on fresh database (use `./scripts/reset_database.sh`)
+- [ ] Include existence checks for all DDL operations
+- [ ] Verify seed scripts work with new constraints
+- [ ] Test rollback functionality
+- [ ] Check for SQLAlchemy model/migration consistency
+
 ## Database Migration Strategy
 
 ### Adding New Scholarship Types
