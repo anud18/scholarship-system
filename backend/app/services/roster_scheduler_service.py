@@ -16,7 +16,8 @@ from croniter import croniter
 
 from app.core.config import settings
 from app.db.session import get_db_session
-from app.services.payment_roster_service import PaymentRosterService
+from app.models.payment_roster import RosterCycle, RosterTriggerType
+from app.services.roster_service import RosterService
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ class RosterSchedulerService:
 
     def __init__(self):
         self.scheduler: Optional[AsyncIOScheduler] = None
-        self.roster_service = PaymentRosterService()
+        # RosterService will be instantiated with db session when needed
         self._setup_scheduler()
 
     def _setup_scheduler(self):
@@ -162,7 +163,7 @@ class RosterSchedulerService:
                     raise Exception(f"Schedule {schedule_id} not found")
 
                 # 執行造冊產生
-                result = await self.roster_service.create_roster_from_schedule(schedule)
+                result = await self._create_roster_from_schedule(schedule)
 
                 if result and result.get("success"):
                     success = True
@@ -229,6 +230,60 @@ class RosterSchedulerService:
                 (error_message, schedule_id),
             )
         await db.commit()
+
+    async def _create_roster_from_schedule(self, schedule: Dict) -> Dict:
+        """從排程建立造冊"""
+        try:
+            # 取得當前學年度（這裡需要根據系統邏輯調整）
+            from datetime import datetime
+            current_year = datetime.now().year
+
+            # 根據月份判斷學年度（假設9月開始新學年）
+            academic_year = current_year if datetime.now().month >= 9 else current_year - 1
+
+            # 轉換 roster_cycle 字串為 enum
+            roster_cycle_value = schedule["roster_cycle"]
+            if isinstance(roster_cycle_value, str):
+                roster_cycle = RosterCycle(roster_cycle_value)
+            else:
+                roster_cycle = roster_cycle_value
+
+            # 產生期間標記
+            with get_db_session() as db:
+                roster_service = RosterService(db)
+
+                # 從排程產生期間標記
+                period_label = roster_service.generate_period_label(
+                    roster_cycle=roster_cycle,
+                    target_date=datetime.now()
+                )
+
+                # 呼叫 RosterService 建立造冊
+                roster = roster_service.generate_roster(
+                    scholarship_configuration_id=schedule["scholarship_configuration_id"],
+                    period_label=period_label,
+                    roster_cycle=roster_cycle,
+                    academic_year=academic_year + 113,  # 轉換為民國年
+                    created_by_user_id=schedule["created_by_user_id"],
+                    trigger_type=RosterTriggerType.SCHEDULED,
+                    student_verification_enabled=schedule.get("student_verification_enabled", True),
+                    force_regenerate=False
+                )
+
+                return {
+                    "success": True,
+                    "roster_id": roster.id,
+                    "roster_code": roster.roster_code,
+                    "message": f"Successfully created roster {roster.roster_code}"
+                }
+
+        except Exception as e:
+            logger.error(f"Failed to create roster from schedule: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Failed to create roster: {e}"
+            }
 
     async def _get_schedule_by_id(self, db, schedule_id: int) -> Optional[Dict]:
         """根據ID取得排程"""
