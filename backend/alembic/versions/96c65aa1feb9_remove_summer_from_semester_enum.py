@@ -17,21 +17,39 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Update the enum by creating new enum and replacing it
-    op.execute("CREATE TYPE semester_new AS ENUM ('first', 'second', 'annual')")
+    # Check if semester_new type already exists
+    bind = op.get_bind()
+    result = bind.execute("SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'semester_new')")
+    semester_new_exists = result.scalar()
 
-    # Convert existing semester columns to new enum (no data exists to convert)
-    op.execute("ALTER TABLE applications ALTER COLUMN semester TYPE semester_new USING semester::text::semester_new")
-    op.execute(
-        "ALTER TABLE scholarship_configurations ALTER COLUMN semester TYPE semester_new USING semester::text::semester_new"
-    )
-    op.execute(
-        "ALTER TABLE scholarship_rules ALTER COLUMN semester TYPE semester_new USING semester::text::semester_new"
-    )
+    # Check if semester type exists
+    result = bind.execute("SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'semester')")
+    semester_exists = result.scalar()
 
-    # Drop old enum and rename new one
-    op.execute("DROP TYPE semester")
-    op.execute("ALTER TYPE semester_new RENAME TO semester")
+    if not semester_new_exists and semester_exists:
+        # Update the enum by creating new enum and replacing it
+        op.execute("CREATE TYPE semester_new AS ENUM ('first', 'second', 'annual')")
+
+        # Check which tables exist before converting columns
+        result = bind.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'applications')")
+        if result.scalar():
+            op.execute("ALTER TABLE applications ALTER COLUMN semester TYPE semester_new USING semester::text::semester_new")
+
+        result = bind.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'scholarship_configurations')")
+        if result.scalar():
+            op.execute(
+                "ALTER TABLE scholarship_configurations ALTER COLUMN semester TYPE semester_new USING semester::text::semester_new"
+            )
+
+        result = bind.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'scholarship_rules')")
+        if result.scalar():
+            op.execute(
+                "ALTER TABLE scholarship_rules ALTER COLUMN semester TYPE semester_new USING semester::text::semester_new"
+            )
+
+        # Drop old enum and rename new one
+        op.execute("DROP TYPE semester")
+        op.execute("ALTER TYPE semester_new RENAME TO semester")
 
 
 def downgrade() -> None:
