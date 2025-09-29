@@ -6,6 +6,7 @@ MinIO文件儲存服務
 import hashlib
 import io
 import logging
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 
@@ -26,6 +27,11 @@ class MinIOService:
         self.roster_bucket = settings.roster_minio_bucket
         self.default_bucket = settings.minio_bucket
         self._initialized = False
+
+        # Force initialization for non-testing environments to catch errors early
+        if not settings.testing:
+            # Access client property to trigger initialization
+            _ = self.client
 
     @property
     def client(self) -> Minio:
@@ -79,7 +85,9 @@ class MinIOService:
 
         except Exception as e:
             logger.error(f"Failed to ensure buckets exist: {e}")
-            raise FileStorageError(f"MinIO bucket initialization failed: {str(e)}")
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=500, detail=f"MinIO bucket initialization failed: {str(e)}")
 
     def _set_bucket_policy(self, bucket_name: str, private: bool = True):
         """設定bucket政策"""
@@ -193,22 +201,30 @@ class MinIOService:
             # 檢查檔案大小
             if file_size > settings.max_file_size:
                 from fastapi import HTTPException
+
                 raise HTTPException(status_code=500, detail="File too large")
 
             # 檢查檔案類型
             if not file.filename:
                 from fastapi import HTTPException
+
                 raise HTTPException(status_code=500, detail="No filename provided")
 
-            file_extension = file.filename.split('.')[-1].lower()
+            file_extension = file.filename.split(".")[-1].lower()
             if file_extension not in settings.allowed_file_types_list:
                 from fastapi import HTTPException
+
                 raise HTTPException(status_code=500, detail="Invalid file type")
 
             # 生成object名稱
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             safe_filename = file.filename.replace(" ", "_")
-            object_name = f"applications/{application_id}/{file_type}s/{timestamp}_{safe_filename}"
+            # 標準化 file_type 為複數形式
+            if file_type == "doc":
+                folder_name = "documents"
+            else:
+                folder_name = f"{file_type}s"
+            object_name = f"applications/{application_id}/{folder_name}/{timestamp}_{safe_filename}"
 
             # 上傳到MinIO
             self.client.put_object(
@@ -225,6 +241,7 @@ class MinIOService:
         except Exception as e:
             logger.error(f"Failed to upload file {file.filename}: {e}")
             from fastapi import HTTPException
+
             raise HTTPException(status_code=500, detail=str(e))
 
     def get_file_stream(self, object_name: str):
@@ -242,6 +259,7 @@ class MinIOService:
         except Exception as e:
             logger.error(f"Failed to get file stream for {object_name}: {e}")
             from fastapi import HTTPException
+
             raise HTTPException(status_code=404, detail="File not found")
 
     def delete_file(self, object_name: str) -> bool:
@@ -274,18 +292,16 @@ class MinIOService:
             str: 新的object名稱
         """
         try:
-            import uuid
-
             # 生成新的object名稱
-            file_extension = source_object_name.split('.')[-1] if '.' in source_object_name else ''
-            new_object_name = f"applications/{application_id}/cloned/{uuid.uuid4().hex}.{file_extension}"
+            file_extension = source_object_name.split(".")[-1] if "." in source_object_name else ""
+            new_object_name = f"applications/{application_id}/documents/{uuid.uuid4().hex}.{file_extension}"
 
             # 嘗試複製檔案
             try:
                 self.client.copy_object(
                     bucket_name=self.default_bucket,
                     object_name=new_object_name,
-                    copy_source=f"{self.default_bucket}/{source_object_name}"
+                    copy_source=f"{self.default_bucket}/{source_object_name}",
                 )
                 logger.info(f"Cloned file {source_object_name} to {new_object_name}")
                 return new_object_name
@@ -305,6 +321,7 @@ class MinIOService:
         except Exception as e:
             logger.error(f"Failed to clone file {source_object_name}: {e}")
             from fastapi import HTTPException
+
             raise HTTPException(status_code=500, detail=str(e))
 
     def extract_object_name_from_url(self, url: str) -> Optional[str]:
@@ -319,13 +336,13 @@ class MinIOService:
         """
         try:
             # 移除query parameters
-            if '?' in url:
-                url = url.split('?')[0]
+            if "?" in url:
+                url = url.split("?")[0]
 
             # 檢查是否是有效的檔案路徑
-            if url.startswith('/api/v1/user-profiles/files/'):
+            if url.startswith("/api/v1/user-profiles/files/"):
                 # 提取檔案路徑部分
-                return url.replace('/api/v1/user-profiles/files/', 'user-profiles/')
+                return url.replace("/api/v1/user-profiles/files/", "user-profiles/")
 
             return None
         except Exception:

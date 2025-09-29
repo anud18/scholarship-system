@@ -81,7 +81,7 @@ class RosterSchedulerService:
     async def load_active_schedules(self):
         """載入啟用中的排程"""
         try:
-            async with get_db() as db:
+            async with get_db_session() as db:
                 # 查詢所有啟用中的排程
                 active_schedules = await db.execute("SELECT * FROM roster_schedules WHERE status = 'active'")
                 schedules = active_schedules.fetchall()
@@ -153,7 +153,7 @@ class RosterSchedulerService:
         success = False
 
         try:
-            async with get_db() as db:
+            async with get_db_session() as db:
                 # 更新排程執行狀態
                 await self._update_schedule_execution_start(db, schedule_id)
 
@@ -178,7 +178,7 @@ class RosterSchedulerService:
         finally:
             # 更新排程執行結果
             try:
-                async with get_db() as db:
+                async with get_db_session() as db:
                     await self._update_schedule_execution_result(db, schedule_id, success, error_message)
             except Exception as e:
                 logger.error(f"Failed to update schedule execution result: {e}")
@@ -236,6 +236,7 @@ class RosterSchedulerService:
         try:
             # 取得當前學年度（這裡需要根據系統邏輯調整）
             from datetime import datetime
+
             current_year = datetime.now().year
 
             # 根據月份判斷學年度（假設9月開始新學年）
@@ -254,8 +255,7 @@ class RosterSchedulerService:
 
                 # 從排程產生期間標記
                 period_label = roster_service.generate_period_label(
-                    roster_cycle=roster_cycle,
-                    target_date=datetime.now()
+                    roster_cycle=roster_cycle, target_date=datetime.now()
                 )
 
                 # 呼叫 RosterService 建立造冊
@@ -267,23 +267,19 @@ class RosterSchedulerService:
                     created_by_user_id=schedule["created_by_user_id"],
                     trigger_type=RosterTriggerType.SCHEDULED,
                     student_verification_enabled=schedule.get("student_verification_enabled", True),
-                    force_regenerate=False
+                    force_regenerate=False,
                 )
 
                 return {
                     "success": True,
                     "roster_id": roster.id,
                     "roster_code": roster.roster_code,
-                    "message": f"Successfully created roster {roster.roster_code}"
+                    "message": f"Successfully created roster {roster.roster_code}",
                 }
 
         except Exception as e:
             logger.error(f"Failed to create roster from schedule: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "message": f"Failed to create roster: {e}"
-            }
+            return {"success": False, "error": str(e), "message": f"Failed to create roster: {e}"}
 
     async def _get_schedule_by_id(self, db, schedule_id: int) -> Optional[Dict]:
         """根據ID取得排程"""

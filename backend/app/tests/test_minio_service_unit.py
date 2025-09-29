@@ -221,7 +221,15 @@ def test_minio_service_bucket_creation(monkeypatch):
     # Trigger client initialization which will call bucket creation
     _ = service.client
     assert service.default_bucket == BASE_CONFIG["minio_bucket"]
-    assert events == ["exists", f"create:{BASE_CONFIG['minio_bucket']}"]
+    assert service.roster_bucket == BASE_CONFIG["roster_minio_bucket"]
+    # Should check existence for both buckets and create them
+    expected_events = [
+        "exists",
+        f"create:{BASE_CONFIG['roster_minio_bucket']}",
+        "exists",
+        f"create:{BASE_CONFIG['minio_bucket']}",
+    ]
+    assert events == expected_events
 
 
 def test_minio_service_bucket_exists(monkeypatch):
