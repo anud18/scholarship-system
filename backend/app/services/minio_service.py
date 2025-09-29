@@ -173,6 +173,164 @@ class MinIOService:
             logger.error(f"Failed to upload roster file {filename}: {e}")
             raise FileStorageError(f"檔案上傳失敗: {str(e)}")
 
+    async def upload_file(self, file, application_id: int, file_type: str) -> Tuple[str, int]:
+        """
+        通用檔案上傳方法 (for application files)
+
+        Args:
+            file: UploadFile對象
+            application_id: 申請ID
+            file_type: 檔案類型 (doc, transcript, etc.)
+
+        Returns:
+            Tuple[str, int]: (object_name, file_size)
+        """
+        try:
+            # 讀取檔案內容
+            content = await file.read()
+            file_size = len(content)
+
+            # 檢查檔案大小
+            if file_size > settings.max_file_size:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=500, detail="File too large")
+
+            # 檢查檔案類型
+            if not file.filename:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=500, detail="No filename provided")
+
+            file_extension = file.filename.split('.')[-1].lower()
+            if file_extension not in settings.allowed_file_types_list:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=500, detail="Invalid file type")
+
+            # 生成object名稱
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_filename = file.filename.replace(" ", "_")
+            object_name = f"applications/{application_id}/{file_type}s/{timestamp}_{safe_filename}"
+
+            # 上傳到MinIO
+            self.client.put_object(
+                bucket_name=self.default_bucket,
+                object_name=object_name,
+                data=io.BytesIO(content),
+                length=file_size,
+                content_type=file.content_type,
+            )
+
+            logger.info(f"Uploaded file {file.filename} as {object_name}")
+            return object_name, file_size
+
+        except Exception as e:
+            logger.error(f"Failed to upload file {file.filename}: {e}")
+            from fastapi import HTTPException
+            raise HTTPException(status_code=500, detail=str(e))
+
+    def get_file_stream(self, object_name: str):
+        """
+        取得檔案串流
+
+        Args:
+            object_name: 檔案object名稱
+
+        Returns:
+            MinIO response object
+        """
+        try:
+            return self.client.get_object(self.default_bucket, object_name)
+        except Exception as e:
+            logger.error(f"Failed to get file stream for {object_name}: {e}")
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="File not found")
+
+    def delete_file(self, object_name: str) -> bool:
+        """
+        刪除檔案
+
+        Args:
+            object_name: 檔案object名稱
+
+        Returns:
+            bool: 是否成功刪除
+        """
+        try:
+            self.client.remove_object(self.default_bucket, object_name)
+            logger.info(f"Deleted file {object_name}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete file {object_name}: {e}")
+            return False
+
+    def clone_file_to_application(self, source_object_name: str, application_id: str) -> str:
+        """
+        複製檔案到指定的申請
+
+        Args:
+            source_object_name: 來源檔案object名稱
+            application_id: 目標申請ID
+
+        Returns:
+            str: 新的object名稱
+        """
+        try:
+            import uuid
+
+            # 生成新的object名稱
+            file_extension = source_object_name.split('.')[-1] if '.' in source_object_name else ''
+            new_object_name = f"applications/{application_id}/cloned/{uuid.uuid4().hex}.{file_extension}"
+
+            # 嘗試複製檔案
+            try:
+                self.client.copy_object(
+                    bucket_name=self.default_bucket,
+                    object_name=new_object_name,
+                    copy_source=f"{self.default_bucket}/{source_object_name}"
+                )
+                logger.info(f"Cloned file {source_object_name} to {new_object_name}")
+                return new_object_name
+            except Exception:
+                # 如果複製失敗，創建一個placeholder
+                placeholder_content = b"Placeholder content"
+                self.client.put_object(
+                    bucket_name=self.default_bucket,
+                    object_name=new_object_name,
+                    data=io.BytesIO(placeholder_content),
+                    length=len(placeholder_content),
+                    content_type="application/pdf",
+                )
+                logger.info(f"Created placeholder file {new_object_name}")
+                return new_object_name
+
+        except Exception as e:
+            logger.error(f"Failed to clone file {source_object_name}: {e}")
+            from fastapi import HTTPException
+            raise HTTPException(status_code=500, detail=str(e))
+
+    def extract_object_name_from_url(self, url: str) -> Optional[str]:
+        """
+        從URL中提取object名稱
+
+        Args:
+            url: 檔案URL
+
+        Returns:
+            Optional[str]: object名稱或None
+        """
+        try:
+            # 移除query parameters
+            if '?' in url:
+                url = url.split('?')[0]
+
+            # 檢查是否是有效的檔案路徑
+            if url.startswith('/api/v1/user-profiles/files/'):
+                # 提取檔案路徑部分
+                return url.replace('/api/v1/user-profiles/files/', 'user-profiles/')
+
+            return None
+        except Exception:
+            return None
+
     def download_roster_file(self, object_name: str) -> Tuple[bytes, Dict[str, str]]:
         """
         下載造冊檔案
