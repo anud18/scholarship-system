@@ -88,10 +88,16 @@ class User(Base):
 
     # Professor-Student relationships
     professor_relationships = relationship(
-        "ProfessorStudentRelationship", foreign_keys="[ProfessorStudentRelationship.professor_id]", lazy="select"
+        "ProfessorStudentRelationship",
+        foreign_keys="[ProfessorStudentRelationship.professor_id]",
+        lazy="select",
+        overlaps="professor",
     )
     student_relationships = relationship(
-        "ProfessorStudentRelationship", foreign_keys="[ProfessorStudentRelationship.student_id]", lazy="select"
+        "ProfessorStudentRelationship",
+        foreign_keys="[ProfessorStudentRelationship.student_id]",
+        lazy="select",
+        overlaps="student",
     )
 
     def __repr__(self):
