@@ -6,7 +6,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const apiCall = async (url: string, options: RequestInit = {}) => {
   // Get auth token from localStorage if available
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  
+
   const response = await fetch(`${API_BASE}${url}`, {
     headers: {
       'Content-Type': 'application/json',
@@ -15,11 +15,11 @@ const apiCall = async (url: string, options: RequestInit = {}) => {
     },
     ...options,
   });
-  
+
   if (!response.ok) {
     throw new Error(`API call failed: ${response.statusText}`);
   }
-  
+
   return response.json();
 };
 
@@ -82,8 +82,8 @@ export const configApi = {
    * Update matrix quota (admin only)
    */
   updateMatrixQuota: async (
-    subType: string, 
-    college: string, 
+    subType: string,
+    college: string,
     newQuota: number
   ): Promise<ApiResponse<any>> => {
     return apiCall('/api/v1/scholarship-configurations/matrix-quota', {
@@ -100,7 +100,7 @@ export const configApi = {
    * Update regional quota (admin only)
    */
   updateRegionalQuota: async (
-    regionCode: string, 
+    regionCode: string,
     newQuota: number
   ): Promise<ApiResponse<any>> => {
     return apiCall('/api/v1/scholarship-configurations/regional-quota', {

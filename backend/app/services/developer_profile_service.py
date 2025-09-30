@@ -57,8 +57,8 @@ class DeveloperProfileService:
             nycu_id=nycu_id,
             name=profile.name,
             email=email,
-            user_type=UserType.STUDENT if profile.role == UserRole.STUDENT else UserType.EMPLOYEE,
-            status=EmployeeStatus.在學 if profile.role == UserRole.STUDENT else EmployeeStatus.在職,
+            user_type=UserType.student if profile.role == UserRole.student else UserType.employee,
+            status=EmployeeStatus.在學 if profile.role == UserRole.student else EmployeeStatus.在職,
             dept_code="5802",  # Default department code
             dept_name="校務資訊組",  # Default department name
             role=profile.role,
@@ -131,7 +131,7 @@ class DeveloperProfileService:
                 name=f"{developer_id.title()} Student",
                 chinese_name=f"{developer_id}學生",
                 english_name=f"{developer_id.title()} Student",
-                role=UserRole.STUDENT,
+                role=UserRole.student,
                 custom_attributes={"gpa": 3.5, "year": "sophomore"},
             ),
             DeveloperProfile(
@@ -139,7 +139,7 @@ class DeveloperProfileService:
                 name=f"Prof. {developer_id.title()}",
                 chinese_name=f"{developer_id}教授",
                 english_name=f"Professor {developer_id.title()}",
-                role=UserRole.PROFESSOR,
+                role=UserRole.professor,
                 custom_attributes={"department": "Computer Science"},
             ),
             DeveloperProfile(
@@ -147,7 +147,7 @@ class DeveloperProfileService:
                 name=f"{developer_id.title()} Admin",
                 chinese_name=f"{developer_id}管理員",
                 english_name=f"{developer_id.title()} Administrator",
-                role=UserRole.ADMIN,
+                role=UserRole.admin,
                 custom_attributes={"permissions": ["full_access"]},
             ),
         ]
@@ -190,7 +190,7 @@ class DeveloperProfileManager:
                 name=f"{developer_id.title()} Freshman",
                 chinese_name=f"{developer_id}大一生",
                 english_name=f"{developer_id.title()} Freshman",
-                role=UserRole.STUDENT,
+                role=UserRole.student,
                 custom_attributes={
                     "student_type": "undergraduate",
                     "year": "freshman",
@@ -202,7 +202,7 @@ class DeveloperProfileManager:
                 name=f"{developer_id.title()} Graduate",
                 chinese_name=f"{developer_id}研究生",
                 english_name=f"{developer_id.title()} Graduate",
-                role=UserRole.STUDENT,
+                role=UserRole.student,
                 custom_attributes={
                     "student_type": "graduate",
                     "year": "master",
@@ -214,7 +214,7 @@ class DeveloperProfileManager:
                 name=f"{developer_id.title()} PhD",
                 chinese_name=f"{developer_id}博士生",
                 english_name=f"{developer_id.title()} PhD Student",
-                role=UserRole.STUDENT,
+                role=UserRole.student,
                 custom_attributes={
                     "student_type": "graduate",
                     "year": "phd",
@@ -232,7 +232,7 @@ class DeveloperProfileManager:
                 name=f"Dr. {developer_id.title()}",
                 chinese_name=f"{developer_id}博士",
                 english_name=f"Dr. {developer_id.title()}",
-                role=UserRole.PROFESSOR,
+                role=UserRole.professor,
                 custom_attributes={
                     "department": "Computer Science",
                     "title": "Assistant Professor",
@@ -243,7 +243,7 @@ class DeveloperProfileManager:
                 name=f"Prof. {developer_id.title()}",
                 chinese_name=f"{developer_id}教授",
                 english_name=f"Professor {developer_id.title()}",
-                role=UserRole.PROFESSOR,
+                role=UserRole.professor,
                 custom_attributes={
                     "department": "Electrical Engineering",
                     "title": "Full Professor",
@@ -254,7 +254,7 @@ class DeveloperProfileManager:
                 name=f"{developer_id.title()} College Admin",
                 chinese_name=f"{developer_id}學院管理員",
                 english_name=f"{developer_id.title()} College Administrator",
-                role=UserRole.COLLEGE,
+                role=UserRole.college,
                 custom_attributes={
                     "department": "College of Engineering",
                     "permissions": ["college_review"],
@@ -265,7 +265,7 @@ class DeveloperProfileManager:
                 name=f"{developer_id.title()} System Admin",
                 chinese_name=f"{developer_id}系統管理員",
                 english_name=f"{developer_id.title()} System Administrator",
-                role=UserRole.SUPER_ADMIN,
+                role=UserRole.super_admin,
                 custom_attributes={"permissions": ["full_access", "system_config"]},
             ),
         ]

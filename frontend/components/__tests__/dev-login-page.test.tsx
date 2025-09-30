@@ -143,7 +143,7 @@ describe.skip('DevLoginPage Component', () => {
 
   it('should render development login interface correctly', () => {
     render(<DevLoginPage />);
-    
+
     expect(screen.getByText('Development Login')).toBeInTheDocument();
     expect(screen.getByText(/Select a user to simulate login/)).toBeInTheDocument();
     expect(screen.getByText(/Development Only:/)).toBeInTheDocument();
@@ -151,14 +151,14 @@ describe.skip('DevLoginPage Component', () => {
 
   it('should display all mock users with correct roles', () => {
     render(<DevLoginPage />);
-    
+
     // Check that all role types are displayed
     expect(screen.getByText('Student')).toBeInTheDocument();
     expect(screen.getByText('Professor')).toBeInTheDocument();
     expect(screen.getByText('College Reviewer')).toBeInTheDocument();
     expect(screen.getByText('Administrator')).toBeInTheDocument();
     expect(screen.getByText('Super Administrator')).toBeInTheDocument();
-    
+
     // Check that user names are displayed
     expect(screen.getByText('張小明 (Zhang Xiaoming)')).toBeInTheDocument();
     expect(screen.getByText('王教授 (Prof. Wang)')).toBeInTheDocument();
@@ -179,24 +179,24 @@ describe.skip('DevLoginPage Component', () => {
         }
       }
     };
-    
+
     // Mock the API call
     const mockMockSSOLogin = jest.fn().mockResolvedValue(mockApiResponse);
     apiClient.auth.mockSSOLogin = mockMockSSOLogin;
-    
+
     render(<DevLoginPage />);
-    
+
     // Find and click the student login button
     const studentCard = screen.getByText('張小明 (Zhang Xiaoming)').closest('.cursor-pointer');
     expect(studentCard).toBeInTheDocument();
-    
+
     fireEvent.click(studentCard!);
-    
+
     // Check loading state
     await waitFor(() => {
       expect(screen.getByText('Logging in...')).toBeInTheDocument();
     });
-    
+
     // Wait for login to complete
     await waitFor(() => {
       expect(mockMockSSOLogin).toHaveBeenCalledWith('student_dev');
@@ -208,16 +208,16 @@ describe.skip('DevLoginPage Component', () => {
 
   it('should store correct user data in localStorage', async () => {
     render(<DevLoginPage />);
-    
+
     // Click on admin user
     const adminCard = screen.getByText('管理員 (Admin User)').closest('.cursor-pointer');
     fireEvent.click(adminCard!);
-    
+
     await waitFor(() => {
       const setItemCalls = mockLocalStorage.setItem.mock.calls;
       const devUserCall = setItemCalls.find(call => call[0] === 'dev_user');
       expect(devUserCall).toBeTruthy();
-      
+
       if (devUserCall) {
         const userData = JSON.parse(devUserCall[1]);
         expect(userData).toMatchObject({
@@ -237,7 +237,7 @@ describe.skip('DevLoginPage Component', () => {
 
   it('should display instructions clearly', () => {
     render(<DevLoginPage />);
-    
+
     expect(screen.getByText('Instructions:')).toBeInTheDocument();
     expect(screen.getByText(/Click any user card to simulate login/)).toBeInTheDocument();
     expect(screen.getByText(/User data will be stored in localStorage/)).toBeInTheDocument();
@@ -246,7 +246,7 @@ describe.skip('DevLoginPage Component', () => {
 
   it('should show proper role colors and icons', () => {
     render(<DevLoginPage />);
-    
+
     // Check that badges with different colors are present
     const badges = screen.getAllByTestId('badge') || screen.getAllByText(/Student|Professor|College Reviewer|Administrator|Super Administrator/);
     expect(badges.length).toBeGreaterThan(0);
@@ -254,14 +254,14 @@ describe.skip('DevLoginPage Component', () => {
 
   it('should disable buttons during login process', async () => {
     render(<DevLoginPage />);
-    
+
     const studentCard = screen.getByText('張小明 (Zhang Xiaoming)').closest('.cursor-pointer');
     const loginButton = studentCard?.querySelector('button');
-    
+
     expect(loginButton).not.toBeDisabled();
-    
+
     fireEvent.click(studentCard!);
-    
+
     await waitFor(() => {
       expect(loginButton).toBeDisabled();
     });
@@ -304,4 +304,4 @@ describe.skip('DevLoginPage Production Mode', () => {
     render(<DevLoginPage />);
     expect(mockPush).toHaveBeenCalledWith('/');
   });
-}); 
+});

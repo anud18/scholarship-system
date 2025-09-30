@@ -57,7 +57,7 @@ export function MatrixQuotaTable({
   }, [data])
 
   // Get colleges and sub-types from the actual data, fallback to static lists if no data
-  const colleges = localData && Object.keys(localData.phd_quotas).length > 0 
+  const colleges = localData && Object.keys(localData.phd_quotas).length > 0
     ? Array.from(new Set(Object.values(localData.phd_quotas).flatMap(subtypeData => Object.keys(subtypeData)))).sort()
     : getCollegeCodes()
   const subTypes = localData ? Object.keys(localData.phd_quotas) : getSubTypeCodes()
@@ -94,7 +94,7 @@ export function MatrixQuotaTable({
     try {
       // Extract academic year from current period
       const academicYear = currentPeriod ? parseInt(currentPeriod.split('-')[0]) : undefined
-      
+
       const response = await quotaApi.updateMatrixQuota({
         sub_type: editingCell.subType,
         college: editingCell.college,
@@ -106,15 +106,15 @@ export function MatrixQuotaTable({
         // Update local data with deep copy to ensure reactivity
         const updatedData = JSON.parse(JSON.stringify(localData)) as MatrixQuotaData
         updatedData.phd_quotas[editingCell.subType][editingCell.college].total_quota = newValue
-        updatedData.phd_quotas[editingCell.subType][editingCell.college].available = 
+        updatedData.phd_quotas[editingCell.subType][editingCell.college].available =
           newValue - updatedData.phd_quotas[editingCell.subType][editingCell.college].used
-        
+
         // Recalculate all totals comprehensively
         let grandTotal = 0
         let grandUsed = 0
         let grandAvailable = 0
         let grandApplications = 0
-        
+
         Object.values(updatedData.phd_quotas).forEach((colleges) => {
           Object.values(colleges as Record<string, QuotaCell>).forEach((cell) => {
             grandTotal += cell.total_quota
@@ -123,7 +123,7 @@ export function MatrixQuotaTable({
             grandApplications += cell.applications
           })
         })
-        
+
         updatedData.grand_total = {
           total_quota: grandTotal,
           total_used: grandUsed,
@@ -132,7 +132,7 @@ export function MatrixQuotaTable({
 
         // Force state update and callback
         setLocalData(updatedData)
-        
+
         // Use timeout to ensure state has updated before calling parent callback
         setTimeout(() => {
           onDataUpdate?.(updatedData)
@@ -174,7 +174,7 @@ export function MatrixQuotaTable({
 
   const calculateSubTypeTotal = useCallback((subType: string): QuotaCell => {
     if (!localData) return { total_quota: 0, used: 0, available: 0, applications: 0 }
-    
+
     const result = { total_quota: 0, used: 0, available: 0, applications: 0 }
     Object.values(localData.phd_quotas[subType] || {}).forEach(cell => {
       result.total_quota += cell.total_quota
@@ -187,7 +187,7 @@ export function MatrixQuotaTable({
 
   const calculateCollegeTotal = useCallback((college: string): QuotaCell => {
     if (!localData) return { total_quota: 0, used: 0, available: 0, applications: 0 }
-    
+
     const result = { total_quota: 0, used: 0, available: 0, applications: 0 }
     subTypes.forEach(subType => {
       const cell = localData.phd_quotas[subType]?.[college]
@@ -336,7 +336,7 @@ export function MatrixQuotaTable({
               </TableRow>
             )
           })}
-          
+
           {/* College totals row */}
           <TableRow className="bg-gray-50 font-bold">
             <TableCell className="sticky left-0 bg-gray-50 z-10">學院總計</TableCell>

@@ -51,7 +51,7 @@ class TestApplicationService:
             email="student@university.edu",
             name="Test Student",
             nycu_id="11011001",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
             is_active=True,
         )
 
@@ -62,7 +62,7 @@ class TestApplicationService:
             id=2,
             email="admin@university.edu",
             name="Admin User",
-            role=UserRole.ADMIN,
+            role=UserRole.admin,
             is_active=True,
         )
 
@@ -73,7 +73,7 @@ class TestApplicationService:
             id=3,
             email="professor@university.edu",
             name="Professor User",
-            role=UserRole.PROFESSOR,
+            role=UserRole.professor,
             is_active=True,
         )
 
@@ -89,7 +89,7 @@ class TestApplicationService:
             is_active=True,
             is_application_period=True,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
         )
 
     @pytest.fixture
@@ -101,7 +101,7 @@ class TestApplicationService:
             sub_scholarship_type="general",
             amount=Decimal("50000"),
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             student_data={
                 "name": "Test Student",
                 "student_id": "11011001",
@@ -129,7 +129,7 @@ class TestApplicationService:
             sub_scholarship_type="general",
             amount=Decimal("50000"),
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             student_data={
                 "name": "Test Student",
                 "student_id": "11011001",
@@ -295,9 +295,7 @@ class TestApplicationService:
         application_service.db.refresh = AsyncMock()
 
         # Act
-        result = await application_service.update_application(
-            user=student_user, application_id=1, update_data=update_data
-        )
+        await application_service.update_application(user=student_user, application_id=1, update_data=update_data)
 
         # Assert
         assert mock_application.submitted_form_data["personal_statement"] == "Updated statement"
@@ -351,7 +349,7 @@ class TestApplicationService:
 
         with patch.object(application_service, "_validate_application_completeness", return_value=True):
             # Act
-            result = await application_service.submit_application(user=student_user, application_id=1)
+            await application_service.submit_application(user=student_user, application_id=1)
 
             # Assert
             assert mock_application.status == ApplicationStatus.SUBMITTED.value
@@ -390,9 +388,7 @@ class TestApplicationService:
         application_service.db.commit = AsyncMock()
 
         # Act
-        result = await application_service.withdraw_application(
-            user=student_user, application_id=1, reason="Changed my mind"
-        )
+        await application_service.withdraw_application(user=student_user, application_id=1, reason="Changed my mind")
 
         # Assert
         assert mock_application.status == ApplicationStatus.WITHDRAWN.value
@@ -451,7 +447,7 @@ class TestApplicationService:
         application_service.db.commit = AsyncMock()
 
         # Act
-        result = await application_service.update_application_status(
+        await application_service.update_application_status(
             user=admin_user,
             application_id=1,
             new_status=ApplicationStatus.UNDER_REVIEW,
@@ -510,8 +506,8 @@ class TestApplicationService:
         incomplete_application = Mock(submitted_form_data={"personal_statement": "Too short"}, agree_terms=False)
 
         # Act & Assert
-        assert application_service._validate_application_completeness(complete_application) == True
-        assert application_service._validate_application_completeness(incomplete_application) == False
+        assert application_service._validate_application_completeness(complete_application)
+        assert not application_service._validate_application_completeness(incomplete_application)
 
     @pytest.mark.asyncio
     async def test_generate_app_id_uniqueness(self, application_service):
@@ -589,7 +585,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_success(self):
         """Test successful student data retrieval"""
         # Arrange
-        user = User(id=1, role=UserRole.STUDENT, nycu_id="11011001")
+        user = User(id=1, role=UserRole.student, nycu_id="11011001")
 
         mock_student_data = {
             "name": "Test Student",
@@ -612,7 +608,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_non_student_user(self):
         """Test student data retrieval for non-student user"""
         # Arrange
-        user = User(id=1, role=UserRole.PROFESSOR, nycu_id="11011001")
+        user = User(id=1, role=UserRole.professor, nycu_id="11011001")
 
         # Act
         result = await get_student_data_from_user(user)
@@ -624,7 +620,7 @@ class TestGetStudentDataFromUser:
     async def test_get_student_data_no_nycu_id(self):
         """Test student data retrieval without NYCU ID"""
         # Arrange
-        user = User(id=1, role=UserRole.STUDENT, nycu_id=None)
+        user = User(id=1, role=UserRole.student, nycu_id=None)
 
         # Act
         result = await get_student_data_from_user(user)

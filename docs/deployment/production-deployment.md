@@ -27,32 +27,32 @@ graph TD
     subgraph "Load Balancer"
         LB[NGINX/HAProxy]
     end
-    
+
     subgraph "Application Tier"
         API1[FastAPI Instance 1]
         API2[FastAPI Instance 2]
         FE1[Frontend Instance 1]
         FE2[Frontend Instance 2]
     end
-    
+
     subgraph "Data Tier"
         DB[(PostgreSQL Primary)]
         DB_R[(PostgreSQL Replica)]
         REDIS[(Redis Cluster)]
         MINIO[(MinIO Cluster)]
     end
-    
+
     subgraph "Monitoring"
         PROM[Prometheus]
         GRAF[Grafana]
         ALERT[AlertManager]
     end
-    
+
     LB --> API1
     LB --> API2
     LB --> FE1
     LB --> FE2
-    
+
     API1 --> DB
     API2 --> DB
     API1 --> DB_R
@@ -61,7 +61,7 @@ graph TD
     API2 --> REDIS
     API1 --> MINIO
     API2 --> MINIO
-    
+
     PROM --> API1
     PROM --> API2
     PROM --> DB
@@ -125,14 +125,14 @@ server {
 server {
     listen 443 ssl http2;
     server_name scholarship.university.edu;
-    
+
     ssl_certificate /etc/ssl/certs/scholarship.crt;
     ssl_certificate_key /etc/ssl/private/scholarship.key;
-    
+
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256;
     ssl_prefer_server_ciphers off;
-    
+
     location / {
         proxy_pass http://frontend;
         proxy_set_header Host $host;
@@ -140,7 +140,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-    
+
     location /api/ {
         proxy_pass http://backend;
         proxy_set_header Host $host;
@@ -241,7 +241,7 @@ services:
       timeout: 10s
       start_period: 40s
       retries: 3
-      
+
   frontend:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
@@ -404,7 +404,7 @@ services:
         reservations:
           cpus: '1'
           memory: 1G
-          
+
   frontend:
     deploy:
       replicas: 2

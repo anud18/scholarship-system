@@ -7,7 +7,7 @@
 module.exports = {
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
-  
+
   // Module name mapping - Only specific literal mappings, no generic fallback
   moduleNameMapper: {
     // CSS and static assets
@@ -19,7 +19,7 @@ module.exports = {
     '^@/lib/utils$': '<rootDir>/lib/utils',
     '^@/lib/validation$': '<rootDir>/lib/validation',
     '^@/lib/i18n$': '<rootDir>/lib/i18n',
-    
+
     // Common component paths
     '^@/components/ui/card$': '<rootDir>/components/ui/card',
     '^@/components/ui/button$': '<rootDir>/components/ui/button',
@@ -33,8 +33,8 @@ module.exports = {
     '^@/components/ui/progress$': '<rootDir>/components/ui/progress',
     '^@/components/progress-timeline$': '<rootDir>/components/progress-timeline',
     '^@/components/file-upload$': '<rootDir>/components/file-upload',
-    
-    // Common hook paths  
+
+    // Common hook paths
     '^@/hooks/use-auth$': '<rootDir>/hooks/use-auth',
     '^@/hooks/use-applications$': '<rootDir>/hooks/use-applications',
     '^@/hooks/use-toast$': '<rootDir>/hooks/use-toast'
@@ -42,17 +42,17 @@ module.exports = {
 
   // Module directories
   moduleDirectories: ['node_modules', '<rootDir>/'],
-  
+
   // Module file extensions
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  
+
   // Test configuration
   testMatch: [
     '<rootDir>/components/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/**/*.(test|spec).{js,jsx,ts,tsx}'
   ],
-  
+
   testPathIgnorePatterns: [
     '<rootDir>/.next/',
     '<rootDir>/node_modules/',
@@ -81,9 +81,9 @@ module.exports = {
   // Other settings
   clearMocks: true,
   automock: false,
-  
+
   // Transform ignore patterns
   transformIgnorePatterns: [
     'node_modules/(?!(.*\\.mjs$))',
   ],
-} 
+}

@@ -71,13 +71,13 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
       if (processedFilters.date_to) {
         processedFilters.date_to = `${processedFilters.date_to}T23:59:59Z`
       }
-      
+
       const params = {
         skip: pagination.skip,
         limit: pagination.limit,
         ...Object.fromEntries(Object.entries(processedFilters).filter(([_, v]) => v !== '' && v !== 'all'))
       }
-      
+
       const response = await apiClient.emailManagement.getEmailHistory(params)
       if (response.success && response.data) {
         const { items, total } = response.data
@@ -147,9 +147,9 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
     <div className={`space-y-4 ${className}`}>
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-nycu-navy-800">郵件歷史記錄</h3>
-        <Button 
-          onClick={loadEmailHistory} 
-          variant="outline" 
+        <Button
+          onClick={loadEmailHistory}
+          variant="outline"
           size="sm"
           disabled={loading}
         >
@@ -166,7 +166,7 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
               <Label className="text-sm font-medium">郵件類別</Label>
               <Select
                 value={filters.email_category}
-                onValueChange={(value) => 
+                onValueChange={(value) =>
                   setFilters(prev => ({ ...prev, email_category: value }))
                 }
               >
@@ -193,7 +193,7 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
               <Label className="text-sm font-medium">狀態</Label>
               <Select
                 value={filters.status}
-                onValueChange={(value) => 
+                onValueChange={(value) =>
                   setFilters(prev => ({ ...prev, status: value }))
                 }
               >
@@ -214,7 +214,7 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
               <Input
                 placeholder="搜尋收件者信箱"
                 value={filters.recipient_email}
-                onChange={(e) => 
+                onChange={(e) =>
                   setFilters(prev => ({ ...prev, recipient_email: e.target.value }))
                 }
                 className="h-8"
@@ -225,7 +225,7 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
               <Input
                 type="date"
                 value={filters.date_from}
-                onChange={(e) => 
+                onChange={(e) =>
                   setFilters(prev => ({ ...prev, date_from: e.target.value }))
                 }
                 className="h-8"
@@ -236,14 +236,14 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
               <Input
                 type="date"
                 value={filters.date_to}
-                onChange={(e) => 
+                onChange={(e) =>
                   setFilters(prev => ({ ...prev, date_to: e.target.value }))
                 }
                 className="h-8"
               />
             </div>
             <div className="flex items-end">
-              <Button 
+              <Button
                 onClick={() => setFilters({
                   email_category: 'all',
                   status: 'all',
@@ -310,8 +310,8 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {email.email_size_bytes ? 
-                          `${(email.email_size_bytes / 1024).toFixed(1)} KB` : 
+                        {email.email_size_bytes ?
+                          `${(email.email_size_bytes / 1024).toFixed(1)} KB` :
                           '-'
                         }
                       </TableCell>
@@ -393,11 +393,11 @@ export function EmailHistoryTable({ className }: EmailHistoryTableProps) {
                   ))}
                 </TableBody>
               </Table>
-              
+
               {/* Pagination */}
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  顯示 {pagination.skip + 1} - {Math.min(pagination.skip + pagination.limit, pagination.total)} 
+                  顯示 {pagination.skip + 1} - {Math.min(pagination.skip + pagination.limit, pagination.total)}
                   共 {pagination.total} 筆
                 </div>
                 <div className="flex items-center gap-2">

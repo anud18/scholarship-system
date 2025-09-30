@@ -117,7 +117,7 @@ class Application(Base):
     scholarship_name = Column(String(200))
     amount = Column(Numeric(10, 2))
     scholarship_subtype_list = Column(JSON, nullable=False, default=[])
-    sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), nullable=False)
+    sub_type_selection_mode = Column(Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
 
     # New fields for comprehensive scholarship system (Issue #10)
     main_scholarship_type = Column(String(50))  # UNDERGRADUATE_FRESHMAN, PHD, DIRECT_PHD
@@ -134,7 +134,7 @@ class Application(Base):
 
     # 學期資訊 (申請當時的學期)
     academic_year = Column(Integer, nullable=False)  # 民國年，例如 113
-    semester = Column(Enum(Semester), nullable=True)  # Can be NULL for yearly scholarships
+    semester = Column(Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True)  # Can be NULL for yearly scholarships
 
     # 申請資料 (申請當時)
     student_data = Column(JSON)  # Student 資料
@@ -281,8 +281,8 @@ class Application(Base):
     def get_semester_label(self) -> str:
         """Get semester label in Chinese"""
         return {
-            Semester.FIRST: "第一學期",
-            Semester.SECOND: "第二學期",
+            Semester.first: "第一學期",
+            Semester.second: "第二學期",
         }.get(self.semester, "")
 
     @property

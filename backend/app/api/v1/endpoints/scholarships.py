@@ -39,9 +39,9 @@ async def get_all_scholarships(
         # Convert semester string to enum for configuration lookup
         semester_enum = None
         if display_semester == "first":
-            semester_enum = Semester.FIRST
+            semester_enum = Semester.first
         elif display_semester == "second":
-            semester_enum = Semester.SECOND
+            semester_enum = Semester.second
 
         # Get active configuration for this scholarship and academic year
         # For yearly scholarships, look for configurations with semester = None
@@ -49,7 +49,7 @@ async def get_all_scholarships(
         config_conditions = [
             ScholarshipConfiguration.scholarship_type_id == scholarship.id,
             ScholarshipConfiguration.academic_year == display_academic_year,
-            ScholarshipConfiguration.is_active == True,
+            ScholarshipConfiguration.is_active.is_(True),
         ]
 
         # Add semester condition based on scholarship's application cycle
@@ -239,7 +239,7 @@ async def get_scholarship_detail(scholarship_id: int, db: AsyncSession = Depends
         select(ScholarshipConfiguration)
         .where(
             ScholarshipConfiguration.scholarship_type_id == scholarship_id,
-            ScholarshipConfiguration.is_active == True,
+            ScholarshipConfiguration.is_active.is_(True),
         )
         .order_by(
             ScholarshipConfiguration.academic_year.desc(),

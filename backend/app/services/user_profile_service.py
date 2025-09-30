@@ -334,7 +334,7 @@ class UserProfileService:
                         "WEBP": "image/webp",
                     }
                     mime = format_to_mime.get(temp_image.format, "application/octet-stream")
-                except:
+                except Exception:
                     mime = "application/octet-stream"
 
             if mime not in self.ALLOWED_MIME_TYPES:

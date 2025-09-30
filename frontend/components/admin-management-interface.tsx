@@ -22,6 +22,7 @@ import { AdminConfigurationManagement } from "@/components/admin-configuration-m
 import { EmailHistoryTable } from "@/components/email-history-table"
 import { ScheduledEmailsTable } from "@/components/scheduled-emails-table"
 import { ScholarshipWorkflowMermaid } from "@/components/ScholarshipWorkflowMermaid"
+import SystemConfigurationManagement from "@/components/system-configuration-management"
 
 
 
@@ -191,7 +192,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   const [emailTab, setEmailTab] = useState("");
   const [emailTemplate, setEmailTemplate] = useState<EmailTemplate | null>(null);
-  
+
   // Email Management states
   const [emailManagementTab, setEmailManagementTab] = useState("templates");
   const [emailHistory, setEmailHistory] = useState<any[]>([]);
@@ -225,7 +226,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     scheduled_to: ''
   });
   const [loadingTemplate, setLoadingTemplate] = useState(false);
-  
+
   // Email Template states by sending type
   const [emailTemplateTab, setEmailTemplateTab] = useState<'single' | 'bulk'>("single");
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
@@ -336,23 +337,23 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   // 使用 useCallback 來確保 onPermissionChange 捕獲最新的狀態
   const handlePermissionChange = useCallback((permissions: any[]) => {
-    
+
     // 更新該用戶的獎學金權限
     const userId = editingUser?.id
     if (userId) {
       // 移除該用戶的舊權限
       const otherUserPermissions = scholarshipPermissions.filter(p => p.user_id !== Number(userId))
 
-      
+
       // 處理新權限，保留現有權限的 ID
       const newPermissions = permissions.map(permission => {
         const scholarship = availableScholarships.find(s => s.id === permission.scholarship_id)
-        
+
         // 檢查是否已存在此權限（通過 scholarship_id 匹配）
-        const existingPermission = scholarshipPermissions.find(p => 
+        const existingPermission = scholarshipPermissions.find(p =>
           p.user_id === Number(userId) && p.scholarship_id === permission.scholarship_id
         )
-        
+
         return {
           ...permission,
           // 如果已存在，保留原 ID；否則使用新 ID
@@ -362,7 +363,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
           scholarship_name_en: scholarship?.name_en
         }
       })
-      
+
       const updatedPermissions = [...otherUserPermissions, ...newPermissions];
       setScholarshipPermissions(updatedPermissions)
     }
@@ -424,14 +425,14 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
     e.preventDefault();
     const ref = field === "subject_template" ? subjectRef : bodyRef;
     if (!ref.current || !emailTemplate) return;
-    
+
     const el = ref.current;
     const start = el.selectionStart || 0;
     const end = el.selectionEnd || 0;
     const old = emailTemplate[field] || "";
     const newValue = old.slice(0, start) + `{${variable}}` + old.slice(end);
     handleTemplateChange(field, newValue);
-    
+
     // Set cursor position after the inserted variable
     setTimeout(() => {
       el.focus();
@@ -536,7 +537,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         limit: emailHistoryPagination.limit,
         ...Object.fromEntries(Object.entries(emailHistoryFilters).filter(([_, v]) => v !== ''))
       };
-      
+
       const response = await apiClient.emailManagement.getEmailHistory(params);
       if (response.success && response.data) {
         const { items, total } = response.data
@@ -561,7 +562,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         limit: scheduledEmailsPagination.limit,
         ...Object.fromEntries(Object.entries(scheduledEmailsFilters).filter(([_, v]) => v !== ''))
       };
-      
+
       const response = await apiClient.emailManagement.getScheduledEmails(params);
       if (response.success && response.data) {
         const { items, total } = response.data
@@ -677,13 +678,13 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
     setLoadingAnnouncements(true);
     setAnnouncementsError(null);
-    
+
     try {
       const response = await apiClient.admin.getAllAnnouncements(
         announcementPagination.page,
         announcementPagination.size
       );
-      
+
       if (response.success && response.data) {
         setAnnouncements(response.data.items || []);
         setAnnouncementPagination(prev => ({
@@ -710,10 +711,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   const handleCreateAnnouncement = async () => {
     if (!announcementForm.title || !announcementForm.message) return;
-    
+
     try {
       const response = await apiClient.admin.createAnnouncement(announcementForm);
-      
+
       if (response.success) {
         setShowAnnouncementForm(false);
         setAnnouncementForm({ title: '', message: '', notification_type: 'info', priority: 'normal' });
@@ -728,10 +729,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   const handleUpdateAnnouncement = async () => {
     if (!editingAnnouncement || !announcementForm.title || !announcementForm.message) return;
-    
+
     try {
       const response = await apiClient.admin.updateAnnouncement(editingAnnouncement.id, announcementForm as AnnouncementUpdate);
-      
+
       if (response.success) {
         setEditingAnnouncement(null);
         setShowAnnouncementForm(false);
@@ -747,10 +748,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   const handleDeleteAnnouncement = async (id: number) => {
     if (!confirm('確定要刪除此公告嗎？')) return;
-    
+
     try {
       const response = await apiClient.admin.deleteAnnouncement(id);
-      
+
       if (response.success) {
         fetchAnnouncements();
       } else {
@@ -792,7 +793,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         setCurrentUserScholarshipPermissions([]); // Not needed for super admin
         return;
       }
-      
+
       // For regular admin, check if they have any scholarship permissions
       if (user.role === 'admin') {
         try {
@@ -829,14 +830,14 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         // Reset to system mode
         setScholarshipEmailTemplates([]);
       }
-      
+
       // Reset email tab to first available template
       const availableTemplates = getFilteredEmailTemplates();
       if (availableTemplates.length > 0 && availableTemplates[0].key !== emailTab) {
         setEmailTab(availableTemplates[0].key);
       }
     };
-    
+
     loadScholarshipData();
   }, [scholarshipEmailTab]);
 
@@ -927,7 +928,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
           const response = await apiClient.admin.getMyScholarships();
           if (response.success && response.data) {
             setMyScholarships(response.data);
-            
+
             // If user has scholarships and current tab is not valid, reset to first scholarship or system
             if (response.data.length > 0 && scholarshipEmailTab !== "system") {
               const currentScholarshipId = parseInt(scholarshipEmailTab);
@@ -944,7 +945,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         }
       }
     };
-    
+
     fetchMyScholarships();
   }, [user]);
 
@@ -957,29 +958,30 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const fetchUsers = async () => {
     setLoadingUsers(true);
     setUsersError(null);
-    
+
     try {
       // 根據當前使用者角色決定請求哪些角色
       let rolesParam = 'college,admin,super_admin,professor';
       if (user.role === 'admin') {
         rolesParam = 'college,admin,professor'; // admin 使用者不能看到 super_admin
       }
-      
+      // 轉換為大寫傳送給後端
+      rolesParam = rolesParam.split(',').map(role => role.trim().toUpperCase()).join(',');
       const params: any = {
         page: userPagination.page,
         size: userPagination.size,
         roles: rolesParam
       };
-      
+
       if (userSearch) params.search = userSearch;
       if (userRoleFilter) params.role = userRoleFilter;
-      
+
       const response = await apiClient.users.getAll(params);
-      
+
       if (response.success && response.data) {
         // 後端已經根據roles參數過濾了正確的角色，不需要前端再過濾
         const managementUsers = response.data.items || [];
-        
+
         // 對使用者列表進行角色排序
         const sortedUsers = managementUsers.sort((a, b) => {
           const roleOrder = {
@@ -988,13 +990,13 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
             'college': 3,
             'professor': 4
           };
-          
+
           const aOrder = roleOrder[a.role as keyof typeof roleOrder] || 999;
           const bOrder = roleOrder[b.role as keyof typeof roleOrder] || 999;
-          
+
           return aOrder - bOrder;
         });
-        
+
         setUsers(sortedUsers);
         setUserPagination(prev => ({
           ...prev,
@@ -1025,11 +1027,11 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   const handleUserFormChange = (field: keyof UserCreate, value: any) => {
     setUserForm(prev => ({ ...prev, [field]: value }));
-    
+
     // 當角色改變時，處理獎學金權限
     if (field === 'role') {
-      
-      
+
+
       // 如果角色不是 college 或 admin，清除該用戶的所有獎學金權限
       if (!['college', 'admin'].includes(value)) {
         if (editingUser) {
@@ -1047,13 +1049,13 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   const handleCreateUser = async () => {
     if (!userForm.nycu_id || !userForm.role) return;
-    
+
     setUserFormLoading(true);
-    
+
     try {
       // First create the user
       const response = await apiClient.users.create(userForm);
-      
+
       if (response.success) {
         // If user creation successful and we have scholarship permissions to save
         const newUserId = response.data?.id;
@@ -1075,10 +1077,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
             }
           }
         }
-        
+
         // Clean up temporary permissions
         setScholarshipPermissions(prev => prev.filter(p => p.user_id !== -1));
-        
+
         setShowUserForm(false);
         resetUserForm();
         await fetchUsers();
@@ -1096,35 +1098,35 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   const handleUpdateUser = async () => {
     if (!editingUser || !userForm.role) return;
-    
+
     setUserFormLoading(true);
-    
+
     try {
       // First update the user
       const response = await apiClient.users.update(editingUser.id, userForm);
-      
+
       if (response.success) {
         // Handle scholarship permissions for college/admin/super_admin roles
         if (['college', 'admin', 'super_admin'].includes(userForm.role)) {
-          
-          
 
-          
+
+
+
           // Get the permissions that should be saved (from the UI state - only those that are actually selected)
           // Note: scholarshipPermissions state is updated by onPermissionChange when user changes selection
           const permissionsToSave = scholarshipPermissions.filter(p => p.user_id === Number(editingUser.id));
-          
+
           // Force refresh permissions from backend to get the latest state
           const refreshResponse = await apiClient.admin.getScholarshipPermissions();
           if (refreshResponse.success && refreshResponse.data) {
             const freshPermissions = refreshResponse.data;
             const freshUserPermissions = freshPermissions.filter(p => p.user_id === Number(editingUser.id));
-            
+
             // Use fresh permissions for comparison
-            const permissionsToRemove = freshUserPermissions.filter(currentPerm => 
+            const permissionsToRemove = freshUserPermissions.filter(currentPerm =>
               !permissionsToSave.some(savePerm => savePerm.scholarship_id === currentPerm.scholarship_id)
             );
-            
+
             // Step 1: Delete permissions that are no longer selected
             for (const currentPerm of permissionsToRemove) {
               try {
@@ -1134,12 +1136,12 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                 alert(`權限刪除失敗: ${permError instanceof Error ? permError.message : '未知錯誤'}`);
               }
             }
-            
+
             // Step 2: Create new permissions for newly selected scholarships
-            const permissionsToCreate = permissionsToSave.filter(savePerm => 
+            const permissionsToCreate = permissionsToSave.filter(savePerm =>
               !freshUserPermissions.some(currentPerm => currentPerm.scholarship_id === savePerm.scholarship_id)
             );
-            
+
             for (const permission of permissionsToCreate) {
               try {
                 await apiClient.admin.createScholarshipPermission({
@@ -1164,7 +1166,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
             }
           }
         }
-        
+
 
         setEditingUser(null);
         setShowUserForm(false);
@@ -1207,10 +1209,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       password: '', // 編輯時不需要密碼
       student_no: user.student_no || ''
     });
-    
+
     // 載入該用戶的現有獎學金權限
     const userPermissions = scholarshipPermissions.filter(p => p.user_id === Number(user.id));
-    
+
     setShowUserForm(true);
   };
 
@@ -1338,7 +1340,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const fetchScholarshipRules = async () => {
     setLoadingRules(true);
     setRulesError(null);
-    
+
     try {
       const response = await apiClient.admin.getScholarshipRules();
       if (response.success && response.data) {
@@ -1498,15 +1500,22 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
   // 獲取獎學金類型列表
   const fetchScholarshipTypes = async () => {
+    console.log('🔍 Fetching scholarship types for user:', user?.role, user?.nycu_id);
     setLoadingScholarshipTypes(true);
     try {
       // Use the new API that returns only scholarships the user has permission to manage
       const response = await apiClient.admin.getMyScholarships();
+      console.log('📊 Scholarship types response:', response);
+
       if (response.success && response.data) {
+        console.log('✅ Found scholarship types:', response.data.length, 'types');
         setScholarshipTypes(response.data);
+      } else {
+        console.log('❌ Failed to get scholarship types:', response.message);
+        setScholarshipTypes([]);
       }
     } catch (error) {
-      console.error('Failed to fetch scholarship types:', error);
+      console.error('❌ Failed to fetch scholarship types:', error);
       // Fallback to empty array so UI doesn't break
       setScholarshipTypes([]);
     } finally {
@@ -1517,7 +1526,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   // 根據獎學金 tab 和篩選條件過濾規則
   const getFilteredRules = () => {
     let filtered = [...scholarshipRules];
-    
+
     // 根據選擇的獎學金 tab 過濾
     if (selectedScholarshipTab !== 'templates') {
       const scholarshipId = parseInt(selectedScholarshipTab.replace('scholarship-', ''));
@@ -1526,7 +1535,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       // 只顯示模板
       filtered = filtered.filter(rule => rule.is_template === true);
     }
-    
+
     // 根據學年度和學期過濾
     filtered = filtered.filter(rule => {
       if (rule.academic_year && rule.academic_year !== selectedAcademicYear) {
@@ -1541,7 +1550,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
       }
       return true;
     });
-    
+
     // 根據初領/續領過濾
     if (ruleTypeFilter !== 'all') {
       filtered = filtered.filter(rule => {
@@ -1553,7 +1562,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         return true;
       });
     }
-    
+
     // 按優先級排序 (數字越小優先級越高，1 在最上面)
     return filtered.sort((a, b) => a.priority - b.priority);
   };
@@ -1568,7 +1577,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const fetchSystemStats = async () => {
     setLoadingStats(true);
     setStatsError(null);
-    
+
     try {
       const response = await apiClient.admin.getSystemStats();
       if (response.success && response.data) {
@@ -1587,10 +1596,10 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   const fetchScholarshipPermissions = async () => {
     setLoadingPermissions(true);
     setPermissionsError(null);
-    
+
     try {
       const response = await apiClient.admin.getScholarshipPermissions();
-      
+
       if (response.success && response.data) {
         setScholarshipPermissions(response.data);
       } else {
@@ -1611,7 +1620,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
   // 獲取可用獎學金列表
   const fetchAvailableScholarships = async () => {
     setLoadingScholarships(true);
-    
+
     try {
       const response = await apiClient.admin.getAllScholarshipsForPermissions();
       if (response.success && response.data) {
@@ -1635,7 +1644,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
           <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
           <h2 className="text-2xl font-bold text-red-600 mb-2">需要登入</h2>
           <p className="text-gray-600 mb-6">您需要登入才能訪問系統管理功能</p>
-          <Button 
+          <Button
             onClick={() => window.location.href = '/dev-login'}
             className="nycu-gradient text-white"
           >
@@ -1697,7 +1706,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
               <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
               <p className="text-lg font-medium text-red-600 mb-2">載入系統統計失敗</p>
               <p className="text-sm text-gray-600 mb-4">{statsError}</p>
-              <Button 
+              <Button
                 onClick={fetchSystemStats}
                 variant="outline"
                 className="border-red-300 text-red-600 hover:bg-red-50"
@@ -1816,18 +1825,56 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
         </TabsContent>
 
         <TabsContent value="rules" className="space-y-4">
-          <AdminRuleManagement scholarshipTypes={scholarshipTypes} />
+          {loadingScholarshipTypes ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
+                  <span className="text-nycu-navy-600">載入獎學金類型中...</span>
+                </div>
+              </CardContent>
+            </Card>
+          ) : scholarshipTypes.length === 0 ? (
+            <Card>
+              <CardContent className="text-center py-12">
+                <AlertCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium text-gray-600 mb-2">沒有可管理的獎學金</p>
+                <p className="text-sm text-gray-500">請聯繫系統管理員分配獎學金管理權限</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <AdminRuleManagement scholarshipTypes={scholarshipTypes} />
+          )}
         </TabsContent>
 
         <TabsContent value="configurations" className="space-y-4">
-          <AdminConfigurationManagement scholarshipTypes={scholarshipTypes} />
+          {loadingScholarshipTypes ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-8">
+                <div className="flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
+                  <span className="text-nycu-navy-600">載入獎學金類型中...</span>
+                </div>
+              </CardContent>
+            </Card>
+          ) : scholarshipTypes.length === 0 ? (
+            <Card>
+              <CardContent className="text-center py-12">
+                <AlertCircle className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium text-gray-600 mb-2">沒有可管理的獎學金</p>
+                <p className="text-sm text-gray-500">請聯繫系統管理員分配獎學金管理權限</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <AdminConfigurationManagement scholarshipTypes={scholarshipTypes} />
+          )}
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">使用者權限管理</h3>
             <div className="flex gap-2">
-              <Button 
+              <Button
                 onClick={() => setShowUserForm(true)}
                 className="nycu-gradient text-white"
               >
@@ -1916,13 +1963,13 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                   </select>
                 </div>
                 <div className="flex items-end gap-2">
-                  <Button 
+                  <Button
                     onClick={handleSearch}
                     className="flex-1 nycu-gradient text-white"
                   >
                     搜尋
                   </Button>
-                  <Button 
+                  <Button
                     onClick={clearFilters}
                     variant="outline"
                     className="border-nycu-blue-300 text-nycu-blue-600 hover:bg-nycu-blue-50"
@@ -1955,7 +2002,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                   <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
                   <p className="text-lg font-medium text-red-600 mb-2">載入使用者失敗</p>
                   <p className="text-sm text-gray-600 mb-4">{usersError}</p>
-                  <Button 
+                  <Button
                     onClick={fetchUsers}
                     variant="outline"
                     className="border-red-300 text-red-600 hover:bg-red-50"
@@ -2057,7 +2104,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                             </TableCell>
                             <TableCell className="px-5 py-4 align-middle">
                               <div className="text-sm text-gray-600">
-                                {user.last_login_at 
+                                {user.last_login_at
                                   ? new Date(user.last_login_at).toLocaleString('zh-TW', {
                                       year: 'numeric',
                                       month: '2-digit',
@@ -2123,7 +2170,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                   <Users className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                   <p className="text-lg font-medium">尚無使用者權限資料</p>
                   <p className="text-sm mt-2 mb-4">點擊「新增使用者權限」開始設定使用者權限</p>
-                  <Button 
+                  <Button
                     onClick={fetchUsers}
                     variant="outline"
                     size="sm"
@@ -2645,7 +2692,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">系統公告管理</h3>
-            <Button 
+            <Button
               onClick={() => setShowAnnouncementForm(true)}
               className="nycu-gradient text-white"
             >
@@ -2794,7 +2841,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                   <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
                   <p className="text-lg font-medium text-red-600 mb-2">載入公告失敗</p>
                   <p className="text-sm text-gray-600 mb-4">{announcementsError}</p>
-                  <Button 
+                  <Button
                     onClick={fetchAnnouncements}
                     variant="outline"
                     className="border-red-300 text-red-600 hover:bg-red-50"
@@ -2828,25 +2875,25 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                           </div>
                           <p className="text-gray-700 mb-3 leading-relaxed">{announcement.message}</p>
                           <div className="text-sm text-gray-500 bg-gray-50 p-2 rounded">
-                            建立時間: {new Date(announcement.created_at).toLocaleString('zh-TW', { 
-                              year: 'numeric', 
-                              month: '2-digit', 
-                              day: '2-digit', 
-                              hour: '2-digit', 
-                              minute: '2-digit', 
+                            建立時間: {new Date(announcement.created_at).toLocaleString('zh-TW', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
                               second: '2-digit',
-                              hour12: false 
+                              hour12: false
                             })}
                             {announcement.expires_at && (
                               <span className="ml-4">
-                                過期時間: {new Date(announcement.expires_at).toLocaleString('zh-TW', { 
-                                  year: 'numeric', 
-                                  month: '2-digit', 
-                                  day: '2-digit', 
-                                  hour: '2-digit', 
-                                  minute: '2-digit', 
+                                過期時間: {new Date(announcement.expires_at).toLocaleString('zh-TW', {
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
                                   second: '2-digit',
-                                  hour12: false 
+                                  hour12: false
                                 })}
                               </span>
                             )}
@@ -2910,7 +2957,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                   <MessageSquare className="h-16 w-16 mx-auto mb-4 text-gray-300" />
                   <p className="text-lg font-medium">尚無系統公告</p>
                   <p className="text-sm mt-2 mb-4">點擊「新增公告」開始建立系統公告</p>
-                  <Button 
+                  <Button
                     onClick={fetchAnnouncements}
                     variant="outline"
                     size="sm"
@@ -2926,91 +2973,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
 
         <TabsContent value="settings" className="space-y-4">
-          <div className="grid gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>系統設定</CardTitle>
-                <CardDescription>管理系統全域設定與參數</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>系統名稱</Label>
-                    <Input value="獎學金申請與簽核作業管理系統" />
-                  </div>
-                  <div>
-                    <Label>系統版本</Label>
-                    <Input value="v1.0.0" disabled />
-                  </div>
-                  <div>
-                    <Label>預設語言</Label>
-                    <Input value="繁體中文" />
-                  </div>
-                  <div>
-                    <Label>時區設定</Label>
-                    <Input value="Asia/Taipei" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>通知設定</CardTitle>
-                <CardDescription>管理系統通知與郵件設定</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>每日審核提醒</Label>
-                    <p className="text-sm text-muted-foreground">每晚22:00發送待審核案件提醒</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>申請狀態更新通知</Label>
-                    <p className="text-sm text-muted-foreground">申請狀態變更時通知申請人</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>系統維護通知</Label>
-                    <p className="text-sm text-muted-foreground">系統維護前24小時發送通知</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>安全設定</CardTitle>
-                <CardDescription>管理系統安全與存取控制</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Session 逾時時間 (分鐘)</Label>
-                    <Input type="number" value="30" />
-                  </div>
-                  <div>
-                    <Label>密碼最小長度</Label>
-                    <Input type="number" value="8" />
-                  </div>
-                  <div>
-                    <Label>檔案上傳大小限制 (MB)</Label>
-                    <Input type="number" value="10" />
-                  </div>
-                  <div>
-                    <Label>API 請求頻率限制 (次/分鐘)</Label>
-                    <Input type="number" value="100" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <SystemConfigurationManagement />
         </TabsContent>
 
         <TabsContent value="email" className="space-y-4">
@@ -3218,7 +3181,7 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
                                 )}
                               </div>
                             </div>
-                            
+
                             {/* CC/BCC 設定 */}
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-2">
@@ -3245,8 +3208,8 @@ export function AdminManagementInterface({ user }: AdminManagementInterfaceProps
 
                         {/* 儲存按鈕 */}
                         <div className="flex justify-end pt-2">
-                          <Button 
-                            onClick={handleSaveTemplate} 
+                          <Button
+                            onClick={handleSaveTemplate}
                             disabled={saving}
                             className="nycu-gradient text-white min-w-[120px] nycu-shadow hover:opacity-90 transition-opacity"
                           >

@@ -96,12 +96,12 @@ export function MockSSOLogin() {
     try {
       const developersResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/dev-profiles/developers`);
       if (!developersResponse.ok) return;
-      
+
       const developersData = await developersResponse.json();
       if (!developersData.success) return;
 
       const allProfiles: DeveloperProfile[] = [];
-      
+
       for (const developerId of developersData.data) {
         try {
           const profilesResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/dev-profiles/${developerId}`);
@@ -119,7 +119,7 @@ export function MockSSOLogin() {
           console.warn(`Failed to fetch profiles for developer ${developerId}:`, err);
         }
       }
-      
+
       setDeveloperProfiles(allProfiles);
     } catch (err) {
       console.warn("Failed to fetch developer profiles:", err);
@@ -128,17 +128,17 @@ export function MockSSOLogin() {
 
   const handleMockLogin = async (nycu_id: string) => {
     setLoginLoading(nycu_id);
-    
+
     try {
       const response = await api.auth.mockSSOLogin(nycu_id);
-      
+
       if (response.success && response.data) {
         // Store token and user data
         const { access_token, user } = response.data;
         api.setToken(access_token);
         localStorage.setItem("token", access_token);
         localStorage.setItem("user", JSON.stringify(user));
-        
+
         // Reload page to update auth state
         window.location.reload();
       } else {
@@ -162,10 +162,10 @@ export function MockSSOLogin() {
           </div>
           <Badge variant="outline">{user.role}</Badge>
         </div>
-        
+
         <div className="space-y-1">
           <p className="text-sm font-medium">
-            {user.raw_data?.chinese_name && user.raw_data?.english_name 
+            {user.raw_data?.chinese_name && user.raw_data?.english_name
               ? `${user.raw_data.chinese_name} (${user.raw_data.english_name})`
               : user.name
             }
@@ -173,7 +173,7 @@ export function MockSSOLogin() {
           <p className="text-xs text-gray-500">{user.email}</p>
         </div>
       </CardHeader>
-      
+
       <CardContent className="pt-0">
         {'description' in user && (
           <p className="text-xs text-gray-600 mb-3">{user.description}</p>
@@ -206,7 +206,7 @@ export function MockSSOLogin() {
           This feature is automatically disabled in production.
         </CardDescription>
       </CardHeader>
-      
+
       <CardContent className="space-y-4">
         {error && (
           <Alert variant="destructive">
@@ -215,11 +215,11 @@ export function MockSSOLogin() {
         )}
 
         <div className="flex gap-2">
-          <Button 
+          <Button
             onClick={() => {
               fetchMockUsers();
               fetchDeveloperProfiles();
-            }} 
+            }}
             disabled={isLoading}
             variant="outline"
             size="sm"
@@ -241,7 +241,7 @@ export function MockSSOLogin() {
               Developer Profiles ({developerProfiles.length})
             </TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="mock-users" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {mockUsers.map(renderUserCard)}
@@ -253,7 +253,7 @@ export function MockSSOLogin() {
               </div>
             )}
           </TabsContent>
-          
+
           <TabsContent value="dev-profiles" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {developerProfiles.map(renderUserCard)}
@@ -268,7 +268,7 @@ export function MockSSOLogin() {
         </Tabs>
 
         <Separator />
-        
+
         <div className="text-xs text-gray-500 space-y-1">
           <p><strong>Development Notes:</strong></p>
           <ul className="list-disc list-inside space-y-1 ml-2">
@@ -282,4 +282,4 @@ export function MockSSOLogin() {
       </CardContent>
     </Card>
   );
-} 
+}

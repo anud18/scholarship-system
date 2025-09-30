@@ -24,6 +24,7 @@ import { MatrixQuotaTable } from '@/components/quota/matrix-quota-table'
 import { QuotaStatsCard, QuotaStatsGroup } from '@/components/quota/quota-stats-card'
 import { quotaApi, calculateUsagePercentage } from '@/services/api/quotaApi'
 import apiClient from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
 import {
   MatrixQuotaData,
   AvailablePeriod,
@@ -32,7 +33,7 @@ import {
 
 export function QuotaManagement() {
   const { toast } = useToast()
-  
+  const { user } = useAuth()
   // State management
   const [availablePeriods, setAvailablePeriods] = useState<AvailablePeriod[]>([])
   const [selectedPeriod, setSelectedPeriod] = useState<string>('')
@@ -77,31 +78,43 @@ export function QuotaManagement() {
 
   const checkUserPermission = async () => {
     setCheckingPermission(true)
+    console.log('🔍 Checking quota management permissions for user:', user)
+
     try {
-      // First try to access the quota API directly to check if user is super admin
-      // Super admins can access quota endpoints without specific permissions
-      try {
-        await quotaApi.getAvailableSemesters('matrix_based')
-        setHasPermission(true) // If they can access this endpoint, they have permission (likely super admin)
+      // First check if user is super_admin - they always have access
+      if (user?.role === 'super_admin') {
+        console.log('✅ User is super_admin, granting access')
+        setHasPermission(true)
         setCheckingPermission(false)
         return
-      } catch (quotaError) {
-        // If quota API fails, check admin permissions for regular admins
+      }
+
+      // For admin users, check their scholarship permissions
+      if (user?.role === 'admin') {
+        console.log('🔍 Checking admin permissions via scholarship permissions API')
         try {
           const response = await apiClient.admin.getCurrentUserScholarshipPermissions()
+          console.log('📊 Scholarship permissions response:', response)
+
           if (response.success && response.data) {
-            // User has permission if they have any scholarship permissions
-            setHasPermission(response.data.length > 0)
+            const hasPerms = response.data.length > 0
+            console.log(hasPerms ? '✅ Admin has scholarship permissions' : '❌ Admin has no scholarship permissions')
+            setHasPermission(hasPerms)
           } else {
+            console.log('❌ Admin permission check failed:', response.message)
             setHasPermission(false)
           }
         } catch (permError) {
-          console.error('Permission check failed:', permError)
+          console.error('❌ Admin permission check error:', permError)
           setHasPermission(false)
         }
+      } else {
+        // Other roles don't have access
+        console.log('❌ User role not authorized for quota management:', user?.role)
+        setHasPermission(false)
       }
     } catch (error) {
-      console.error('Overall permission check failed:', error)
+      console.error('❌ Overall permission check failed:', error)
       setHasPermission(false)
     } finally {
       setCheckingPermission(false)
@@ -134,7 +147,7 @@ export function QuotaManagement() {
   const fetchMatrixQuotaData = async (period: string) => {
     setLoading(true)
     setError(null)
-    
+
     try {
       const response = await quotaApi.getMatrixQuotaStatus(period)
       if (response.success && response.data) {
@@ -158,7 +171,7 @@ export function QuotaManagement() {
 
   const handleRefresh = useCallback(async () => {
     if (!selectedPeriod || refreshing) return
-    
+
     setRefreshing(true)
     try {
       await fetchMatrixQuotaData(selectedPeriod)
@@ -184,7 +197,7 @@ export function QuotaManagement() {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-      
+
       toast({
         title: '匯出成功',
         description: '配額資料已匯出',
@@ -203,7 +216,7 @@ export function QuotaManagement() {
     setMatrixData({ ...newData })
     setLastUpdate(new Date())
     setForceUpdateCounter(prev => prev + 1) // Force re-calculation of stats
-    
+
     // Optional: Show brief success feedback for immediate visual confirmation
     // This could be enhanced to show the specific change made
   }
@@ -299,7 +312,7 @@ export function QuotaManagement() {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -310,7 +323,7 @@ export function QuotaManagement() {
                 <RefreshCw className={cn('h-4 w-4 mr-2', refreshing && 'animate-spin')} />
                 重新整理
               </Button>
-              
+
               <Button
                 variant="outline"
                 size="sm"

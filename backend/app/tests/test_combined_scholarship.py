@@ -4,15 +4,23 @@ NOTE: CombinedScholarshipCreate schema not yet implemented - skipping all tests
 """
 
 from datetime import datetime, timedelta, timezone
-
-# from app.schemas.scholarship import CombinedScholarshipCreate  # Not implemented yet
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.scholarship import ScholarshipCategory
 from app.services.scholarship_service import ScholarshipService
+
+if TYPE_CHECKING:
+    from app.schemas.scholarship import CombinedScholarshipCreate
+else:  # pragma: no cover - placeholder until schema is implemented
+    class CombinedScholarshipCreate:  # pylint: disable=too-few-public-methods
+        """Lightweight placeholder that accepts arbitrary keyword arguments."""
+
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
 
 
 @pytest.mark.skip(reason="CombinedScholarshipCreate schema not implemented")
@@ -82,16 +90,9 @@ class TestCombinedScholarship:
             ],
         )
 
-        parent = await service.create_combined_phd_scholarship(data)
+        await service.create_combined_phd_scholarship(data)
 
         # Test sub-scholarship validation
-        sub_scholarship_data = {
-            "code": "test_nstc",
-            "name": "測試國科會獎學金",
-            "sub_type": "nstc",
-            "amount": 40000,
-            "min_gpa": 3.7,
-        }
 
     async def test_get_eligible_combined_scholarships(self, db_session: AsyncSession, test_student):
         """Test that combined scholarships appear in eligible list"""
@@ -128,10 +129,3 @@ class TestCombinedScholarship:
         assert len(sub_scholarships) == 0
 
         # Test sub-scholarship validation
-        sub_scholarship_data = {
-            "code": "test_nstc",
-            "name": "測試國科會獎學金",
-            "sub_type": "nstc",
-            "amount": 40000,
-            "min_gpa": 3.7,
-        }

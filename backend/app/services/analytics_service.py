@@ -159,8 +159,6 @@ class ScholarshipAnalyticsService:
     def _analyze_scholarship_types(self, applications: List[Application]) -> Dict[str, Any]:
         """Analyze scholarship type distribution and performance"""
 
-        type_analysis = {}
-
         # Group by main type
         main_type_stats = {}
         for main_type in ScholarshipMainType:
@@ -376,12 +374,7 @@ class ScholarshipAnalyticsService:
                 ),
             }
 
-        # Submission timing correlation
-        early_submissions = []  # Applications submitted early in application period
-        late_submissions = []  # Applications submitted late in application period
-
-        # This would require more complex logic to determine "early" vs "late"
-        # For now, placeholder structure
+        # Submission timing correlation placeholder; requires additional data to categorize early vs late
 
         return success_factors
 

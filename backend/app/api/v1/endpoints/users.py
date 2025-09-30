@@ -51,7 +51,7 @@ async def get_student_info(current_user: User = Depends(get_current_user), db: A
     """Get student information"""
     from app.services.application_service import get_student_data_from_user
 
-    if current_user.role.value != "student":
+    if current_user.role != UserRole.student:
         raise HTTPException(status_code=403, detail="Only students can access student information")
 
     # Get student profile
@@ -301,11 +301,11 @@ async def get_user_stats(current_user: User = Depends(require_admin), db: AsyncS
 
     # Status distribution
     status_stats = {}
-    for status in EmployeeStatus:
-        stmt = select(func.count(User.id)).where(User.status == status)
+    for employee_status in EmployeeStatus:
+        stmt = select(func.count(User.id)).where(User.status == employee_status)
         result = await db.execute(stmt)
         count = result.scalar()
-        status_stats[status.value] = count
+        status_stats[employee_status.value] = count
 
     # Recent registrations (last 30 days)
     from datetime import datetime, timedelta

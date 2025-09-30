@@ -23,7 +23,7 @@ class TestRenewalFlowSequence:
             name="順序流程獎學金",
             category=ScholarshipCategory.PHD.value,
             academic_year=113,
-            semester=Semester.FIRST,
+            semester=Semester.first,
             amount=50000,
             status=ScholarshipStatus.ACTIVE.value,
             # 續領申請期間（優先處理）

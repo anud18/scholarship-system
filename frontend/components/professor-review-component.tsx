@@ -60,7 +60,7 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("pending")
-  
+
   // Review form states
   const [subTypes, setSubTypes] = useState<SubTypeOption[]>([])
   const [reviewData, setReviewData] = useState<ReviewData>({
@@ -117,7 +117,7 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
     console.log('SubTypes changed, checking reviewData initialization')
     console.log('SubTypes:', subTypes)
     console.log('Current reviewData.items:', reviewData.items)
-    
+
     if (subTypes.length > 0 && reviewData.items.length === 0) {
       console.log('Initializing reviewData.items from subTypes effect')
       const initialItems = subTypes.map(subType => ({
@@ -125,12 +125,12 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
         is_recommended: false,
         comments: ""
       }))
-      
+
       setReviewData(prev => ({
         ...prev,
         items: initialItems
       }))
-      
+
       console.log('ReviewData.items initialized:', initialItems)
     }
   }, [subTypes, reviewData.items.length])
@@ -168,15 +168,15 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
     setSelectedApplication(application)
     setLoading(true)
     setError(null)
-    
+
     try {
       console.log('=== OPENING REVIEW MODAL ===')
       console.log('Application ID:', application.id)
-      
+
       // Get available sub-types
       const subTypesResponse = await apiClient.professor.getSubTypes(application.id)
       console.log('Sub-types response:', subTypesResponse)
-      
+
       let availableSubTypes: SubTypeOption[] = []
       if (subTypesResponse.success && subTypesResponse.data) {
         availableSubTypes = subTypesResponse.data
@@ -201,13 +201,13 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
       try {
         const reviewResponse = await apiClient.professor.getReview(application.id)
         console.log('Existing review response:', reviewResponse)
-        
+
         // Check if this is an actual existing review (id > 0) or a new review (id = 0)
         if (reviewResponse.success && reviewResponse.data && reviewResponse.data.id && reviewResponse.data.id > 0) {
           console.log('Found existing review with ID:', reviewResponse.data.id)
           console.log('Existing review items:', reviewResponse.data.items)
           setExistingReview(reviewResponse.data)
-          
+
           // Merge existing review items with all available sub-types
           const existingItems: ReviewItem[] = reviewResponse.data.items || []
           const mergedItems = availableSubTypes.map(subType => {
@@ -218,7 +218,7 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
               comments: ""
             }
           })
-          
+
           console.log('Merged items with existing review:', mergedItems)
           setReviewData({
             recommendation: reviewResponse.data.recommendation || "",
@@ -270,7 +270,7 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
 
     try {
       let response: ApiResponse<any>
-      
+
       if (existingReview) {
         // Update existing review
         response = await apiClient.professor.updateReview(
@@ -309,13 +309,13 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
     console.log('=== updateReviewItem START ===')
     console.log('Parameters:', { subTypeCode, field, value })
     console.log('Current reviewData before update:', JSON.stringify(reviewData, null, 2))
-    
+
     setReviewData(prev => {
       console.log('Previous state in setter:', JSON.stringify(prev, null, 2))
-      
+
       const itemFound = prev.items.find(item => item.sub_type_code === subTypeCode)
       console.log('Item found for subTypeCode:', subTypeCode, '=', itemFound)
-      
+
       const newData = {
         ...prev,
         items: prev.items.map(item => {
@@ -327,7 +327,7 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
           return item
         })
       }
-      
+
       console.log('New reviewData:', JSON.stringify(newData, null, 2))
       console.log('=== updateReviewItem END ===')
       return newData
@@ -356,9 +356,9 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
             <div className="flex items-center gap-2 text-red-700">
               <AlertCircle className="h-4 w-4" />
               <span>{error}</span>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setError(null)}
                 className="ml-auto"
               >
@@ -375,9 +375,9 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
             <div className="flex items-center gap-2 text-green-700">
               <CheckCircle className="h-4 w-4" />
               <span>{success}</span>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setSuccess(null)}
                 className="ml-auto"
               >
@@ -392,8 +392,8 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="搜尋學生姓名、學號或獎學金..." 
+          <Input
+            placeholder="搜尋學生姓名、學號或獎學金..."
             className="pl-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -455,9 +455,9 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
                             {error ? "請重新整理頁面或聯繫系統管理員" : searchQuery ? "請嘗試不同的搜尋關鍵字" : "新的申請提交後會顯示在這裡"}
                           </p>
                           {error && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={fetchApplications}
                               className="mt-2"
                             >
@@ -573,7 +573,7 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
                     {subTypes.map((subType) => {
                       const reviewItem = reviewData.items.find(item => item.sub_type_code === subType.value)
                       const isRecommended = reviewItem?.is_recommended || false
-                      
+
                       return (
                         <div key={subType.value} className="border rounded-lg p-4 space-y-4">
                           {/* Simple checkbox approach */}
@@ -587,7 +587,7 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
                                   updateReviewItem(subType.value, 'is_recommended', !!checked)
                                 }}
                               />
-                              <label 
+                              <label
                                 htmlFor={`recommend-${subType.value}`}
                                 className="text-sm font-medium cursor-pointer"
                               >
@@ -680,9 +680,9 @@ function ProfessorReviewComponentInner({ user }: ProfessorReviewComponentProps) 
                   <Textarea
                     placeholder="請提供對此申請的整體推薦意見..."
                     value={reviewData.recommendation || ""}
-                    onChange={(e) => setReviewData(prev => ({ 
-                      ...prev, 
-                      recommendation: e.target.value 
+                    onChange={(e) => setReviewData(prev => ({
+                      ...prev,
+                      recommendation: e.target.value
                     }))}
                     rows={4}
                   />

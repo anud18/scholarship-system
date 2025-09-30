@@ -11,11 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { 
-  FormInput, 
-  Plus, 
-  Edit, 
-  Trash2, 
+import {
+  FormInput,
+  Plus,
+  Edit,
+  Trash2,
   Save,
   X,
   Loader2,
@@ -71,7 +71,7 @@ export function ApplicationFieldForm({
     validation_rules: {},
     conditional_rules: {}
   })
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [newOption, setNewOption] = useState({ value: "", label: "", label_en: "" })
@@ -140,7 +140,7 @@ export function ApplicationFieldForm({
       }
 
       // Validate options for select/radio fields
-      if ((formData.field_type === "select" || formData.field_type === "radio") && 
+      if ((formData.field_type === "select" || formData.field_type === "radio") &&
           (!formData.field_options || formData.field_options.length === 0)) {
         throw new Error("下拉選單和單選按鈕必須至少有一個選項")
       }
@@ -179,7 +179,7 @@ export function ApplicationFieldForm({
   const updateOption = (index: number, field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
-      field_options: prev.field_options?.map((option, i) => 
+      field_options: prev.field_options?.map((option, i) =>
         i === index ? { ...option, [field]: value } : option
       ) || []
     }))
@@ -510,4 +510,4 @@ export function ApplicationFieldForm({
       </DialogContent>
     </Dialog>
   )
-} 
+}

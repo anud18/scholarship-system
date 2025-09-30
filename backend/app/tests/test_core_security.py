@@ -241,10 +241,10 @@ class TestRoleBasedAccess:
         mock_user = Mock(spec=User)
         mock_user.has_role.return_value = True
 
-        role_checker = require_role(UserRole.STUDENT)
+        role_checker = require_role(UserRole.student)
         result = role_checker(mock_user)
 
-        mock_user.has_role.assert_called_once_with(UserRole.STUDENT)
+        mock_user.has_role.assert_called_once_with(UserRole.student)
         assert result == mock_user
 
     def test_require_role_failure(self):
@@ -252,7 +252,7 @@ class TestRoleBasedAccess:
         mock_user = Mock(spec=User)
         mock_user.has_role.return_value = False
 
-        role_checker = require_role(UserRole.ADMIN)
+        role_checker = require_role(UserRole.admin)
 
         with pytest.raises(AuthorizationError, match="Access denied. Required role: admin"):
             role_checker(mock_user)
@@ -262,7 +262,7 @@ class TestRoleBasedAccess:
         mock_user = Mock(spec=User)
         mock_user.has_role.side_effect = [True, False]  # First role matches
 
-        roles_checker = require_roles(UserRole.ADMIN, UserRole.PROFESSOR)
+        roles_checker = require_roles(UserRole.admin, UserRole.professor)
         result = roles_checker(mock_user)
 
         assert result == mock_user
@@ -272,7 +272,7 @@ class TestRoleBasedAccess:
         mock_user = Mock(spec=User)
         mock_user.has_role.side_effect = [False, True]  # Second role matches
 
-        roles_checker = require_roles(UserRole.ADMIN, UserRole.PROFESSOR)
+        roles_checker = require_roles(UserRole.admin, UserRole.professor)
         result = roles_checker(mock_user)
 
         assert result == mock_user
@@ -282,7 +282,7 @@ class TestRoleBasedAccess:
         mock_user = Mock(spec=User)
         mock_user.has_role.return_value = False  # No roles match
 
-        roles_checker = require_roles(UserRole.ADMIN, UserRole.PROFESSOR)
+        roles_checker = require_roles(UserRole.admin, UserRole.professor)
 
         with pytest.raises(AuthorizationError, match="Access denied. Required roles: admin, professor"):
             roles_checker(mock_user)

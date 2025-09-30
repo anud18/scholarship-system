@@ -14,12 +14,12 @@ export default function TestUsersPage() {
   const testGetUsers = async () => {
     setLoading(true)
     setError(null)
-    
+
     try {
       console.log('🧪 測試獲取用戶列表...')
       const response = await apiClient.users.getAll({ page: 1, size: 10 })
       console.log('📥 用戶列表響應:', response)
-      
+
       if (response.success && response.data) {
         setUsers(response.data.items || [])
         console.log('✅ 用戶列表獲取成功，數量:', response.data.items?.length || 0)
@@ -39,7 +39,7 @@ export default function TestUsersPage() {
       console.log('🧪 測試獲取用戶統計...')
       const response = await apiClient.users.getStats()
       console.log('📥 用戶統計響應:', response)
-      
+
       if (response.success && response.data) {
         setUserStats(response.data)
         console.log('✅ 用戶統計獲取成功')
@@ -70,10 +70,10 @@ export default function TestUsersPage() {
           english_name: 'Test User'
         }
       };
-      
+
       const response = await apiClient.users.create(newUser)
       console.log('📥 創建用戶響應:', response)
-      
+
       if (response.success) {
         console.log('✅ 用戶創建成功')
         testGetUsers() // 重新獲取用戶列表
@@ -183,7 +183,7 @@ export default function TestUsersPage() {
                           註冊: {new Date(user.created_at).toLocaleDateString('zh-TW')}
                         </p>
                         <p className="text-sm text-gray-600">
-                          最後登入: {user.last_login_at 
+                          最後登入: {user.last_login_at
                             ? new Date(user.last_login_at).toLocaleDateString('zh-TW')
                             : '從未登入'
                           }
@@ -201,4 +201,4 @@ export default function TestUsersPage() {
       </div>
     </div>
   )
-} 
+}

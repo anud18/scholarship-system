@@ -11,7 +11,6 @@ Tests admin-only endpoints including:
 """
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -60,22 +59,22 @@ class TestAdminEndpoints:
         from app.db.deps import get_db
         from app.main import app
         from app.models.scholarship import ScholarshipType
-        from app.models.user import User, UserRole, UserType
+        from app.models.user import User, UserType
 
         # Get DB from client's override
         get_db_override = app.dependency_overrides[get_db]
         # Call the override function to get the generator
         db_gen = get_db_override()
         # Get the yielded db session
-        db = await anext(db_gen)
+        db = await db_gen.__anext__()
 
         # Create user
         user = User(
             nycu_id="testuser",
             name="Test User",
             email="test@university.edu",
-            user_type=UserType.STUDENT,
-            role=UserRole.STUDENT,
+            user_type=UserType.student,
+            role=UserRole.student,
         )
         db.add(user)
         await db.commit()
@@ -97,15 +96,15 @@ class TestAdminEndpoints:
             nycu_id="testuser2",
             name="Test User 2",
             email="test2@university.edu",
-            user_type=UserType.STUDENT,
-            role=UserRole.STUDENT,
+            user_type=UserType.student,
+            role=UserRole.student,
         )
         db.add(user2)
         await db.commit()
         await db.refresh(user2)
 
         # Create applications (different users to satisfy unique constraint)
-        apps = [
+        applications = [
             Application(
                 app_id="APP-2024-000001",
                 user_id=user.id,
@@ -127,13 +126,13 @@ class TestAdminEndpoints:
                 created_at=datetime.now(timezone.utc) - timedelta(days=1),
             ),
         ]
-        for app in apps:
-            db.add(app)
+        for application in applications:
+            db.add(application)
         await db.commit()
-        for app in apps:
-            await db.refresh(app)
+        for application in applications:
+            await db.refresh(application)
 
-        return apps
+        return applications
 
     @pytest.mark.asyncio
     async def test_get_all_applications_success(self, admin_client, sample_applications):
@@ -238,19 +237,19 @@ class TestAdminEndpoints:
         # Arrange - Create a professor in the DB
         from app.db.deps import get_db
         from app.main import app
-        from app.models.user import User, UserRole, UserType
+        from app.models.user import User, UserType
 
         get_db_override = app.dependency_overrides.get(get_db)
         db_gen = get_db_override()
-        db = await anext(db_gen)
+        db = await db_gen.__anext__()
 
         # Create professor
         professor = User(
             nycu_id="P001",
             name="Prof User",
             email="prof@university.edu",
-            user_type=UserType.EMPLOYEE,
-            role=UserRole.PROFESSOR,
+            user_type=UserType.employee,
+            role=UserRole.professor,
         )
         db.add(professor)
         await db.commit()

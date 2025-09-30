@@ -4,7 +4,7 @@ Scholarship type and rule models
 
 import enum
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from sqlalchemy import (
     JSON,
@@ -24,6 +24,9 @@ from sqlalchemy.sql import func
 
 from app.db.base_class import Base
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
+
+if TYPE_CHECKING:
+    from app.models.application import Application
 
 
 class ScholarshipStatus(enum.Enum):
@@ -45,12 +48,12 @@ class ScholarshipCategory(enum.Enum):
 class ScholarshipSubType(enum.Enum):
     """Scholarship sub-type enum for combined scholarships"""
 
-    GENERAL = "general"  # 作為無子獎學金類型時的預設值
+    GENERAL = "GENERAL"  # 作為無子獎學金類型時的預設值
 
     # For PhD scholarships
-    NSTC = "nstc"  # 國科會 (National Science and Technology Council)
-    MOE_1W = "moe_1w"  # 教育部 (Ministry of Education) + 指導教授配合款一萬
-    MOE_2W = "moe_2w"  # 教育部 (Ministry of Education) + 指導教授配合款兩萬
+    NSTC = "NSTC"  # 國科會 (National Science and Technology Council)
+    MOE_1W = "MOE_1W"  # 教育部 (Ministry of Education) + 指導教授配合款一萬
+    MOE_2W = "MOE_2W"  # 教育部 (Ministry of Education) + 指導教授配合款兩萬
 
 
 class ScholarshipType(Base):
@@ -74,12 +77,16 @@ class ScholarshipType(Base):
     # 類別設定
     category = Column(String(50), nullable=False)
     sub_type_list = Column(JSON, default=[ScholarshipSubType.GENERAL.value])  # ["nstc", "moe_1w", "moe_2w"]
-    sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), default=SubTypeSelectionMode.SINGLE, nullable=False)
+    sub_type_selection_mode = Column(
+        Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]),
+        default=SubTypeSelectionMode.single,
+        nullable=False
+    )
 
     # 申請週期設定
     application_cycle = Column(
         Enum(ApplicationCycle, values_callable=lambda obj: [e.value for e in obj]),
-        default=ApplicationCycle.SEMESTER,
+        default=ApplicationCycle.semester,
         nullable=False,
     )
 
@@ -158,8 +165,6 @@ class ScholarshipType(Base):
 
     def get_current_review_stage(self) -> Optional[str]:
         """Get current review stage: 'renewal_professor', 'renewal_college', 'general_professor', 'general_college' or None"""
-        now = datetime.now(timezone.utc)
-
         # 續領階段
         if self.is_renewal_professor_review_period():
             return "renewal_professor"
@@ -176,11 +181,11 @@ class ScholarshipType(Base):
 
     def is_valid_sub_type_selection(self, selected: List[str]) -> bool:
         """Validate sub-type selection based on selection mode"""
-        if self.sub_type_selection_mode == SubTypeSelectionMode.SINGLE:
+        if self.sub_type_selection_mode == SubTypeSelectionMode.single:
             return len(selected) == 1 and selected[0] in self.sub_type_list
-        elif self.sub_type_selection_mode == SubTypeSelectionMode.MULTIPLE:
+        elif self.sub_type_selection_mode == SubTypeSelectionMode.multiple:
             return all(s in self.sub_type_list for s in selected)
-        elif self.sub_type_selection_mode == SubTypeSelectionMode.HIERARCHICAL:
+        elif self.sub_type_selection_mode == SubTypeSelectionMode.hierarchical:
             expected = self.sub_type_list[: len(selected)]
             return selected == expected
         return False
@@ -218,50 +223,6 @@ class ScholarshipType(Base):
             return "MOE_2W"
         return "GENERAL"
 
-    def get_sub_type_translations(self) -> Dict[str, Dict[str, str]]:
-        """Get translations for sub-types in both Chinese and English"""
-        translations = {
-            "zh": {
-                "general": "通用",
-                "nstc": "國科會博士生獎學金",
-                "moe_1w": "教育部博士生獎學金（指導教授配合款一萬）",
-                "moe_2w": "教育部博士生獎學金（指導教授配合款兩萬）",
-            },
-            "en": {
-                "general": "General",
-                "nstc": "NSTC Doctoral Scholarship",
-                "moe_1w": "MOE Doctoral Scholarship (10K Advisor Match)",
-                "moe_2w": "MOE Doctoral Scholarship (20K Advisor Match)",
-            },
-        }
-        return translations
-
-    def can_student_apply(self, student_id: int, semester: str) -> tuple[bool, str]:
-        """Check if student can apply for this scholarship"""
-        # Check if scholarship is active
-        if not self.is_active:
-            return False, "獎學金目前未開放申請"
-
-        # Check application period
-        if not self.is_application_period:
-            return False, "目前不在申請期間內"
-
-        # Check whitelist
-        if not self.is_student_in_whitelist(student_id):
-            return False, "您不在此獎學金的申請名單中"
-
-        # Check if student already has an application for this semester
-        # This would need to be implemented with proper session management
-        # existing_app = session.query(Application).filter(
-        #     Application.student_id == student_id,
-        #     Application.scholarship_type_id == self.id,
-        #     Application.semester == semester
-        # ).first()
-        # if existing_app:
-        #     return False, "您已經在本學期申請過此獎學金"
-
-        return True, ""
-
     def validate_sub_type_list(self) -> bool:
         """Validate sub_type_list against ScholarshipSubType enum"""
         if not self.sub_type_list:
@@ -295,18 +256,10 @@ class ScholarshipType(Base):
         """Get sub-type translations for all supported languages"""
         translations = {"zh": {}, "en": {}}
 
-        # 添加已配置的子類型
+        # 只添加已配置的子類型，所有翻譯都從資料庫撈
         for config in self.get_active_sub_type_configs():
             translations["zh"][config.sub_type_code] = config.name
             translations["en"][config.sub_type_code] = config.name_en or config.name
-
-        # 為 general 子類型添加預設翻譯（如果沒有配置）
-        if ScholarshipSubType.GENERAL.value in self.sub_type_list:
-            general_config = self.get_sub_type_config(ScholarshipSubType.GENERAL.value)
-            if not general_config:
-                # 使用預設翻譯
-                translations["zh"][ScholarshipSubType.GENERAL.value] = "一般獎學金"
-                translations["en"][ScholarshipSubType.GENERAL.value] = "General Scholarship"
 
         return translations
 
@@ -342,7 +295,6 @@ class ScholarshipType(Base):
             return False
 
         # Check if student already has an application for this semester
-        semester_key = self.get_semester_key()
         for application in existing_applications:
             if (
                 application.scholarship_type_id == self.id
@@ -488,7 +440,7 @@ class ScholarshipRule(Base):
 
     # Academic context - rules can be specific to academic year and semester
     academic_year = Column(Integer, nullable=True, index=True)  # 民國年，如 113 表示 113 學年度
-    semester = Column(Enum(Semester), nullable=True, index=True)  # 學期，學年制可為 NULL
+    semester = Column(Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True)  # 學期，學年制可為 NULL
 
     # Rule template information
     is_template = Column(Boolean, default=False, nullable=False)  # 是否為規則模板
@@ -552,8 +504,8 @@ class ScholarshipRule(Base):
             return "通用"
         if self.semester:
             semester_label = {
-                Semester.FIRST: "第一學期",
-                Semester.SECOND: "第二學期",
+                Semester.first: "第一學期",
+                Semester.second: "第二學期",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
@@ -619,7 +571,7 @@ class ScholarshipConfiguration(Base):
 
     # 週期識別 - 作為唯一標識符
     academic_year = Column(Integer, nullable=False, index=True)  # 民國年，如 113 表示 113 學年度
-    semester = Column(Enum(Semester), nullable=True, index=True)  # 學期制獎學金需要，學年制可為 NULL
+    semester = Column(Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True)  # 學期制獎學金需要，學年制可為 NULL
 
     # 基本配置資訊
     config_name = Column(String(200), nullable=False)  # 配置名稱
@@ -630,7 +582,11 @@ class ScholarshipConfiguration(Base):
     # 配額限制配置
     has_quota_limit = Column(Boolean, default=False, nullable=False)  # 是否有配額限制
     has_college_quota = Column(Boolean, default=False, nullable=False)  # 是否有學院配額
-    quota_management_mode = Column(Enum(QuotaManagementMode), default=QuotaManagementMode.NONE, nullable=False)
+    quota_management_mode = Column(
+        Enum(QuotaManagementMode, values_callable=lambda obj: [e.value for e in obj]),
+        default=QuotaManagementMode.none,
+        nullable=False,
+    )
 
     # 配額詳細設定
     total_quota = Column(Integer, nullable=True)  # 總配額數量
@@ -714,8 +670,8 @@ class ScholarshipConfiguration(Base):
         """Get academic year label for display"""
         if self.semester:
             semester_label = {
-                Semester.FIRST: "第一學期",
-                Semester.SECOND: "第二學期",
+                Semester.first: "第一學期",
+                Semester.second: "第二學期",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
@@ -821,7 +777,7 @@ class ScholarshipConfiguration(Base):
         if not self.has_quota_limit:
             return -1  # Unlimited
 
-        if self.quota_management_mode == QuotaManagementMode.NONE:
+        if self.quota_management_mode == QuotaManagementMode.none:
             return -1  # Unlimited
 
         return self.total_quota or 0
@@ -992,8 +948,6 @@ class ScholarshipConfiguration(Base):
 
     def get_current_review_stage(self) -> Optional[str]:
         """Get current review stage: 'renewal_professor', 'renewal_college', 'general_professor', 'general_college' or None"""
-        now = datetime.now(timezone.utc)
-
         # 續領階段
         if self.is_renewal_professor_review_period():
             return "renewal_professor"

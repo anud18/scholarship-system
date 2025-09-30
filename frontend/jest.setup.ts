@@ -80,7 +80,7 @@ const originalError = console.error
 beforeAll(() => {
   console.error = (...args: any[]) => {
     if (
-      args[0] && 
+      args[0] &&
       typeof args[0] === 'string' &&
       (
         (args[0].includes('Warning: An update to') && args[0].includes('act(...)')) ||
@@ -173,4 +173,4 @@ global.fetch = jest.fn(async () => {
     json: async () => JSON.parse(body),
     text: async () => body,
   })
-}) as jest.Mock 
+}) as jest.Mock

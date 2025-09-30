@@ -65,11 +65,11 @@ class TestMockSSO:
 
         roles = set(user["role"] for user in data["data"])
         expected_roles = {
-            UserRole.STUDENT.value,
-            UserRole.PROFESSOR.value,
-            UserRole.COLLEGE.value,
-            UserRole.ADMIN.value,
-            UserRole.SUPER_ADMIN.value,
+            UserRole.student.value,
+            UserRole.professor.value,
+            UserRole.college.value,
+            UserRole.admin.value,
+            UserRole.super_admin.value,
         }
 
         assert roles >= expected_roles  # Contains all expected roles

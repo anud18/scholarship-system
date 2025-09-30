@@ -35,13 +35,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { 
-  GripVertical, 
-  Eye, 
-  Edit3, 
-  Save, 
-  Trophy, 
-  Users, 
+import {
+  GripVertical,
+  Eye,
+  Edit3,
+  Save,
+  Trophy,
+  Users,
   AlertCircle,
   CheckCircle,
   XCircle,
@@ -152,7 +152,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
           {getRankBadge(application.rank_position)}
         </div>
       </TableCell>
-      
+
       <TableCell>
         <div className="space-y-1">
           <p className="font-medium">{application.student_name}</p>
@@ -160,7 +160,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
           <p className="text-xs text-gray-400">{application.app_id}</p>
         </div>
       </TableCell>
-      
+
       <TableCell className="text-center">
         <div className="flex flex-col items-center gap-1">
           <Badge variant="outline" className="font-mono">
@@ -168,17 +168,17 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
           </Badge>
         </div>
       </TableCell>
-      
+
       <TableCell className="text-center">
         {getStatusBadge(application)}
       </TableCell>
-      
+
       <TableCell className="text-center">
         <div className="flex justify-center gap-1">
           <Dialog>
             <DialogTrigger asChild>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="sm"
               >
                 <Eye className="h-4 w-4" />
@@ -191,7 +191,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
                   {application.app_id} | 排名: #{application.rank_position}
                 </DialogDescription>
               </DialogHeader>
-              
+
               <div className="space-y-4">
                 {/* Score Breakdown */}
                 <div className="grid grid-cols-2 gap-4">
@@ -206,7 +206,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
                       disabled={isFinalized}
                     />
                   </div>
-                  
+
                   <div>
                     <label className="text-sm font-medium">教授推薦 (40%)</label>
                     <Input
@@ -218,7 +218,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
                       disabled={isFinalized}
                     />
                   </div>
-                  
+
                   <div>
                     <label className="text-sm font-medium">學院標準 (20%)</label>
                     <Input
@@ -230,7 +230,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
                       disabled={isFinalized}
                     />
                   </div>
-                  
+
                   <div>
                     <label className="text-sm font-medium">特殊情況 (10%)</label>
                     <Input
@@ -243,7 +243,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
                     />
                   </div>
                 </div>
-                
+
                 {/* Total Score */}
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center justify-between">
@@ -253,7 +253,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
                     </Badge>
                   </div>
                 </div>
-                
+
                 {/* Review Comments */}
                 <div>
                   <label className="text-sm font-medium">審查意見</label>
@@ -264,7 +264,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
                     rows={3}
                   />
                 </div>
-                
+
                 {/* Recommendation */}
                 <div>
                   <label className="text-sm font-medium">推薦結果</label>
@@ -283,7 +283,7 @@ function SortableItem({ application, index, totalQuota, locale, isFinalized, onR
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 {!isFinalized && (
                   <div className="flex justify-end gap-2">
                     <Button variant="outline">
@@ -318,11 +318,11 @@ export function CollegeRankingTable({
   locale = "zh"
 }: CollegeRankingTableProps) {
   const t = (key: string) => getTranslation(locale, key)
-  
+
   const [localApplications, setLocalApplications] = useState<Application[]>(applications)
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null)
   const [reviewScores, setReviewScores] = useState<{[key: number]: any}>({})
-  
+
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -348,7 +348,7 @@ export function CollegeRankingTable({
       const newIndex = items.findIndex((item) => item.id.toString() === over.id)
 
       const newItems = arrayMove(items, oldIndex, newIndex)
-      
+
       // Update rank positions
       const updatedItems = newItems.map((item, index) => ({
         ...item,
@@ -379,7 +379,7 @@ export function CollegeRankingTable({
       college_criteria: 0.20,
       special_circumstances: 0.10
     }
-    
+
     return (
       (scores?.academic || 0) * weights.academic +
       (scores?.professor_review || 0) * weights.professor_review +
@@ -463,13 +463,13 @@ export function CollegeRankingTable({
                 <Badge variant="outline">{subTypeCode}</Badge>
               </CardTitle>
               <CardDescription>
-                {locale === "zh" 
+                {locale === "zh"
                   ? `學年度 ${academicYear}${semester ? ` - ${semester}` : ""}`
                   : `AY ${academicYear}${semester ? ` - ${semester}` : ""}`
                 }
               </CardDescription>
             </div>
-            
+
             <div className="flex gap-2">
               {!isFinalized && (
                 <>
@@ -483,7 +483,7 @@ export function CollegeRankingTable({
                   </Button>
                 </>
               )}
-              
+
               <Button variant="outline" size="sm">
                 <Download className="h-4 w-4 mr-2" />
                 {locale === "zh" ? "匯出" : "Export"}
@@ -491,7 +491,7 @@ export function CollegeRankingTable({
             </div>
           </div>
         </CardHeader>
-        
+
         <CardContent>
           {isFinalized && (
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -518,7 +518,7 @@ export function CollegeRankingTable({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <SortableContext 
+                <SortableContext
                   items={localApplications.map((app) => app.id.toString())}
                   strategy={verticalListSortingStrategy}
                 >
@@ -542,7 +542,7 @@ export function CollegeRankingTable({
           </DndContext>
         </CardContent>
       </Card>
-      
+
       {/* Quota Line Indicator */}
       {totalQuota < localApplications.length && (
         <Card className="border-orange-200 bg-orange-50">
@@ -550,7 +550,7 @@ export function CollegeRankingTable({
             <div className="flex items-center gap-2 text-orange-800">
               <AlertCircle className="h-5 w-5" />
               <p className="font-medium">
-                {locale === "zh" 
+                {locale === "zh"
                   ? `配額線: 前 ${totalQuota} 名學生將獲得分配`
                   : `Quota Line: Top ${totalQuota} students will be allocated`
                 }

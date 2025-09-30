@@ -155,7 +155,7 @@ router = APIRouter()
 # Helper functions for granular authorization checks
 async def _check_scholarship_permission(user: User, scholarship_type_id: int, db: AsyncSession) -> bool:
     """Check if user has permission for specific scholarship type"""
-    if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+    if user.role in [UserRole.admin, UserRole.super_admin]:
         return True
 
     # Check if user is assigned to this scholarship type
@@ -173,7 +173,7 @@ async def _check_scholarship_permission(user: User, scholarship_type_id: int, db
 
 async def _check_academic_year_permission(user: User, academic_year: int, db: AsyncSession) -> bool:
     """Check if user has permission for specific academic year"""
-    if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+    if user.role in [UserRole.admin, UserRole.super_admin]:
         return True
 
     # College users can only access current and previous academic year
@@ -184,7 +184,7 @@ async def _check_academic_year_permission(user: User, academic_year: int, db: As
 
 async def _check_application_review_permission(user: User, application_id: int, db: AsyncSession) -> bool:
     """Check if user can review specific application"""
-    if user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+    if user.role in [UserRole.admin, UserRole.super_admin]:
         return True
 
     # Get application details to check permissions
@@ -406,8 +406,8 @@ async def update_college_review(
 
         # Check permissions
         if college_review.reviewer_id != current_user.id and current_user.role not in [
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.admin,
+            UserRole.super_admin,
         ]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -482,7 +482,7 @@ async def get_rankings(
         stmt = select(CollegeRanking)
 
         # Apply filters
-        if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        if current_user.role not in [UserRole.admin, UserRole.super_admin]:
             # Regular college users can only see their own rankings
             stmt = stmt.where(CollegeRanking.created_by == current_user.id)
 
@@ -893,7 +893,7 @@ async def get_college_review_statistics(
         # Build statistics query
         base_query = select(CollegeReview)
 
-        if current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        if current_user.role not in [UserRole.admin, UserRole.super_admin]:
             # Non-admin users can only see their own reviews
             base_query = base_query.where(CollegeReview.reviewer_id == current_user.id)
 

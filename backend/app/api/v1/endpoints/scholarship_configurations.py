@@ -6,7 +6,7 @@ Clean, database-driven approach for dynamic scholarship configuration management
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
@@ -15,9 +15,10 @@ from app.core.security import require_admin, require_staff
 from app.db.deps import get_db
 
 # Student model removed - student data now fetched from external API
+from app.models.application import Application, ApplicationStatus
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
-from app.models.user import AdminScholarship, User, UserRole
+from app.models.user import AdminScholarship, User
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -80,7 +81,7 @@ async def get_available_semesters(
 
         # Build query conditions
         conditions = [
-            ScholarshipConfiguration.is_active == True,
+            ScholarshipConfiguration.is_active.is_(True),
             ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
         ]
 
@@ -109,9 +110,22 @@ async def get_available_semesters(
             from app.models.enums import QuotaManagementMode
 
             try:
-                mode_enum = QuotaManagementMode(quota_management_mode)
+                # Find the enum by its value, not by its name
+                mode_enum = None
+                for mode in QuotaManagementMode:
+                    if mode.value == quota_management_mode:
+                        mode_enum = mode
+                        break
+
+                if mode_enum is None:
+                    return ApiResponse(
+                        success=False,
+                        message=f"Invalid quota management mode: {quota_management_mode}",
+                        data=[],
+                    )
+
                 conditions.append(ScholarshipConfiguration.quota_management_mode == mode_enum)
-            except ValueError:
+            except Exception:
                 return ApiResponse(
                     success=False,
                     message=f"Invalid quota management mode: {quota_management_mode}",
@@ -168,6 +182,16 @@ async def get_available_semesters(
         )
 
     except Exception as e:
+        import logging
+        import traceback
+
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Error in get_available_semesters: {type(e).__name__}: {str(e)}",
+            exc_info=True,
+        )
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve available semesters: {str(e)}",
@@ -187,7 +211,7 @@ async def get_matrix_quota_status(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.FIRST if semester_str == "1" else Semester.SECOND
+            semester = Semester.first if semester_str == "1" else Semester.second
         else:
             academic_year = int(period)
             semester = None
@@ -224,7 +248,7 @@ async def get_matrix_quota_status(
                     ScholarshipConfiguration.semester == semester
                     if semester
                     else ScholarshipConfiguration.semester.is_(None),
-                    ScholarshipConfiguration.is_active == True,
+                    ScholarshipConfiguration.is_active.is_(True),
                 )
             )
             .options(selectinload(ScholarshipConfiguration.scholarship_type))
@@ -366,7 +390,7 @@ async def update_matrix_quota(
         # Get the configuration for the specified academic year, or the most recent if not specified
         config_conditions = [
             ScholarshipConfiguration.scholarship_type_id == phd_scholarship.id,
-            ScholarshipConfiguration.is_active == True,
+            ScholarshipConfiguration.is_active.is_(True),
         ]
 
         if academic_year:
@@ -503,7 +527,7 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
                 .where(
                     and_(
                         ScholarshipConfiguration.scholarship_type_id == stype.id,
-                        ScholarshipConfiguration.is_active == True,
+                        ScholarshipConfiguration.is_active.is_(True),
                     )
                 )
                 .order_by(ScholarshipConfiguration.academic_year.desc())
@@ -555,7 +579,7 @@ async def get_quota_overview(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.FIRST if semester_str == "1" else Semester.SECOND
+            semester = Semester.first if semester_str == "1" else Semester.second
         else:
             academic_year = int(period)
             semester = None
@@ -576,7 +600,7 @@ async def get_quota_overview(
                     ScholarshipConfiguration.semester == semester
                     if semester
                     else ScholarshipConfiguration.semester.is_(None),
-                    ScholarshipConfiguration.is_active == True,
+                    ScholarshipConfiguration.is_active.is_(True),
                 )
             )
             .options(selectinload(ScholarshipConfiguration.scholarship_type))
@@ -608,9 +632,35 @@ async def get_quota_overview(
                     num_sub_types = len(stype.sub_type_list or ["general"])
                     allocated_quota = config.total_quota // num_sub_types if num_sub_types > 0 else config.total_quota
 
-                # TODO: Get actual usage from applications
-                used_quota = 0
-                applications_count = 0
+                # Get actual usage from applications
+                quota_query = select(func.count(Application.id)).where(
+                    and_(
+                        Application.scholarship_type_id == stype.id,
+                        Application.config_code == config.config_code,
+                        Application.sub_type == sub_type_code,
+                        Application.status.in_([
+                            ApplicationStatus.APPROVED,
+                            ApplicationStatus.FUNDED
+                        ])
+                    )
+                )
+                used_quota_result = await db.execute(quota_query)
+                used_quota = used_quota_result.scalar() or 0
+
+                # Get total applications count (all statuses except rejected/withdrawn)
+                total_apps_query = select(func.count(Application.id)).where(
+                    and_(
+                        Application.scholarship_type_id == stype.id,
+                        Application.config_code == config.config_code,
+                        Application.sub_type == sub_type_code,
+                        Application.status.not_in([
+                            ApplicationStatus.REJECTED,
+                            ApplicationStatus.WITHDRAWN
+                        ])
+                    )
+                )
+                total_apps_result = await db.execute(total_apps_query)
+                applications_count = total_apps_result.scalar() or 0
 
                 sub_types.append(
                     {
@@ -686,7 +736,7 @@ async def create_scholarship_configuration(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == config_data.get("academic_year"),
                 ScholarshipConfiguration.semester == config_data.get("semester"),
-                ScholarshipConfiguration.is_active == True,
+                ScholarshipConfiguration.is_active.is_(True),
             )
         )
         existing_result = await db.execute(existing_stmt)
@@ -1046,7 +1096,7 @@ async def duplicate_scholarship_configuration(
                 ScholarshipConfiguration.scholarship_type_id == source_config.scholarship_type_id,
                 ScholarshipConfiguration.academic_year == target_academic_year,
                 ScholarshipConfiguration.semester == target_semester,
-                ScholarshipConfiguration.is_active == True,
+                ScholarshipConfiguration.is_active.is_(True),
             )
         )
         existing_result = await db.execute(existing_stmt)
@@ -1128,9 +1178,9 @@ async def list_scholarship_configurations(
 
         if semester:
             if semester == "first":
-                conditions.append(ScholarshipConfiguration.semester == Semester.FIRST)
+                conditions.append(ScholarshipConfiguration.semester == Semester.first)
             elif semester == "second":
-                conditions.append(ScholarshipConfiguration.semester == Semester.SECOND)
+                conditions.append(ScholarshipConfiguration.semester == Semester.second)
 
         # Execute query
         stmt = (

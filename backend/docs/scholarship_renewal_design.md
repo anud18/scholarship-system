@@ -91,7 +91,7 @@ def current_application_type(self) -> Optional[str]:
 ```python
 def get_current_review_stage(self) -> Optional[str]:
     """獲取當前審查階段：
-    'renewal_professor', 'renewal_college', 
+    'renewal_professor', 'renewal_college',
     'general_professor', 'general_college' 或 None
     """
 ```
@@ -210,4 +210,4 @@ application = Application(
 
 1. **資料庫遷移**：需要添加新的欄位到 `scholarship_types` 和 `applications` 表
 2. **現有資料**：現有的申請會被標記為 `application_type = "general"`
-3. **向後相容**：保留 `is_renewal` 欄位以維持向後相容性 
+3. **向後相容**：保留 `is_renewal` 欄位以維持向後相容性

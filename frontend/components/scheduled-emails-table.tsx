@@ -82,13 +82,13 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
       if (processedFilters.scheduled_to) {
         processedFilters.scheduled_to = `${processedFilters.scheduled_to}:59Z`
       }
-      
+
       const params = {
         skip: pagination.skip,
         limit: pagination.limit,
         ...Object.fromEntries(Object.entries(processedFilters).filter(([_, v]) => v !== '' && v !== 'all'))
       }
-      
+
       const response = await apiClient.emailManagement.getScheduledEmails(params)
       if (response.success && response.data) {
         const { items, total } = response.data
@@ -193,7 +193,7 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
 
   const renderTemplateVariables = (content: string) => {
     if (!content) return content
-    
+
     // Match variables in {variable} format
     return content.split(/(\{[^}]+\})/g).map((part, index) => {
       if (part.match(/^\{[^}]+\}$/)) {
@@ -221,22 +221,22 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
 
   const handleSaveEdit = async () => {
     if (!selectedEmail) return
-    
+
     try {
       await apiClient.emailManagement.updateScheduledEmail(selectedEmail.id, {
         subject: editingSubject,
         body: editingBody
       })
-      
+
       // Update the email in the list
-      setScheduledEmails(prev => 
-        prev.map(email => 
-          email.id === selectedEmail.id 
+      setScheduledEmails(prev =>
+        prev.map(email =>
+          email.id === selectedEmail.id
             ? { ...email, subject: editingSubject, body: editingBody }
             : email
         )
       )
-      
+
       // Update selected email
       setSelectedEmail(prev => prev ? { ...prev, subject: editingSubject, body: editingBody } : null)
       setIsEditMode(false)
@@ -255,9 +255,9 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
     <div className={`space-y-4 ${className}`}>
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-nycu-navy-800">排程郵件管理</h3>
-        <Button 
-          onClick={loadScheduledEmails} 
-          variant="outline" 
+        <Button
+          onClick={loadScheduledEmails}
+          variant="outline"
           size="sm"
           disabled={loading}
         >
@@ -274,7 +274,7 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
               <Label className="text-sm font-medium">狀態</Label>
               <Select
                 value={filters.status}
-                onValueChange={(value) => 
+                onValueChange={(value) =>
                   setFilters(prev => ({ ...prev, status: value }))
                 }
               >
@@ -294,7 +294,7 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
               <Label className="text-sm font-medium">需要審核</Label>
               <Select
                 value={filters.requires_approval}
-                onValueChange={(value) => 
+                onValueChange={(value) =>
                   setFilters(prev => ({ ...prev, requires_approval: value }))
                 }
               >
@@ -313,7 +313,7 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
               <Input
                 type="datetime-local"
                 value={filters.scheduled_from}
-                onChange={(e) => 
+                onChange={(e) =>
                   setFilters(prev => ({ ...prev, scheduled_from: e.target.value }))
                 }
                 className="h-8"
@@ -324,14 +324,14 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
               <Input
                 type="datetime-local"
                 value={filters.scheduled_to}
-                onChange={(e) => 
+                onChange={(e) =>
                   setFilters(prev => ({ ...prev, scheduled_to: e.target.value }))
                 }
                 className="h-8"
               />
             </div>
             <div className="flex items-end">
-              <Button 
+              <Button
                 onClick={() => setFilters({
                   status: 'all',
                   scholarship_type_id: 'all',
@@ -610,11 +610,11 @@ export function ScheduledEmailsTable({ className, currentUserRole }: ScheduledEm
                   ))}
                 </TableBody>
               </Table>
-              
+
               {/* Pagination */}
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  顯示 {pagination.skip + 1} - {Math.min(pagination.skip + pagination.limit, pagination.total)} 
+                  顯示 {pagination.skip + 1} - {Math.min(pagination.skip + pagination.limit, pagination.total)}
                   共 {pagination.total} 筆
                 </div>
                 <div className="flex items-center gap-2">

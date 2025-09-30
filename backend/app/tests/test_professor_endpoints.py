@@ -29,7 +29,7 @@ class TestProfessorApplicationsEndpoint:
         """Mock professor user"""
         professor = Mock(spec=User)
         professor.id = 1
-        professor.role = UserRole.PROFESSOR
+        professor.role = UserRole.professor
         professor.name = "Dr. Test Professor"
         professor.nycu_id = "prof001"
         return professor
@@ -217,7 +217,7 @@ class TestProfessorReviewEndpoints:
     def mock_professor(self):
         professor = Mock(spec=User)
         professor.id = 1
-        professor.role = UserRole.PROFESSOR
+        professor.role = UserRole.professor
         return professor
 
     @pytest.fixture
@@ -417,7 +417,7 @@ class TestProfessorSubTypesEndpoint:
     def mock_professor(self):
         professor = Mock(spec=User)
         professor.id = 1
-        professor.role = UserRole.PROFESSOR
+        professor.role = UserRole.professor
         return professor
 
     @pytest.fixture
@@ -487,7 +487,7 @@ class TestProfessorStatsEndpoint:
     def mock_professor(self):
         professor = Mock(spec=User)
         professor.id = 1
-        professor.role = UserRole.PROFESSOR
+        professor.role = UserRole.professor
         return professor
 
     @pytest.fixture

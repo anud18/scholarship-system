@@ -11,11 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { 
-  FileText, 
-  Plus, 
-  Edit, 
-  Trash2, 
+import {
+  FileText,
+  Plus,
+  Edit,
+  Trash2,
   Save,
   X,
   Loader2,
@@ -74,7 +74,7 @@ export function ApplicationDocumentForm({
     upload_instructions_en: "",
     validation_rules: {}
   })
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [newFileType, setNewFileType] = useState("")
@@ -414,4 +414,4 @@ export function ApplicationDocumentForm({
       </DialogContent>
     </Dialog>
   )
-} 
+}

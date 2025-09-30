@@ -25,6 +25,7 @@ from app.schemas.application import (
     ApplicationUpdate,
     StudentDataSchema,
 )
+from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
     """Get student data from external API using user's nycu_id"""
-    if user.role != UserRole.STUDENT or not user.nycu_id:
+    if user.role != UserRole.student or not user.nycu_id:
         return None
 
     student_service = StudentService()
@@ -271,13 +272,8 @@ class ApplicationService:
         app_id = self._generate_app_id()
         logger.debug(f"Generated app_id: {app_id}")
 
-        # Extract names from student data snapshot
-        cname = student_snapshot.get("cname", "")
-        ename = student_snapshot.get("ename", "")
-        std_stdcode = student_snapshot.get("std_stdcode", "")
-
         # Determine sub_type_selection_mode from scholarship configuration
-        sub_type_selection_mode = SubTypeSelectionMode.SINGLE  # Default
+        sub_type_selection_mode = SubTypeSelectionMode.single  # Default
         if scholarship.sub_type_selection_mode:
             sub_type_selection_mode = scholarship.sub_type_selection_mode
 
@@ -335,9 +331,17 @@ class ApplicationService:
         # Get and validate scholarship type and configuration
         scholarship, config = await self._get_scholarship_and_config(application_data)
 
-        # TODO: Add eligibility verification here
-        # We should verify that the student is actually eligible for this specific configuration
-        # by calling the eligibility service to check if this configuration appears in their eligible scholarships
+        # Eligibility verification
+        eligibility_service = EligibilityService(self.db)
+        is_eligible, eligibility_errors = await eligibility_service.check_student_eligibility(
+            student_data=student_snapshot,
+            config=config,
+            user_id=user.id
+        )
+
+        if not is_eligible:
+            error_message = "Student is not eligible for this scholarship. " + "; ".join(eligibility_errors)
+            raise ValidationError(error_message)
 
         # Create application instance using helper method
         application = await self._create_application_instance(
@@ -355,7 +359,7 @@ class ApplicationService:
         except Exception as e:
             # Don't fail the entire application creation if document cloning fails
             logger.warning(
-                f"Failed to clone fixed documents for application {app_id}: {e}",
+                f"Failed to clone fixed documents for application {application.app_id}: {e}",
                 exc_info=True,
             )
 
@@ -626,17 +630,17 @@ class ApplicationService:
             return None
 
         # Check access permissions
-        if current_user.role == UserRole.STUDENT:
+        if current_user.role == UserRole.student:
             if application.user_id != current_user.id:
                 return None
-        elif current_user.role == UserRole.PROFESSOR:
-            # TODO: Add professor-student relationship check when implemented
-            # For now, allow professors to access all applications
-            pass
+        elif current_user.role == UserRole.professor:
+            # Check if professor has access to this student's data
+            if not current_user.can_access_student_data(application.user_id, "view_applications"):
+                return None
         elif current_user.role in [
-            UserRole.COLLEGE,
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
         ]:
             # College, Admin, and Super Admin can access any application
             pass
@@ -844,9 +848,9 @@ class ApplicationService:
 
         # 檢查權限
         if current_user.role not in [
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
-            UserRole.COLLEGE,
+            UserRole.admin,
+            UserRole.super_admin,
+            UserRole.college,
         ]:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only update your own application data")
@@ -912,7 +916,7 @@ class ApplicationService:
             raise ValidationError("Application cannot be submitted in current status")
 
         # 驗證所有必填欄位
-        form_data = ApplicationFormData(**application.submitted_form_data)
+        _ = ApplicationFormData(**application.submitted_form_data)
 
         # 處理銀行帳戶證明文件 clone（從個人資料複製到申請）
         await self._clone_user_profile_documents(application, user)
@@ -1084,14 +1088,18 @@ class ApplicationService:
             selectinload(Application.student),  # Eagerly load student to avoid N+1 queries
         )
 
-        if current_user.role == UserRole.PROFESSOR:
-            # TODO: Add professor-student relationship filter when implemented
-            # For now, professors can see all applications
-            pass
+        if current_user.role == UserRole.professor:
+            # Filter applications to only those from accessible students
+            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            if accessible_student_ids:
+                query = query.where(Application.user_id.in_(accessible_student_ids))
+            else:
+                # No accessible students, return empty result
+                return []
         elif current_user.role in [
-            UserRole.COLLEGE,
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
         ]:
             # College, Admin, and Super Admin can see all applications
             pass
@@ -1200,10 +1208,10 @@ class ApplicationService:
     ) -> ApplicationResponse:
         """Update application status (staff only)"""
         if not (
-            user.has_role(UserRole.ADMIN)
-            or user.has_role(UserRole.COLLEGE)
-            or user.has_role(UserRole.PROFESSOR)
-            or user.has_role(UserRole.SUPER_ADMIN)
+            user.has_role(UserRole.admin)
+            or user.has_role(UserRole.college)
+            or user.has_role(UserRole.professor)
+            or user.has_role(UserRole.super_admin)
         ):
             raise AuthorizationError("Staff access required")
 
@@ -1257,68 +1265,6 @@ class ApplicationService:
             "file_type": file_type,
             "filename": getattr(file, "filename", "unknown"),
         }
-
-    async def submit_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
-        """Submit professor review for an application"""
-        stmt = select(Application).where(Application.id == application_id)
-        result = await self.db.execute(stmt)
-        application = result.scalar_one_or_none()
-        if not application:
-            raise NotFoundError("Application", str(application_id))
-        # Only the assigned professor can submit
-        if application.professor_id != user.id:
-            raise AuthorizationError("You are not the assigned professor for this application")
-
-        # Create professor review record
-        from app.models.application import ProfessorReview, ProfessorReviewItem
-
-        review = ProfessorReview(
-            application_id=application_id,
-            professor_id=user.id,
-            recommendation=review_data.recommendation,
-            review_status=review_data.review_status or "completed",
-            reviewed_at=datetime.utcnow(),
-        )
-        self.db.add(review)
-        await self.db.flush()  # Get the review ID
-
-        # Create review items for each sub-type
-        for item_data in review_data.items:
-            review_item = ProfessorReviewItem(
-                review_id=review.id,
-                sub_type_code=item_data.sub_type_code,
-                is_recommended=item_data.is_recommended,
-                comments=item_data.comments,
-            )
-            self.db.add(review_item)
-
-        await self.db.commit()
-
-        # 發送自動化通知 - Professor review submitted
-        try:
-            # Prepare review data for email automation
-            email_data = {
-                "id": application.id,
-                "app_id": application.app_id,
-                "student_name": getattr(application, "student_name", ""),
-                "professor_name": getattr(user, "name", ""),
-                "professor_email": getattr(user, "email", ""),
-                "scholarship_type": getattr(application.scholarship, "name", "") if application.scholarship else "",
-                "scholarship_type_id": application.scholarship_type_id,
-                "review_result": review_data.recommendation,
-                "review_date": datetime.utcnow().strftime("%Y-%m-%d"),
-                "professor_recommendation": review_data.recommendation,
-                "college_name": getattr(application, "college_name", ""),
-                "review_deadline": getattr(application, "review_deadline", ""),
-            }
-
-            # Trigger email automation for professor review submission
-            await email_automation_service.trigger_professor_review_submitted(self.db, application.id, email_data)
-        except Exception as e:
-            logger.error(f"Failed to trigger automated professor review emails: {e}")
-
-        # Return fresh copy with all relationships loaded
-        return await self.get_application_by_id(application_id)
 
     async def create_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
         """Create a professor review record and notify college reviewers"""
@@ -1378,16 +1324,15 @@ class ApplicationService:
             raise NotFoundError("Application", str(application_id))
 
         # Check upload permissions based on role
-        if user.role == UserRole.STUDENT:
+        if user.role == UserRole.student:
             # Students can only upload to their own applications
             if application.user_id != user.id:
                 raise AuthorizationError("Cannot upload files to other students' applications")
-        elif user.role == UserRole.PROFESSOR:
+        elif user.role == UserRole.professor:
             # Professors can upload files to their students' applications
-            # TODO: Add professor-student relationship check when implemented
-            # For now, allow professors to upload to any application
-            pass
-        elif user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            if not user.can_access_student_data(application.user_id, "upload_documents"):
+                raise AuthorizationError("Cannot upload files - no access to this student's data")
+        elif user.role in [UserRole.college, UserRole.admin, UserRole.super_admin]:
             # College, Admin, and Super Admin can upload to any application
             pass
         else:
@@ -1477,17 +1422,21 @@ class ApplicationService:
             selectinload(Application.student),  # Eagerly load student to avoid N+1 queries
         )
 
-        if current_user.role == UserRole.STUDENT:
+        if current_user.role == UserRole.student:
             # Students can only see their own applications
             query = query.where(Application.user_id == current_user.id)
-        elif current_user.role == UserRole.PROFESSOR:
-            # TODO: Add professor-student relationship filter when implemented
-            # For now, professors can see all applications
-            pass
+        elif current_user.role == UserRole.professor:
+            # Filter applications to only those from accessible students
+            accessible_student_ids = current_user.get_accessible_student_ids("view_applications")
+            if accessible_student_ids:
+                query = query.where(Application.user_id.in_(accessible_student_ids))
+            else:
+                # No accessible students, return empty result
+                return []
         elif current_user.role in [
-            UserRole.COLLEGE,
-            UserRole.ADMIN,
-            UserRole.SUPER_ADMIN,
+            UserRole.college,
+            UserRole.admin,
+            UserRole.super_admin,
         ]:
             # College, Admin, and Super Admin can see all applications
             pass
@@ -1597,10 +1546,10 @@ class ApplicationService:
             raise NotFoundError("Application", application_id)
 
         # Check if user has permission to delete this application
-        if current_user.role == UserRole.STUDENT:
+        if current_user.role == UserRole.student:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only delete your own applications")
-        elif current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        elif current_user.role not in [UserRole.admin, UserRole.super_admin]:
             raise AuthorizationError("You don't have permission to delete applications")
 
         # Only draft applications can be deleted
@@ -1694,16 +1643,13 @@ class ApplicationService:
                     source_object_name = getattr(user_profile, doc_config["object_name_field"], None)
                     if source_object_name:
                         filename = source_object_name.split("/")[-1]
-                        file_extension = filename.split(".")[-1] if "." in filename else "jpg"
                     else:
                         # 從 URL 提取
                         filename = doc_url.split("/")[-1].split("?")[0]
-                        file_extension = filename.split(".")[-1] if "." in filename else "jpg"
                         source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
                 else:
                     # 從 URL 提取（舊的邏輯作為備用）
                     filename = doc_url.split("/")[-1].split("?")[0]
-                    file_extension = filename.split(".")[-1] if "." in filename else "jpg"
                     source_object_name = f"user-profiles/{user.id}/bank-documents/{filename}"
 
                 # 使用 MinIO 服務複製文件到申請路徑
@@ -1904,10 +1850,8 @@ class ApplicationService:
             responses = []
             for app in applications:
                 # Get scholarship type information for display
-                scholarship_type_name = None
                 scholarship_type_zh = None
                 if app.scholarship_configuration and app.scholarship_configuration.scholarship_type:
-                    scholarship_type_name = app.scholarship_configuration.scholarship_type.name
                     # Use name for Chinese display since name_zh doesn't exist
                     scholarship_type_zh = app.scholarship_configuration.scholarship_type.name
 
@@ -2041,10 +1985,10 @@ class ApplicationService:
             ]:
                 return False
 
-            # Check professor review period for SUBMISSION (this is where time restriction applies)
-            # Skip time restrictions if review periods are not configured (e.g., in test environment)
             now = datetime.now(timezone.utc)
 
+            # Check professor review period for SUBMISSION (this is where time restriction applies)
+            # Skip time restrictions if review periods are not configured (e.g., in test environment)
             if application.is_renewal:
                 # Check renewal review period
                 renewal_start = config.renewal_professor_review_start
@@ -2353,8 +2297,6 @@ class ApplicationService:
     async def get_professor_review_stats(self, professor_id: int) -> dict:
         """Get basic review statistics for a professor"""
         try:
-            now = datetime.now(timezone.utc)
-
             # Get applications in current review period - simplified approach to avoid column reference issues
             pending_query = select(func.count(Application.id)).where(
                 Application.professor_id == professor_id,
@@ -2402,10 +2344,10 @@ class ApplicationService:
         try:
             from app.models.user import UserRole
 
-            query = select(User).where(User.role == UserRole.PROFESSOR)
+            query = select(User).where(User.role == UserRole.professor)
 
             # Filter by college for college admins
-            if user.role == UserRole.COLLEGE:
+            if user.role == UserRole.college:
                 query = query.where(User.dept_code == user.dept_code)
 
             # Add search filter
@@ -2470,12 +2412,12 @@ class ApplicationService:
                 raise NotFoundError(f"Application {application_id} not found")
 
             # Check access permissions (similar to get_application_by_id logic)
-            if assigned_by.role == UserRole.STUDENT:
+            if assigned_by.role == UserRole.student:
                 if application.user_id != assigned_by.id:
                     raise ValidationError("Access denied")
 
             # Get professor
-            stmt = select(User).where(User.nycu_id == professor_nycu_id, User.role == UserRole.PROFESSOR)
+            stmt = select(User).where(User.nycu_id == professor_nycu_id, User.role == UserRole.professor)
             result = await self.db.execute(stmt)
             professor = result.scalar_one_or_none()
 
@@ -2488,7 +2430,7 @@ class ApplicationService:
                 raise ValidationError("This scholarship does not require professor review")
 
             # Check permission for college admins
-            if assigned_by.role == UserRole.COLLEGE:
+            if assigned_by.role == UserRole.college:
                 if assigned_by.dept_code != professor.dept_code:
                     raise ValidationError("College admins can only assign professors from their own college")
 

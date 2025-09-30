@@ -14,19 +14,19 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
 import api, { type UserResponse } from '@/lib/api'
-import { 
-  validateAdvisorInfo, 
-  validateBankInfo, 
+import {
+  validateAdvisorInfo,
+  validateBankInfo,
   validateAdvisorEmail,
-  sanitizeAdvisorInfo, 
-  sanitizeBankInfo 
+  sanitizeAdvisorInfo,
+  sanitizeBankInfo
 } from '@/lib/validations/user-profile'
-import { 
-  User, 
-  Building2, 
-  Phone, 
-  Mail, 
-  MapPin, 
+import {
+  User,
+  Building2,
+  Phone,
+  Mail,
+  MapPin,
   Upload,
   Save,
   Eye,
@@ -94,12 +94,12 @@ export default function UserProfileManagement() {
     downloadUrl?: string
   } | null>(null)
   const [showPreview, setShowPreview] = useState(false)
-  
+
   // Validation states
   const [advisorErrors, setAdvisorErrors] = useState<string[]>([])
   const [bankErrors, setBankErrors] = useState<string[]>([])
   const [emailValidationError, setEmailValidationError] = useState<string>('')
-  
+
   const { toast } = useToast()
 
   // Language preference and translation
@@ -114,7 +114,7 @@ export default function UserProfileManagement() {
     try {
       const response = await api.userProfiles.getMyProfile()
       console.log('Profile response:', response) // 調試用
-      
+
       if (response.success && response.data) {
         setProfile(response.data)
         if (response.data.profile) {
@@ -133,7 +133,7 @@ export default function UserProfileManagement() {
           description: response.message || t("profile_management.profile_may_not_exist"),
           variant: "default"
         })
-        
+
         // 設置基本的用戶資料結構，即使沒有完整的個人資料
         setProfile({
           user_info: {
@@ -158,7 +158,7 @@ export default function UserProfileManagement() {
       }
     } catch (error: any) {
       console.error('Load profile error:', error)
-      
+
       // 網絡錯誤或其他嚴重錯誤
       if (error.name === 'TypeError' && error.message.includes('fetch')) {
         toast({
@@ -173,7 +173,7 @@ export default function UserProfileManagement() {
           variant: "destructive"
         })
       }
-      
+
       // 即使發生錯誤也設置基本結構
       setProfile({
         user_info: {
@@ -207,7 +207,7 @@ export default function UserProfileManagement() {
       advisor_email: editingProfile.advisor_email,
       advisor_nycu_id: editingProfile.advisor_nycu_id
     }
-    
+
     const validation = validateAdvisorInfo(advisorData)
     setAdvisorErrors(validation.errors)
     return validation.isValid
@@ -218,7 +218,7 @@ export default function UserProfileManagement() {
       bank_code: editingProfile.bank_code,
       account_number: editingProfile.account_number
     }
-    
+
     const validation = validateBankInfo(bankData)
     setBankErrors(validation.errors)
     return validation.isValid
@@ -230,13 +230,13 @@ export default function UserProfileManagement() {
       ...editingProfile,
       advisor_email: email
     })
-    
+
     // Clear previous errors
     setEmailValidationError('')
     if (advisorErrors.length > 0) {
       setAdvisorErrors([])
     }
-    
+
     // Only validate if user has entered something
     if (email.trim() !== '') {
       const validation = validateAdvisorEmail(email)
@@ -248,7 +248,7 @@ export default function UserProfileManagement() {
 
   const handleSave = async (section: string) => {
     if (!editingProfile) return
-    
+
     // Validate data before saving
     let isValid = true
     if (section === 'advisor') {
@@ -256,7 +256,7 @@ export default function UserProfileManagement() {
     } else if (section === 'bank') {
       isValid = validateBankData()
     }
-    
+
     if (!isValid) {
       toast({
         title: t("profile_management.validation_failed"),
@@ -265,7 +265,7 @@ export default function UserProfileManagement() {
       })
       return
     }
-    
+
     setSaving(true)
     try {
       let endpoint = '/user-profiles/me'
@@ -310,16 +310,16 @@ export default function UserProfileManagement() {
         default:
           response = await api.userProfiles.updateProfile(editingProfile)
       }
-      
+
       if (!response.success) {
         throw new Error(response.message || 'Update failed')
       }
-      
+
       toast({
         title: t("profile_management.update_success"),
         description: t("profile_management.profile_updated"),
       })
-      
+
       await loadProfile()
     } catch (error: any) {
       toast({
@@ -360,7 +360,7 @@ export default function UserProfileManagement() {
     setUploadingBankDoc(true)
     try {
       const response = await api.userProfiles.uploadBankDocumentFile(file)
-      
+
       if (!response.success) {
         throw new Error(response.message || 'Upload failed')
       }
@@ -387,7 +387,7 @@ export default function UserProfileManagement() {
   const handleDeleteBankDocument = async () => {
     try {
       const response = await api.userProfiles.deleteBankDocument()
-      
+
       if (response.success) {
         toast({
           title: t("profile_management.update_success"),
@@ -412,7 +412,7 @@ export default function UserProfileManagement() {
     // 從銀行文件 URL 提取檔名和 token
     const documentUrl = profile.profile.bank_document_photo_url
     const filename = documentUrl.split('/').pop()?.split('?')[0] || 'bank_document'
-    
+
     // 從 URL 中提取 token（如果有的話）
     let token = ''
     const urlParts = documentUrl.split('?')
@@ -420,27 +420,27 @@ export default function UserProfileManagement() {
       const urlParams = new URLSearchParams(urlParts[1])
       token = urlParams.get('token') || ''
     }
-    
+
     // 如果 URL 中沒有 token，嘗試從存儲中獲取
     if (!token) {
-      token = localStorage.getItem('auth_token') || 
-              localStorage.getItem('token') || 
-              sessionStorage.getItem('auth_token') || 
-              sessionStorage.getItem('token') || 
+      token = localStorage.getItem('auth_token') ||
+              localStorage.getItem('token') ||
+              sessionStorage.getItem('auth_token') ||
+              sessionStorage.getItem('token') ||
               'eyJhbGciOiJIUzI' // 預設 token
     }
-    
+
     // 對於個人資料的銀行文件，使用檔名作為 fileId
     const fileId = filename
     const fileType = encodeURIComponent('bank_document')
     // 對於個人資料，使用用戶 ID 作為標識符，而不是 applicationId
     const userId = profile.user_info.id || 0
-    
+
     // 建立預覽 URL，使用前端路由而不是完整的外部 URL
     const previewUrl = `/api/v1/preview?fileId=${fileId}&filename=${encodeURIComponent(filename)}&type=${fileType}&userId=${userId}&token=${token}`
-    
+
     console.log('Preview URL:', previewUrl) // 用於調試
-    
+
     // 判斷文件類型
     let fileType_display = 'other'
     if (filename.toLowerCase().endsWith('.pdf')) {
@@ -448,7 +448,7 @@ export default function UserProfileManagement() {
     } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].some(ext => filename.toLowerCase().endsWith(ext))) {
       fileType_display = 'image'
     }
-    
+
     // 設定預覽文件資訊
     setPreviewFile({
       url: previewUrl,
@@ -456,7 +456,7 @@ export default function UserProfileManagement() {
       type: fileType_display,
       downloadUrl: documentUrl // 使用原始的文件 URL 作為下載連結
     })
-    
+
     setShowPreview(true)
   }
 
@@ -468,7 +468,7 @@ export default function UserProfileManagement() {
   const loadHistory = async () => {
     try {
       const response = await api.userProfiles.getHistory()
-      
+
       if (response.success && response.data) {
         setHistory(response.data)
         setShowHistory(true)
@@ -514,8 +514,8 @@ export default function UserProfileManagement() {
           <h1 className="text-3xl font-bold">{t("profile_management.title")}</h1>
           <p className="text-gray-600 mt-2">{t("profile_management.subtitle")}</p>
         </div>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={loadHistory}
           className="flex items-center gap-2"
         >
@@ -658,35 +658,35 @@ export default function UserProfileManagement() {
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>{t("profile_management.name")}</Label>
-                  <Input value={profile.user_info.name} disabled />
+                  <Input value={profile.user_info.name} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.id_number")}</Label>
-                  <Input value={profile.user_info.nycu_id} disabled />
+                  <Input value={profile.user_info.nycu_id} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.email")}</Label>
-                  <Input value={profile.user_info.email} disabled />
+                  <Input value={profile.user_info.email} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.user_type")}</Label>
-                  <Input value={profile.user_info.user_type} disabled />
+                  <Input value={profile.user_info.user_type} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.status")}</Label>
-                  <Input value={profile.user_info.status} disabled />
+                  <Input value={profile.user_info.status} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.dept_code")}</Label>
-                  <Input value={profile.user_info.dept_code || ''} disabled />
+                  <Input value={profile.user_info.dept_code || ''} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.dept_name")}</Label>
-                  <Input value={profile.user_info.dept_name || ''} disabled />
+                  <Input value={profile.user_info.dept_name || ''} disabled readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("profile_management.system_role")}</Label>
-                  <Input value={profile.user_info.role} disabled />
+                  <Input value={profile.user_info.role} disabled readOnly />
                 </div>
               </div>
 
@@ -698,19 +698,19 @@ export default function UserProfileManagement() {
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>{t("profile_management.degree")}</Label>
-                      <Input value={profile.student_info.student?.std_degree || ''} disabled />
+                      <Input value={profile.student_info.student?.std_degree || ''} disabled readOnly />
                     </div>
                     <div className="space-y-2">
                       <Label>{t("profile_management.enrollment_status")}</Label>
-                      <Input value={profile.student_info.student?.std_studingstatus || ''} disabled />
+                      <Input value={profile.student_info.student?.std_studingstatus || ''} disabled readOnly />
                     </div>
                     <div className="space-y-2">
                       <Label>{t("profile_management.enrollment_year")}</Label>
-                      <Input value={profile.student_info.student?.std_enrollyear || ''} disabled />
+                      <Input value={profile.student_info.student?.std_enrollyear || ''} disabled readOnly />
                     </div>
                     <div className="space-y-2">
                       <Label>{t("profile_management.semester_count")}</Label>
-                      <Input value={profile.student_info.student?.std_termcount || ''} disabled />
+                      <Input value={profile.student_info.student?.std_termcount || ''} disabled readOnly />
                     </div>
                   </div>
                 </div>
@@ -788,7 +788,7 @@ export default function UserProfileManagement() {
               <div className="space-y-4">
                 <div className="space-y-4">
                   <Label>{t("profile_management.bank_document")}</Label>
-                  
+
                   {/* Display current uploaded document */}
                   {profile.profile?.bank_document_photo_url && (
                     <div className="mb-4 p-4 border rounded-lg bg-green-50 border-green-200">
@@ -801,16 +801,16 @@ export default function UserProfileManagement() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             size="sm"
                             onClick={handlePreviewBankDocument}
                           >
                             <Eye className="w-4 h-4 mr-1" />
                             {t("profile_management.preview")}
                           </Button>
-                          <Button 
-                            variant="destructive" 
+                          <Button
+                            variant="destructive"
                             size="sm"
                             onClick={handleDeleteBankDocument}
                           >
@@ -821,7 +821,7 @@ export default function UserProfileManagement() {
                       </div>
                     </div>
                   )}
-                  
+
                   {/* File Upload Component */}
                   <div className="space-y-4">
                     <FileUpload
@@ -833,7 +833,7 @@ export default function UserProfileManagement() {
                       fileType="bank_document"
                       locale="zh"
                     />
-                    
+
                     {/* Upload Button - only show when files are selected */}
                     {bankDocumentFiles.length > 0 && (
                       <Button
@@ -855,7 +855,7 @@ export default function UserProfileManagement() {
                       </Button>
                     )}
                   </div>
-                  
+
                   <div className="text-xs text-muted-foreground">
                     <p>{t("profile_management.file_formats")}</p>
                     <p>{t("profile_management.file_size_limit")}</p>
@@ -1032,7 +1032,7 @@ export default function UserProfileManagement() {
       )}
 
       {/* File Preview Dialog */}
-      <FilePreviewDialog 
+      <FilePreviewDialog
         isOpen={showPreview}
         onClose={handleClosePreview}
         file={previewFile}

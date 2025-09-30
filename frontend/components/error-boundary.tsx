@@ -27,7 +27,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo)
-    
+
     // Call optional error handler
     this.props.onError?.(error, errorInfo)
   }
@@ -52,25 +52,25 @@ export class ErrorBoundary extends Component<Props, State> {
               發生未預期的錯誤。請重新整理頁面或聯繫系統管理員。
             </AlertDescription>
           </Alert>
-          
+
           <div className="flex space-x-2">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={this.handleRetry}
               className="flex items-center space-x-2"
             >
               <RefreshCw className="h-4 w-4" />
               <span>重試</span>
             </Button>
-            
-            <Button 
-              variant="outline" 
+
+            <Button
+              variant="outline"
               onClick={() => window.location.reload()}
             >
               重新整理頁面
             </Button>
           </div>
-          
+
           {process.env.NODE_ENV === 'development' && this.state.error && (
             <details className="mt-4 p-4 bg-gray-100 rounded text-sm max-w-2xl">
               <summary className="cursor-pointer font-semibold">

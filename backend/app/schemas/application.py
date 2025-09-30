@@ -462,6 +462,14 @@ class ProfessorAssignmentRequest(BaseModel):
     professor_nycu_id: str = Field(..., description="Professor NYCU ID to assign")
 
 
+class BulkApproveRequest(BaseModel):
+    """Schema for bulk approval requests."""
+
+    application_ids: List[int] = Field(..., min_length=1, description="Application IDs to approve")
+    comments: Optional[str] = Field(None, description="Optional approval notes")
+    send_notifications: bool = Field(True, description="Whether to notify applicants")
+
+
 class HistoricalApplicationResponse(BaseModel):
     """Historical application response schema for admin view"""
 

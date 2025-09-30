@@ -50,19 +50,19 @@ export function NotificationButton({ locale = "zh", className = "" }: Notificati
 
   useEffect(() => {
     fetchUnreadCount()
-    
+
     // 每30秒更新一次未讀數量
     const interval = setInterval(fetchUnreadCount, 30000)
-    
+
     return () => clearInterval(interval)
   }, [])
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           className={`relative hover:bg-nycu-blue-50 ${className}`}
         >
           <Bell className="h-5 w-5" />
@@ -70,11 +70,11 @@ export function NotificationButton({ locale = "zh", className = "" }: Notificati
             <>
               {/* 橘色指示燈 - 小圓點 */}
               <span className="absolute -top-1 -right-1 h-3 w-3 bg-orange-500 rounded-full animate-pulse border-2 border-white"></span>
-              
+
               {/* 數字徽章 - 如果未讀數量超過3則顯示 */}
               {unreadCount > 3 && (
-                <Badge 
-                  variant="destructive" 
+                <Badge
+                  variant="destructive"
                   className="absolute -top-2 -right-2 h-5 w-5 p-0 text-xs bg-orange-500 hover:bg-orange-600 border-white border-2 flex items-center justify-center"
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}
@@ -84,9 +84,9 @@ export function NotificationButton({ locale = "zh", className = "" }: Notificati
           )}
         </Button>
       </PopoverTrigger>
-      
-      <PopoverContent 
-        className="w-80 p-0 mr-4" 
+
+      <PopoverContent
+        className="w-80 p-0 mr-4"
         align="end"
         side="bottom"
         sideOffset={8}
@@ -100,4 +100,4 @@ export function NotificationButton({ locale = "zh", className = "" }: Notificati
       </PopoverContent>
     </Popover>
   )
-} 
+}

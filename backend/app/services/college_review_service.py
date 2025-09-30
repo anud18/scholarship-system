@@ -308,7 +308,7 @@ class CollegeReviewService:
                 CollegeRanking.sub_type_code == sub_type_code,
                 CollegeRanking.academic_year == academic_year,
                 CollegeRanking.semester == normalized_semester,
-                CollegeRanking.is_finalized == False,  # Only non-finalized rankings
+                CollegeRanking.is_finalized.is_(False),  # Only non-finalized rankings
             )
         )
 
@@ -395,8 +395,6 @@ class CollegeReviewService:
         college_reviews = college_reviews_result.scalars().all()
 
         # Ensure all applications have college reviews (create default ones if needed)
-        from app.models.college_review import CollegeReview
-
         college_review_lookup = {review.application_id: review for review in college_reviews}
 
         # Create default college reviews for applications that don't have them
@@ -425,7 +423,7 @@ class CollegeReviewService:
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
                 ScholarshipConfiguration.semester == normalized_semester,
-                ScholarshipConfiguration.is_active == True,
+                ScholarshipConfiguration.is_active.is_(True),
             )
         )
         config_result = await self.db.execute(config_stmt)
@@ -664,20 +662,6 @@ class CollegeReviewService:
                     else ""
                 )
 
-                # Prepare application and result data
-                application_data = {
-                    "id": application.id,
-                    "app_id": getattr(application, "app_id", ""),
-                    "student_name": getattr(application, "student_name", ""),
-                    "student_email": getattr(application, "student_email", ""),
-                    "professor_name": getattr(application, "professor_name", ""),
-                    "professor_email": getattr(application, "professor_email", ""),
-                    "college_name": getattr(application, "college_name", ""),
-                    "scholarship_type": getattr(application.scholarship, "name", "") if application.scholarship else "",
-                    "scholarship_type_id": application.scholarship_type_id,
-                    "college_emails": ["mock_college@nycu.edu.tw"],  # TODO: Get actual college emails
-                }
-
                 result_data = {
                     "result_status": result_status,
                     "approved_amount": str(approved_amount) if approved_amount else "",
@@ -738,7 +722,7 @@ class CollegeReviewService:
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
                 ScholarshipConfiguration.semester == semester,
-                ScholarshipConfiguration.is_active == True,
+                ScholarshipConfiguration.is_active.is_(True),
             )
         )
         config_result = await self.db.execute(config_stmt)

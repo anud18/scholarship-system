@@ -58,7 +58,7 @@ describe('NotificationButton Component', () => {
     })
 
     render(<NotificationButton locale="zh" />)
-    
+
     const button = screen.getByRole('button')
     expect(button).toBeInTheDocument()
     expect(button).toHaveClass('relative')
@@ -131,7 +131,7 @@ describe('NotificationButton Component', () => {
     })
 
     render(<NotificationButton locale="zh" />)
-    
+
     const button = screen.getByRole('button')
     fireEvent.click(button)
 
@@ -148,7 +148,7 @@ describe('NotificationButton Component', () => {
     })
 
     render(<NotificationButton locale="en" />)
-    
+
     const button = screen.getByRole('button')
     fireEvent.click(button)
 
@@ -164,7 +164,7 @@ describe('NotificationButton Component', () => {
     })
 
     render(<NotificationButton locale="zh" />)
-    
+
     const button = screen.getByRole('button')
     fireEvent.click(button)
 
@@ -183,7 +183,7 @@ describe('NotificationButton Component', () => {
       .mockResolvedValueOnce({ success: true, data: 0 })
 
     render(<NotificationButton locale="zh" />)
-    
+
     // Wait for initial load
     await waitFor(() => {
       expect(screen.getByText('5')).toBeInTheDocument()
@@ -282,7 +282,7 @@ describe('NotificationButton Component', () => {
     })
 
     render(<NotificationButton locale="zh" className="custom-class" />)
-    
+
     const button = screen.getByRole('button')
     expect(button).toHaveClass('custom-class')
   })
@@ -296,7 +296,7 @@ describe('NotificationButton Component', () => {
     const consoleSpy = jest.spyOn(console, 'log').mockImplementation()
 
     render(<NotificationButton locale="zh" />)
-    
+
     const button = screen.getByRole('button')
     fireEvent.click(button)
 

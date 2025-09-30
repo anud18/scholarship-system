@@ -34,15 +34,15 @@ export const getApplicationTimeline = (application: any, locale: Locale): Timeli
     {
       id: "2",
       title: locale === "zh" ? "初步審核" : "Initial Review",
-      status: status === "draft" 
-        ? "pending" 
+      status: status === "draft"
+        ? "pending"
         : status === "submitted" || status === "pending_recommendation"
           ? "current"
           : status === "rejected"
             ? "rejected"
             : "completed",
       date: status === "draft" || status === "submitted" || status === "pending_recommendation"
-        ? "" 
+        ? ""
         : formatDate(application.reviewed_at, locale),
     },
     {
@@ -62,12 +62,12 @@ export const getApplicationTimeline = (application: any, locale: Locale): Timeli
     {
       id: "4",
       title: locale === "zh" ? "核定結果" : "Final Decision",
-      status: status === "approved" 
-        ? "completed" 
-        : status === "rejected" 
-          ? "rejected" 
+      status: status === "approved"
+        ? "completed"
+        : status === "rejected"
+          ? "rejected"
           : "pending",
-      date: status === "approved" 
+      date: status === "approved"
         ? formatDate(application.approved_at, locale)
         : status === "rejected"
           ? formatDate(application.reviewed_at, locale)
@@ -81,7 +81,7 @@ export const getApplicationTimeline = (application: any, locale: Locale): Timeli
 export const getStatusColor = (status: ApplicationStatus): BadgeVariant => {
   const statusMap: Record<ApplicationStatus, BadgeVariant> = {
     draft: "secondary",
-    submitted: "default", 
+    submitted: "default",
     under_review: "outline",
     pending_recommendation: "outline",
     recommended: "outline",
@@ -103,7 +103,7 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       under_review: "審核中",
       pending_recommendation: "待教授推薦",
       recommended: "已推薦",
-      approved: "已核准", 
+      approved: "已核准",
       rejected: "已拒絕",
       returned: "已退回",
       withdrawn: "已撤回",
@@ -117,7 +117,7 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       recommended: "Recommended",
       approved: "Approved",
       rejected: "Rejected",
-      returned: "Returned", 
+      returned: "Returned",
       withdrawn: "Withdrawn",
       cancelled: "Cancelled",
     }
@@ -175,7 +175,7 @@ export const getDocumentLabel = (docType: string, locale: Locale, dynamicLabel?:
   if (dynamicLabel) {
     return locale === "zh" ? dynamicLabel.zh : (dynamicLabel.en || dynamicLabel.zh || docType)
   }
-  
+
   // 後備靜態標籤（僅在無法獲取動態標籤時使用）
   const docTypeMap = {
     zh: {
@@ -226,16 +226,16 @@ export const fetchApplicationFiles = async (applicationId: number) => {
         uploaded_at: doc.upload_time
       }))
     }
-    
+
     // 如果申請詳情沒有文件，嘗試專門的文件API（向後兼容）
     const filesResponse = await api.applications.getApplicationFiles(applicationId)
     if (filesResponse.success && filesResponse.data) {
       return filesResponse.data
     }
-    
+
     return []
   } catch (error) {
     console.error('Failed to fetch application files:', error)
     return []
   }
-} 
+}

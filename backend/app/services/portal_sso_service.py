@@ -193,22 +193,22 @@ class PortalSSOService:
         # Determine actual user type and role based on Student API verification
         if is_student:
             user_type = "student"
-            user_role = UserRole.STUDENT
-            mapped_user_type = UserType.STUDENT
+            user_role = UserRole.student
+            mapped_user_type = UserType.student
             logger.info(f"User {nycu_id} confirmed as student via Student API")
         else:
             # Not a student according to Student API, use Portal's classification
             user_type = portal_user_type
             if portal_user_type.lower() in ["employee", "staff", "teacher"]:
-                user_role = UserRole.PROFESSOR  # Default employees to professor
-                mapped_user_type = UserType.EMPLOYEE
+                user_role = UserRole.professor  # Default employees to professor
+                mapped_user_type = UserType.employee
             elif portal_user_type.lower() == "admin":
-                user_role = UserRole.ADMIN
-                mapped_user_type = UserType.EMPLOYEE
+                user_role = UserRole.admin
+                mapped_user_type = UserType.employee
             else:
                 # Fallback to student if uncertain
-                user_role = UserRole.STUDENT
-                mapped_user_type = UserType.STUDENT
+                user_role = UserRole.student
+                mapped_user_type = UserType.student
             logger.info(f"User {nycu_id} classified as {user_type} based on Portal data")
 
         # Generate email if not provided
@@ -256,8 +256,8 @@ class PortalSSOService:
         email: str,
         dept_name: Optional[str] = None,
         dept_code: Optional[str] = None,
-        user_type: UserType = UserType.STUDENT,
-        user_role: UserRole = UserRole.STUDENT,
+        user_type: UserType = UserType.student,
+        user_role: UserRole = UserRole.student,
         status: str = "在學",
         raw_data: Optional[Dict] = None,
         student_data: Optional[Dict] = None,
@@ -319,27 +319,27 @@ class PortalSSOService:
     def _map_user_type_to_role(self, user_type: str) -> UserRole:
         """Map Portal userType to system UserRole"""
         type_mapping = {
-            "student": UserRole.STUDENT,
-            "employee": UserRole.PROFESSOR,  # Default employees to professor
-            "staff": UserRole.ADMIN,
+            "student": UserRole.student,
+            "employee": UserRole.professor,  # Default employees to professor
+            "staff": UserRole.admin,
         }
-        return type_mapping.get(user_type.lower(), UserRole.STUDENT)
+        return type_mapping.get(user_type.lower(), UserRole.student)
 
     def _map_user_type_to_enum(self, user_type: str) -> UserType:
         """Map Portal userType to system UserType enum"""
         type_mapping = {
-            "student": UserType.STUDENT,
-            "employee": UserType.EMPLOYEE,
-            "staff": UserType.EMPLOYEE,
+            "student": UserType.student,
+            "employee": UserType.employee,
+            "staff": UserType.employee,
         }
-        return type_mapping.get(user_type.lower(), UserType.STUDENT)
+        return type_mapping.get(user_type.lower(), UserType.student)
 
     def _map_status_to_enum(self, status: str) -> EmployeeStatus:
         """Map Portal status to system UserStatus enum"""
         status_mapping = {
-            "在學": EmployeeStatus.STUDENT,
-            "在職": EmployeeStatus.ACTIVE,
-            "退休": EmployeeStatus.RETIRED,
-            "畢業": EmployeeStatus.GRADUATED,
+            "在學": EmployeeStatus.student,
+            "在職": EmployeeStatus.active,
+            "退休": EmployeeStatus.retired,
+            "畢業": EmployeeStatus.graduated,
         }
-        return status_mapping.get(status, EmployeeStatus.STUDENT)
+        return status_mapping.get(status, EmployeeStatus.student)

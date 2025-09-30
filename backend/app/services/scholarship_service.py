@@ -20,6 +20,7 @@ from app.models.application import (
     ApplicationReview,
     ApplicationStatus,
     ProfessorReview,
+    ProfessorReviewItem,
     ReviewStatus,
     ScholarshipMainType,
     ScholarshipSubType,
@@ -346,7 +347,7 @@ class ScholarshipService:
         # Query active subtype configurations
         stmt = select(ScholarshipSubTypeConfig).filter(
             ScholarshipSubTypeConfig.scholarship_type_id == scholarship_type_id,
-            ScholarshipSubTypeConfig.is_active == True,
+            ScholarshipSubTypeConfig.is_active.is_(True),
         )
         result = await self.db.execute(stmt)
         configs = result.scalars().all()
@@ -370,7 +371,7 @@ class ScholarshipApplicationService:
     def __init__(self, db: Session):
         self.db = db
 
-    # TODO: Refactor this method to work with external API student data
+    # Application creation has been moved to ApplicationService with external API integration
     # def create_application(
     #     self,
     #     user_id: int,

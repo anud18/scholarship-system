@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { 
+import {
   Bell,
   AlertCircle,
   Info,
@@ -66,7 +66,7 @@ export function NotificationPanel({
     try {
       setIsLoading(true)
       setError(null)
-      
+
       const response = await apiClient.notifications.getNotifications(0, 50)
       if (response.success) {
         const notifications = (response.data || []).map(n => ({
@@ -104,9 +104,9 @@ export function NotificationPanel({
       const response = await apiClient.notifications.markAsRead(notificationId)
       if (response.success) {
         // 更新本地狀態
-        setNotifications(prev => 
-          prev.map(n => 
-            n.id === notificationId 
+        setNotifications(prev =>
+          prev.map(n =>
+            n.id === notificationId
               ? { ...n, is_read: true, read_at: new Date().toISOString() }
               : n
           )
@@ -125,7 +125,7 @@ export function NotificationPanel({
       const response = await apiClient.notifications.markAllAsRead()
       if (response.success) {
         // 更新本地狀態
-        setNotifications(prev => 
+        setNotifications(prev =>
           prev.map(n => ({ ...n, is_read: true, read_at: new Date().toISOString() }))
         )
         setUnreadCount(0)
@@ -156,8 +156,8 @@ export function NotificationPanel({
 
   // 獲取通知類型圖標
   const getNotificationIcon = (type: string, priority: string) => {
-    const iconClass = priority === "urgent" ? "text-red-500" : 
-                     priority === "high" ? "text-orange-500" : 
+    const iconClass = priority === "urgent" ? "text-red-500" :
+                     priority === "high" ? "text-orange-500" :
                      "text-blue-500"
 
     switch (type) {
@@ -191,18 +191,18 @@ export function NotificationPanel({
   // 格式化時間
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
-    return format(date, "MM/dd HH:mm", { 
-      locale: locale === "zh" ? zhCN : enUS 
+    return format(date, "MM/dd HH:mm", {
+      locale: locale === "zh" ? zhCN : enUS
     })
   }
 
   // 獲取通知標題和內容
   const getNotificationText = (notification: NotificationData) => {
-    const title = locale === "en" && notification.title_en 
-      ? notification.title_en 
+    const title = locale === "en" && notification.title_en
+      ? notification.title_en
       : notification.title
-    const message = locale === "en" && notification.message_en 
-      ? notification.message_en 
+    const message = locale === "en" && notification.message_en
+      ? notification.message_en
       : notification.message
     return { title, message }
   }
@@ -210,10 +210,10 @@ export function NotificationPanel({
   useEffect(() => {
     fetchNotifications()
     fetchUnreadCount()
-    
+
     // 當組件首次載入時，自動標記所有通知為已讀
     autoMarkAllAsRead()
-    
+
     // 每30秒刷新一次通知
     const interval = setInterval(() => {
       fetchNotifications()
@@ -222,7 +222,7 @@ export function NotificationPanel({
 
     return () => clearInterval(interval)
   }, [])
-  
+
   // 當通知面板變為可見時也自動標記已讀
   useEffect(() => {
     if (notifications.length > 0) {
@@ -271,7 +271,7 @@ export function NotificationPanel({
           )}
         </div>
       </CardHeader>
-      
+
       <CardContent className="p-0">
         {error ? (
           <div className="p-4 text-center text-red-500 text-sm">
@@ -296,7 +296,7 @@ export function NotificationPanel({
                 const { title, message } = getNotificationText(notification)
                 const isExpanded = expandedNotifications.has(notification.id)
                 const needsExpansion = isMessageLong(message)
-                
+
                 return (
                   <div key={notification.id}>
                     <div
@@ -308,7 +308,7 @@ export function NotificationPanel({
                         <div className="flex-shrink-0 mt-0.5">
                           {getNotificationIcon(notification.notification_type, notification.priority)}
                         </div>
-                        
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <h4 className="text-sm font-semibold text-gray-900 leading-tight">
@@ -321,7 +321,7 @@ export function NotificationPanel({
                               )}
                             </div>
                           </div>
-                          
+
                           <div className="space-y-2">
                             <div
                               className={`text-sm text-gray-700 leading-relaxed ${
@@ -330,7 +330,7 @@ export function NotificationPanel({
                             >
                               {message}
                             </div>
-                            
+
                             {needsExpansion && (
                               <Button
                                 variant="ghost"
@@ -355,12 +355,12 @@ export function NotificationPanel({
                               </Button>
                             )}
                           </div>
-                          
+
                           <div className="flex items-center justify-between mt-3">
                             <span className="text-xs text-gray-500">
                               {formatDate(notification.created_at)}
                             </span>
-                            
+
                             <div className="flex items-center gap-2">
                               {notification.action_url && (
                                 <Button
@@ -402,4 +402,4 @@ export function NotificationPanel({
       </CardContent>
     </Card>
   )
-} 
+}

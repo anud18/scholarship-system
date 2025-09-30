@@ -1,7 +1,7 @@
 import React from 'react'
 
 export const Button = ({ children, onClick, variant, size, ...props }: any) => (
-  <button 
+  <button
     data-testid="button"
     onClick={onClick}
     data-variant={variant}

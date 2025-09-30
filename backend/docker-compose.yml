@@ -56,4 +56,4 @@ volumes:
 
 networks:
   scholarship_network:
-    driver: bridge 
+    driver: bridge

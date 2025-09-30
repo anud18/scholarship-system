@@ -25,4 +25,4 @@ describe('Jest Setup', () => {
     expect(document).toBeDefined()
     expect(window).toBeDefined()
   })
-}) 
+})

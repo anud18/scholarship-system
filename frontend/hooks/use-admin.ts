@@ -29,9 +29,9 @@ export function useAdminDashboard() {
     try {
       setIsStatsLoading(true)
       setError(null)
-      
+
       const response = await apiClient.admin.getDashboardStats()
-      
+
       if (response.success && response.data) {
         setStats(response.data)
       } else {
@@ -57,11 +57,11 @@ export function useAdminDashboard() {
     try {
       setIsRecentLoading(true)
       setError(null)
-      
+
       console.log('Fetching recent applications...')
       const response = await apiClient.admin.getRecentApplications(5)
       console.log('Recent applications response:', response)
-      
+
       if (response.success && response.data) {
         console.log('Setting recent applications:', response.data)
         setRecentApplications(response.data)
@@ -88,9 +88,9 @@ export function useAdminDashboard() {
     try {
       setIsAnnouncementsLoading(true)
       setError(null)
-      
+
       const response = await apiClient.admin.getSystemAnnouncements(5)
-      
+
       if (response.success && response.data) {
         setSystemAnnouncements(response.data)
       } else {
@@ -116,9 +116,9 @@ export function useAdminDashboard() {
     try {
       setIsLoading(true)
       setError(null)
-      
+
       const response = await apiClient.admin.getAllApplications(page, size, status)
-      
+
       if (response.success && response.data) {
         setAllApplications(response.data.items)
         setPagination({
@@ -143,22 +143,22 @@ export function useAdminDashboard() {
   ) => {
     try {
       setError(null)
-      
+
       const response = await apiClient.admin.updateApplicationStatus(
         applicationId,
         status,
         reviewNotes
       )
-      
+
       if (response.success && response.data) {
         // Update the application in the list
-        setAllApplications(prev => 
+        setAllApplications(prev =>
           prev.map(app => app.id === applicationId ? response.data! : app)
         )
-        
+
         // Refresh stats to reflect the change
         await fetchDashboardStats()
-        
+
         return response.data
       } else {
         throw new Error(response.message || 'Failed to update application status')
@@ -213,18 +213,18 @@ export function useCollegeApplications() {
     try {
       setIsLoading(true)
       setError(null)
-      
+
       // Build query parameters
       const params = new URLSearchParams()
       if (academicYear) params.append('academic_year', academicYear.toString())
       if (semester) params.append('semester', semester)
       if (scholarshipType) params.append('scholarship_type', scholarshipType)
-      
+
       const queryString = params.toString()
-      
+
       // Use the new college-specific endpoint
       const response = await apiClient.college.getApplicationsForReview(queryString)
-      
+
       if (response.success && response.data) {
         // Transform data to ensure consistent field mapping
         const transformedApplications = response.data.map((app: any) => ({
@@ -251,7 +251,7 @@ export function useCollegeApplications() {
   ) => {
     try {
       setError(null)
-      
+
       // For college role, we might need a different endpoint or the same admin one
       // For now, using admin endpoint - this should be role-based in backend
       const response = await apiClient.admin.updateApplicationStatus(
@@ -259,13 +259,13 @@ export function useCollegeApplications() {
         status,
         reviewNotes
       )
-      
+
       if (response.success && response.data) {
         // Update the application in the list
-        setApplications(prev => 
+        setApplications(prev =>
           prev.map(app => app.id === applicationId ? response.data! : app)
         )
-        
+
         return response.data
       } else {
         throw new Error(response.message || 'Failed to update application status')
@@ -299,7 +299,7 @@ export function useScholarshipSpecificApplications() {
   const [scholarshipStats, setScholarshipStats] = useState<Record<string, any>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+
   // Get user's scholarship permissions
   const { filterScholarshipsByPermission } = useScholarshipPermissions()
 
@@ -312,21 +312,21 @@ export function useScholarshipSpecificApplications() {
       const response = await apiClient.admin.getScholarshipStats()
       if (response.success && response.data) {
         const types = Object.keys(response.data)
-        
+
         // Filter scholarship types based on user permissions
         // Super admin has access to all scholarships
         let filteredTypes = types
         if (user.role === 'admin' || user.role === 'college') {
           // Create objects with both id and code for filtering
-          const scholarshipObjects = types.map(type => ({ 
+          const scholarshipObjects = types.map(type => ({
             id: response.data![type].id, // Use the actual scholarship ID
             code: type // Keep the code for reference
           }))
-          
+
           const filteredObjects = filterScholarshipsByPermission(scholarshipObjects)
           filteredTypes = filteredObjects.map(obj => obj.code) // Return the codes
         }
-        
+
         setScholarshipTypes(filteredTypes)
         // Filter stats to only include permitted scholarships
         const filteredStats: Record<string, any> = {}
@@ -355,27 +355,27 @@ export function useScholarshipSpecificApplications() {
     try {
       setIsLoading(true)
       setError(null)
-      
+
       console.log('Fetching scholarship types...')
       // First get scholarship types from backend (already filtered by permissions)
       const types = await fetchScholarshipTypes()
       console.log('Scholarship types received:', types)
-      
+
       if (!types || types.length === 0) {
         console.log('No scholarship types found, setting empty applications')
         setApplicationsByType({})
         return
       }
-      
+
       const applications: Record<string, Application[]> = {}
-      
+
       // Fetch applications for each scholarship type
       for (const type of types) {
         try {
           console.log(`Fetching applications for scholarship type: ${type}`)
           const response = await apiClient.admin.getApplicationsByScholarship(type)
           console.log(`Response for ${type}:`, response)
-          
+
           if (response.success && response.data) {
             applications[type] = response.data
             console.log(`Found ${response.data.length} applications for ${type}`)
@@ -388,7 +388,7 @@ export function useScholarshipSpecificApplications() {
           applications[type] = []
         }
       }
-      
+
       console.log('Final applications by type:', applications)
       setApplicationsByType(applications)
     } catch (err) {
@@ -400,8 +400,8 @@ export function useScholarshipSpecificApplications() {
   }, [isAuthenticated, user, fetchScholarshipTypes])
 
   const updateApplicationStatus = useCallback(async (
-    applicationId: number, 
-    status: string, 
+    applicationId: number,
+    status: string,
     comments?: string
   ) => {
     if (!user || !['admin', 'super_admin'].includes(user.role)) {
@@ -413,7 +413,7 @@ export function useScholarshipSpecificApplications() {
         status,
         comments
       })
-      
+
       if (response.success) {
         // Refresh data after successful update
         await fetchApplicationsByType()
@@ -458,9 +458,9 @@ export function useScholarshipReview() {
     try {
       setIsLoading(true)
       setError(null)
-      
+
       const response = await apiClient.admin.getScholarshipStats()
-      
+
       if (response.success && response.data) {
         setScholarshipStats(response.data)
       } else {
@@ -484,9 +484,9 @@ export function useScholarshipReview() {
 
     try {
       setError(null)
-      
+
       const response = await apiClient.admin.getApplicationsByScholarship(scholarshipCode, subType, status)
-      
+
       if (response.success && response.data) {
         setApplicationsByScholarship(prev => ({
           ...prev,
@@ -507,9 +507,9 @@ export function useScholarshipReview() {
 
     try {
       setError(null)
-      
+
       const response = await apiClient.admin.getScholarshipSubTypes(scholarshipCode)
-      
+
       if (response.success && response.data) {
         setSubTypeStats(prev => ({
           ...prev,
@@ -534,7 +534,7 @@ export function useScholarshipReview() {
 
     try {
       const response = await apiClient.admin.updateApplicationStatus(applicationId, status, reviewNotes)
-      
+
       if (response.success && response.data) {
         // Refresh scholarship stats after update
         await fetchScholarshipStats()
@@ -563,4 +563,4 @@ export function useScholarshipReview() {
     fetchSubTypeStats,
     updateApplicationStatus
   }
-} 
+}

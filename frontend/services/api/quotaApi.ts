@@ -24,7 +24,7 @@ const apiCall = async <T = any>(
 ): Promise<ApiResponse<T>> => {
   // Get auth token from localStorage if available
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-  
+
   const response = await fetch(`${API_BASE}${url}`, {
     headers: {
       'Content-Type': 'application/json',
@@ -33,12 +33,12 @@ const apiCall = async <T = any>(
     },
     ...options,
   })
-  
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
     throw new Error(errorData.detail || `API call failed: ${response.statusText}`)
   }
-  
+
   return response.json()
 }
 
@@ -120,8 +120,8 @@ export const quotaApi = {
 
     return {
       success: errors.length === 0,
-      message: errors.length > 0 
-        ? `Batch update completed with ${errors.length} errors` 
+      message: errors.length > 0
+        ? `Batch update completed with ${errors.length} errors`
         : 'All quotas updated successfully',
       data: results,
       errors: errors.length > 0 ? errors : undefined
@@ -136,9 +136,9 @@ export const quotaApi = {
     format: 'csv' | 'excel' = 'csv'
   ): Promise<Blob> => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-    const params = new URLSearchParams({ 
+    const params = new URLSearchParams({
       academic_year: academicYear,
-      format 
+      format
     })
 
     const response = await fetch(
@@ -164,7 +164,7 @@ export const quotaApi = {
     academicYear: string,
     limit: number = 50
   ): Promise<ApiResponse<any[]>> => {
-    const params = new URLSearchParams({ 
+    const params = new URLSearchParams({
       academic_year: academicYear,
       limit: limit.toString()
     })

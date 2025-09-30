@@ -172,7 +172,7 @@ async def get_available_semesters() -> dict:
     taiwan_year = current_year - 1911
 
     # Determine current semester (8月以前為第二學期，8月以後為第一學期)
-    current_semester = Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
+    current_semester = Semester.first.value if current_month >= 8 else Semester.second.value
 
     # Generate academic years: current - 2 to current + 2
     academic_years = []
@@ -190,16 +190,16 @@ async def get_available_semesters() -> dict:
     # Semester options using system enums
     semesters = [
         {
-            "value": Semester.FIRST.value,
+            "value": Semester.first.value,
             "label": "第一學期",
             "label_en": "First Semester",
-            "is_current": current_semester == Semester.FIRST.value,
+            "is_current": current_semester == Semester.first.value,
         },
         {
-            "value": Semester.SECOND.value,
+            "value": Semester.second.value,
             "label": "第二學期",
             "label_en": "Second Semester",
-            "is_current": current_semester == Semester.SECOND.value,
+            "is_current": current_semester == Semester.second.value,
         },
     ]
 
@@ -224,7 +224,7 @@ async def get_semester_academic_year_combinations(
     current_year = datetime.now().year
     current_month = datetime.now().month
     taiwan_year = current_year - 1911
-    current_semester = Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
+    current_semester = Semester.first.value if current_month >= 8 else Semester.second.value
 
     combinations = []
 
@@ -232,9 +232,9 @@ async def get_semester_academic_year_combinations(
     for year_offset in range(-2, 3):
         year = taiwan_year + year_offset
 
-        for semester in [Semester.FIRST.value, Semester.SECOND.value]:
-            semester_label = "第一學期" if semester == Semester.FIRST.value else "第二學期"
-            semester_label_en = "First Semester" if semester == Semester.FIRST.value else "Second Semester"
+        for semester in [Semester.first.value, Semester.second.value]:
+            semester_label = "第一學期" if semester == Semester.first.value else "第二學期"
+            semester_label_en = "First Semester" if semester == Semester.first.value else "Second Semester"
 
             combination = {
                 "value": f"{year}-{semester}",
@@ -243,7 +243,7 @@ async def get_semester_academic_year_combinations(
                 "label": f"{year}學年{semester_label}",
                 "label_en": f"Academic Year {year + 1911}-{year + 1912} {semester_label_en}",
                 "is_current": year == taiwan_year and semester == current_semester,
-                "sort_order": year * 10 + (1 if semester == Semester.FIRST.value else 2),
+                "sort_order": year * 10 + (1 if semester == Semester.first.value else 2),
             }
 
             # Add statistics if requested
@@ -299,8 +299,8 @@ async def get_active_academic_periods(
     active_periods = []
 
     for row in result:
-        semester_label = "第一學期" if row.semester == Semester.FIRST.value else "第二學期"
-        semester_label_en = "First Semester" if row.semester == Semester.FIRST.value else "Second Semester"
+        semester_label = "第一學期" if row.semester == Semester.first.value else "第二學期"
+        semester_label_en = "First Semester" if row.semester == Semester.first.value else "Second Semester"
 
         active_periods.append(
             {
@@ -332,7 +332,7 @@ async def get_scholarship_periods(
     current_year = datetime.now().year
     current_month = datetime.now().month
     taiwan_year = current_year - 1911
-    current_semester = Semester.FIRST.value if current_month >= 8 else Semester.SECOND.value
+    current_semester = Semester.first.value if current_month >= 8 else Semester.second.value
 
     # Get scholarship info if specified
     scholarship_cycle = None
@@ -353,11 +353,11 @@ async def get_scholarship_periods(
             scholarship_name = scholarship.name
 
     # Use provided cycle or detected cycle
-    cycle = application_cycle or (scholarship_cycle.value if scholarship_cycle else ApplicationCycle.SEMESTER.value)
+    cycle = application_cycle or (scholarship_cycle.value if scholarship_cycle else ApplicationCycle.semester.value)
 
     periods = []
 
-    if cycle == ApplicationCycle.YEARLY.value:
+    if cycle == ApplicationCycle.yearly.value:
         # 學年制：只顯示學年選項
         for year_offset in range(-3, 3):
             year = taiwan_year + year_offset
@@ -378,9 +378,9 @@ async def get_scholarship_periods(
         for year_offset in range(-2, 3):
             year = taiwan_year + year_offset
 
-            for semester in [Semester.FIRST.value, Semester.SECOND.value]:
-                semester_label = "第一學期" if semester == Semester.FIRST.value else "第二學期"
-                semester_label_en = "First Semester" if semester == Semester.FIRST.value else "Second Semester"
+            for semester in [Semester.first.value, Semester.second.value]:
+                semester_label = "第一學期" if semester == Semester.first.value else "第二學期"
+                semester_label_en = "First Semester" if semester == Semester.first.value else "Second Semester"
 
                 periods.append(
                     {
@@ -391,7 +391,7 @@ async def get_scholarship_periods(
                         "label_en": f"Academic Year {year + 1911}-{year + 1912} {semester_label_en}",
                         "is_current": year == taiwan_year and semester == current_semester,
                         "cycle": "semester",
-                        "sort_order": year * 10 + (1 if semester == Semester.FIRST.value else 2),
+                        "sort_order": year * 10 + (1 if semester == Semester.first.value else 2),
                     }
                 )
 
@@ -403,7 +403,7 @@ async def get_scholarship_periods(
         "cycle": cycle,
         "scholarship_name": scholarship_name,
         "current_period": f"{taiwan_year}-{current_semester}"
-        if cycle == ApplicationCycle.SEMESTER.value
+        if cycle == ApplicationCycle.semester.value
         else f"{taiwan_year}",
         "total_periods": len(periods),
     }
@@ -424,7 +424,7 @@ async def get_scholarship_types_with_cycles(
 
     for scholarship in scholarships:
         cycle = (
-            scholarship.application_cycle.value if scholarship.application_cycle else ApplicationCycle.SEMESTER.value
+            scholarship.application_cycle.value if scholarship.application_cycle else ApplicationCycle.semester.value
         )
         cycle_counts[cycle] += 1
 
@@ -436,8 +436,8 @@ async def get_scholarship_types_with_cycles(
                 "name_en": scholarship.name_en,
                 "category": scholarship.category,
                 "application_cycle": cycle,
-                "cycle_label": "學年制" if cycle == ApplicationCycle.YEARLY.value else "學期制",
-                "cycle_label_en": "Yearly" if cycle == ApplicationCycle.YEARLY.value else "Semester",
+                "cycle_label": "學年制" if cycle == ApplicationCycle.yearly.value else "學期制",
+                "cycle_label_en": "Yearly" if cycle == ApplicationCycle.yearly.value else "Semester",
             }
         )
 

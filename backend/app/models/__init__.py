@@ -31,6 +31,7 @@ from app.models.student import (  # 查詢表模型 (Reference data only); Helpe
 from app.models.system_setting import SystemSetting
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile, UserProfileHistory
+from app.models.professor_student import ProfessorStudentRelationship
 
 __all__ = [
     "User",
@@ -80,4 +81,6 @@ __all__ = [
     "CollegeRanking",
     "CollegeRankingItem",
     "QuotaDistribution",
+    # Professor-Student relationship model
+    "ProfessorStudentRelationship",
 ]

@@ -31,7 +31,7 @@ class TestDeveloperProfileService:
             full_name="Test Developer Student",
             chinese_name="測試開發者學生",
             english_name="Test Dev Student",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
             email_domain="test.dev",
             custom_attributes={"gpa": 3.8, "major": "CS"},
         )
@@ -43,7 +43,7 @@ class TestDeveloperProfileService:
         assert user.full_name == "Test Developer Student"
         assert user.chinese_name == "測試開發者學生"
         assert user.english_name == "Test Dev Student"
-        assert user.role == UserRole.STUDENT
+        assert user.role == UserRole.student
         assert user.is_active is True
         assert user.is_verified is True
 
@@ -53,7 +53,7 @@ class TestDeveloperProfileService:
         service = DeveloperProfileService(db_session)
 
         # Create initial user
-        profile1 = DeveloperProfile(developer_id="testdev", full_name="Initial Name", role=UserRole.STUDENT)
+        profile1 = DeveloperProfile(developer_id="testdev", full_name="Initial Name", role=UserRole.student)
         user1 = await service.create_developer_user("testdev", profile1)
         initial_id = user1.id
 
@@ -62,7 +62,7 @@ class TestDeveloperProfileService:
             developer_id="testdev",
             full_name="Updated Name",
             chinese_name="更新名稱",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
         )
         user2 = await service.create_developer_user("testdev", profile2)
 
@@ -77,9 +77,9 @@ class TestDeveloperProfileService:
 
         # Create multiple profiles for same developer
         profiles = [
-            DeveloperProfile(developer_id="testdev", full_name="Student", role=UserRole.STUDENT),
-            DeveloperProfile(developer_id="testdev", full_name="Professor", role=UserRole.PROFESSOR),
-            DeveloperProfile(developer_id="testdev", full_name="Admin", role=UserRole.ADMIN),
+            DeveloperProfile(developer_id="testdev", full_name="Student", role=UserRole.student),
+            DeveloperProfile(developer_id="testdev", full_name="Professor", role=UserRole.professor),
+            DeveloperProfile(developer_id="testdev", full_name="Admin", role=UserRole.admin),
         ]
 
         for profile in profiles:
@@ -89,7 +89,7 @@ class TestDeveloperProfileService:
 
         assert len(users) == 3
         roles = {user.role for user in users}
-        assert roles == {UserRole.STUDENT, UserRole.PROFESSOR, UserRole.ADMIN}
+        assert roles == {UserRole.student, UserRole.professor, UserRole.admin}
 
     @pytest.mark.asyncio
     async def test_delete_developer_user(self, db_session: AsyncSession):
@@ -97,11 +97,11 @@ class TestDeveloperProfileService:
         service = DeveloperProfileService(db_session)
 
         # Create user
-        profile = DeveloperProfile(developer_id="testdev", full_name="Test User", role=UserRole.STUDENT)
+        profile = DeveloperProfile(developer_id="testdev", full_name="Test User", role=UserRole.student)
         await service.create_developer_user("testdev", profile)
 
         # Delete user
-        deleted = await service.delete_developer_user("testdev", UserRole.STUDENT)
+        deleted = await service.delete_developer_user("testdev", UserRole.student)
         assert deleted is True
 
         # Verify deletion
@@ -115,8 +115,8 @@ class TestDeveloperProfileService:
 
         # Create multiple users
         profiles = [
-            DeveloperProfile(developer_id="testdev", full_name="User1", role=UserRole.STUDENT),
-            DeveloperProfile(developer_id="testdev", full_name="User2", role=UserRole.PROFESSOR),
+            DeveloperProfile(developer_id="testdev", full_name="User1", role=UserRole.student),
+            DeveloperProfile(developer_id="testdev", full_name="User2", role=UserRole.professor),
         ]
 
         for profile in profiles:
@@ -136,9 +136,9 @@ class TestDeveloperProfileService:
         service = DeveloperProfileService(db_session)
 
         profiles = [
-            DeveloperProfile(developer_id="testdev", full_name="Student", role=UserRole.STUDENT),
-            DeveloperProfile(developer_id="testdev", full_name="Professor", role=UserRole.PROFESSOR),
-            DeveloperProfile(developer_id="testdev", full_name="Admin", role=UserRole.ADMIN),
+            DeveloperProfile(developer_id="testdev", full_name="Student", role=UserRole.student),
+            DeveloperProfile(developer_id="testdev", full_name="Professor", role=UserRole.professor),
+            DeveloperProfile(developer_id="testdev", full_name="Admin", role=UserRole.admin),
         ]
 
         users = await service.create_developer_test_suite("testdev", profiles)
@@ -155,9 +155,9 @@ class TestDeveloperProfileService:
 
         # Create users for different developers
         profiles = [
-            ("dev1", UserRole.STUDENT),
-            ("dev2", UserRole.PROFESSOR),
-            ("dev1", UserRole.ADMIN),  # dev1 has multiple profiles
+            ("dev1", UserRole.student),
+            ("dev2", UserRole.professor),
+            ("dev1", UserRole.admin),  # dev1 has multiple profiles
         ]
 
         for dev_id, role in profiles:
@@ -177,7 +177,7 @@ class TestDeveloperProfileService:
 
         assert len(users) == 3  # Student, Professor, Admin
         roles = {user.role for user in users}
-        assert roles == {UserRole.STUDENT, UserRole.PROFESSOR, UserRole.ADMIN}
+        assert roles == {UserRole.student, UserRole.professor, UserRole.admin}
 
         # Verify names are properly set
         for user in users:
@@ -193,7 +193,7 @@ class TestDeveloperProfileManager:
         """Test creating a custom profile"""
         profile = DeveloperProfileManager.create_custom_profile(
             developer_id="testdev",
-            role=UserRole.STUDENT,
+            role=UserRole.student,
             full_name="Custom Student",
             chinese_name="自定義學生",
             gpa=3.9,
@@ -201,7 +201,7 @@ class TestDeveloperProfileManager:
         )
 
         assert profile.developer_id == "testdev"
-        assert profile.role == UserRole.STUDENT
+        assert profile.role == UserRole.student
         assert profile.full_name == "Custom Student"
         assert profile.chinese_name == "自定義學生"
         assert profile.custom_attributes["gpa"] == 3.9
@@ -219,7 +219,7 @@ class TestDeveloperProfileManager:
 
         # Verify all are students
         for profile in profiles:
-            assert profile.role == UserRole.STUDENT
+            assert profile.role == UserRole.student
             assert "testdev" in profile.full_name.lower()
 
     def test_create_staff_profiles(self):
@@ -229,7 +229,7 @@ class TestDeveloperProfileManager:
         assert len(profiles) == 3  # Professor, College, Admin
 
         roles = {p.role for p in profiles}
-        expected_roles = {UserRole.PROFESSOR, UserRole.COLLEGE, UserRole.ADMIN}
+        expected_roles = {UserRole.professor, UserRole.college, UserRole.admin}
         assert roles == expected_roles
 
         # Verify all have testdev in name

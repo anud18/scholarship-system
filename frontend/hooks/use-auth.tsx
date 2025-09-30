@@ -30,15 +30,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Check if user is already authenticated (from localStorage)
       const token = localStorage.getItem('auth_token')
       const userJson = localStorage.getItem('user') || localStorage.getItem('dev_user')
-      
+
       console.log('Found token:', !!token, 'Found user data:', !!userJson)
-      
+
       if (token && userJson) {
         try {
           const userData = JSON.parse(userJson)
           console.log('Parsed user data:', userData)
           apiClient.setToken(token)
-          setUser({ ...userData, name: userData.full_name || userData.name })
+          // Convert role to lowercase for frontend consistency
+          const normalizedUser = {
+            ...userData,
+            name: userData.full_name || userData.name,
+            role: userData.role?.toLowerCase()
+          }
+          setUser(normalizedUser)
           console.log('Authentication restored from localStorage')
         } catch (err) {
           console.error('Failed to parse stored user data:', err)
@@ -56,31 +62,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = useCallback((token: string, userData: User) => {
-    console.log('🔐 useAuth.login() called with:', { 
-      token: !!token, 
+    console.log('🔐 useAuth.login() called with:', {
+      token: !!token,
       tokenPreview: token ? `${token.substring(0, 20)}...` : 'none',
-      userData 
+      userData
     })
-    
+
     try {
       console.log('🌐 Setting API client token...')
       apiClient.setToken(token)
       console.log('✅ API client token set')
-      
+
       console.log('💾 Storing token in localStorage...')
       localStorage.setItem("auth_token", token)
       console.log('💾 Storing user data in localStorage...')
       localStorage.setItem("user", JSON.stringify(userData))
-      
+
       // Also store as dev_user for backwards compatibility
       const devUser = {
         ...userData,
         name: userData.full_name || userData.name,
+        role: userData.role?.toLowerCase()
       }
       console.log('💾 Storing dev_user for backwards compatibility...')
       localStorage.setItem('dev_user', JSON.stringify(devUser))
-      
-      const finalUser = { ...userData, name: userData.full_name || userData.name }
+      const finalUser = {
+        ...userData,
+        name: userData.full_name || userData.name,
+        role: userData.role?.toLowerCase() as 'student' | 'professor' | 'college' | 'admin' | 'super_admin'
+      }
       console.log('👤 Setting user state:', finalUser)
       setUser(finalUser)
       setError(null)
@@ -104,14 +114,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('dev_user')
     setUser(null)
     setError(null)
-    
+
     // Redirect to dev-login in development mode
     if (typeof window !== 'undefined') {
-      const isLocalhost = window.location.hostname === 'localhost' || 
+      const isLocalhost = window.location.hostname === 'localhost' ||
                          window.location.hostname === '127.0.0.1' ||
                          window.location.hostname.startsWith('192.168.') ||
                          window.location.hostname.includes('dev')
-      
+
       if (isLocalhost) {
         router.push('/dev-login')
       } else {
@@ -125,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setError(null)
       const response = await apiClient.users.updateProfile(userData)
-      
+
       if (response.success && response.data) {
         // Map full_name to name for component compatibility
         const updatedUser = {
@@ -164,4 +174,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within AuthProvider')
   }
   return context
-} 
+}

@@ -19,4 +19,4 @@ npm install
 echo "✅ Dependencies regenerated successfully!"
 echo "📝 Don't forget to commit the new package-lock.json file:"
 echo "   git add package-lock.json"
-echo "   git commit -m 'fix: regenerate package-lock.json with updated dependencies'" 
+echo "   git commit -m 'fix: regenerate package-lock.json with updated dependencies'"

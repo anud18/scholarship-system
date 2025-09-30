@@ -318,7 +318,7 @@ curl -X POST http://localhost:8000/api/v1/auth/mock-sso/login \
 3. **CI/CD**: Include mock SSO in automated testing pipelines
 4. **Documentation**: Keep this documentation updated with new mock users
 
-This mock SSO implementation significantly improves development productivity by eliminating authentication complexity while maintaining security in production environments. 
+This mock SSO implementation significantly improves development productivity by eliminating authentication complexity while maintaining security in production environments.
 
 This document describes the mock SSO (Single Sign-On) implementation for the scholarship management system, designed to simplify development and testing workflows.
 
@@ -638,4 +638,4 @@ curl -X POST http://localhost:8000/api/v1/auth/mock-sso/login \
 3. **CI/CD**: Include mock SSO in automated testing pipelines
 4. **Documentation**: Keep this documentation updated with new mock users
 
-This mock SSO implementation significantly improves development productivity by eliminating authentication complexity while maintaining security in production environments. 
+This mock SSO implementation significantly improves development productivity by eliminating authentication complexity while maintaining security in production environments.

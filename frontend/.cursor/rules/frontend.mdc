@@ -38,11 +38,11 @@ interface ComponentProps {
 
 export function ComponentName({ userId, applicationData }: ComponentProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const handleFormSubmit = async (formData: FormData) => {
     // Handle form submission
   };
-  
+
   return (
     <div className="p-6">
       {/* Component content */}
@@ -76,7 +76,7 @@ export function ApplicationForm() {
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
   });
-  
+
   const onSubmit = async (data: FormData) => {
     // Handle submission
   };
@@ -93,11 +93,11 @@ const submitApplication = async (data: ApplicationData) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  
+
   if (!response.ok) {
     throw new Error('Failed to submit application');
   }
-  
+
   return response.json();
 };
 ```
@@ -130,7 +130,7 @@ describe('StudentPortal Component', () => {
     render(<StudentPortal userId="123" />);
     expect(screen.getByRole('form')).toBeInTheDocument();
   });
-  
+
   it('should handle form submission', async () => {
     render(<StudentPortal userId="123" />);
     const submitButton = screen.getByRole('button', { name: /submit/i });
@@ -174,7 +174,7 @@ import { useTranslation } from 'next-i18next';
 
 export function StudentPortal() {
   const { t } = useTranslation('common');
-  
+
   return (
     <h1>{t('welcome_message')}</h1>
   );
@@ -210,11 +210,11 @@ export function StudentPortal() {
 export function useApplicationSubmission() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const submitApplication = async (data: ApplicationData) => {
     setIsSubmitting(true);
     setError(null);
-    
+
     try {
       await submitApplicationApi(data);
     } catch (err) {
@@ -223,7 +223,7 @@ export function useApplicationSubmission() {
       setIsSubmitting(false);
     }
   };
-  
+
   return { submitApplication, isSubmitting, error };
 }
 ```
@@ -248,4 +248,4 @@ export function useApplicationSubmission() {
 ### Mobile Responsiveness
 - Mobile-first design approach
 - Touch-friendly interface
-- Optimized for small screens 
+- Optimized for small screens

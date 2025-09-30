@@ -23,21 +23,21 @@ export function FilePreviewDialog({ isOpen, onClose, file, locale }: FilePreview
 
   const handleOpenInNewWindow = () => {
     if (!file) return
-    
+
     // 使用前端URL在新視窗開啟，確保包含token
-    const frontendUrl = file.url.startsWith('/api/v1/preview') 
-      ? file.url 
+    const frontendUrl = file.url.startsWith('/api/v1/preview')
+      ? file.url
       : file.url // 如果已經是前端URL就直接使用
-    
+
     window.open(frontendUrl, '_blank')
   }
 
   const handleDownload = () => {
     if (!file) return
-    
+
     // 如果有專門的下載URL，使用它；否則使用預覽URL
     const downloadUrl = file.downloadUrl || file.url
-    
+
     // 創建一個隱藏的 a 標籤來下載文件
     const link = document.createElement('a')
     link.href = downloadUrl
@@ -61,7 +61,7 @@ export function FilePreviewDialog({ isOpen, onClose, file, locale }: FilePreview
             {file.filename}
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="flex-1 overflow-hidden">
           {file.type.includes('pdf') ? (
             <iframe
@@ -97,7 +97,7 @@ export function FilePreviewDialog({ isOpen, onClose, file, locale }: FilePreview
               </Button>
             </div>
           )}
-          
+
           {isLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/80">
               <div className="text-center">
@@ -108,7 +108,7 @@ export function FilePreviewDialog({ isOpen, onClose, file, locale }: FilePreview
               </div>
             </div>
           )}
-          
+
           <div className="flex justify-between items-center mt-4">
             <div className="flex gap-2">
               <Button
@@ -137,4 +137,4 @@ export function FilePreviewDialog({ isOpen, onClose, file, locale }: FilePreview
       </DialogContent>
     </Dialog>
   )
-} 
+}

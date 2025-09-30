@@ -233,7 +233,7 @@ class TestApplicationService:
             service.db, "add"
         ) as mock_add, patch.object(service.db, "commit") as mock_commit, patch.object(
             service.db, "refresh"
-        ) as mock_refresh, patch.object(
+        ), patch.object(
             service.student_service,
             "get_student_snapshot",
             return_value=mock_student_snapshot,
@@ -293,7 +293,7 @@ class TestApplicationService:
             service.db, "add"
         ) as mock_add, patch.object(service.db, "commit") as mock_commit, patch.object(
             service.db, "refresh"
-        ) as mock_refresh, patch.object(
+        ), patch.object(
             service.student_service,
             "get_student_snapshot",
             return_value=mock_student_snapshot,
@@ -337,7 +337,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -361,7 +361,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -383,7 +383,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.ADMIN
+        mock_user.role = UserRole.admin
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -406,7 +406,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -432,7 +432,7 @@ class TestApplicationService:
 
             assert result == mock_application
             assert mock_application.status == ApplicationStatus.DRAFT.value
-            assert mock_application.is_renewal == True
+            assert mock_application.is_renewal
             mock_commit.assert_called_once()
             mock_refresh.assert_called_once()
 
@@ -444,7 +444,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -471,7 +471,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -498,7 +498,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
@@ -520,7 +520,7 @@ class TestApplicationService:
 
         mock_user = Mock(spec=User)
         mock_user.id = user_id
-        mock_user.role = UserRole.STUDENT
+        mock_user.role = UserRole.student
 
         mock_application = Mock(spec=Application)
         mock_application.id = application_id

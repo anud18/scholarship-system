@@ -182,7 +182,7 @@ async def remove_admin_from_scholarship(
 
     try:
         pre_auth_service = PreAuthorizationService(db)
-        success = await pre_auth_service.remove_admin_from_scholarship(
+        await pre_auth_service.remove_admin_from_scholarship(
             admin_nycu_id=admin_nycu_id,
             scholarship_id=scholarship_id,
             removed_by=current_user.nycu_id,

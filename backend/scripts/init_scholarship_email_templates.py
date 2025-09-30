@@ -10,12 +10,12 @@ import sys
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlalchemy import select
+from sqlalchemy import select  # noqa: E402
 
-from app.db.session import AsyncSessionLocal
-from app.models.scholarship import ScholarshipType
-from app.models.user import User, UserRole
-from app.services.scholarship_email_template_service import ScholarshipEmailTemplateService
+from app.db.session import AsyncSessionLocal  # noqa: E402
+from app.models.scholarship import ScholarshipType  # noqa: E402
+from app.models.user import User, UserRole  # noqa: E402
+from app.services.scholarship_email_template_service import ScholarshipEmailTemplateService  # noqa: E402
 
 
 async def initialize_scholarship_email_templates():
@@ -33,7 +33,7 @@ async def initialize_scholarship_email_templates():
             print(f"   - {scholarship.name} (ID: {scholarship.id})")
 
         # Get a super admin user to perform the operations
-        admin_stmt = select(User).where(User.role == UserRole.SUPER_ADMIN).limit(1)
+        admin_stmt = select(User).where(User.role == UserRole.super_admin).limit(1)
         admin_result = await db.execute(admin_stmt)
         admin_user = admin_result.scalar_one_or_none()
 
@@ -45,7 +45,7 @@ async def initialize_scholarship_email_templates():
                 nycu_id="system",
                 name="System Admin",
                 email="system@admin.local",
-                role=UserRole.SUPER_ADMIN,
+                role=UserRole.super_admin,
             )
 
         print(f"👤 Using admin user: {admin_user.name} ({admin_user.role})")
@@ -102,7 +102,7 @@ async def show_template_summary():
             nycu_id="system",
             name="System Query",
             email="system@query.local",
-            role=UserRole.SUPER_ADMIN,
+            role=UserRole.super_admin,
         )
 
         for scholarship in scholarships:

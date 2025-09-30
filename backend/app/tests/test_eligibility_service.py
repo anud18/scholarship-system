@@ -26,21 +26,21 @@ class TestEligibilityServiceDevMode:
         with patch("app.services.eligibility_service.settings") as mock_settings:
             mock_settings.debug = True
             mock_settings.environment = "production"
-            assert service._is_dev_mode() == True
+            assert service._is_dev_mode()
 
     def test_is_dev_mode_environment_development(self, service):
         """Test dev mode detection with environment=development"""
         with patch("app.services.eligibility_service.settings") as mock_settings:
             mock_settings.debug = False
             mock_settings.environment = "development"
-            assert service._is_dev_mode() == True
+            assert service._is_dev_mode()
 
     def test_is_dev_mode_production(self, service):
         """Test dev mode detection in production"""
         with patch("app.services.eligibility_service.settings") as mock_settings:
             mock_settings.debug = False
             mock_settings.environment = "production"
-            assert service._is_dev_mode() == False
+            assert not service._is_dev_mode()
 
     def test_should_bypass_whitelist_dev_enabled(self, service):
         """Test whitelist bypass in dev mode"""
@@ -49,7 +49,7 @@ class TestEligibilityServiceDevMode:
             {"BYPASS_WHITELIST": True},
         ):
             mock_settings.debug = True
-            assert service._should_bypass_whitelist() == True
+            assert service._should_bypass_whitelist()
 
     def test_should_bypass_whitelist_dev_disabled(self, service):
         """Test whitelist bypass disabled"""
@@ -58,7 +58,7 @@ class TestEligibilityServiceDevMode:
             {"BYPASS_WHITELIST": False},
         ):
             mock_settings.debug = True
-            assert service._should_bypass_whitelist() == False
+            assert not service._should_bypass_whitelist()
 
     def test_should_bypass_application_period_enabled(self, service):
         """Test application period bypass in dev mode"""
@@ -67,7 +67,7 @@ class TestEligibilityServiceDevMode:
             {"ALWAYS_OPEN_APPLICATION": True},
         ):
             mock_settings.debug = True
-            assert service._should_bypass_application_period() == True
+            assert service._should_bypass_application_period()
 
 
 @pytest.mark.asyncio
@@ -108,7 +108,7 @@ class TestEligibilityServiceBasicChecks:
         with patch.object(service, "_should_bypass_application_period", return_value=False):
             is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
-        assert is_eligible == False
+        assert not is_eligible
         assert "獎學金配置未啟用" in reasons
 
     async def test_check_ineffective_configuration(self, service, active_config, student_data):
@@ -118,7 +118,7 @@ class TestEligibilityServiceBasicChecks:
         with patch.object(service, "_should_bypass_application_period", return_value=False):
             is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
-        assert is_eligible == False
+        assert not is_eligible
         assert "不在獎學金有效期間內" in reasons
 
     async def test_check_outside_application_period(self, service, active_config, student_data):
@@ -131,7 +131,7 @@ class TestEligibilityServiceBasicChecks:
         ):
             is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
-        assert is_eligible == False
+        assert not is_eligible
         assert "不在申請期間內" in reasons
 
     async def test_check_within_application_period(self, service, active_config, student_data):
@@ -141,7 +141,7 @@ class TestEligibilityServiceBasicChecks:
         ):
             is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
-        assert is_eligible == True
+        assert is_eligible
         assert len(reasons) == 0
 
     async def test_check_within_renewal_period(self, service, active_config, student_data):
@@ -159,7 +159,7 @@ class TestEligibilityServiceBasicChecks:
         ):
             is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
-        assert is_eligible == True
+        assert is_eligible
         assert len(reasons) == 0
 
     async def test_check_bypass_application_period(self, service, active_config, student_data):
@@ -173,7 +173,7 @@ class TestEligibilityServiceBasicChecks:
         ):
             is_eligible, reasons = await service.check_student_eligibility(student_data, active_config)
 
-        assert is_eligible == True
+        assert is_eligible
         assert len(reasons) == 0
 
 
@@ -209,7 +209,7 @@ class TestEligibilityServiceWhitelist:
         ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
             is_eligible, reasons = await service.check_student_eligibility(student_data, whitelist_config)
 
-        assert is_eligible == True
+        assert is_eligible
         assert len(reasons) == 0
 
     async def test_whitelist_student_denied_dict(self, service, whitelist_config):
@@ -221,7 +221,7 @@ class TestEligibilityServiceWhitelist:
         ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
             is_eligible, reasons = await service.check_student_eligibility(student_data, whitelist_config)
 
-        assert is_eligible == False
+        assert not is_eligible
         assert "未在白名單中" in reasons
 
     async def test_whitelist_student_allowed_list(self, service, whitelist_config):
@@ -234,7 +234,7 @@ class TestEligibilityServiceWhitelist:
         ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
             is_eligible, reasons = await service.check_student_eligibility(student_data, whitelist_config)
 
-        assert is_eligible == True
+        assert is_eligible
         assert len(reasons) == 0
 
     async def test_whitelist_bypass(self, service, whitelist_config):
@@ -246,7 +246,7 @@ class TestEligibilityServiceWhitelist:
         ), patch.object(service, "_check_scholarship_rules", return_value=(True, [])):
             is_eligible, reasons = await service.check_student_eligibility(student_data, whitelist_config)
 
-        assert is_eligible == True
+        assert is_eligible
         assert len(reasons) == 0
 
 
@@ -293,7 +293,7 @@ class TestEligibilityServiceDetailedCheck:
                 details,
             ) = await service.get_detailed_eligibility_check(student_data, active_config)
 
-        assert is_eligible == True
+        assert is_eligible
         assert len(reasons) == 0
         assert "passed" in details
         assert "warnings" in details
@@ -311,6 +311,6 @@ class TestEligibilityServiceDetailedCheck:
                 details,
             ) = await service.get_detailed_eligibility_check(student_data, active_config)
 
-        assert is_eligible == False
+        assert not is_eligible
         assert "獎學金配置未啟用" in reasons
         assert details == {"passed": [], "warnings": [], "errors": []}

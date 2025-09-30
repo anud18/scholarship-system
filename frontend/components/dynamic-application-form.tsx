@@ -84,7 +84,7 @@ export function DynamicApplicationForm({
       setError(null)
 
       const response = await api.applicationFields.getFormConfig(scholarshipType)
-      
+
       if (response.success && response.data) {
         setFormConfig(response.data)
       } else {
@@ -116,7 +116,7 @@ export function DynamicApplicationForm({
     // 從文件 URL 提取檔名
     const documentUrl = document.existing_file_url
     const filename = documentUrl.split('/').pop()?.split('?')[0] || 'bank_document'
-    
+
     // 從 URL 中提取 token（如果有的話）
     let token = ''
     const urlParts = documentUrl.split('?')
@@ -124,31 +124,31 @@ export function DynamicApplicationForm({
       const urlParams = new URLSearchParams(urlParts[1])
       token = urlParams.get('token') || ''
     }
-    
+
     // 如果 URL 中沒有 token，嘗試從存儲中獲取
     if (!token) {
-      token = localStorage.getItem('auth_token') || 
-              localStorage.getItem('token') || 
-              sessionStorage.getItem('auth_token') || 
-              sessionStorage.getItem('token') || 
+      token = localStorage.getItem('auth_token') ||
+              localStorage.getItem('token') ||
+              sessionStorage.getItem('auth_token') ||
+              sessionStorage.getItem('token') ||
               ''
-      
+
       if (!token) {
         console.error('No authentication token available')
         return null
       }
     }
-    
+
     // 對於個人資料的文件，使用檔名作為 fileId
     const fileId = filename
     const fileType = encodeURIComponent('存摺封面')
-    
+
     // 使用傳遞的用戶ID或預設值
     const userId = currentUserId || 1
-    
+
     // 建立預覽 URL
     const previewUrl = `/api/v1/preview?fileId=${fileId}&filename=${encodeURIComponent(filename)}&type=${fileType}&userId=${userId}&token=${token}`
-    
+
     // 判斷文件類型
     let fileTypeDisplay = 'other'
     if (filename.toLowerCase().endsWith('.pdf')) {
@@ -156,7 +156,7 @@ export function DynamicApplicationForm({
     } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].some(ext => filename.toLowerCase().endsWith(ext))) {
       fileTypeDisplay = 'image'
     }
-    
+
     // 設定預覽文件資訊並打開modal
     setPreviewFile({
       url: previewUrl,
@@ -164,7 +164,7 @@ export function DynamicApplicationForm({
       type: fileTypeDisplay,
       downloadUrl: documentUrl // 使用原始URL作為下載連結
     })
-    
+
     setShowPreview(true)
   }
 
@@ -205,7 +205,7 @@ export function DynamicApplicationForm({
     const label = getFieldLabel(field)
     const placeholder = getFieldPlaceholder(field)
     const helpText = getFieldHelpText(field)
-    
+
     // Add fixed field indicator
     const isFixedField = field.is_fixed === true
 
@@ -235,8 +235,8 @@ export function DynamicApplicationForm({
             />
             {isFixedField && (
               <p className="text-sm text-blue-600">
-                {locale === "zh" 
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容" 
+                {locale === "zh"
+                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
                   : "This field has been auto-filled from your profile and can be modified"}
               </p>
             )}
@@ -272,8 +272,8 @@ export function DynamicApplicationForm({
             />
             {isFixedField && (
               <p className="text-sm text-blue-600">
-                {locale === "zh" 
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容" 
+                {locale === "zh"
+                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
                   : "This field has been auto-filled from your profile and can be modified"}
               </p>
             )}
@@ -305,8 +305,8 @@ export function DynamicApplicationForm({
             />
             {isFixedField && (
               <p className="text-sm text-blue-600">
-                {locale === "zh" 
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容" 
+                {locale === "zh"
+                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
                   : "This field has been auto-filled from your profile and can be modified"}
               </p>
             )}
@@ -340,8 +340,8 @@ export function DynamicApplicationForm({
             />
             {isFixedField && (
               <p className="text-sm text-blue-600">
-                {locale === "zh" 
-                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容" 
+                {locale === "zh"
+                  ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
                   : "This field has been auto-filled from your profile and can be modified"}
               </p>
             )}
@@ -470,7 +470,7 @@ export function DynamicApplicationForm({
             </Badge>
           )}
         </div>
-        
+
         {isFixedDocument && document.existing_file_url && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium">
@@ -493,8 +493,8 @@ export function DynamicApplicationForm({
                 </div>
                 <div className="flex items-center space-x-2">
                   {/* 預覽按鈕 */}
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     size="sm"
                     onClick={() => handlePreviewExistingFile(document)}
                   >
@@ -508,13 +508,13 @@ export function DynamicApplicationForm({
               </CardContent>
             </Card>
             <p className="text-xs text-blue-600">
-              {locale === "zh" 
-                ? "您可以上傳新檔案來替換現有檔案" 
+              {locale === "zh"
+                ? "您可以上傳新檔案來替換現有檔案"
                 : "You can upload a new file to replace the existing one"}
             </p>
           </div>
         )}
-        
+
         {description && (
           <p className="text-sm text-muted-foreground">{description}</p>
         )}
@@ -604,7 +604,7 @@ export function DynamicApplicationForm({
               {locale === "zh" ? "申請資訊" : "Application Information"}
             </CardTitle>
             <CardDescription>
-              {locale === "zh" 
+              {locale === "zh"
                 ? "請填寫所有必要資訊"
                 : "Please fill in all required information"}
             </CardDescription>
@@ -624,7 +624,7 @@ export function DynamicApplicationForm({
               {locale === "zh" ? "必要文件" : "Required Documents"}
             </CardTitle>
             <CardDescription>
-              {locale === "zh" 
+              {locale === "zh"
                 ? "請上傳所有必要文件"
                 : "Please upload all required documents"}
             </CardDescription>
@@ -639,15 +639,15 @@ export function DynamicApplicationForm({
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {locale === "zh" 
+            {locale === "zh"
               ? "此獎學金類型尚未設定申請要求"
               : "No application requirements configured for this scholarship type"}
           </AlertDescription>
         </Alert>
       )}
-      
+
       {/* File Preview Dialog */}
-      <FilePreviewDialog 
+      <FilePreviewDialog
         isOpen={showPreview}
         onClose={handleClosePreview}
         file={previewFile}
@@ -655,4 +655,4 @@ export function DynamicApplicationForm({
       />
     </div>
   )
-} 
+}

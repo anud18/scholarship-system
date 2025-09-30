@@ -16,9 +16,10 @@ import pytest
 from jose import jwt
 
 from app.core.config import settings
-from app.core.exceptions import (  # FileStorageError  # Not implemented yet
+from app.core.exceptions import (
     AuthorizationError,
     BusinessLogicError,
+    FileStorageError,
     NotFoundError,
     ValidationError,
 )
@@ -27,6 +28,86 @@ from app.core.security import create_access_token
 # Note: These utilities are defined in the tests for demonstration
 # In a real project, these would be imported from actual utility modules
 
+
+def parse_date_string(value: str) -> datetime:
+    """Parse ISO-8601 (with optional date-only) strings into aware datetimes."""
+    if not value:
+        raise ValueError("Date string cannot be empty")
+
+    normalized = value.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError as exc:  # pragma: no cover - exercised via tests
+        raise ValueError(f"Invalid date string: {value}") from exc
+
+
+def format_date_for_display(date: datetime, *, format_string: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """Format datetimes for UI display using the given format string."""
+    if date.tzinfo is None:
+        # Ensure consistent formatting by assuming UTC for naive datetimes in tests
+        date = date.replace(tzinfo=timezone.utc)
+    return date.astimezone(timezone.utc).strftime(format_string)
+
+
+def get_academic_year_from_date(date: datetime) -> int:
+    """Convert a Gregorian date into ROC academic year."""
+    roc_year = date.year - 1911
+    # Academic year rolls over in August; months before August belong to previous year
+    if date.month < 8:
+        roc_year -= 1
+    return roc_year
+
+
+def is_within_application_period(start_date: datetime, end_date: datetime) -> bool:
+    """Return True when the current time falls between start and end dates."""
+    now = datetime.now(timezone.utc)
+    return start_date <= now <= end_date
+
+
+_DEPARTMENT_DIRECTORY = {
+    "CS": {"name": "Computer Science", "college": "資訊學院"},
+    "CSIE": {"name": "Computer Science & Information Engineering", "college": "資訊學院"},
+    "EE": {"name": "Electrical Engineering", "college": "電機學院"},
+    "ECE": {"name": "Electrical and Computer Engineering", "college": "電機學院"},
+    "ME": {"name": "Mechanical Engineering", "college": "工學院"},
+    "CE": {"name": "Civil Engineering", "college": "工學院"},
+}
+
+_COLLEGE_TO_SYSTEM_CODE = {
+    "工學院": "ENG",
+    "電機學院": "EECS",
+    "資訊學院": "CS",
+    "理學院": "SCI",
+}
+
+
+def get_college_code(department_code: str) -> str | None:
+    """Return the college code associated with a department code."""
+    if department_code is None:
+        return None
+    info = _DEPARTMENT_DIRECTORY.get(department_code.upper())
+    if not info:
+        return "UNKNOWN"
+    return _COLLEGE_TO_SYSTEM_CODE.get(info["college"], "UNKNOWN")
+
+
+def get_department_info(department_code: str) -> dict | None:
+    """Return metadata for a department if it exists."""
+    if not department_code:
+        return None
+    return _DEPARTMENT_DIRECTORY.get(department_code.upper())
+
+
+def validate_student_department(department_code: str) -> bool:
+    """Check whether the given department code is recognised."""
+    return bool(get_department_info(department_code))
+
+
+def map_college_to_system_code(college_name: str) -> str | None:
+    """Map a human-readable college name to the system code used in integrations."""
+    if not college_name:
+        return None
+    return _COLLEGE_TO_SYSTEM_CODE.get(college_name, "UNKNOWN")
 
 @pytest.mark.unit
 class TestSecurityFunctions:
@@ -471,7 +552,7 @@ class TestValidationHelpers:
             try:
                 validate_email(email)
                 is_valid = True
-            except:
+            except Exception:
                 is_valid = False
             assert is_valid is True
 

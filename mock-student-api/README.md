@@ -51,7 +51,7 @@ Get student basic information
 ```json
 {
   "account": "scholarship",
-  "action": "qrySoaaScholarshipStudent", 
+  "action": "qrySoaaScholarshipStudent",
   "stdcode": "313612215"
 }
 ```
@@ -116,7 +116,7 @@ Get student semester information
   "data": [
     {
       "trm_year": "113",
-      "trm_term": "2", 
+      "trm_term": "2",
       "trm_stdno": "313612215",
       "trm_studystatus": "1",
       "trm_ascore": "86.3",
@@ -147,7 +147,7 @@ Get student semester information
 # Start the main application services first
 docker-compose up -d
 
-# Then start the mock student API for development  
+# Then start the mock student API for development
 docker-compose -f docker-compose.dev.yml up -d mock-student-api
 ```
 
@@ -188,7 +188,7 @@ The API includes sample data for testing:
 #### Undergraduate Students
 - **313612215** - 陳弘穎 (CHEN,HUNG-YING) - 電機工程學系, 大學生
 
-#### Master's Students  
+#### Master's Students
 - **123456789** - 李美麗 (LEE,MEI-LI) - 資訊工程學系, 碩士生
 
 #### PhD Students - Comprehensive Test Scenarios
@@ -222,7 +222,7 @@ The API includes sample data for testing:
 
 ### Degree Types (`std_degree`, `trm_degree`)
 - `1` - 博士 (PhD)
-- `2` - 碩士 (Master's)  
+- `2` - 碩士 (Master's)
 - `3` - 大學 (Bachelor's)
 
 ### Study Status (`std_studingstatus`, `trm_studystatus`)
@@ -292,7 +292,7 @@ def test_api():
     base_url = "http://localhost:8080"
     hmac_key_hex = "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
     account = "scholarship"
-    
+
     # Create request
     timestamp = datetime.now(datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
     request_data = {
@@ -301,20 +301,20 @@ def test_api():
         "stdcode": "313612215"
     }
     request_body = json.dumps(request_data, separators=(',', ':'))
-    
+
     # Generate signature
     message = timestamp + request_body
     hmac_key = bytes.fromhex(hmac_key_hex)
     signature = hmac.new(hmac_key, message.encode('utf-8'), hashlib.sha256).hexdigest()
-    
+
     # Make request
     headers = {
         "Authorization": f"HMAC-SHA256:{timestamp}:{account}:{signature}",
         "Content-Type": "application/json;charset=UTF-8",
         "ENCODE_TYPE": "UTF-8"
     }
-    
-    response = requests.post(f"{base_url}/getsoaascholarshipstudent", 
+
+    response = requests.post(f"{base_url}/getsoaascholarshipstudent",
                            data=request_body, headers=headers)
     print(response.json())
 
@@ -327,7 +327,7 @@ test_api()
 - **401** - HMAC signature verification failed
 - **422** - Missing required headers
 
-### Validation Errors  
+### Validation Errors
 - **400** - Invalid account or action
 - **404** - Student or term data not found
 

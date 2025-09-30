@@ -9,16 +9,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
-import { 
-  FileText, 
-  Users, 
-  Clock, 
-  Timer, 
-  Search, 
-  Filter, 
-  Eye, 
-  CheckCircle, 
-  XCircle, 
+import { toast } from "@/hooks/use-toast"
+import {
+  FileText,
+  Users,
+  Clock,
+  Timer,
+  Search,
+  Filter,
+  Eye,
+  CheckCircle,
+  XCircle,
   AlertCircle,
   GraduationCap,
   Star,
@@ -26,7 +27,13 @@ import {
   RefreshCw,
   Calendar,
   User,
-  Minus
+  Minus,
+  CreditCard,
+  Shield,
+  ShieldCheck,
+  ShieldX,
+  Loader2,
+  DollarSign
 } from "lucide-react"
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin"
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
@@ -149,7 +156,7 @@ interface DashboardApplication {
 const transformApplicationData = (app: any): DashboardApplication => {
   console.log('🔍 Transforming application data:', app.app_id)
   console.log('📊 Professor data in raw API response:', app.professor)
-  
+
   // Ensure submitted_form_data has the correct structure for file preview
   let submittedFormData = app.submitted_form_data
   if (submittedFormData && submittedFormData.documents) {
@@ -175,7 +182,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
       }))
     }
   }
-  
+
   const transformed = {
     id: app.id,
     app_id: app.app_id,
@@ -219,7 +226,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
     // Pass through scholarship configuration for professor review requirements
     scholarship_configuration: app.scholarship_configuration
   }
-  
+
   console.log('✅ Transformed result:', transformed.app_id)
   console.log('📋 Professor in transformed data:', transformed.professor)
   console.log('🎯 Professor name in transformed:', transformed.professor?.name)
@@ -230,14 +237,14 @@ const transformApplicationData = (app: any): DashboardApplication => {
 
 export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardProps) {
   // 使用 hook 獲取真實資料
-  const { 
-    applicationsByType, 
+  const {
+    applicationsByType,
     scholarshipTypes,
     scholarshipStats,
-    isLoading, 
-    error, 
+    isLoading,
+    error,
     refetch,
-    updateApplicationStatus 
+    updateApplicationStatus
   } = useScholarshipSpecificApplications()
 
   // Get user's scholarship permissions for debugging
@@ -245,10 +252,11 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
 
   // Locale state for internationalization (管理員頁面固定使用中文)
   const [locale] = useState<Locale>("zh")
-  
+
   // State for sub-type translations from backend
-  const [subTypeTranslations, setSubTypeTranslations] = useState<Record<string, string>>({})
+  const [subTypeTranslations, setSubTypeTranslations] = useState<Record<string, Record<string, string>>>({})
   const [translationsLoading, setTranslationsLoading] = useState(false)
+  const [translationsLoaded, setTranslationsLoaded] = useState(false)
 
   // Debug logging
   console.log('ScholarshipSpecificDashboard render:', {
@@ -267,7 +275,9 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   const [statusFilter, setStatusFilter] = useState("all")
   const [showApplicationDetail, setShowApplicationDetail] = useState(false)
   const [selectedApplicationForDetail, setSelectedApplicationForDetail] = useState<DashboardApplication | null>(null)
-  
+  const [bankVerificationLoading, setBankVerificationLoading] = useState<Record<number, boolean>>({})
+  const [batchVerificationLoading, setBatchVerificationLoading] = useState(false)
+  const [selectedApplicationsForBatch, setSelectedApplicationsForBatch] = useState<number[]>([])
   // 學期選擇相關狀態
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>()
   const [selectedSemester, setSelectedSemester] = useState<string>()
@@ -286,28 +296,28 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   const getApplicationsByType = (type: string) => {
     const rawApplications = applicationsByType[type] || []
     const transformedApplications = rawApplications.map(transformApplicationData)
-    
+
     // Debug logging
     if (transformedApplications.length > 0) {
       console.log(`Transformed applications for ${type}:`, transformedApplications[0])
     }
-    
+
     return transformedApplications
   }
-  
+
   // 獲取當前選擇的獎學金類型的子類型（從後端獲取）
   const getCurrentScholarshipSubTypes = () => {
     if (!activeTab || !scholarshipStats[activeTab]) return []
     return scholarshipStats[activeTab].sub_types || []
   }
-  
+
   // 當獎學金類型載入後，自動選擇第一個類型
   useEffect(() => {
     if (scholarshipTypes.length > 0 && !activeTab) {
       setActiveTab(scholarshipTypes[0])
     }
   }, [scholarshipTypes, activeTab])
-  
+
   // 當獎學金類型改變時，重置子類型選擇和學期選擇
   useEffect(() => {
     setSelectedSubTypes([])
@@ -318,24 +328,33 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
 
   // 載入子類型翻譯
   useEffect(() => {
+    let isMounted = true
+
     const loadSubTypeTranslations = async () => {
       if (Object.keys(subTypeTranslations).length > 0) return // 已經載入過
-      
+
       setTranslationsLoading(true)
       try {
         const response = await apiClient.admin.getSubTypeTranslations()
-        if (response.success && response.data) {
-          // 使用中文翻譯
-          setSubTypeTranslations(response.data.zh || {})
+        if (response.success && response.data && isMounted) {
+          // 儲存完整的翻譯資料
+          setSubTypeTranslations(response.data)
+          setTranslationsLoaded(true)
         }
       } catch (error) {
         console.error('Failed to load sub-type translations:', error)
       } finally {
-        setTranslationsLoading(false)
+        if (isMounted) {
+          setTranslationsLoading(false)
+        }
       }
     }
 
     loadSubTypeTranslations()
+
+    return () => {
+      isMounted = false
+    }
   }, [subTypeTranslations])
 
   // 搜尋和篩選邏輯
@@ -362,7 +381,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
     // 搜尋篩選
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(app => 
+      filtered = filtered.filter(app =>
         app.student_name?.toLowerCase().includes(term) ||
         app.student_no?.toLowerCase().includes(term) ||
         app.user?.email.toLowerCase().includes(term) ||
@@ -384,12 +403,17 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   }
 
   // 獲取子類型顯示名稱（從後端獲取）
-  const getSubTypeDisplayName = (subType: string) => {
+  const getSubTypeDisplayName = (subType: string, lang: string = locale) => {
     // 使用後端翻譯
-    if (subTypeTranslations[subType]) {
-      return subTypeTranslations[subType]
+    if (subTypeTranslations[lang] && subTypeTranslations[lang][subType]) {
+      return subTypeTranslations[lang][subType]
     }
-    
+
+    // 如果當前語言沒有翻譯，嘗試使用中文
+    if (lang !== 'zh' && subTypeTranslations['zh'] && subTypeTranslations['zh'][subType]) {
+      return subTypeTranslations['zh'][subType]
+    }
+
     // 如果沒有翻譯，顯示原始代碼
     return subType
   }
@@ -403,6 +427,138 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
     } catch (error) {
       console.error('Failed to update application status:', error)
       alert('更新申請狀態失敗')
+    }
+  }
+
+  // 處理銀行帳戶驗證
+  const handleBankVerification = async (applicationId: number) => {
+    setBankVerificationLoading(prev => ({ ...prev, [applicationId]: true }))
+    try {
+      const response = await apiClient.bankVerification.verifyBankAccount(applicationId)
+      if (response.success) {
+        toast({
+          title: '銀行驗證成功',
+          description: '銀行帳戶驗證已完成',
+        })
+        refetch() // 重新載入數據以顯示更新的驗證狀態
+      } else {
+        toast({
+          title: '銀行驗證失敗',
+          description: response.message || '無法完成銀行帳戶驗證',
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      console.error('Bank verification error:', error)
+      toast({
+        title: '銀行驗證錯誤',
+        description: '銀行帳戶驗證過程中發生錯誤',
+        variant: 'destructive',
+      })
+    } finally {
+      setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }))
+    }
+  }
+
+  // 處理批量銀行帳戶驗證
+  const handleBatchBankVerification = async () => {
+    if (selectedApplicationsForBatch.length === 0) {
+      toast({
+        title: '請選擇申請案件',
+        description: '請至少選擇一個申請案件進行批量驗證',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setBatchVerificationLoading(true)
+    try {
+      const response = await apiClient.bankVerification.verifyBankAccountsBatch(selectedApplicationsForBatch)
+      if (response.success) {
+        toast({
+          title: '批量銀行驗證成功',
+          description: `已完成 ${selectedApplicationsForBatch.length} 個申請案件的銀行帳戶驗證`,
+        })
+        setSelectedApplicationsForBatch([])
+        refetch() // 重新載入數據
+      } else {
+        toast({
+          title: '批量銀行驗證失敗',
+          description: response.message || '無法完成批量銀行帳戶驗證',
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      console.error('Batch bank verification error:', error)
+      toast({
+        title: '批量銀行驗證錯誤',
+        description: '批量銀行帳戶驗證過程中發生錯誤',
+        variant: 'destructive',
+      })
+    } finally {
+      setBatchVerificationLoading(false)
+    }
+  }
+
+  // 處理批量選擇
+  const handleBatchSelectionToggle = (applicationId: number) => {
+    setSelectedApplicationsForBatch(prev =>
+      prev.includes(applicationId)
+        ? prev.filter(id => id !== applicationId)
+        : [...prev, applicationId]
+    )
+  }
+
+  // 處理全選/取消全選
+  const handleSelectAll = (applications: DashboardApplication[]) => {
+    const eligibleApplications = applications.filter(app =>
+      ['submitted', 'under_review', 'approved'].includes(app.status)
+    ).map(app => app.id)
+
+    const allSelected = eligibleApplications.every(id => selectedApplicationsForBatch.includes(id))
+
+    if (allSelected) {
+      setSelectedApplicationsForBatch(prev => prev.filter(id => !eligibleApplications.includes(id)))
+    } else {
+      setSelectedApplicationsForBatch(prev => [...new Set([...prev, ...eligibleApplications])])
+    }
+  }
+
+  // 獲取銀行驗證狀態的顯示組件
+  const getBankVerificationStatus = (app: DashboardApplication) => {
+    // 檢查是否有銀行驗證相關的 meta_data
+    const bankVerified = app.meta_data?.bank_verification_status === 'verified'
+    const bankVerificationFailed = app.meta_data?.bank_verification_status === 'failed'
+    const bankVerificationPending = app.meta_data?.bank_verification_status === 'pending'
+
+    if (bankVerified) {
+      return (
+        <div className="flex items-center gap-1 text-green-600">
+          <ShieldCheck className="h-4 w-4" />
+          <span className="text-xs">已驗證</span>
+        </div>
+      )
+    } else if (bankVerificationFailed) {
+      return (
+        <div className="flex items-center gap-1 text-red-600">
+          <ShieldX className="h-4 w-4" />
+          <span className="text-xs">驗證失敗</span>
+        </div>
+      )
+    } else if (bankVerificationPending) {
+      return (
+        <div className="flex items-center gap-1 text-yellow-600">
+          <Shield className="h-4 w-4" />
+          <span className="text-xs">驗證中</span>
+        </div>
+      )
+    } else {
+      return (
+        <div className="flex items-center gap-1 text-gray-500">
+          <CreditCard className="h-4 w-4" />
+          <span className="text-xs">未驗證</span>
+        </div>
+      )
     }
   }
 
@@ -424,13 +580,13 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   // 渲染統計卡片
   const renderStatsCards = (applications: DashboardApplication[]) => {
     const totalApplications = applications.length
-    const pendingApplications = applications.filter(app => 
+    const pendingApplications = applications.filter(app =>
       ['submitted', 'under_review'].includes(app.status)
     ).length
-    const approvedApplications = applications.filter(app => 
+    const approvedApplications = applications.filter(app =>
       app.status === 'approved'
     ).length
-    const rejectedApplications = applications.filter(app => 
+    const rejectedApplications = applications.filter(app =>
       app.status === 'rejected'
     ).length
 
@@ -499,6 +655,48 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* 批量操作工具列 */}
+          {selectedApplicationsForBatch.length > 0 && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-800">
+                    已選擇 {selectedApplicationsForBatch.length} 個申請案件
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedApplicationsForBatch([])}
+                    disabled={batchVerificationLoading}
+                  >
+                    取消選擇
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleBatchBankVerification}
+                    disabled={batchVerificationLoading}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {batchVerificationLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        驗證中...
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        批量銀行驗證
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 搜尋和篩選 */}
           <div className="flex gap-4 mb-4">
             <div className="flex-1">
@@ -534,11 +732,20 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={filteredApplications.length > 0 && filteredApplications
+                        .filter(app => ['submitted', 'under_review', 'approved'].includes(app.status))
+                        .every(app => selectedApplicationsForBatch.includes(app.id))}
+                      onCheckedChange={() => handleSelectAll(filteredApplications)}
+                    />
+                  </TableHead>
                   <TableHead>申請人</TableHead>
                   <TableHead>學號</TableHead>
                   {showSubTypes && <TableHead>子項目</TableHead>}
                   <TableHead>指派教授</TableHead>
                   <TableHead>狀態</TableHead>
+                  <TableHead>銀行驗證</TableHead>
                   <TableHead>提交時間</TableHead>
                   <TableHead>等待天數</TableHead>
                   <TableHead>操作</TableHead>
@@ -547,6 +754,40 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
               <TableBody>
                 {filteredApplications.map((app) => (
                   <TableRow key={app.id}>
+                    <TableCell>
+                      {['submitted', 'under_review', 'approved'].includes(app.status) && (
+                        <Checkbox
+                          checked={selectedApplicationsForBatch.includes(app.id)}
+                          onCheckedChange={() => handleBatchSelectionToggle(app.id)}
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {getBankVerificationStatus(app)}
+                        {!app.meta_data?.bank_verification_status && ['submitted', 'under_review', 'approved'].includes(app.status) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleBankVerification(app.id)}
+                            disabled={bankVerificationLoading[app.id]}
+                            className="text-xs h-6 px-2"
+                          >
+                            {bankVerificationLoading[app.id] ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                驗證中
+                              </>
+                            ) : (
+                              <>
+                                <CreditCard className="h-3 w-3 mr-1" />
+                                驗證
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="font-medium">{app.student_name || '未知'}</div>
                       <div className="text-sm text-gray-500">{app.user?.email || 'N/A'}</div>
@@ -682,13 +923,13 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {app.submitted_at 
+                      {app.submitted_at
                         ? new Date(app.submitted_at).toLocaleDateString('zh-TW')
                         : 'N/A'
                       }
                     </TableCell>
                     <TableCell>
-                      {app.days_waiting !== undefined 
+                      {app.days_waiting !== undefined
                         ? `${app.days_waiting}天`
                         : 'N/A'
                       }
@@ -759,7 +1000,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
     if (selectedSubTypes.length === 0) {
       return applications // 如果沒有選擇子類型，顯示全部
     }
-    
+
     // 這裡需要根據實際的申請數據結構來過濾
     // 暫時返回全部，實際實現時需要根據 scholarship_subtype_list 來過濾
     return applications.filter(app => {
@@ -774,7 +1015,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
   // 渲染子類型多選標籤頁
   const renderSubTypeTabs = (applications: DashboardApplication[]) => {
     const subTypes = getCurrentScholarshipSubTypes()
-    
+
     if (subTypes.length === 0) {
       // 沒有子類型的獎學金，直接顯示統計卡片和申請列表
       return (
@@ -787,7 +1028,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
 
     // 過濾掉 "general" 類型，只顯示其他子類型
     const filteredSubTypes = subTypes.filter((subType: string) => subType !== "general")
-    
+
     // 如果沒有其他子類型，直接顯示申請列表
     if (filteredSubTypes.length === 0) {
       // 只有 "general" 類型的獎學金，顯示統計卡片和申請列表
@@ -856,7 +1097,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                 {selectedSubTypes.length > 0 ? (
                   <span className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-green-600" />
-                    已選擇 {selectedSubTypes.length} 個子類型: 
+                    已選擇 {selectedSubTypes.length} 個子類型:
                     <span className="font-medium">
                       {selectedSubTypes.map(type => getSubTypeDisplayName(type)).join(', ')}
                     </span>
@@ -868,7 +1109,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                   </span>
                 )}
               </div>
-              
+
               {selectedSubTypes.length > 0 && (
                 <Button
                   variant="outline"
@@ -956,9 +1197,9 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
         <div>
           <h2 className="text-2xl font-bold">獎學金申請管理</h2>
           <p className="text-muted-foreground">
-            管理各類型獎學金申請案件 - {user.role === 'super_admin' ? '超級管理員' : 
-            user.role === 'admin' ? '管理員' : 
-            user.role === 'college' ? '學院審核人員' : 
+            管理各類型獎學金申請案件 - {user.role === 'super_admin' ? '超級管理員' :
+            user.role === 'admin' ? '管理員' :
+            user.role === 'college' ? '學院審核人員' :
             user.role === 'professor' ? '教授' : '未知角色'}
           </p>
         </div>
@@ -977,14 +1218,14 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
               <div>
                 <h3 className="font-semibold text-blue-900">權限狀態</h3>
                 <p className="text-sm text-blue-700">
-                  {user.role === 'super_admin' 
-                    ? '可管理所有獎學金類型' 
-                    : user.role === 'admin' 
-                    ? '可管理指定權限的獎學金類型' 
-                    : user.role === 'college' 
-                    ? '可管理指定權限的獎學金類型' 
-                    : user.role === 'professor' 
-                    ? '可查看指導學生的申請案件' 
+                  {user.role === 'super_admin'
+                    ? '可管理所有獎學金類型'
+                    : user.role === 'admin'
+                    ? '可管理指定權限的獎學金類型'
+                    : user.role === 'college'
+                    ? '可管理指定權限的獎學金類型'
+                    : user.role === 'professor'
+                    ? '可查看指導學生的申請案件'
                     : '無管理權限'}
                 </p>
                 {/* Debug information */}
@@ -1103,7 +1344,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                     </Button>
                   )}
                 </div>
-                
+
                 {/* 顯示當前篩選狀態 */}
                 {(selectedAcademicYear || selectedSemester) && (
                   <div className="mt-4 p-3 bg-white rounded-lg border border-green-200">
@@ -1124,7 +1365,7 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
                 )}
               </CardContent>
             </Card>
-            
+
             {renderSubTypeTabs(getApplicationsByType(type))}
           </TabsContent>
         ))}
@@ -1144,8 +1385,8 @@ export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardPro
       {/* 獎學金管理面板 */}
       {activeTab && (
         <div className="mt-8">
-          <AdminScholarshipManagementInterface 
-            type={activeTab as any} 
+          <AdminScholarshipManagementInterface
+            type={activeTab as any}
             className="border-t pt-6"
           />
         </div>

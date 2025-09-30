@@ -41,7 +41,7 @@ class TestScholarshipConfigurationServiceCRUD:
             email="admin@university.edu",
             username="admin",
             full_name="Test Admin",
-            role=UserRole.ADMIN,
+            role=UserRole.admin,
             is_active=True,
         )
         db_sync.add(user)
@@ -250,7 +250,7 @@ class TestScholarshipConfigurationServiceCRUD:
 
         config2_data = valid_config_data.copy()
         config2_data.update({"config_code": "PHD-113-2", "semester": "second"})
-        config2 = service.create_configuration(
+        service.create_configuration(
             scholarship_type_id=test_scholarship_type.id,
             config_data=config2_data,
             created_by_user_id=test_user.id,
@@ -258,7 +258,7 @@ class TestScholarshipConfigurationServiceCRUD:
 
         config3_data = valid_config_data.copy()
         config3_data.update({"config_code": "PHD-114-1", "academic_year": 114})
-        config3 = service.create_configuration(
+        service.create_configuration(
             scholarship_type_id=test_scholarship_type.id,
             config_data=config3_data,
             created_by_user_id=test_user.id,
@@ -361,7 +361,7 @@ class TestScholarshipConfigurationServiceIntegration:
             email="lifecycle@test.edu",
             username="lifecycle",
             full_name="Lifecycle User",
-            role=UserRole.ADMIN,
+            role=UserRole.admin,
         )
         db_sync.add(user)
         db_sync.commit()

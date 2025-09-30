@@ -13,6 +13,12 @@ from app.core.exceptions import NotFoundError
 from app.services.student_service import StudentService
 
 
+class Student:  # pragma: no cover - runtime spec used for mocks only
+    """Lightweight placeholder representing the legacy Student model."""
+
+    pass
+
+
 class TestStudentService:
     """Test cases for StudentService"""
 
@@ -263,7 +269,7 @@ class TestStudentService:
         with patch.object(service, "get_student_by_id", return_value=mock_student), patch.object(
             service.db, "commit"
         ), patch.object(service.db, "refresh"), patch("builtins.hasattr", side_effect=mock_hasattr):
-            result = await service.update_student_info(student_id, update_info)
+            await service.update_student_info(student_id, update_info)
 
             # Verify valid field was updated
             assert mock_student.com_cellphone == "0911111111"
