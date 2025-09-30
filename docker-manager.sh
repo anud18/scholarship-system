@@ -132,16 +132,6 @@ start_services() {
             log_info "Creating required directories for production app..."
             mkdir -p logs/{backend,nginx}
             ;;
-        "staging")
-            log_info "Checking SSL certificates for staging environment..."
-            if [ ! -f "/etc/nginx/ssl/test.nycu.crt" ]; then
-                log_error "SSL certificates not found at /etc/nginx/ssl/test.nycu.{crt,key}"
-                log_info "Please ensure SSL certificates are properly installed"
-                exit 1
-            else
-                log_success "SSL certificates found at /etc/nginx/ssl/"
-            fi
-            ;;
     esac
     
     # Start services
