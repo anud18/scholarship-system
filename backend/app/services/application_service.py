@@ -2454,7 +2454,7 @@ class ApplicationService:
                 notification_service = NotificationService(self.db)
                 await notification_service.create_notification(
                     user_id=professor.id,
-                    notification_type=NotificationType.PROFESSOR_ASSIGNMENT,
+                    notification_type=NotificationType.professor_assignment,
                     data={
                         "title": "新的獎學金申請需要您的審查",
                         "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
@@ -2465,7 +2465,7 @@ class ApplicationService:
                         "assigned_by": assigned_by.name,
                     },
                     href=f"/professor/applications/{application.id}",
-                    priority=NotificationPriority.HIGH,
+                    priority=NotificationPriority.high,
                     channels=[NotificationChannel.IN_APP, NotificationChannel.EMAIL],
                 )
                 logger.info(f"In-app notification created for professor {professor.nycu_id}")

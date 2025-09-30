@@ -42,7 +42,7 @@ class NotificationService:
         notification_type: NotificationType,
         data: Dict[str, Any],
         channels: Optional[List[NotificationChannel]] = None,
-        priority: NotificationPriority = NotificationPriority.NORMAL,
+        priority: NotificationPriority = NotificationPriority.normal,
         href: Optional[str] = None,
         group_key: Optional[str] = None,
         scheduled_for: Optional[datetime] = None,
@@ -487,8 +487,8 @@ class NotificationService:
         message: str,
         title_en: Optional[str] = None,
         message_en: Optional[str] = None,
-        notification_type: NotificationType = NotificationType.INFO,
-        priority: NotificationPriority = NotificationPriority.NORMAL,
+        notification_type: NotificationType = NotificationType.info,
+        priority: NotificationPriority = NotificationPriority.normal,
         related_resource_type: Optional[str] = None,
         related_resource_id: Optional[int] = None,
         action_url: Optional[str] = None,
@@ -542,8 +542,8 @@ class NotificationService:
         message: str,
         title_en: Optional[str] = None,
         message_en: Optional[str] = None,
-        notification_type: NotificationType = NotificationType.INFO,
-        priority: NotificationPriority = NotificationPriority.NORMAL,
+        notification_type: NotificationType = NotificationType.info,
+        priority: NotificationPriority = NotificationPriority.normal,
         action_url: Optional[str] = None,
         expires_at: Optional[datetime] = None,
         metadata: Optional[Dict[str, Any]] = None,
@@ -627,8 +627,8 @@ class NotificationService:
             },
         )
 
-        notification_type = NotificationType.SUCCESS if new_status == "approved" else NotificationType.INFO
-        priority = NotificationPriority.HIGH if new_status in ["approved", "rejected"] else NotificationPriority.NORMAL
+        notification_type = NotificationType.success if new_status == "approved" else NotificationType.info
+        priority = NotificationPriority.high if new_status in ["approved", "rejected"] else NotificationPriority.normal
 
         # Enhanced: Use new Facebook-style notification system
         return await self.create_notification(
@@ -682,8 +682,8 @@ class NotificationService:
             title_en="Document Requirement Notification",
             message=message,
             message_en=message_en,
-            notification_type=NotificationType.WARNING,
-            priority=NotificationPriority.HIGH,
+            notification_type=NotificationType.warning,
+            priority=NotificationPriority.high,
             related_resource_type="application",
             related_resource_id=application_id,
             action_url=f"/applications/{application_id}/documents",
@@ -728,7 +728,7 @@ class NotificationService:
             message = f"{title}的截止日期已到期"
             message_en = f"The deadline for {title_en or title} has passed"
 
-        priority = NotificationPriority.CRITICAL if days_left <= 1 else NotificationPriority.HIGH
+        priority = NotificationPriority.urgent if days_left <= 1 else NotificationPriority.high
 
         return await self.createUserNotification(
             user_id=user_id,
@@ -736,7 +736,7 @@ class NotificationService:
             title_en=f"Deadline Reminder: {title_en or title}",
             message=message,
             message_en=message_en,
-            notification_type=NotificationType.REMINDER,
+            notification_type=NotificationType.reminder,
             priority=priority,
             action_url=action_url,
             expires_at=deadline + timedelta(days=7) if deadline else None,  # 過期後7天自動清理
@@ -754,8 +754,8 @@ class NotificationService:
         message: str,
         title_en: Optional[str] = None,
         message_en: Optional[str] = None,
-        notification_type: NotificationType = NotificationType.INFO,
-        priority: NotificationPriority = NotificationPriority.NORMAL,
+        notification_type: NotificationType = NotificationType.info,
+        priority: NotificationPriority = NotificationPriority.normal,
         action_url: Optional[str] = None,
         expires_at: Optional[datetime] = None,
         metadata: Optional[Dict[str, Any]] = None,
@@ -1078,7 +1078,7 @@ class NotificationService:
         Returns:
             batch_id if batching enabled, otherwise list of notifications
         """
-        notification_type = NotificationType.NEW_SCHOLARSHIP_AVAILABLE
+        notification_type = NotificationType.new_scholarship_available
         data = {
             "title": f"新獎學金機會：{scholarship_data['name']}",
             "title_en": f"New Scholarship Opportunity: {scholarship_data['name']}",
@@ -1107,7 +1107,7 @@ class NotificationService:
                     data=data,
                     href=f"/scholarships/{scholarship_data['id']}",
                     group_key="new_scholarships",
-                    priority=NotificationPriority.HIGH,
+                    priority=NotificationPriority.high,
                 )
                 notifications.append(notification)
             return notifications
@@ -1149,15 +1149,15 @@ class NotificationService:
                 if approved_count > 0 and rejected_count == 0:
                     title = f"獎學金申請結果通知 - {approved_count} 項申請獲得核准"
                     message = f"恭喜！您有 {approved_count} 項獎學金申請已獲得核准"
-                    notification_type = NotificationType.APPLICATION_APPROVED
+                    notification_type = NotificationType.application_approved
                 elif rejected_count > 0 and approved_count == 0:
                     title = f"獎學金申請結果通知 - {rejected_count} 項申請"
                     message = f"您有 {rejected_count} 項獎學金申請的審核結果已出爐"
-                    notification_type = NotificationType.APPLICATION_REJECTED
+                    notification_type = NotificationType.application_rejected
                 else:
                     title = f"獎學金申請結果通知 - {len(updates)} 項申請"
                     message = f"您有 {len(updates)} 項獎學金申請的審核結果已出爐（核准：{approved_count}，其他：{rejected_count}）"
-                    notification_type = NotificationType.INFO
+                    notification_type = NotificationType.info
 
                 await self.create_notification(
                     user_id=user_id,
@@ -1172,7 +1172,7 @@ class NotificationService:
                     },
                     href="/applications",
                     group_key="application_results",
-                    priority=NotificationPriority.HIGH,
+                    priority=NotificationPriority.high,
                 )
                 aggregated_notifications += 1
 
@@ -1229,13 +1229,13 @@ class NotificationService:
             queue_entry = NotificationQueue(
                 user_id=notif_data["user_id"],
                 batch_id=batch_id,
-                notification_type=NotificationType.DEADLINE_APPROACHING,
+                notification_type=NotificationType.deadline_approaching,
                 notifications_data={
                     "user_ids": [notif_data["user_id"]],
                     "data": notif_data["data"],
                 },
                 scheduled_for=reminder_time + timedelta(seconds=30 * i),  # Stagger by 30 seconds
-                priority=NotificationPriority.HIGH,
+                priority=NotificationPriority.high,
             )
             self.db.add(queue_entry)
 

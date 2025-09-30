@@ -10,26 +10,26 @@ from app.db.base_class import Base
 class ConfigCategory(enum.Enum):
     """Configuration categories for organizing system settings"""
 
-    DATABASE = "database"
-    API_KEYS = "api_keys"
-    EMAIL = "email"
-    OCR = "ocr"
-    FILE_STORAGE = "file_storage"
-    SECURITY = "security"
-    FEATURES = "features"
-    INTEGRATIONS = "integrations"
-    PERFORMANCE = "performance"
-    LOGGING = "logging"
+    database = "database"
+    api_keys = "api_keys"
+    email = "email"
+    ocr = "ocr"
+    file_storage = "file_storage"
+    security = "security"
+    features = "features"
+    integrations = "integrations"
+    performance = "performance"
+    logging = "logging"
 
 
 class ConfigDataType(enum.Enum):
     """Data types for configuration values"""
 
-    STRING = "string"
-    INTEGER = "integer"
-    BOOLEAN = "boolean"
-    JSON = "json"
-    FLOAT = "float"
+    string = "string"
+    integer = "integer"
+    boolean = "boolean"
+    json = "json"
+    float = "float"
 
 
 class SystemSetting(Base):
@@ -41,12 +41,12 @@ class SystemSetting(Base):
     category = Column(
         Enum(ConfigCategory, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
-        default=ConfigCategory.FEATURES,
+        default=ConfigCategory.features,
     )
     data_type = Column(
         Enum(ConfigDataType, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
-        default=ConfigDataType.STRING,
+        default=ConfigDataType.string,
     )
     is_sensitive = Column(Boolean, nullable=False, default=False)
     is_readonly = Column(Boolean, nullable=False, default=False)
@@ -80,8 +80,8 @@ class ConfigurationAuditLog(Base):
 
 
 class SendingType(enum.Enum):
-    SINGLE = "single"
-    BULK = "bulk"
+    single = "single"
+    bulk = "bulk"
 
 
 class EmailTemplate(Base):
@@ -96,7 +96,7 @@ class EmailTemplate(Base):
     sending_type = Column(
         Enum(SendingType, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
-        default=SendingType.SINGLE,
+        default=SendingType.single,
     )
     recipient_options = Column(JSON, nullable=True)  # JSON array of recipient options
     requires_approval = Column(Boolean, nullable=False, default=False)

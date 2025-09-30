@@ -13,8 +13,10 @@ except ImportError:
     genai = None
 
 from PIL import Image
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.dynamic_config import dynamic_config
 from app.core.exceptions import OCRError
 
 logger = logging.getLogger(__name__)
@@ -23,31 +25,76 @@ logger = logging.getLogger(__name__)
 class OCRService:
     """Service for OCR using Google Gemini API"""
 
-    def __init__(self):
-        """Initialize OCR service with Gemini API"""
-        if not settings.ocr_service_enabled:
-            raise OCRError("OCR service is disabled")
+    def __init__(self, db: Optional[AsyncSession] = None):
+        """
+        Initialize OCR service with Gemini API.
 
-        if not settings.gemini_api_key:
-            raise OCRError("Gemini API key is not configured")
+        Args:
+            db: Database session for loading dynamic configuration.
+                If provided, will use database settings; otherwise falls back to environment variables.
+        """
+        self.db = db
+        self._config_loaded = False
+        self.ocr_enabled = None
+        self.api_key = None
+        self.model_name = None
+        self.timeout = None
+        self.model = None
 
-        if genai is None:
-            raise OCRError("Google Generative AI library is not installed. Run: pip install google-generativeai")
+    async def _load_config(self):
+        """Load OCR configuration from database or environment variables"""
+        if not self._config_loaded:
+            if self.db:
+                # Load from database with dynamic config
+                self.ocr_enabled = await dynamic_config.get_bool(
+                    "ocr_service_enabled", self.db, settings.ocr_service_enabled
+                )
+                self.api_key = await dynamic_config.get_str("gemini_api_key", self.db, settings.gemini_api_key or "")
+                self.model_name = await dynamic_config.get_str("gemini_model", self.db, settings.gemini_model)
+                self.timeout = await dynamic_config.get_int("ocr_timeout", self.db, settings.ocr_timeout)
+                logger.info("OCR configuration loaded from database")
+            else:
+                # Fall back to environment variables
+                self.ocr_enabled = settings.ocr_service_enabled
+                self.api_key = settings.gemini_api_key
+                self.model_name = settings.gemini_model
+                self.timeout = settings.ocr_timeout
 
-        # Configure Gemini API
-        genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel(settings.gemini_model)
+            # Validate configuration
+            if not self.ocr_enabled:
+                raise OCRError("OCR service is disabled")
 
-    async def extract_bank_info_from_image(self, image_data: bytes) -> Dict[str, Any]:
+            if not self.api_key:
+                raise OCRError("Gemini API key is not configured")
+
+            if genai is None:
+                raise OCRError("Google Generative AI library is not installed. Run: pip install google-generativeai")
+
+            # Configure Gemini API
+            genai.configure(api_key=self.api_key)
+            self.model = genai.GenerativeModel(self.model_name)
+
+            self._config_loaded = True
+            logger.info(f"OCR service initialized with model: {self.model_name}")
+
+    async def extract_bank_info_from_image(
+        self, image_data: bytes, db: Optional[AsyncSession] = None
+    ) -> Dict[str, Any]:
         """
         Extract bank account information from passbook image
 
         Args:
             image_data: Raw image bytes
+            db: Database session for loading configuration
 
         Returns:
             Dict containing extracted bank information
         """
+        # Load configuration before processing (picks up any changes from database)
+        if db:
+            self.db = db
+        await self._load_config()
+
         try:
             # Validate and process image
             image = self._validate_and_process_image(image_data)
@@ -95,16 +142,24 @@ class OCRService:
             logger.error(f"Bank OCR extraction failed: {str(e)}")
             raise OCRError(f"Failed to extract bank information: {str(e)}")
 
-    async def extract_general_text_from_image(self, image_data: bytes) -> Dict[str, Any]:
+    async def extract_general_text_from_image(
+        self, image_data: bytes, db: Optional[AsyncSession] = None
+    ) -> Dict[str, Any]:
         """
         Extract general text from any document image
 
         Args:
             image_data: Raw image bytes
+            db: Database session for loading configuration
 
         Returns:
             Dict containing extracted text
         """
+        # Load configuration before processing (picks up any changes from database)
+        if db:
+            self.db = db
+        await self._load_config()
+
         try:
             # Validate and process image
             image = self._validate_and_process_image(image_data)
@@ -208,20 +263,34 @@ class OCRService:
             logger.error(f"Error processing Gemini response: {str(e)}")
             return {"success": False, "error": f"Response processing error: {str(e)}", "confidence": 0.0}
 
-    def is_enabled(self) -> bool:
-        """Check if OCR service is enabled and configured"""
-        return settings.ocr_service_enabled and settings.gemini_api_key is not None
+    async def is_enabled(self, db: Optional[AsyncSession] = None) -> bool:
+        """
+        Check if OCR service is enabled and configured
+
+        Args:
+            db: Database session for loading configuration
+
+        Returns:
+            True if OCR is enabled and API key is configured
+        """
+        if db:
+            self.db = db
+
+        try:
+            await self._load_config()
+            return self.ocr_enabled and self.api_key is not None
+        except OCRError:
+            return False
 
 
-# Global OCR service instance
-ocr_service: Optional[OCRService] = None
+def get_ocr_service(db: Optional[AsyncSession] = None) -> OCRService:
+    """
+    Get OCR service instance with optional database session for dynamic config.
 
+    Args:
+        db: Database session for loading dynamic configuration
 
-def get_ocr_service() -> OCRService:
-    """Get or create OCR service instance"""
-    global ocr_service
-
-    if ocr_service is None:
-        ocr_service = OCRService()
-
-    return ocr_service
+    Returns:
+        OCRService instance
+    """
+    return OCRService(db=db)

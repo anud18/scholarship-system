@@ -78,8 +78,8 @@ class RosterNotificationService:
                         title_en=notification_data["title_en"],
                         message=notification_data["message"],
                         message_en=notification_data["message_en"],
-                        notification_type=NotificationType.INFO,
-                        priority=NotificationPriority.NORMAL,
+                        notification_type=NotificationType.info,
+                        priority=NotificationPriority.normal,
                         related_resource_type="roster",
                         related_resource_id=roster.id,
                         action_url=f"/admin/rosters/{roster.id}",
@@ -142,8 +142,8 @@ class RosterNotificationService:
                         title_en=notification_data["title_en"],
                         message=notification_data["message"],
                         message_en=notification_data["message_en"],
-                        notification_type=NotificationType.SUCCESS,
-                        priority=NotificationPriority.NORMAL,
+                        notification_type=NotificationType.success,
+                        priority=NotificationPriority.normal,
                         related_resource_type="roster",
                         related_resource_id=roster.id,
                         action_url=f"/admin/rosters/{roster.id}",
@@ -201,8 +201,8 @@ class RosterNotificationService:
                         title_en=notification_data["title_en"],
                         message=notification_data["message"],
                         message_en=notification_data["message_en"],
-                        notification_type=NotificationType.ERROR,
-                        priority=NotificationPriority.CRITICAL,
+                        notification_type=NotificationType.error,
+                        priority=NotificationPriority.urgent,
                         related_resource_type="roster_error",
                         related_resource_id=error_data.get("config_id"),
                         action_url="/admin/rosters",
@@ -281,17 +281,17 @@ class RosterNotificationService:
 
             # 根據新狀態決定通知類型和優先級
             if new_status == RosterStatus.COMPLETED:
-                notification_type = NotificationType.SUCCESS
-                priority = NotificationPriority.NORMAL
+                notification_type = NotificationType.success
+                priority = NotificationPriority.normal
             elif new_status == RosterStatus.LOCKED:
-                notification_type = NotificationType.WARNING
-                priority = NotificationPriority.HIGH
+                notification_type = NotificationType.warning
+                priority = NotificationPriority.high
             elif new_status == RosterStatus.FAILED:
-                notification_type = NotificationType.ERROR
-                priority = NotificationPriority.HIGH
+                notification_type = NotificationType.error
+                priority = NotificationPriority.high
             else:
-                notification_type = NotificationType.INFO
-                priority = NotificationPriority.NORMAL
+                notification_type = NotificationType.info
+                priority = NotificationPriority.normal
 
             notified_users = []
             for user in target_users:
@@ -356,11 +356,11 @@ class RosterNotificationService:
             # 根據是否有失敗決定通知類型
             failed_count = summary_data.get("failed_rosters", 0)
             if failed_count > 0:
-                notification_type = NotificationType.WARNING
-                priority = NotificationPriority.HIGH
+                notification_type = NotificationType.warning
+                priority = NotificationPriority.high
             else:
-                notification_type = NotificationType.INFO
-                priority = NotificationPriority.NORMAL
+                notification_type = NotificationType.info
+                priority = NotificationPriority.normal
 
             notified_users = []
             for user in target_users:
@@ -421,8 +421,8 @@ class RosterNotificationService:
                 title_en="Roster Notification Test",
                 message="這是一個造冊通知系統的測試訊息",
                 message_en="This is a test message from the roster notification system",
-                notification_type=NotificationType.INFO,
-                priority=NotificationPriority.NORMAL,
+                notification_type=NotificationType.info,
+                priority=NotificationPriority.normal,
                 related_resource_type="test",
                 metadata={"test": True, "sent_at": datetime.now().isoformat()},
             )

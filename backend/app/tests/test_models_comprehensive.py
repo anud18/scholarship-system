@@ -553,7 +553,7 @@ class TestNotificationModel:
             "title": "Application Update",
             "message": "Your application status has been updated.",
             "notification_type": NotificationType.APPLICATION_STATUS,
-            "priority": NotificationPriority.NORMAL,
+            "priority": NotificationPriority.normal,
             "is_read": False,
             "data": {"application_id": 1, "new_status": "approved"},
         }

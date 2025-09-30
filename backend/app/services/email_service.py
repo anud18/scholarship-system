@@ -8,6 +8,7 @@ import aiosmtplib
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.dynamic_config import dynamic_config
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail
 from app.services.system_setting_service import EmailTemplateService
 
@@ -15,12 +16,43 @@ logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    def __init__(self):
-        self.host = settings.smtp_host
-        self.port = settings.smtp_port
-        self.username = settings.smtp_user
-        self.password = settings.smtp_password
-        self.from_addr = settings.email_from
+    def __init__(self, db: Optional[AsyncSession] = None):
+        """
+        Initialize Email Service.
+
+        Args:
+            db: Database session for loading dynamic configuration.
+                If provided, will use database settings; otherwise falls back to environment variables.
+        """
+        self.db = db
+        self._config_loaded = False
+        self.host = None
+        self.port = None
+        self.username = None
+        self.password = None
+        self.from_addr = None
+        self.from_name = None
+
+    async def _load_config(self):
+        """Load email configuration from database or environment variables"""
+        if self.db and not self._config_loaded:
+            # Load from database with dynamic config
+            self.host = await dynamic_config.get_str("smtp_host", self.db, settings.smtp_host)
+            self.port = await dynamic_config.get_int("smtp_port", self.db, settings.smtp_port)
+            self.username = await dynamic_config.get_str("smtp_user", self.db, settings.smtp_user)
+            self.password = await dynamic_config.get_str("smtp_password", self.db, settings.smtp_password)
+            self.from_addr = await dynamic_config.get_str("email_from", self.db, settings.email_from)
+            self.from_name = await dynamic_config.get_str("email_from_name", self.db, settings.email_from_name)
+            self._config_loaded = True
+            logger.info("Email configuration loaded from database")
+        elif not self.db:
+            # Fall back to environment variables
+            self.host = settings.smtp_host
+            self.port = settings.smtp_port
+            self.username = settings.smtp_user
+            self.password = settings.smtp_password
+            self.from_addr = settings.email_from
+            self.from_name = settings.email_from_name
 
     async def send_email(
         self,
@@ -44,6 +76,11 @@ class EmailService:
             db: Database session for logging
             **metadata: Additional metadata for logging (template_key, application_id, etc.)
         """
+        # Load configuration before sending (picks up any changes from database)
+        if db:
+            self.db = db
+        await self._load_config()
+
         if isinstance(to, str):
             to = [to]
 
@@ -53,7 +90,11 @@ class EmailService:
 
         try:
             msg = EmailMessage()
-            msg["From"] = self.from_addr
+            # Use from_name if available
+            if self.from_name:
+                msg["From"] = f"{self.from_name} <{self.from_addr}>"
+            else:
+                msg["From"] = self.from_addr
             msg["To"] = ", ".join(to)
             msg["Subject"] = subject
             if cc:

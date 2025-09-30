@@ -54,7 +54,7 @@ async def initialize_system_email_templates():
 
 國立陽明交通大學
 獎學金管理系統""",
-                "sending_type": SendingType.SINGLE,
+                "sending_type": SendingType.single,
                 "recipient_options": [{"label": "申請學生", "value": "student"}],
             },
             {
@@ -74,7 +74,7 @@ async def initialize_system_email_templates():
 請至管理系統查看詳細資料：{admin_portal_url}
 
 獎學金管理系統""",
-                "sending_type": SendingType.SINGLE,
+                "sending_type": SendingType.single,
                 "recipient_options": [{"label": "管理員", "value": "admin"}],
             },
             {
@@ -93,7 +93,7 @@ async def initialize_system_email_templates():
 
 國立陽明交通大學
 獎學金管理系統""",
-                "sending_type": SendingType.SINGLE,
+                "sending_type": SendingType.single,
                 "recipient_options": [{"label": "指導教授", "value": "professor"}],
             },
             {
@@ -108,7 +108,7 @@ async def initialize_system_email_templates():
 請至管理系統查看詳細審查資料。
 
 獎學金管理系統""",
-                "sending_type": SendingType.SINGLE,
+                "sending_type": SendingType.single,
                 "recipient_options": [{"label": "管理員", "value": "admin"}],
             },
             # Bulk sending type templates
@@ -130,7 +130,7 @@ async def initialize_system_email_templates():
 
 國立陽明交通大學
 獎學金管理系統""",
-                "sending_type": SendingType.BULK,
+                "sending_type": SendingType.bulk,
                 "recipient_options": [
                     {"label": "全體學生", "value": "all_students"},
                     {"label": "特定科系學生", "value": "department_students"},
@@ -151,7 +151,7 @@ async def initialize_system_email_templates():
 尚未申請的同學請把握時間完成申請手續。
 
 獎學金管理系統""",
-                "sending_type": SendingType.BULK,
+                "sending_type": SendingType.bulk,
                 "recipient_options": [
                     {"label": "尚未申請的學生", "value": "non_applicants"},
                     {"label": "申請未完成的學生", "value": "incomplete_applicants"},

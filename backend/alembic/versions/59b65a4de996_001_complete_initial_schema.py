@@ -10,7 +10,6 @@ Create Date: 2025-09-25 02:12:21.898181
 """
 from typing import Sequence, Union
 
-
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -33,9 +32,10 @@ def upgrade() -> None:
                 CREATE TYPE usertype AS ENUM ('student', 'employee');
                 CREATE TYPE userrole AS ENUM ('student', 'professor', 'college', 'admin', 'super_admin');
                 CREATE TYPE employeestatus AS ENUM ('在職', '退休', '在學', '畢業');
-                CREATE TYPE notificationtype AS ENUM ('INFO', 'WARNING', 'ERROR', 'SUCCESS', 'REMINDER');
-                CREATE TYPE notificationpriority AS ENUM ('LOW', 'NORMAL', 'HIGH', 'URGENT');
-                CREATE TYPE semester AS ENUM ('FIRST', 'SECOND', 'SUMMER', 'ANNUAL');
+                CREATE TYPE notificationtype AS ENUM ('info', 'warning', 'error', 'success', 'reminder');
+                CREATE TYPE notificationpriority AS ENUM ('low', 'normal', 'high', 'urgent');
+                CREATE TYPE notificationfrequency AS ENUM ('immediate', 'daily', 'weekly', 'disabled');
+                CREATE TYPE semester AS ENUM ('first', 'second', 'annual');
                 CREATE TYPE applicationstatus AS ENUM ('draft', 'submitted', 'under_review', 'approved', 'rejected', 'withdrawn');
                 CREATE TYPE applicationcycle AS ENUM ('semester', 'yearly');
                 CREATE TYPE subtypeselectionmode AS ENUM ('single', 'multiple', 'hierarchical');

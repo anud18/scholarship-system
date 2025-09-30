@@ -303,10 +303,10 @@ export enum NotificationType {
 }
 
 export enum NotificationPriority {
-  CRITICAL = "critical",
-  HIGH = "high",
-  NORMAL = "normal",
   LOW = "low",
+  NORMAL = "normal",
+  HIGH = "high",
+  URGENT = "urgent",  // Renamed from CRITICAL to match backend
 }
 
 export enum EmailStatus {
@@ -534,4 +534,87 @@ export const getRosterAuditLevelLabel = (
     },
   };
   return labels[locale][level];
+};
+
+// System Settings Enums
+export enum ConfigCategory {
+  DATABASE = "database",
+  API_KEYS = "api_keys",
+  EMAIL = "email",
+  OCR = "ocr",
+  FILE_STORAGE = "file_storage",
+  SECURITY = "security",
+  FEATURES = "features",
+  INTEGRATIONS = "integrations",
+  PERFORMANCE = "performance",
+  LOGGING = "logging",
+}
+
+export enum ConfigDataType {
+  STRING = "string",
+  INTEGER = "integer",
+  BOOLEAN = "boolean",
+  JSON = "json",
+  FLOAT = "float",
+}
+
+export enum SendingType {
+  SINGLE = "single",
+  BULK = "bulk",
+}
+
+export const getConfigCategoryLabel = (
+  category: ConfigCategory,
+  locale: "zh" | "en" = "zh"
+): string => {
+  const labels = {
+    zh: {
+      [ConfigCategory.DATABASE]: "資料庫",
+      [ConfigCategory.API_KEYS]: "API 金鑰",
+      [ConfigCategory.EMAIL]: "電子郵件",
+      [ConfigCategory.OCR]: "OCR 設定",
+      [ConfigCategory.FILE_STORAGE]: "檔案儲存",
+      [ConfigCategory.SECURITY]: "安全性",
+      [ConfigCategory.FEATURES]: "功能設定",
+      [ConfigCategory.INTEGRATIONS]: "整合設定",
+      [ConfigCategory.PERFORMANCE]: "效能設定",
+      [ConfigCategory.LOGGING]: "日誌設定",
+    },
+    en: {
+      [ConfigCategory.DATABASE]: "Database",
+      [ConfigCategory.API_KEYS]: "API Keys",
+      [ConfigCategory.EMAIL]: "Email",
+      [ConfigCategory.OCR]: "OCR",
+      [ConfigCategory.FILE_STORAGE]: "File Storage",
+      [ConfigCategory.SECURITY]: "Security",
+      [ConfigCategory.FEATURES]: "Features",
+      [ConfigCategory.INTEGRATIONS]: "Integrations",
+      [ConfigCategory.PERFORMANCE]: "Performance",
+      [ConfigCategory.LOGGING]: "Logging",
+    },
+  };
+  return labels[locale][category];
+};
+
+export const getConfigDataTypeLabel = (
+  dataType: ConfigDataType,
+  locale: "zh" | "en" = "zh"
+): string => {
+  const labels = {
+    zh: {
+      [ConfigDataType.STRING]: "字串",
+      [ConfigDataType.INTEGER]: "整數",
+      [ConfigDataType.BOOLEAN]: "布林值",
+      [ConfigDataType.JSON]: "JSON",
+      [ConfigDataType.FLOAT]: "浮點數",
+    },
+    en: {
+      [ConfigDataType.STRING]: "String",
+      [ConfigDataType.INTEGER]: "Integer",
+      [ConfigDataType.BOOLEAN]: "Boolean",
+      [ConfigDataType.JSON]: "JSON",
+      [ConfigDataType.FLOAT]: "Float",
+    },
+  };
+  return labels[locale][dataType];
 };

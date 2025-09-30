@@ -11,13 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -29,7 +22,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -39,115 +31,88 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Plus,
   Edit2,
-  Trash2,
-  Eye,
-  EyeOff,
   Save,
   X,
   History,
   AlertTriangle,
-  CheckCircle,
   Settings,
   Shield,
   Mail,
-  Database,
   Key,
   FileText,
-  Bell,
   Camera,
-  Link,
+  Lock,
+  Unlock,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   apiClient,
   SystemConfiguration,
-  SystemConfigurationCreate,
   SystemConfigurationUpdate,
 } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 
-const categoryIcons = {
-  FEATURES: Settings,
-  SECURITY: Shield,
-  EMAIL: Mail,
-  DATABASE: Database,
-  API_KEYS: Key,
-  FILE_STORAGE: FileText,
-  NOTIFICATION: Bell,
-  OCR: Camera,
-  INTEGRATIONS: Link,
+// Category configuration
+const categoryConfig = {
+  email: {
+    label: "電子郵件設定",
+    icon: Mail,
+    description: "SMTP 伺服器和寄件者設定",
+  },
+  ocr: {
+    label: "OCR 設定",
+    icon: Camera,
+    description: "文件辨識服務配置",
+  },
+  file_storage: {
+    label: "檔案儲存設定",
+    icon: FileText,
+    description: "檔案上傳限制和規則",
+  },
+  security: {
+    label: "安全設定",
+    icon: Shield,
+    description: "權杖過期時間和安全策略",
+  },
+  api_keys: {
+    label: "API 金鑰",
+    icon: Key,
+    description: "第三方服務 API 金鑰",
+  },
+  performance: {
+    label: "效能設定",
+    icon: Settings,
+    description: "快取和效能優化配置",
+  },
 };
 
-const categoryLabels = {
-  FEATURES: "功能設定",
-  SECURITY: "安全設定",
-  EMAIL: "電子郵件設定",
-  DATABASE: "資料庫設定",
-  API_KEYS: "API 金鑰",
-  FILE_STORAGE: "檔案儲存",
-  NOTIFICATION: "通知設定",
-  OCR: "OCR 設定",
-  INTEGRATIONS: "第三方整合",
-};
-
-const dataTypeLabels = {
-  STRING: "字串",
-  INTEGER: "整數",
-  FLOAT: "浮點數",
-  BOOLEAN: "布林值",
-  JSON: "JSON 物件",
-};
+type CategoryKey = keyof typeof categoryConfig;
 
 export default function SystemConfigurationManagement() {
   const { user } = useAuth();
-  const [configurations, setConfigurations] = useState<SystemConfiguration[]>(
-    []
-  );
-  const [categories, setCategories] = useState<string[]>([]);
-  const [dataTypes, setDataTypes] = useState<string[]>([]);
+  const [configurations, setConfigurations] = useState<SystemConfiguration[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [showSensitive, setShowSensitive] = useState(false);
-  const [editingConfig, setEditingConfig] =
-    useState<SystemConfiguration | null>(null);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState<Record<string, any>>({});
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [selectedConfigKey, setSelectedConfigKey] = useState<string>("");
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
-  // Form states
-  const [formData, setFormData] = useState<SystemConfigurationCreate>({
-    key: "",
-    value: "",
-    category: "FEATURES",
-    data_type: "STRING",
-    is_sensitive: false,
-    description: "",
-    validation_regex: "",
-  });
-
-  const [updateFormData, setUpdateFormData] =
-    useState<SystemConfigurationUpdate>({
-      value: "",
-      category: "FEATURES",
-      data_type: "STRING",
-      is_sensitive: false,
-      description: "",
-      validation_regex: "",
-    });
+  useEffect(() => {
+    loadConfigurations();
+  }, [showSensitive]);
 
   const loadConfigurations = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.system.getConfigurations(
-        selectedCategory,
-        showSensitive
-      );
+      setError(null);
+      const response = await apiClient.system.getConfigurations(undefined, showSensitive);
       if (response.success && response.data) {
         setConfigurations(response.data);
       } else {
@@ -158,25 +123,6 @@ export default function SystemConfigurationManagement() {
       console.error("Error loading configurations:", err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadMetadata = async () => {
-    try {
-      const [categoriesResponse, dataTypesResponse] = await Promise.all([
-        apiClient.system.getCategories(),
-        apiClient.system.getDataTypes(),
-      ]);
-
-      if (categoriesResponse.success && categoriesResponse.data) {
-        setCategories(categoriesResponse.data);
-      }
-
-      if (dataTypesResponse.success && dataTypesResponse.data) {
-        setDataTypes(dataTypesResponse.data);
-      }
-    } catch (err) {
-      console.error("Error loading metadata:", err);
     }
   };
 
@@ -191,46 +137,33 @@ export default function SystemConfigurationManagement() {
     }
   };
 
-  useEffect(() => {
-    loadConfigurations();
-    loadMetadata();
-  }, [selectedCategory, showSensitive]);
-
-  const handleCreate = async () => {
-    try {
-      const response = await apiClient.system.createConfiguration(formData);
-      if (response.success) {
-        setIsCreateDialogOpen(false);
-        setFormData({
-          key: "",
-          value: "",
-          category: "FEATURES",
-          data_type: "STRING",
-          is_sensitive: false,
-          description: "",
-          validation_regex: "",
-        });
-        loadConfigurations();
-      } else {
-        setError(response.message || "創建配置失敗");
-      }
-    } catch (err) {
-      setError("創建配置時發生錯誤");
-      console.error("Error creating configuration:", err);
-    }
+  const handleEdit = (config: SystemConfiguration) => {
+    setEditingKey(config.key);
+    setEditFormData({
+      value: config.value,
+      description: config.description || "",
+    });
   };
 
-  const handleUpdate = async () => {
-    if (!editingConfig) return;
+  const handleCancelEdit = () => {
+    setEditingKey(null);
+    setEditFormData({});
+  };
 
+  const handleSave = async (config: SystemConfiguration) => {
     try {
-      const response = await apiClient.system.updateConfiguration(
-        editingConfig.key,
-        updateFormData
-      );
+      const updateData: SystemConfigurationUpdate = {
+        value: editFormData.value,
+        category: config.category,
+        data_type: config.data_type,
+        is_sensitive: config.is_sensitive,
+        description: editFormData.description,
+      };
+
+      const response = await apiClient.system.updateConfiguration(config.key, updateData);
       if (response.success) {
-        setIsEditDialogOpen(false);
-        setEditingConfig(null);
+        setEditingKey(null);
+        setEditFormData({});
         loadConfigurations();
       } else {
         setError(response.message || "更新配置失敗");
@@ -241,42 +174,14 @@ export default function SystemConfigurationManagement() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!editingConfig) return;
-
-    try {
-      const response = await apiClient.system.deleteConfiguration(
-        editingConfig.key
-      );
-      if (response.success) {
-        setIsDeleteDialogOpen(false);
-        setEditingConfig(null);
-        loadConfigurations();
-      } else {
-        setError(response.message || "刪除配置失敗");
-      }
-    } catch (err) {
-      setError("刪除配置時發生錯誤");
-      console.error("Error deleting configuration:", err);
+  const toggleCategory = (category: string) => {
+    const newCollapsed = new Set(collapsedCategories);
+    if (newCollapsed.has(category)) {
+      newCollapsed.delete(category);
+    } else {
+      newCollapsed.add(category);
     }
-  };
-
-  const openEditDialog = (config: SystemConfiguration) => {
-    setEditingConfig(config);
-    setUpdateFormData({
-      value: config.value,
-      category: config.category,
-      data_type: config.data_type,
-      is_sensitive: config.is_sensitive,
-      description: config.description || "",
-      validation_regex: config.validation_regex || "",
-    });
-    setIsEditDialogOpen(true);
-  };
-
-  const openDeleteDialog = (config: SystemConfiguration) => {
-    setEditingConfig(config);
-    setIsDeleteDialogOpen(true);
+    setCollapsedCategories(newCollapsed);
   };
 
   const openAuditDialog = (configKey: string) => {
@@ -284,19 +189,94 @@ export default function SystemConfigurationManagement() {
     loadAuditLogs(configKey);
   };
 
-  const filteredConfigurations = configurations.filter(
-    config => !selectedCategory || config.category === selectedCategory
-  );
+  // Group configurations by category
+  const groupedConfigs = configurations.reduce((acc, config) => {
+    if (!acc[config.category]) {
+      acc[config.category] = [];
+    }
+    acc[config.category].push(config);
+    return acc;
+  }, {} as Record<string, SystemConfiguration[]>);
 
-  const groupedConfigurations = categories.reduce(
-    (acc, category) => {
-      acc[category] = filteredConfigurations.filter(
-        config => config.category === category
+  // Render input based on data type
+  const renderValueInput = (config: SystemConfiguration) => {
+    const value = editFormData.value;
+
+    if (config.data_type === "boolean") {
+      return (
+        <div className="flex items-center space-x-2">
+          <Switch
+            checked={value === "true" || value === true}
+            onCheckedChange={(checked) =>
+              setEditFormData({ ...editFormData, value: checked ? "true" : "false" })
+            }
+          />
+          <span className="text-sm text-muted-foreground">
+            {value === "true" || value === true ? "已啟用" : "已停用"}
+          </span>
+        </div>
       );
-      return acc;
-    },
-    {} as Record<string, SystemConfiguration[]>
-  );
+    }
+
+    if (config.data_type === "integer") {
+      return (
+        <Input
+          type="number"
+          value={value}
+          onChange={(e) => setEditFormData({ ...editFormData, value: e.target.value })}
+          className="max-w-xs"
+        />
+      );
+    }
+
+    // String or other types
+    if (value && value.length > 50) {
+      return (
+        <Textarea
+          value={value}
+          onChange={(e) => setEditFormData({ ...editFormData, value: e.target.value })}
+          rows={3}
+          className="font-mono text-sm"
+        />
+      );
+    }
+
+    return (
+      <Input
+        type={config.is_sensitive ? "password" : "text"}
+        value={value}
+        onChange={(e) => setEditFormData({ ...editFormData, value: e.target.value })}
+        className="font-mono text-sm"
+      />
+    );
+  };
+
+  // Render display value
+  const renderDisplayValue = (config: SystemConfiguration) => {
+    if (config.is_sensitive && !showSensitive) {
+      return <span className="text-muted-foreground">***HIDDEN***</span>;
+    }
+
+    if (config.data_type === "boolean") {
+      const isEnabled = config.value === "true" || config.value === true;
+      return (
+        <div className="flex items-center space-x-2">
+          <div
+            className={`w-2 h-2 rounded-full ${isEnabled ? "bg-green-500" : "bg-gray-400"}`}
+          />
+          <span>{isEnabled ? "已啟用" : "已停用"}</span>
+        </div>
+      );
+    }
+
+    return (
+      <span className="font-mono text-sm">
+        {config.value.length > 100
+          ? config.value.substring(0, 100) + "..."
+          : config.value}
+      </span>
+    );
+  };
 
   if (!user || (user.role !== "admin" && user.role !== "super_admin")) {
     return (
@@ -311,165 +291,34 @@ export default function SystemConfigurationManagement() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold">系統配置管理</h1>
-          <p className="text-muted-foreground">管理系統配置參數和設定</p>
+          <p className="text-muted-foreground mt-1">
+            即時生效配置 • 修改後立即套用，無需重啟服務
+          </p>
         </div>
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
-            <Label htmlFor="show-sensitive">顯示敏感資料</Label>
+            {showSensitive ? (
+              <Unlock className="h-4 w-4 text-orange-500" />
+            ) : (
+              <Lock className="h-4 w-4 text-gray-500" />
+            )}
+            <Label htmlFor="show-sensitive" className="cursor-pointer">
+              顯示敏感資料
+            </Label>
             <Switch
               id="show-sensitive"
               checked={showSensitive}
               onCheckedChange={setShowSensitive}
             />
           </div>
-          <Dialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-          >
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                新增配置
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>新增系統配置</DialogTitle>
-                <DialogDescription>建立新的系統配置項目</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="key">配置鍵名 *</Label>
-                    <Input
-                      id="key"
-                      value={formData.key}
-                      onChange={e =>
-                        setFormData({ ...formData, key: e.target.value })
-                      }
-                      placeholder="例如：smtp_host"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="category">類別 *</Label>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(value: any) =>
-                        setFormData({ ...formData, category: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map(category => (
-                          <SelectItem key={category} value={category}>
-                            {categoryLabels[
-                              category as keyof typeof categoryLabels
-                            ] || category}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="data_type">資料類型 *</Label>
-                    <Select
-                      value={formData.data_type}
-                      onValueChange={(value: any) =>
-                        setFormData({ ...formData, data_type: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {dataTypes.map(type => (
-                          <SelectItem key={type} value={type}>
-                            {dataTypeLabels[
-                              type as keyof typeof dataTypeLabels
-                            ] || type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="is_sensitive">敏感資料</Label>
-                    <div className="flex items-center space-x-2 pt-2">
-                      <Switch
-                        id="is_sensitive"
-                        checked={formData.is_sensitive}
-                        onCheckedChange={checked =>
-                          setFormData({ ...formData, is_sensitive: checked })
-                        }
-                      />
-                      <span className="text-sm text-muted-foreground">
-                        {formData.is_sensitive ? "是" : "否"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="value">配置值 *</Label>
-                  <Textarea
-                    id="value"
-                    value={formData.value}
-                    onChange={e =>
-                      setFormData({ ...formData, value: e.target.value })
-                    }
-                    placeholder="輸入配置值"
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">描述</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={e =>
-                      setFormData({ ...formData, description: e.target.value })
-                    }
-                    placeholder="配置說明"
-                    rows={2}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="validation_regex">驗證正則表達式</Label>
-                  <Input
-                    id="validation_regex"
-                    value={formData.validation_regex}
-                    onChange={e =>
-                      setFormData({
-                        ...formData,
-                        validation_regex: e.target.value,
-                      })
-                    }
-                    placeholder="例如：^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsCreateDialogOpen(false)}
-                >
-                  取消
-                </Button>
-                <Button
-                  onClick={handleCreate}
-                  disabled={!formData.key || !formData.value}
-                >
-                  建立
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={loadConfigurations} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            重新載入
+          </Button>
         </div>
       </div>
 
@@ -480,414 +329,204 @@ export default function SystemConfigurationManagement() {
         </Alert>
       )}
 
-      <Tabs defaultValue="configurations" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="configurations">配置管理</TabsTrigger>
-          <TabsTrigger value="categories">分類瀏覽</TabsTrigger>
-        </TabsList>
+      {loading ? (
+        <div className="text-center py-12">
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+          <p className="text-muted-foreground mt-4">載入配置中...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {Object.entries(categoryConfig).map(([categoryKey, category]) => {
+            const configs = groupedConfigs[categoryKey] || [];
+            if (configs.length === 0) return null;
 
-        <TabsContent value="configurations" className="space-y-4">
-          <div className="flex items-center space-x-4">
-            <Select
-              value={selectedCategory}
-              onValueChange={setSelectedCategory}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="選擇類別" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">所有類別</SelectItem>
-                {categories.map(category => (
-                  <SelectItem key={category} value={category}>
-                    {categoryLabels[category as keyof typeof categoryLabels] ||
-                      category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="outline" onClick={loadConfigurations}>
-              重新載入
-            </Button>
-          </div>
+            const CategoryIcon = category.icon;
+            const isCollapsed = collapsedCategories.has(categoryKey);
 
-          {loading ? (
-            <div className="text-center py-8">載入中...</div>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>配置列表</CardTitle>
-                <CardDescription>
-                  共 {filteredConfigurations.length} 項配置
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>鍵名</TableHead>
-                      <TableHead>值</TableHead>
-                      <TableHead>類別</TableHead>
-                      <TableHead>類型</TableHead>
-                      <TableHead>狀態</TableHead>
-                      <TableHead>操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredConfigurations.map(config => {
-                      const CategoryIcon =
-                        categoryIcons[
-                          config.category as keyof typeof categoryIcons
-                        ];
-                      return (
-                        <TableRow key={config.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center space-x-2">
-                              {CategoryIcon && (
-                                <CategoryIcon className="h-4 w-4" />
-                              )}
-                              <span>{config.key}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-2">
-                              <span className="max-w-xs truncate">
-                                {config.is_sensitive && !showSensitive
-                                  ? "***"
-                                  : config.value}
+            return (
+              <Card key={categoryKey} className="overflow-hidden">
+                <CardHeader
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => toggleCategory(categoryKey)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <CategoryIcon className="h-5 w-5 text-primary" />
+                      <div>
+                        <CardTitle className="text-lg">{category.label}</CardTitle>
+                        <CardDescription className="text-xs mt-1">
+                          {category.description} • {configs.length} 項配置
+                        </CardDescription>
+                      </div>
+                    </div>
+                    {isCollapsed ? (
+                      <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                    )}
+                  </div>
+                </CardHeader>
+
+                {!isCollapsed && (
+                  <CardContent className="space-y-4 pt-0">
+                    {configs.map((config) => (
+                      <div
+                        key={config.key}
+                        className="p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <span className="font-mono text-sm font-medium">
+                                {config.key}
                               </span>
                               {config.is_sensitive && (
-                                <Badge variant="secondary">
-                                  <Shield className="h-3 w-3 mr-1" />
+                                <Badge variant="secondary" className="text-xs">
+                                  <Lock className="h-3 w-3 mr-1" />
                                   敏感
                                 </Badge>
                               )}
+                              <Badge variant="outline" className="text-xs">
+                                {config.data_type}
+                              </Badge>
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
-                              {categoryLabels[
-                                config.category as keyof typeof categoryLabels
-                              ] || config.category}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {dataTypeLabels[
-                                config.data_type as keyof typeof dataTypeLabels
-                              ] || config.data_type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-1">
-                              <CheckCircle className="h-4 w-4 text-green-500" />
-                              <span className="text-sm">活躍</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openEditDialog(config)}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openDeleteDialog(config)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openAuditDialog(config.key)}
-                              >
-                                <History className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="categories" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {categories.map(category => {
-              const configs = groupedConfigurations[category] || [];
-              const CategoryIcon =
-                categoryIcons[category as keyof typeof categoryIcons];
-              return (
-                <Card key={category}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center space-x-2">
-                      {CategoryIcon && <CategoryIcon className="h-5 w-5" />}
-                      <span>
-                        {categoryLabels[
-                          category as keyof typeof categoryLabels
-                        ] || category}
-                      </span>
-                    </CardTitle>
-                    <CardDescription>{configs.length} 項配置</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {configs.slice(0, 5).map(config => (
-                        <div
-                          key={config.id}
-                          className="flex justify-between items-center"
-                        >
-                          <span className="text-sm truncate">{config.key}</span>
-                          <div className="flex items-center space-x-1">
-                            {config.is_sensitive && (
-                              <Shield className="h-3 w-3 text-orange-500" />
+                            {config.description && (
+                              <p className="text-sm text-muted-foreground">
+                                {config.description}
+                              </p>
                             )}
-                            <Badge variant="outline" className="text-xs">
-                              {
-                                dataTypeLabels[
-                                  config.data_type as keyof typeof dataTypeLabels
-                                ]
-                              }
-                            </Badge>
+                          </div>
+                          <div className="flex items-center space-x-1 ml-4">
+                            {editingKey !== config.key && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleEdit(config)}
+                                  className="h-8"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openAuditDialog(config.key)}
+                                  className="h-8"
+                                >
+                                  <History className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
-                      ))}
-                      {configs.length > 5 && (
-                        <div className="text-xs text-muted-foreground">
-                          還有 {configs.length - 5} 項...
-                        </div>
-                      )}
-                    </div>
+
+                        {editingKey === config.key ? (
+                          <div className="space-y-3 mt-4 pt-4 border-t">
+                            <div className="space-y-2">
+                              <Label>配置值</Label>
+                              {renderValueInput(config)}
+                            </div>
+                            <div className="space-y-2">
+                              <Label>描述</Label>
+                              <Input
+                                value={editFormData.description}
+                                onChange={(e) =>
+                                  setEditFormData({
+                                    ...editFormData,
+                                    description: e.target.value,
+                                  })
+                                }
+                                placeholder="配置說明..."
+                              />
+                            </div>
+                            <div className="flex items-center space-x-2 pt-2">
+                              <Button size="sm" onClick={() => handleSave(config)}>
+                                <Save className="h-4 w-4 mr-2" />
+                                儲存
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleCancelEdit}
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                取消
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-3 p-3 bg-muted/50 rounded-md">
+                            {renderDisplayValue(config)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>編輯配置</DialogTitle>
-            <DialogDescription>
-              修改 {editingConfig?.key} 的設定
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-category">類別</Label>
-                <Select
-                  value={updateFormData.category}
-                  onValueChange={(value: any) =>
-                    setUpdateFormData({ ...updateFormData, category: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(category => (
-                      <SelectItem key={category} value={category}>
-                        {categoryLabels[
-                          category as keyof typeof categoryLabels
-                        ] || category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-data_type">資料類型</Label>
-                <Select
-                  value={updateFormData.data_type}
-                  onValueChange={(value: any) =>
-                    setUpdateFormData({ ...updateFormData, data_type: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dataTypes.map(type => (
-                      <SelectItem key={type} value={type}>
-                        {dataTypeLabels[type as keyof typeof dataTypeLabels] ||
-                          type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-is_sensitive">敏感資料</Label>
-              <div className="flex items-center space-x-2 pt-2">
-                <Switch
-                  id="edit-is_sensitive"
-                  checked={updateFormData.is_sensitive}
-                  onCheckedChange={checked =>
-                    setUpdateFormData({
-                      ...updateFormData,
-                      is_sensitive: checked,
-                    })
-                  }
-                />
-                <span className="text-sm text-muted-foreground">
-                  {updateFormData.is_sensitive ? "是" : "否"}
-                </span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-value">配置值</Label>
-              <Textarea
-                id="edit-value"
-                value={updateFormData.value}
-                onChange={e =>
-                  setUpdateFormData({
-                    ...updateFormData,
-                    value: e.target.value,
-                  })
-                }
-                rows={3}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-description">描述</Label>
-              <Textarea
-                id="edit-description"
-                value={updateFormData.description}
-                onChange={e =>
-                  setUpdateFormData({
-                    ...updateFormData,
-                    description: e.target.value,
-                  })
-                }
-                rows={2}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-validation_regex">驗證正則表達式</Label>
-              <Input
-                id="edit-validation_regex"
-                value={updateFormData.validation_regex}
-                onChange={e =>
-                  setUpdateFormData({
-                    ...updateFormData,
-                    validation_regex: e.target.value,
-                  })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              取消
-            </Button>
-            <Button onClick={handleUpdate}>
-              <Save className="h-4 w-4 mr-2" />
-              儲存
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>刪除配置</DialogTitle>
-            <DialogDescription>
-              確定要刪除配置 "{editingConfig?.key}" 嗎？此操作無法復原。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-            >
-              取消
-            </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              刪除
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Audit Log Dialog */}
-      <Dialog
-        open={!!selectedConfigKey}
-        onOpenChange={() => setSelectedConfigKey("")}
-      >
+      <Dialog open={!!selectedConfigKey} onOpenChange={() => setSelectedConfigKey("")}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>配置變更記錄</DialogTitle>
-            <DialogDescription>
-              {selectedConfigKey} 的變更歷史
-            </DialogDescription>
+            <DialogDescription>{selectedConfigKey} 的變更歷史</DialogDescription>
           </DialogHeader>
           <div className="max-h-96 overflow-y-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>操作</TableHead>
-                  <TableHead>舊值</TableHead>
-                  <TableHead>新值</TableHead>
-                  <TableHead>操作者</TableHead>
-                  <TableHead>時間</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {auditLogs.map((log, index) => (
-                  <TableRow key={index}>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          log.action === "CREATE"
-                            ? "default"
-                            : log.action === "UPDATE"
-                              ? "secondary"
-                              : "destructive"
-                        }
-                      >
-                        {log.action === "CREATE"
-                          ? "建立"
-                          : log.action === "UPDATE"
-                            ? "更新"
-                            : "刪除"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm text-muted-foreground">
-                        {log.old_value || "-"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm">{log.new_value || "-"}</span>
-                    </TableCell>
-                    <TableCell>
-                      {log.user_name || `用戶 ${log.changed_by}`}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(log.changed_at).toLocaleString("zh-TW")}
-                    </TableCell>
+            {auditLogs.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">尚無變更記錄</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>操作</TableHead>
+                    <TableHead>舊值</TableHead>
+                    <TableHead>新值</TableHead>
+                    <TableHead>操作者</TableHead>
+                    <TableHead>時間</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {auditLogs.map((log, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            log.action === "CREATE"
+                              ? "default"
+                              : log.action === "UPDATE"
+                                ? "secondary"
+                                : "destructive"
+                          }
+                        >
+                          {log.action === "CREATE"
+                            ? "建立"
+                            : log.action === "UPDATE"
+                              ? "更新"
+                              : "刪除"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground font-mono">
+                          {log.old_value || "-"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm font-mono">{log.new_value || "-"}</span>
+                      </TableCell>
+                      <TableCell>{log.user_name || `用戶 ${log.changed_by}`}</TableCell>
+                      <TableCell>
+                        {new Date(log.changed_at).toLocaleString("zh-TW")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedConfigKey("")}>

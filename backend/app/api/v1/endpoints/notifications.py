@@ -294,8 +294,8 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
             title_en="System Maintenance Notice",
             message="系統將於今晚23:00-01:00進行維護，期間可能無法正常使用。造成不便敬請見諒。",
             message_en="The system will undergo maintenance from 23:00-01:00 tonight. Service may be unavailable during this time. We apologize for any inconvenience.",
-            notification_type=NotificationType.WARNING.value,
-            priority=NotificationPriority.HIGH.value,
+            notification_type=NotificationType.warning.value,
+            priority=NotificationPriority.high.value,
         )
         created_notifications.append(system_announcement.id)
 
@@ -306,8 +306,8 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
             title_en="Welcome to Scholarship Management System",
             message="歡迎使用獎學金申請與審核系統！您可以在此查看申請狀態、上傳文件並接收重要通知。",
             message_en="Welcome to the Scholarship Application and Review System! You can view application status, upload documents, and receive important notifications here.",
-            notification_type=NotificationType.INFO.value,
-            priority=NotificationPriority.NORMAL.value,
+            notification_type=NotificationType.info.value,
+            priority=NotificationPriority.normal.value,
             action_url="/dashboard",
         )
         created_notifications.append(personal_notification.id)
@@ -318,7 +318,7 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
             title_en="Important: Application Deadline Reminder",
             message="2024春季獎學金申請將於本月底截止，請尚未提交申請的同學把握時間完成申請程序。",
             message_en="The 2024 Spring Scholarship application deadline is at the end of this month. Students who have not yet submitted their applications should complete the process soon.",
-            notification_type=NotificationType.REMINDER.value,
+            notification_type=NotificationType.reminder.value,
             priority=NotificationPriority.URGENT.value,
             action_url="/scholarships",
         )

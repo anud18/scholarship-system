@@ -64,7 +64,7 @@ class ConfigurationCreateSchema(BaseModel):
     key: str = Field(..., description="Configuration key")
     value: Any = Field(..., description="Configuration value")
     category: ConfigCategory = Field(..., description="Configuration category")
-    data_type: ConfigDataType = Field(ConfigDataType.STRING, description="Data type")
+    data_type: ConfigDataType = Field(ConfigDataType.string, description="Data type")
     is_sensitive: bool = Field(False, description="Whether the value is sensitive")
     is_readonly: bool = Field(False, description="Whether the configuration is readonly")
     description: Optional[str] = Field(None, description="Description")
@@ -212,16 +212,16 @@ class ConfigurationImportResultSchema(BaseModel):
 def get_category_display_name(category: ConfigCategory) -> str:
     """Get human-readable category name"""
     display_names = {
-        ConfigCategory.DATABASE: "資料庫設定",
-        ConfigCategory.API_KEYS: "API 金鑰",
-        ConfigCategory.EMAIL: "電子郵件設定",
-        ConfigCategory.OCR: "OCR 設定",
-        ConfigCategory.FILE_STORAGE: "檔案儲存設定",
-        ConfigCategory.SECURITY: "安全性設定",
-        ConfigCategory.FEATURES: "功能開關",
-        ConfigCategory.INTEGRATIONS: "系統整合",
-        ConfigCategory.PERFORMANCE: "效能設定",
-        ConfigCategory.LOGGING: "日誌設定",
+        ConfigCategory.database: "資料庫設定",
+        ConfigCategory.api_keys: "API 金鑰",
+        ConfigCategory.email: "電子郵件設定",
+        ConfigCategory.ocr: "OCR 設定",
+        ConfigCategory.file_storage: "檔案儲存設定",
+        ConfigCategory.security: "安全性設定",
+        ConfigCategory.features: "功能開關",
+        ConfigCategory.integrations: "系統整合",
+        ConfigCategory.performance: "效能設定",
+        ConfigCategory.logging: "日誌設定",
     }
     return display_names.get(category, category.value)
 
@@ -229,16 +229,16 @@ def get_category_display_name(category: ConfigCategory) -> str:
 def get_category_description(category: ConfigCategory) -> str:
     """Get category description"""
     descriptions = {
-        ConfigCategory.DATABASE: "資料庫連接與設定相關選項",
-        ConfigCategory.API_KEYS: "外部服務 API 金鑰與認證資訊",
-        ConfigCategory.EMAIL: "SMTP 伺服器與電子郵件發送設定",
-        ConfigCategory.OCR: "OCR 服務與 Gemini API 設定",
-        ConfigCategory.FILE_STORAGE: "MinIO 與檔案上傳儲存設定",
-        ConfigCategory.SECURITY: "安全性、CORS 與驗證相關設定",
-        ConfigCategory.FEATURES: "系統功能開關與特性設定",
-        ConfigCategory.INTEGRATIONS: "NYCU API 與外部系統整合設定",
-        ConfigCategory.PERFORMANCE: "系統效能與快取設定",
-        ConfigCategory.LOGGING: "日誌記錄與除錯設定",
+        ConfigCategory.database: "資料庫連接與設定相關選項",
+        ConfigCategory.api_keys: "外部服務 API 金鑰與認證資訊",
+        ConfigCategory.email: "SMTP 伺服器與電子郵件發送設定",
+        ConfigCategory.ocr: "OCR 服務與 Gemini API 設定",
+        ConfigCategory.file_storage: "MinIO 與檔案上傳儲存設定",
+        ConfigCategory.security: "安全性、CORS 與驗證相關設定",
+        ConfigCategory.features: "系統功能開關與特性設定",
+        ConfigCategory.integrations: "NYCU API 與外部系統整合設定",
+        ConfigCategory.performance: "系統效能與快取設定",
+        ConfigCategory.logging: "日誌記錄與除錯設定",
     }
     return descriptions.get(category, "系統設定分類")
 

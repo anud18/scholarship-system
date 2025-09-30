@@ -59,8 +59,8 @@ async def test_notify_application_batch_updates_multi_all_approved(dummy_service
     args, kwargs = dummy_service.create_notification.await_args
 
     assert kwargs["user_id"] == 7
-    assert kwargs["notification_type"] == NotificationType.APPLICATION_APPROVED
-    assert kwargs["priority"] == NotificationPriority.HIGH
+    assert kwargs["notification_type"] == NotificationType.application_approved
+    assert kwargs["priority"] == NotificationPriority.high
     assert kwargs["href"] == "/applications"
     assert kwargs["group_key"] == "application_results"
     payload = kwargs["data"]
@@ -91,7 +91,7 @@ async def test_notify_application_batch_updates_mixed_statuses(dummy_service):
     assert payload["rejected_count"] == 1
     assert payload["total_count"] == 3
     assert "核准：1" in payload["message"]
-    assert kwargs["notification_type"] == NotificationType.INFO
+    assert kwargs["notification_type"] == NotificationType.info
 
 
 @pytest.mark.asyncio
@@ -159,8 +159,8 @@ async def test_get_notification_analytics(dummy_service, monkeypatch):
             {
                 "created_at": base_time - timedelta(days=1),
                 "is_read": True,
-                "notification_type": NotificationType.APPLICATION_APPROVED,
-                "priority": NotificationPriority.HIGH,
+                "notification_type": NotificationType.application_approved,
+                "priority": NotificationPriority.high,
                 "channel": NotificationChannel.IN_APP,
             },
         )(),
@@ -170,8 +170,8 @@ async def test_get_notification_analytics(dummy_service, monkeypatch):
             {
                 "created_at": base_time - timedelta(days=2),
                 "is_read": False,
-                "notification_type": NotificationType.APPLICATION_REJECTED,
-                "priority": NotificationPriority.NORMAL,
+                "notification_type": NotificationType.application_rejected,
+                "priority": NotificationPriority.normal,
                 "channel": NotificationChannel.EMAIL,
             },
         )(),
@@ -199,8 +199,8 @@ async def test_get_notification_analytics(dummy_service, monkeypatch):
     assert analytics["read_notifications"] == 1
     assert analytics["unread_notifications"] == 1
     assert analytics["engagement_rate"] == 50.0
-    assert analytics["type_breakdown"][NotificationType.APPLICATION_APPROVED.value] == 1
-    assert analytics["priority_breakdown"][NotificationPriority.HIGH.value] == 1
+    assert analytics["type_breakdown"][NotificationType.application_approved.value] == 1
+    assert analytics["priority_breakdown"][NotificationPriority.high.value] == 1
     assert analytics["channel_breakdown"][NotificationChannel.EMAIL.value] == 1
     assert analytics["user_id"] == 42
 
@@ -230,7 +230,7 @@ async def test_create_batched_notification_enqueues_batches(dummy_service, monke
     user_ids = list(range(5))
     batch_id = await dummy_service.create_batched_notification(
         user_ids=user_ids,
-        notification_type=NotificationType.INFO,
+        notification_type=NotificationType.info,
         data={"title": "Bulk update"},
         batch_size=2,
         delay_minutes=10,
@@ -269,9 +269,9 @@ async def test_aggregate_notifications_returns_grouped_data(dummy_service, monke
             return {"created_at": self.created_at.isoformat(), "type": self.notification_type.value}
 
     notifications = [
-        FakeNotification(base_time - timedelta(hours=1), NotificationType.APPLICATION_APPROVED),
-        FakeNotification(base_time - timedelta(hours=2), NotificationType.APPLICATION_APPROVED),
-        FakeNotification(base_time - timedelta(hours=3), NotificationType.APPLICATION_REJECTED),
+        FakeNotification(base_time - timedelta(hours=1), NotificationType.application_approved),
+        FakeNotification(base_time - timedelta(hours=2), NotificationType.application_approved),
+        FakeNotification(base_time - timedelta(hours=3), NotificationType.application_rejected),
     ]
 
     class FakeScalarResult:
@@ -293,8 +293,8 @@ async def test_aggregate_notifications_returns_grouped_data(dummy_service, monke
     aggregated = await dummy_service.aggregate_notifications(user_id=3, group_key="updates")
 
     assert aggregated["count"] == 3
-    assert aggregated["type_counts"][NotificationType.APPLICATION_APPROVED.value] == 2
-    assert aggregated["type_counts"][NotificationType.APPLICATION_REJECTED.value] == 1
+    assert aggregated["type_counts"][NotificationType.application_approved.value] == 2
+    assert aggregated["type_counts"][NotificationType.application_rejected.value] == 1
     assert aggregated["latest"]["created_at"].startswith(str(base_time.year))
 
 

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.dynamic_config import dynamic_config
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 
@@ -50,3 +51,17 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         raise credentials_exception
 
     return user
+
+
+async def get_dynamic_config():
+    """
+    Get DynamicConfig instance for dependency injection.
+
+    Usage in endpoints:
+        async def my_endpoint(
+            db: AsyncSession = Depends(get_db),
+            config = Depends(get_dynamic_config)
+        ):
+            smtp_host = await config.get("smtp_host", db)
+    """
+    return dynamic_config

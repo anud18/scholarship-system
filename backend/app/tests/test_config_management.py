@@ -67,8 +67,8 @@ class TestConfigurationService:
             id=1,
             key="test_key",
             value="test_value",
-            category=ConfigCategory.FEATURES,
-            data_type=ConfigDataType.STRING,
+            category=ConfigCategory.features,
+            data_type=ConfigDataType.string,
             is_sensitive=False,
         )
 
@@ -95,7 +95,7 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_get_decrypted_value_non_sensitive(self, config_service):
         """Test getting decrypted value for non-sensitive setting"""
-        setting = SystemSetting(key="test_key", value="test_value", data_type=ConfigDataType.STRING, is_sensitive=False)
+        setting = SystemSetting(key="test_key", value="test_value", data_type=ConfigDataType.string, is_sensitive=False)
 
         result = await config_service.get_decrypted_value(setting)
         assert result == "test_value"
@@ -103,7 +103,7 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_get_decrypted_value_boolean(self, config_service):
         """Test getting decrypted value for boolean setting"""
-        setting = SystemSetting(key="test_bool", value="true", data_type=ConfigDataType.BOOLEAN, is_sensitive=False)
+        setting = SystemSetting(key="test_bool", value="true", data_type=ConfigDataType.boolean, is_sensitive=False)
 
         result = await config_service.get_decrypted_value(setting)
         assert result is True
@@ -115,7 +115,7 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_get_decrypted_value_integer(self, config_service):
         """Test getting decrypted value for integer setting"""
-        setting = SystemSetting(key="test_int", value="42", data_type=ConfigDataType.INTEGER, is_sensitive=False)
+        setting = SystemSetting(key="test_int", value="42", data_type=ConfigDataType.integer, is_sensitive=False)
 
         result = await config_service.get_decrypted_value(setting)
         assert result == 42
@@ -124,7 +124,7 @@ class TestConfigurationService:
     async def test_get_decrypted_value_json(self, config_service):
         """Test getting decrypted value for JSON setting"""
         setting = SystemSetting(
-            key="test_json", value='{"key": "value", "number": 123}', data_type=ConfigDataType.JSON, is_sensitive=False
+            key="test_json", value='{"key": "value", "number": 123}', data_type=ConfigDataType.json, is_sensitive=False
         )
 
         result = await config_service.get_decrypted_value(setting)
@@ -142,8 +142,8 @@ class TestConfigurationService:
             key="new_key",
             value="new_value",
             user_id=1,
-            category=ConfigCategory.API_KEYS,
-            data_type=ConfigDataType.STRING,
+            category=ConfigCategory.api_keys,
+            data_type=ConfigDataType.string,
             is_sensitive=True,
             description="Test configuration",
         )
@@ -167,7 +167,7 @@ class TestConfigurationService:
     @pytest.mark.asyncio
     async def test_validate_configuration_valid_integer(self, config_service):
         """Test validation of valid integer configuration"""
-        is_valid, message = await config_service.validate_configuration("test_key", "42", ConfigDataType.INTEGER)
+        is_valid, message = await config_service.validate_configuration("test_key", "42", ConfigDataType.integer)
 
         assert is_valid is True
         assert message == "Valid"
@@ -176,7 +176,7 @@ class TestConfigurationService:
     async def test_validate_configuration_invalid_integer(self, config_service):
         """Test validation of invalid integer configuration"""
         is_valid, message = await config_service.validate_configuration(
-            "test_key", "not_a_number", ConfigDataType.INTEGER
+            "test_key", "not_a_number", ConfigDataType.integer
         )
 
         assert is_valid is False
@@ -186,7 +186,7 @@ class TestConfigurationService:
     async def test_validate_configuration_valid_json(self, config_service):
         """Test validation of valid JSON configuration"""
         is_valid, message = await config_service.validate_configuration(
-            "test_key", '{"valid": "json"}', ConfigDataType.JSON
+            "test_key", '{"valid": "json"}', ConfigDataType.json
         )
 
         assert is_valid is True
@@ -196,7 +196,7 @@ class TestConfigurationService:
     async def test_validate_configuration_invalid_json(self, config_service):
         """Test validation of invalid JSON configuration"""
         is_valid, message = await config_service.validate_configuration(
-            "test_key", "{invalid json}", ConfigDataType.JSON
+            "test_key", "{invalid json}", ConfigDataType.json
         )
 
         assert is_valid is False
@@ -208,11 +208,11 @@ class TestConfigurationService:
         valid_booleans = ["true", "false", "1", "0", "yes", "no", "on", "off"]
 
         for value in valid_booleans:
-            is_valid, message = await config_service.validate_configuration("test_key", value, ConfigDataType.BOOLEAN)
+            is_valid, message = await config_service.validate_configuration("test_key", value, ConfigDataType.boolean)
             assert is_valid is True, f"Failed for value: {value}"
 
         # Test invalid boolean
-        is_valid, message = await config_service.validate_configuration("test_key", "maybe", ConfigDataType.BOOLEAN)
+        is_valid, message = await config_service.validate_configuration("test_key", "maybe", ConfigDataType.boolean)
         assert is_valid is False
         assert "Boolean value must be" in message
 
@@ -228,15 +228,15 @@ class TestConfigurationService:
 
         # Check structure of a configuration
         ocr_config = predefined["ocr_service_enabled"]
-        assert ocr_config["category"] == ConfigCategory.OCR
-        assert ocr_config["data_type"] == ConfigDataType.BOOLEAN
+        assert ocr_config["category"] == ConfigCategory.ocr
+        assert ocr_config["data_type"] == ConfigDataType.boolean
         assert ocr_config["is_sensitive"] is False
         assert "description" in ocr_config
 
         # Check sensitive configuration
         api_key_config = predefined["gemini_api_key"]
         assert api_key_config["is_sensitive"] is True
-        assert api_key_config["category"] == ConfigCategory.API_KEYS
+        assert api_key_config["category"] == ConfigCategory.api_keys
         assert "validation_regex" in api_key_config
 
     @pytest.mark.asyncio
@@ -247,16 +247,16 @@ class TestConfigurationService:
             SystemSetting(
                 key="key1",
                 value="old1",
-                category=ConfigCategory.FEATURES,
-                data_type=ConfigDataType.STRING,
+                category=ConfigCategory.features,
+                data_type=ConfigDataType.string,
                 is_sensitive=False,
                 is_readonly=False,
             ),
             SystemSetting(
                 key="key2",
                 value="old2",
-                category=ConfigCategory.FEATURES,
-                data_type=ConfigDataType.STRING,
+                category=ConfigCategory.features,
+                data_type=ConfigDataType.string,
                 is_sensitive=False,
                 is_readonly=False,
             ),

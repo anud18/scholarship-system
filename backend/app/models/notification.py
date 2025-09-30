@@ -26,64 +26,64 @@ class NotificationType(enum.Enum):
     """Enhanced notification types for scholarship platform"""
 
     # Legacy types (maintain backward compatibility)
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-    SUCCESS = "success"
-    REMINDER = "reminder"
+    info = "info"
+    warning = "warning"
+    error = "error"
+    success = "success"
+    reminder = "reminder"
 
     # Application lifecycle
-    APPLICATION_SUBMITTED = "application_submitted"
-    APPLICATION_APPROVED = "application_approved"
-    APPLICATION_REJECTED = "application_rejected"
-    APPLICATION_REQUIRES_REVIEW = "application_requires_review"
-    APPLICATION_UNDER_REVIEW = "application_under_review"
+    application_submitted = "application_submitted"
+    application_approved = "application_approved"
+    application_rejected = "application_rejected"
+    application_requires_review = "application_requires_review"
+    application_under_review = "application_under_review"
 
     # Document management
-    DOCUMENT_REQUIRED = "document_required"
-    DOCUMENT_APPROVED = "document_approved"
-    DOCUMENT_REJECTED = "document_rejected"
+    document_required = "document_required"
+    document_approved = "document_approved"
+    document_rejected = "document_rejected"
 
     # Deadlines and reminders
-    DEADLINE_APPROACHING = "deadline_approaching"
-    DEADLINE_EXTENDED = "deadline_extended"
-    REVIEW_DEADLINE = "review_deadline"
-    APPLICATION_DEADLINE = "application_deadline"
+    deadline_approaching = "deadline_approaching"
+    deadline_extended = "deadline_extended"
+    review_deadline = "review_deadline"
+    application_deadline = "application_deadline"
 
     # New opportunities
-    NEW_SCHOLARSHIP_AVAILABLE = "new_scholarship_available"
-    MATCHING_SCHOLARSHIP = "matching_scholarship"
-    SCHOLARSHIP_OPENING_SOON = "scholarship_opening_soon"
+    new_scholarship_available = "new_scholarship_available"
+    matching_scholarship = "matching_scholarship"
+    scholarship_opening_soon = "scholarship_opening_soon"
 
     # Review process
-    PROFESSOR_REVIEW_REQUESTED = "professor_review_requested"
-    PROFESSOR_REVIEW_COMPLETED = "professor_review_completed"
-    PROFESSOR_ASSIGNMENT = "professor_assignment"
-    ADMIN_REVIEW_REQUESTED = "admin_review_requested"
+    professor_review_requested = "professor_review_requested"
+    professor_review_completed = "professor_review_completed"
+    professor_assignment = "professor_assignment"
+    admin_review_requested = "admin_review_requested"
 
     # System and admin
-    SYSTEM_MAINTENANCE = "system_maintenance"
-    ADMIN_MESSAGE = "admin_message"
-    ACCOUNT_UPDATE = "account_update"
-    SECURITY_ALERT = "security_alert"
+    system_maintenance = "system_maintenance"
+    admin_message = "admin_message"
+    account_update = "account_update"
+    security_alert = "security_alert"
 
 
 class NotificationPriority(enum.Enum):
     """Enhanced notification priority levels"""
 
-    CRITICAL = "critical"  # System alerts, security issues
-    HIGH = "high"  # Application approvals/rejections
-    NORMAL = "normal"  # Status updates, deadlines
-    LOW = "low"  # General announcements
+    low = "low"  # General announcements
+    normal = "normal"  # Status updates, deadlines
+    high = "high"  # Application approvals/rejections
+    urgent = "urgent"  # System alerts, critical issues (formerly CRITICAL)
 
 
 class NotificationFrequency(enum.Enum):
     """Notification delivery frequency"""
 
-    IMMEDIATE = "immediate"
-    DAILY = "daily"
-    WEEKLY = "weekly"
-    DISABLED = "disabled"
+    immediate = "immediate"
+    daily = "daily"
+    weekly = "weekly"
+    disabled = "disabled"
 
 
 class Notification(Base):
@@ -102,16 +102,16 @@ class Notification(Base):
 
     # Enhanced type system with backward compatibility
     notification_type = Column(
-        Enum(NotificationType),
-        default=NotificationType.INFO,
+        Enum(NotificationType, values_callable=lambda obj: [e.value for e in obj]),
+        default=NotificationType.info,
         nullable=False,
         index=True,
     )
 
     # Enhanced priority system
     priority = Column(
-        Enum(NotificationPriority),
-        default=NotificationPriority.NORMAL,
+        Enum(NotificationPriority, values_callable=lambda obj: [e.value for e in obj]),
+        default=NotificationPriority.normal,
         nullable=False,
         index=True,
     )
@@ -183,12 +183,12 @@ class Notification(Base):
     @property
     def is_urgent(self) -> bool:
         """Check if notification is urgent"""
-        return bool(self.priority in [NotificationPriority.CRITICAL, NotificationPriority.HIGH])
+        return bool(self.priority in [NotificationPriority.urgent, NotificationPriority.high])
 
     @property
     def is_critical(self) -> bool:
         """Check if notification is critical priority"""
-        return bool(self.priority == NotificationPriority.CRITICAL)
+        return bool(self.priority == NotificationPriority.urgent)
 
     @property
     def is_system_announcement(self) -> bool:
@@ -316,8 +316,8 @@ class NotificationPreference(Base):
 
     # Frequency control
     frequency = Column(
-        Enum(NotificationFrequency),
-        default=NotificationFrequency.IMMEDIATE,
+        Enum(NotificationFrequency, values_callable=lambda obj: [e.value for e in obj]),
+        default=NotificationFrequency.immediate,
         nullable=False,
     )
 
@@ -392,7 +392,7 @@ class NotificationTemplate(Base):
     default_channels = Column(JSON, default=["in_app"])  # Default delivery channels
     default_priority = Column(
         Enum(NotificationPriority, values_callable=lambda obj: [e.value for e in obj]),
-        default=NotificationPriority.NORMAL,
+        default=NotificationPriority.normal,
     )
 
     # Template variables documentation
@@ -447,7 +447,7 @@ class NotificationQueue(Base):
     )
     priority = Column(
         Enum(NotificationPriority, values_callable=lambda obj: [e.value for e in obj]),
-        default=NotificationPriority.NORMAL,
+        default=NotificationPriority.normal,
     )
 
     # Content

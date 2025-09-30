@@ -30,8 +30,8 @@ class TestNotificationService:
         notification.title_en = "Test Notification"
         notification.message = "Test message"
         notification.message_en = "Test message"
-        notification.notification_type = NotificationType.INFO.value
-        notification.priority = NotificationPriority.NORMAL.value
+        notification.notification_type = NotificationType.info.value
+        notification.priority = NotificationPriority.normal.value
         notification.is_read = False
         notification.is_dismissed = False
         notification.created_at = datetime.now()
@@ -82,8 +82,8 @@ class TestNotificationService:
         message = "Test message"
         title_en = "Test Notification EN"
         message_en = "Test message EN"
-        notification_type = NotificationType.WARNING.value
-        priority = NotificationPriority.HIGH.value
+        notification_type = NotificationType.warning.value
+        priority = NotificationPriority.high.value
         related_resource_type = "application"
         related_resource_id = 123
         action_url = "/test-url"
@@ -185,8 +185,8 @@ class TestNotificationService:
             assert call_args["title"] == f"{application_title}狀態更新"
             assert call_args["title_en"] == f"{application_title} Status Update"
             assert "恭喜" in call_args["message"]  # Approved message should contain congratulations
-            assert call_args["notification_type"] == NotificationType.SUCCESS.value
-            assert call_args["priority"] == NotificationPriority.HIGH.value
+            assert call_args["notification_type"] == NotificationType.success.value
+            assert call_args["priority"] == NotificationPriority.high.value
             assert call_args["related_resource_type"] == "application"
             assert call_args["related_resource_id"] == application_id
             assert call_args["action_url"] == f"/applications/{application_id}"
@@ -212,8 +212,8 @@ class TestNotificationService:
             call_args = mock_create.call_args[1]
 
             assert "很抱歉" in call_args["message"]  # Rejected message should contain apology
-            assert call_args["notification_type"] == NotificationType.INFO.value
-            assert call_args["priority"] == NotificationPriority.HIGH.value
+            assert call_args["notification_type"] == NotificationType.info.value
+            assert call_args["priority"] == NotificationPriority.high.value
 
             assert result == mock_notification
 
@@ -236,8 +236,8 @@ class TestNotificationService:
             call_args = mock_create.call_args[1]
 
             assert "審核中" in call_args["message"]  # Under review message
-            assert call_args["notification_type"] == NotificationType.INFO.value
-            assert call_args["priority"] == NotificationPriority.NORMAL.value
+            assert call_args["notification_type"] == NotificationType.info.value
+            assert call_args["priority"] == NotificationPriority.normal.value
 
             assert result == mock_notification
 
@@ -267,8 +267,8 @@ class TestNotificationService:
             assert call_args["title"] == "申請文件補充通知"
             assert call_args["title_en"] == "Document Requirement Notification"
             assert "成績單、推薦信、證明文件" in call_args["message"]
-            assert call_args["notification_type"] == NotificationType.WARNING.value
-            assert call_args["priority"] == NotificationPriority.HIGH.value
+            assert call_args["notification_type"] == NotificationType.warning.value
+            assert call_args["priority"] == NotificationPriority.high.value
             assert call_args["expires_at"] == deadline
 
             assert result == mock_notification
@@ -325,8 +325,8 @@ class TestNotificationService:
             call_args = mock_create.call_args[1]
 
             assert "5 天後到期" in call_args["message"]
-            assert call_args["priority"] == NotificationPriority.HIGH.value
-            assert call_args["notification_type"] == NotificationType.REMINDER.value
+            assert call_args["priority"] == NotificationPriority.high.value
+            assert call_args["notification_type"] == NotificationType.reminder.value
 
             assert result == mock_notification
 
@@ -396,8 +396,8 @@ class TestNotificationService:
                     user_ids=user_ids,
                     title=title,
                     message=message,
-                    notification_type=NotificationType.INFO.value,
-                    priority=NotificationPriority.HIGH.value,
+                    notification_type=NotificationType.info.value,
+                    priority=NotificationPriority.high.value,
                 )
 
                 # Verify database operations
@@ -584,7 +584,7 @@ class TestNotificationService:
                 skip=10,
                 limit=20,
                 unread_only=True,
-                notification_type=NotificationType.WARNING.value,
+                notification_type=NotificationType.warning.value,
             )
 
             # Verify query was executed with filters

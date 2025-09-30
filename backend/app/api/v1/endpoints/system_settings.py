@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,7 @@ from app.services.config_management_service import ConfigurationService
 router = APIRouter()
 
 
-@router.get("/", response_model=List[SystemSettingResponse])
+@router.get("/")
 async def get_all_configurations(
     category: Optional[ConfigCategory] = None,
     include_sensitive: bool = False,
@@ -62,14 +62,20 @@ async def get_all_configurations(
                 }
             )
 
-        return response_configs
+        return {
+            "success": True,
+            "message": f"Retrieved {len(response_configs)} system settings",
+            "data": response_configs,
+            "errors": None,
+            "trace_id": None,
+        }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configurations: {str(e)}"
         )
 
 
-@router.get("/{config_key}", response_model=SystemSettingResponse)
+@router.get("/{config_key}")
 async def get_configuration(
     config_key: str,
     include_sensitive: bool = False,
@@ -94,7 +100,7 @@ async def get_configuration(
         else:
             value = configuration.value if not configuration.is_sensitive else "***HIDDEN***"
 
-        return {
+        config_data = {
             "key": configuration.key,
             "value": value,
             "category": configuration.category,
@@ -107,6 +113,14 @@ async def get_configuration(
             "last_modified_by": configuration.last_modified_by,
             "created_at": configuration.created_at,
             "updated_at": configuration.updated_at,
+        }
+
+        return {
+            "success": True,
+            "message": f"Retrieved configuration '{config_key}'",
+            "data": config_data,
+            "errors": None,
+            "trace_id": None,
         }
     except HTTPException:
         raise
@@ -253,20 +267,34 @@ async def validate_configuration(
         )
 
 
-@router.get("/categories/", response_model=List[str])
+@router.get("/categories/")
 async def get_configuration_categories(current_user: User = Depends(require_admin)):
     """
     獲取所有配置類別
     """
-    return [category.value for category in ConfigCategory]
+    categories = [category.value for category in ConfigCategory]
+    return {
+        "success": True,
+        "message": f"Retrieved {len(categories)} configuration categories",
+        "data": categories,
+        "errors": None,
+        "trace_id": None,
+    }
 
 
-@router.get("/data-types/", response_model=List[str])
+@router.get("/data-types/")
 async def get_configuration_data_types(current_user: User = Depends(require_admin)):
     """
     獲取所有配置數據類型
     """
-    return [data_type.value for data_type in ConfigDataType]
+    data_types = [data_type.value for data_type in ConfigDataType]
+    return {
+        "success": True,
+        "message": f"Retrieved {len(data_types)} data types",
+        "data": data_types,
+        "errors": None,
+        "trace_id": None,
+    }
 
 
 @router.get("/audit-logs/{config_key}")

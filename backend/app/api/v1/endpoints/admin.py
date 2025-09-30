@@ -695,7 +695,7 @@ async def update_email_template(
             body_template=template.body_template,
             cc=template.cc,
             bcc=template.bcc,
-            sending_type=SendingType.SINGLE if template.sending_type == "single" else SendingType.BULK,
+            sending_type=SendingType.single if template.sending_type == "single" else SendingType.bulk,
             recipient_options=template.recipient_options,
             requires_approval=template.requires_approval,
             max_recipients=template.max_recipients,
@@ -729,9 +729,9 @@ async def get_email_templates(
 
     if sending_type:
         if sending_type.lower() == "single":
-            stmt = stmt.where(EmailTemplate.sending_type == SendingType.SINGLE)
+            stmt = stmt.where(EmailTemplate.sending_type == SendingType.single)
         elif sending_type.lower() == "bulk":
-            stmt = stmt.where(EmailTemplate.sending_type == SendingType.BULK)
+            stmt = stmt.where(EmailTemplate.sending_type == SendingType.bulk)
 
     stmt = stmt.order_by(EmailTemplate.sending_type, EmailTemplate.key)
     result = await db.execute(stmt)
