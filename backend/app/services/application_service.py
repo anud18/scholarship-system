@@ -199,10 +199,10 @@ class ApplicationService:
                 Application.scholarship_type_id == scholarship.id,
                 Application.status.in_(
                     [
-                        ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.UNDER_REVIEW.value,
-                        ApplicationStatus.PENDING_RECOMMENDATION.value,
-                        ApplicationStatus.RECOMMENDED.value,
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.under_review.value,
+                        ApplicationStatus.pending_recommendation.value,
+                        ApplicationStatus.recommended.value,
                     ]
                 ),
             )
@@ -438,13 +438,14 @@ class ApplicationService:
         self, application: Application, user: User, integrated_form_data: Dict[str, Any]
     ) -> ApplicationListResponse:
         """Create ApplicationListResponse from application data"""
-        app_data = ApplicationListResponse(
+        return ApplicationListResponse(
             id=application.id,
             app_id=application.app_id,
             user_id=application.user_id,
             student_id=user.nycu_id if user else None,
             scholarship_type=application.scholarship.code if application.scholarship else None,
             scholarship_type_id=application.scholarship_type_id,
+            scholarship_type_zh=application.scholarship.name if application.scholarship else None,
             scholarship_subtype_list=application.scholarship_subtype_list or [],
             status=application.status,
             status_name=application.status_name,
@@ -467,9 +468,6 @@ class ApplicationService:
             updated_at=application.updated_at,
             meta_data=application.meta_data,
         )
-
-        # Add Chinese scholarship type name
-        return self._add_scholarship_type_zh(app_data)
 
     async def get_user_applications(self, user: User, status: Optional[str] = None) -> List[ApplicationListResponse]:
         """Get applications for a user"""
@@ -575,6 +573,7 @@ class ApplicationService:
                 student_id=user.nycu_id if user else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
+                scholarship_type_zh=application.scholarship.name if application.scholarship else "未知獎學金",
                 status=application.status,
                 status_name=application.status_name,
                 academic_year=application.academic_year,
@@ -596,8 +595,6 @@ class ApplicationService:
                 meta_data=application.meta_data,
             )
 
-            # Add Chinese scholarship type name
-            app_data = self._add_scholarship_type_zh(app_data)
             recent_applications_response.append(app_data)
 
         return {
@@ -632,8 +629,9 @@ class ApplicationService:
             if application.user_id != current_user.id:
                 return None
         elif current_user.role == UserRole.professor:
-            # Check if professor has access to this student's data
-            if not current_user.can_access_student_data(application.user_id, "view_applications"):
+            # Check if professor is assigned to this application
+            # This avoids lazy loading professor_relationships which causes greenlet errors
+            if application.professor_id != current_user.id:
                 return None
         elif current_user.role in [
             UserRole.college,
@@ -855,8 +853,8 @@ class ApplicationService:
 
         # 檢查是否可以編輯
         if application.status not in [
-            ApplicationStatus.DRAFT.value,
-            ApplicationStatus.RETURNED.value,
+            ApplicationStatus.draft.value,
+            ApplicationStatus.returned.value,
         ]:
             raise ValidationError("Cannot update student data for submitted applications")
 
@@ -920,8 +918,10 @@ class ApplicationService:
         await self._clone_user_profile_documents(application, user)
 
         # 更新狀態為已提交
-        application.status = ApplicationStatus.SUBMITTED.value
-        application.status_name = "已提交"
+        from app.utils.i18n import ScholarshipI18n
+
+        application.status = ApplicationStatus.submitted.value
+        application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.submitted.value)
         application.submitted_at = datetime.now(timezone.utc)
         application.updated_at = datetime.now(timezone.utc)
 
@@ -1174,6 +1174,7 @@ class ApplicationService:
                 student_id=app_user.nycu_id if app_user else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
+                scholarship_type_zh=application.scholarship.name if application.scholarship else None,
                 status=application.status,
                 status_name=application.status_name,
                 academic_year=application.academic_year,
@@ -1195,8 +1196,6 @@ class ApplicationService:
                 meta_data=application.meta_data,
             )
 
-            # Add Chinese scholarship type name
-            app_data = self._add_scholarship_type_zh(app_data)
             response_applications.append(app_data)
 
         return response_applications
@@ -1224,11 +1223,13 @@ class ApplicationService:
         application.status = status_update.status
         application.reviewer_id = user.id
 
-        if status_update.status == ApplicationStatus.APPROVED.value:
+        from app.utils.i18n import ScholarshipI18n
+
+        if status_update.status == ApplicationStatus.approved.value:
             application.approved_at = datetime.utcnow()
-            application.status_name = "已核准"
-        elif status_update.status == ApplicationStatus.REJECTED.value:
-            application.status_name = "已拒絕"
+            application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.approved.value)
+        elif status_update.status == ApplicationStatus.rejected.value:
+            application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.rejected.value)
             if hasattr(status_update, "rejection_reason") and status_update.rejection_reason:
                 application.rejection_reason = status_update.rejection_reason
 
@@ -1372,17 +1373,6 @@ class ApplicationService:
             },
         }
 
-    def _add_scholarship_type_zh(self, app_data: ApplicationListResponse) -> ApplicationListResponse:
-        """Add Chinese scholarship type name to application response"""
-        scholarship_type_zh = {
-            "undergraduate_freshman": "學士班新生獎學金",
-            "phd_nstc": "國科會博士生獎學金",
-            "phd_moe": "教育部博士生獎學金",
-            "direct_phd": "逕博獎學金",
-        }
-        app_data.scholarship_type_zh = scholarship_type_zh.get(app_data.scholarship_type, app_data.scholarship_type)
-        return app_data
-
     async def search_applications(self, search_criteria: Dict[str, Any]) -> List[Application]:
         """搜尋申請"""
         query = select(Application)
@@ -1506,6 +1496,7 @@ class ApplicationService:
                 student_id=app_user.nycu_id if app_user else None,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
+                scholarship_type_zh=application.scholarship.name if application.scholarship else None,
                 status=application.status,
                 status_name=application.status_name,
                 academic_year=application.academic_year,
@@ -1527,8 +1518,6 @@ class ApplicationService:
                 meta_data=application.meta_data,
             )
 
-            # Add Chinese scholarship type name
-            app_data = self._add_scholarship_type_zh(app_data)
             response_applications.append(app_data)
 
         return response_applications
@@ -1551,7 +1540,7 @@ class ApplicationService:
             raise AuthorizationError("You don't have permission to delete applications")
 
         # Only draft applications can be deleted
-        if application.status != ApplicationStatus.DRAFT.value:
+        if application.status != ApplicationStatus.draft.value:
             raise ValidationError("Only draft applications can be deleted")
 
         # Delete associated files from MinIO if they exist
@@ -1798,12 +1787,12 @@ class ApplicationService:
                     # Only applications in valid statuses for professor viewing
                     Application.status.in_(
                         [
-                            ApplicationStatus.SUBMITTED.value,
-                            ApplicationStatus.UNDER_REVIEW.value,
-                            ApplicationStatus.PENDING_RECOMMENDATION.value,
-                            ApplicationStatus.RECOMMENDED.value,
-                            ApplicationStatus.APPROVED.value,
-                            ApplicationStatus.REJECTED.value,
+                            ApplicationStatus.submitted.value,
+                            ApplicationStatus.under_review.value,
+                            ApplicationStatus.pending_recommendation.value,
+                            ApplicationStatus.recommended.value,
+                            ApplicationStatus.approved.value,
+                            ApplicationStatus.rejected.value,
                         ]
                     ),
                 )
@@ -1814,9 +1803,9 @@ class ApplicationService:
                 base_query = base_query.where(
                     Application.status.in_(
                         [
-                            ApplicationStatus.SUBMITTED.value,
-                            ApplicationStatus.PENDING_RECOMMENDATION.value,
-                            ApplicationStatus.UNDER_REVIEW.value,  # Include under_review in pending
+                            ApplicationStatus.submitted.value,
+                            ApplicationStatus.pending_recommendation.value,
+                            ApplicationStatus.under_review.value,  # Include under_review in pending
                         ]
                     )
                 )
@@ -1824,9 +1813,9 @@ class ApplicationService:
                 base_query = base_query.where(
                     Application.status.in_(
                         [
-                            ApplicationStatus.RECOMMENDED.value,
-                            ApplicationStatus.APPROVED.value,
-                            ApplicationStatus.REJECTED.value,
+                            ApplicationStatus.recommended.value,
+                            ApplicationStatus.approved.value,
+                            ApplicationStatus.rejected.value,
                         ]
                     )
                 )
@@ -1859,7 +1848,7 @@ class ApplicationService:
                         id=app.id,
                         app_id=app.app_id,
                         user_id=app.user_id,
-                        student_id=app.student.nycu_id if app.student else None,
+                        student_id=app.student_data.get("std_stdcode", "") if app.student_data else "",
                         scholarship_type=app.main_scholarship_type.lower() if app.main_scholarship_type else "",
                         scholarship_type_id=app.scholarship_type_id,
                         scholarship_type_zh=scholarship_type_zh or "未設定",
@@ -1888,8 +1877,8 @@ class ApplicationService:
                         updated_at=app.updated_at,
                         meta_data=app.meta_data,
                         # Display fields
-                        student_name=app.student_data.get("cname", "") if app.student_data else "",
-                        student_no=app.student_data.get("stdNo", "") if app.student_data else "",
+                        student_name=app.student_data.get("std_cname", "") if app.student_data else "",
+                        student_no=app.student_data.get("std_stdcode", "") if app.student_data else "",
                         days_waiting=None,  # Calculate if needed
                         professor=None,  # Professor info not needed in professor view
                         scholarship_configuration={
@@ -1939,12 +1928,12 @@ class ApplicationService:
 
             # Check application status - should be submitted or under review (or historical)
             if application.status not in [
-                ApplicationStatus.SUBMITTED.value,
-                ApplicationStatus.UNDER_REVIEW.value,
-                ApplicationStatus.PENDING_RECOMMENDATION.value,
-                ApplicationStatus.RECOMMENDED.value,  # Allow viewing historical reviews
-                ApplicationStatus.APPROVED.value,
-                ApplicationStatus.REJECTED.value,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review.value,
+                ApplicationStatus.pending_recommendation.value,
+                ApplicationStatus.recommended.value,  # Allow viewing historical reviews
+                ApplicationStatus.approved.value,
+                ApplicationStatus.rejected.value,
             ]:
                 return False
 
@@ -1977,9 +1966,9 @@ class ApplicationService:
 
             # Check application status - should be submitted or under review
             if application.status not in [
-                ApplicationStatus.SUBMITTED.value,
-                ApplicationStatus.UNDER_REVIEW.value,
-                ApplicationStatus.PENDING_RECOMMENDATION.value,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review.value,
+                ApplicationStatus.pending_recommendation.value,
             ]:
                 return False
 
@@ -2124,12 +2113,15 @@ class ApplicationService:
     async def submit_professor_review(self, application_id: int, professor_id: int, review_data: dict) -> dict:
         """Submit professor review for an application"""
         try:
+            logger.info(f"Step 1: Checking existing review for app {application_id}, prof {professor_id}")
             # Check if review already exists
             existing_review = await self.get_professor_review(application_id, professor_id)
             if existing_review and existing_review.id > 0:  # ID > 0 means it's saved (not a new review template)
                 # Update existing review
+                logger.info(f"Found existing review {existing_review.id}, updating")
                 return await self.update_professor_review(existing_review.id, review_data)
 
+            logger.info("Step 2: Creating new professor review")
             # Create new professor review
             professor_review = ProfessorReview(
                 application_id=application_id,
@@ -2140,9 +2132,12 @@ class ApplicationService:
             )
 
             self.db.add(professor_review)
+            logger.info("Step 3: Flushing to get review ID")
             await self.db.flush()  # Get the review ID
+            logger.info(f"Created review with ID {professor_review.id}")
 
             # Create review items for each sub-type
+            logger.info(f"Step 4: Creating {len(review_data.get('items', []))} review items")
             review_items = review_data.get("items", [])
             for item_data in review_items:
                 review_item = ProfessorReviewItem(
@@ -2154,22 +2149,33 @@ class ApplicationService:
                 self.db.add(review_item)
 
             # Update application status
+            logger.info("Step 5: Updating application status")
             stmt = select(Application).where(Application.id == application_id)
             result = await self.db.execute(stmt)
             application = result.scalar_one_or_none()
 
             if application:
-                application.status = ApplicationStatus.RECOMMENDED.value
-                application.status_name = "已推薦"
+                from app.utils.i18n import ScholarshipI18n
 
+                logger.info("Step 6: Setting status to recommended")
+                application.status = ApplicationStatus.recommended.value
+                application.status_name = ScholarshipI18n.get_application_status_text(
+                    ApplicationStatus.recommended.value
+                )
+
+            logger.info("Step 7: Committing transaction")
             await self.db.commit()
 
             # Return the created review
+            logger.info("Step 8: Fetching created review to return")
             return await self.get_professor_review(application_id, professor_id)
 
         except Exception as e:
             await self.db.rollback()
             logger.error(f"Error submitting professor review: {e}")
+            import traceback
+
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
 
     async def update_professor_review(self, review_id: int, review_data: dict) -> dict:
@@ -2300,8 +2306,8 @@ class ApplicationService:
                 Application.professor_id == professor_id,
                 Application.status.in_(
                     [
-                        ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.PENDING_RECOMMENDATION.value,
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.pending_recommendation.value,
                     ]
                 ),
             )
@@ -2466,7 +2472,7 @@ class ApplicationService:
                     },
                     href=f"/professor/applications/{application.id}",
                     priority=NotificationPriority.high,
-                    channels=[NotificationChannel.IN_APP, NotificationChannel.EMAIL],
+                    channels=[NotificationChannel.in_app, NotificationChannel.email],
                 )
                 logger.info(f"In-app notification created for professor {professor.nycu_id}")
             except Exception as e:
