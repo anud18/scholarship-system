@@ -18,7 +18,7 @@ from app.schemas.scholarship import EligibleScholarshipResponse, ScholarshipType
 router = APIRouter()
 
 
-@router.get("/", response_model=ApiResponse[List[dict]])
+@router.get("", response_model=ApiResponse[List[dict]])
 async def get_all_scholarships(
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),

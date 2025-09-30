@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/", response_model=RosterScheduleListResponse)
+@router.get("", response_model=RosterScheduleListResponse)
 async def list_roster_schedules(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
@@ -96,7 +96,7 @@ async def list_roster_schedules(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list roster schedules")
 
 
-@router.post("/", response_model=RosterScheduleResponse)
+@router.post("", response_model=RosterScheduleResponse)
 async def create_roster_schedule(
     schedule_data: RosterScheduleCreate,
     db: AsyncSession = Depends(get_db),
