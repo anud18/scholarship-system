@@ -127,7 +127,7 @@ async def update_my_profile(
 # ==================== 管理員專用API ====================
 
 
-@router.get("/")
+@router.get("")
 async def get_all_users(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
@@ -145,6 +145,7 @@ async def get_all_users(
     # Apply role filters
     if roles:
         # Handle multiple roles (comma-separated)
+        # Convert to lowercase and handle both snake_case and SCREAMING_CASE
         role_list = [r.strip().lower() for r in roles.split(",") if r.strip()]
         try:
             user_roles = [UserRole(r) for r in role_list]
