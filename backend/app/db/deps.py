@@ -20,10 +20,9 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
-        except Exception as e:
+        except Exception:
             await session.rollback()
-            raise e
+            raise
         finally:
             await session.close()
 
@@ -35,8 +34,14 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     Yields:
         AsyncSession: Database session for async operations
     """
-    async for session in get_async_session():
-        yield session
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
 
 
 def get_sync_db() -> Generator[Session, None, None]:

@@ -15,16 +15,22 @@ from app.core.config import settings
 async_engine = create_async_engine(
     settings.database_url,
     echo=False,  # 關閉詳細 SQL 日誌
-    pool_pre_ping=True,
-    pool_recycle=300,
-    pool_size=5,
-    max_overflow=10,
+    pool_pre_ping=True,  # Test connections before using them
+    pool_recycle=300,  # Recycle connections after 5 minutes
+    pool_size=10,  # Increased from 5 to 10 for better concurrency
+    max_overflow=20,  # Increased from 10 to 20 for burst traffic
+    pool_timeout=60,  # Increased timeout to 60 seconds
     poolclass=QueuePool,
     # Additional async engine parameters for better connection management
     connect_args={
         "prepared_statement_cache_size": 0,  # Disable prepared statement cache
         "statement_cache_size": 0,  # Disable statement cache
         "command_timeout": 60,  # Command timeout in seconds
+        "timeout": 30,  # Connection timeout in seconds
+        "server_settings": {
+            "application_name": "scholarship_system_async",
+            "jit": "off",  # Disable JIT compilation for faster query startup
+        },
     }
     if "postgresql" in settings.database_url
     else {},
@@ -34,14 +40,16 @@ async_engine = create_async_engine(
 sync_engine = create_engine(
     settings.database_url_sync,
     echo=False,  # 關閉詳細 SQL 日誌
-    pool_pre_ping=True,
-    pool_recycle=300,
-    pool_size=5,
-    max_overflow=10,
+    pool_pre_ping=True,  # Test connections before using them
+    pool_recycle=300,  # Recycle connections after 5 minutes
+    pool_size=10,  # Increased from 5 to 10 for better concurrency
+    max_overflow=20,  # Increased from 10 to 20 for burst traffic
+    pool_timeout=60,  # Increased timeout to 60 seconds
     poolclass=QueuePool,
     # Additional sync engine parameters for better connection management
     connect_args={
         "connect_timeout": 30,  # Connection timeout in seconds
+        "options": "-c application_name=scholarship_system_sync -c jit=off",
     }
     if "postgresql" in settings.database_url_sync
     else {},
