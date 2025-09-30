@@ -968,56 +968,54 @@ async def get_college_review_statistics(
 
 @router.get("/available-combinations", response_model=ApiResponse[Dict[str, Any]])
 async def get_available_combinations(current_user: User = Depends(require_college), db: AsyncSession = Depends(get_db)):
-    """Get available combinations of scholarship types, academic years, and semesters from database"""
+    """Get available combinations of scholarship types, academic years, and semesters from configurations"""
 
     try:
-        logger.info("College user requesting available combinations from database")
+        logger.info("College user requesting available combinations from configurations")
 
-        # Query distinct scholarship types from applications and get their full names
-        from app.models.scholarship import ScholarshipType
+        # Import models
+        from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 
-        scholarship_query = select(Application.main_scholarship_type).distinct()
+        # Get all active scholarship types
+        scholarship_query = select(ScholarshipType).where(ScholarshipType.status == "active")
         scholarship_result = await db.execute(scholarship_query)
-        scholarship_types_raw = scholarship_result.scalars().all()
+        scholarship_types_objs = scholarship_result.scalars().all()
 
-        # Get scholarship type details from ScholarshipType table
-        scholarship_types = []
-        for st in scholarship_types_raw:
-            if st:  # Only include non-None values
-                # Query the ScholarshipType table for the full name (case insensitive)
-                type_query = select(ScholarshipType).where(ScholarshipType.code.ilike(st))
-                type_result = await db.execute(type_query)
-                type_obj = type_result.scalar_one_or_none()
+        scholarship_types = [
+            {
+                "code": st.code,
+                "name": st.name,
+                "name_en": st.name_en if st.name_en else st.name,
+            }
+            for st in scholarship_types_objs
+        ]
 
-                scholarship_types.append(
-                    {
-                        "code": st,
-                        "name": type_obj.name if type_obj else st,
-                        "name_en": type_obj.name_en if type_obj else st,
-                    }
-                )
+        # Query distinct academic years and semesters from active configurations
+        config_query = select(ScholarshipConfiguration).where(ScholarshipConfiguration.is_active == True)
+        config_result = await db.execute(config_query)
+        configs = config_result.scalars().all()
 
-        # Query distinct academic years from applications
-        year_query = select(Application.academic_year).distinct().where(Application.academic_year.isnot(None))
-        year_result = await db.execute(year_query)
-        academic_years = sorted([y for y in year_result.scalars().all() if y is not None])
-
-        # Query distinct semesters from applications (including NULL for yearly scholarships)
-        semester_query = select(Application.semester).distinct()
-        semester_result = await db.execute(semester_query)
-        semesters = semester_result.scalars().all()
-
-        # Convert semester enum values to strings if needed
-        semester_strings = []
+        # Collect unique academic years and semesters from configurations
+        academic_years_set = set()
+        semesters_set = set()
         has_yearly_scholarships = False
 
-        for sem in semesters:
-            if sem is None:
-                has_yearly_scholarships = True
-            elif hasattr(sem, "value"):
-                semester_strings.append(sem.value)
+        for config in configs:
+            if config.academic_year:
+                academic_years_set.add(config.academic_year)
+
+            if config.semester:
+                # Semester is an enum, get its value
+                if hasattr(config.semester, "value"):
+                    semesters_set.add(config.semester.value)
+                else:
+                    semesters_set.add(str(config.semester))
             else:
-                semester_strings.append(str(sem))
+                # No semester means yearly scholarship
+                has_yearly_scholarships = True
+
+        academic_years = sorted(list(academic_years_set))
+        semester_strings = sorted(list(semesters_set))
 
         # Add a special "YEARLY" option if there are yearly scholarships
         if has_yearly_scholarships:

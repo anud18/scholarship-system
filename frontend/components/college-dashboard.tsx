@@ -137,8 +137,10 @@ export function CollegeDashboard({
       let currentAvailableOptions = availableOptions;
       if (!currentAvailableOptions) {
         console.log("Available options not loaded yet, fetching now...");
-        await fetchAvailableOptions();
-        currentAvailableOptions = availableOptions;
+        const response = await apiClient.college.getAvailableCombinations();
+        if (response.success && response.data) {
+          currentAvailableOptions = response.data;
+        }
       }
 
       // If still not available after fetching, throw error
