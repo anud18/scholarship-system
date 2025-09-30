@@ -355,12 +355,15 @@ export function AdminDashboard({
                   >
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
-                        <p className="font-medium text-nycu-navy-800">
+                        <p className="font-semibold text-nycu-navy-800">
                           {getScholarshipTypeName(
                             app.scholarship_type,
                             app.scholarship_type_zh,
                             app.scholarship_name
                           )}
+                          <span className="text-xs font-normal text-gray-600 ml-2">
+                            {app.app_id || `APP-${app.id}`}
+                          </span>
                         </p>
                         <Badge
                           variant={
@@ -382,7 +385,13 @@ export function AdminDashboard({
                         </Badge>
                       </div>
                       <div className="flex items-center justify-between text-sm text-nycu-navy-600">
-                        <span>{app.app_id || `APP-${app.id}`}</span>
+                        <div className="flex items-center gap-4">
+                          {(app.student_name || app.student_no) && (
+                            <span className="text-gray-600">
+                              {app.student_name || ''} {app.student_no || ''}
+                            </span>
+                          )}
+                        </div>
                         <div className="flex gap-4">
                           {app.submitted_at && (
                             <span>提交：{formatDate(app.submitted_at)}</span>

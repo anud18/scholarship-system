@@ -2,6 +2,7 @@ import type React from "react";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/hooks/use-auth";
+import { NotificationProvider } from "@/contexts/notification-context";
 import { DebugPanel } from "@/components/debug-panel";
 
 export const metadata: Metadata = {
@@ -32,8 +33,10 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <AuthProvider>
-          {children}
-          <DebugPanel />
+          <NotificationProvider>
+            {children}
+            <DebugPanel />
+          </NotificationProvider>
         </AuthProvider>
       </body>
     </html>
