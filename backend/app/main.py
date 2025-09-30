@@ -180,12 +180,39 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions"""
+    # Get logger for this handler
+    exception_logger = logging.getLogger(__name__)
+
+    # Log the exception with full details
+    trace_id = getattr(request.state, "trace_id", "unknown")
+    exception_logger.error(
+        f"Unhandled exception - Trace ID: {trace_id}, "
+        f"Path: {request.url.path}, "
+        f"Method: {request.method}, "
+        f"Exception: {type(exc).__name__}: {str(exc)}",
+        exc_info=True,
+    )
+
+    # Check if it's a database-related exception
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+
+    if isinstance(exc, (SQLAlchemyTimeoutError, OperationalError)):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "message": "Service temporarily unavailable - database connection issue",
+                "trace_id": trace_id,
+            },
+        )
+
     return JSONResponse(
         status_code=500,
         content={
             "success": False,
             "message": "Internal server error",
-            "trace_id": getattr(request.state, "trace_id", None),
+            "trace_id": trace_id,
         },
     )
 
@@ -231,6 +258,34 @@ async def health_check():
             "version": settings.app_version,
             "error": "Internal server error",
         }
+
+
+# Database pool status endpoint (admin only)
+@app.get("/debug/pool-status")
+async def get_pool_status():
+    """Get current database connection pool status (for debugging)"""
+    from app.db.session import async_engine, sync_engine
+
+    async_pool = async_engine.pool
+    sync_pool = sync_engine.pool
+
+    return {
+        "success": True,
+        "async_pool": {
+            "size": async_pool.size(),
+            "checked_in": async_pool.checkedin(),
+            "checked_out": async_pool.checkedout(),
+            "overflow": async_pool.overflow(),
+            "total": async_pool.size() + async_pool.overflow(),
+        },
+        "sync_pool": {
+            "size": sync_pool.size(),
+            "checked_in": sync_pool.checkedin(),
+            "checked_out": sync_pool.checkedout(),
+            "overflow": sync_pool.overflow(),
+            "total": sync_pool.size() + sync_pool.overflow(),
+        },
+    }
 
 
 # Root endpoint
