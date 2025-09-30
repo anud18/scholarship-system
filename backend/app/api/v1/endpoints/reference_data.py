@@ -19,7 +19,7 @@ from app.schemas.common import ApiResponse
 router = APIRouter()
 
 
-@router.get("/degrees")
+@router.get("degrees")
 async def get_degrees(
     session: AsyncSession = Depends(get_db),
 ) -> List[dict]:
@@ -30,7 +30,7 @@ async def get_degrees(
     return [{"id": degree.id, "name": degree.name} for degree in degrees]
 
 
-@router.get("/identities")
+@router.get("identities")
 async def get_identities(
     session: AsyncSession = Depends(get_db),
 ) -> List[dict]:
@@ -41,7 +41,7 @@ async def get_identities(
     return [{"id": identity.id, "name": identity.name} for identity in identities]
 
 
-@router.get("/studying-statuses")
+@router.get("studying-statuses")
 async def get_studying_statuses(
     session: AsyncSession = Depends(get_db),
 ) -> List[dict]:
@@ -52,7 +52,7 @@ async def get_studying_statuses(
     return [{"id": status.id, "name": status.name} for status in statuses]
 
 
-@router.get("/school-identities")
+@router.get("school-identities")
 async def get_school_identities(
     session: AsyncSession = Depends(get_db),
 ) -> List[dict]:
@@ -63,7 +63,7 @@ async def get_school_identities(
     return [{"id": school_identity.id, "name": school_identity.name} for school_identity in school_identities]
 
 
-@router.get("/academies")
+@router.get("academies")
 async def get_academies(
     session: AsyncSession = Depends(get_db),
 ) -> ApiResponse[List[dict]]:
@@ -76,7 +76,7 @@ async def get_academies(
     return ApiResponse(success=True, message="Academies retrieved successfully", data=data)
 
 
-@router.get("/departments")
+@router.get("departments")
 async def get_departments(
     session: AsyncSession = Depends(get_db),
 ) -> List[dict]:
@@ -87,7 +87,7 @@ async def get_departments(
     return [{"id": department.id, "code": department.code, "name": department.name} for department in departments]
 
 
-@router.get("/enroll-types")
+@router.get("enroll-types")
 async def get_enroll_types(
     degree_id: Optional[int] = Query(None, description="Filter by degree ID"),
     session: AsyncSession = Depends(get_db),
@@ -113,7 +113,7 @@ async def get_enroll_types(
     ]
 
 
-@router.get("/all")
+@router.get("all")
 async def get_all_reference_data(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -162,7 +162,7 @@ async def get_all_reference_data(
     }
 
 
-@router.get("/semesters")
+@router.get("semesters")
 async def get_available_semesters() -> dict:
     """Get available semester and academic year options for dynamic generation"""
     from datetime import datetime
@@ -215,7 +215,7 @@ async def get_available_semesters() -> dict:
     }
 
 
-@router.get("/semester-academic-year-combinations")
+@router.get("semester-academic-year-combinations")
 async def get_semester_academic_year_combinations(
     include_statistics: bool = Query(False, description="Include application statistics"),
     session: AsyncSession = Depends(get_db),
@@ -273,7 +273,7 @@ async def get_semester_academic_year_combinations(
     }
 
 
-@router.get("/active-academic-periods")
+@router.get("active-academic-periods")
 async def get_active_academic_periods(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -321,7 +321,7 @@ async def get_active_academic_periods(
     return {"active_periods": active_periods, "total_periods": len(active_periods)}
 
 
-@router.get("/scholarship-periods")
+@router.get("scholarship-periods")
 async def get_scholarship_periods(
     scholarship_id: Optional[int] = Query(None, description="Scholarship type ID"),
     scholarship_code: Optional[str] = Query(None, description="Scholarship type code"),
@@ -412,7 +412,7 @@ async def get_scholarship_periods(
     }
 
 
-@router.get("/scholarship-types-with-cycles")
+@router.get("scholarship-types-with-cycles")
 async def get_scholarship_types_with_cycles(
     session: AsyncSession = Depends(get_db),
 ) -> dict:

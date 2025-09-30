@@ -21,14 +21,14 @@ from app.services.portal_sso_service import PortalSSOService
 router = APIRouter()
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
     auth_service = AuthService(db)
     return await auth_service.register_user(user_data)
 
 
-@router.post("/login")
+@router.post("login")
 async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
     """Login user and return access token"""
     auth_service = AuthService(db)
@@ -47,7 +47,7 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.get("/me")
+@router.get("me")
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current user information"""
     user_data = UserResponse.model_validate(current_user)
@@ -58,13 +58,13 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     }
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post("logout", response_model=MessageResponse)
 async def logout():
     """Logout user (client-side token removal)"""
     return MessageResponse(message="Logged out successfully")
 
 
-@router.post("/refresh")
+@router.post("refresh")
 async def refresh_token(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Refresh access token"""
     auth_service = AuthService(db)
@@ -83,7 +83,7 @@ async def refresh_token(current_user: User = Depends(get_current_user), db: Asyn
 
 
 # Mock SSO endpoints for development
-@router.get("/mock-sso/users")
+@router.get("mock-sso/users")
 async def get_mock_users(db: AsyncSession = Depends(get_db)):
     """Get available mock users for development login"""
     if not settings.enable_mock_sso:
@@ -99,7 +99,7 @@ async def get_mock_users(db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.post("/mock-sso/login")
+@router.post("mock-sso/login")
 async def mock_sso_login(request_data: PortalSSORequest, db: AsyncSession = Depends(get_db)):
     """Login as mock user for development"""
     if not settings.enable_mock_sso:
@@ -150,7 +150,7 @@ async def get_portal_sso_data(
         return token, nycu_id or username
 
 
-@router.post("/portal-sso/verify")
+@router.post("portal-sso/verify")
 async def portal_sso_verify(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -268,7 +268,7 @@ async def portal_sso_verify_get(username: str, db: AsyncSession = Depends(get_db
 
 
 # Developer Profile endpoints for personalized testing
-@router.get("/dev-profiles/developers")
+@router.get("dev-profiles/developers")
 async def get_all_developers(db: AsyncSession = Depends(get_db)):
     """Get list of all developers who have test profiles"""
     if not settings.enable_mock_sso:

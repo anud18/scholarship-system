@@ -57,7 +57,7 @@ async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> L
 # Core API endpoints
 
 
-@router.get("/available-semesters", response_model=ApiResponse)
+@router.get("available-semesters", response_model=ApiResponse)
 async def get_available_semesters(
     scholarship_code: Optional[str] = Query(None, description="Filter periods by specific scholarship code"),
     quota_management_mode: Optional[str] = Query(
@@ -350,7 +350,7 @@ async def get_matrix_quota_status(
         )
 
 
-@router.put("/matrix-quota", response_model=ApiResponse)
+@router.put("matrix-quota", response_model=ApiResponse)
 async def update_matrix_quota(
     sub_type: str = Body(...),
     college: str = Body(...),
@@ -474,7 +474,7 @@ async def update_matrix_quota(
         )
 
 
-@router.get("/colleges", response_model=ApiResponse)
+@router.get("colleges", response_model=ApiResponse)
 async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get college configurations from database"""
 
@@ -493,7 +493,7 @@ async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSes
         )
 
 
-@router.get("/scholarship-types", response_model=ApiResponse)
+@router.get("scholarship-types", response_model=ApiResponse)
 async def get_scholarship_types(current_user: User = Depends(require_staff), db: AsyncSession = Depends(get_db)):
     """Get scholarship types that the user has access to"""
 
@@ -708,7 +708,7 @@ async def get_quota_overview(
 # CRUD Endpoints for ScholarshipConfiguration Management
 
 
-@router.post("/configurations/", response_model=ApiResponse)
+@router.post("configurations/", response_model=ApiResponse)
 async def create_scholarship_configuration(
     config_data: Dict[str, Any] = Body(...),
     current_user: User = Depends(require_admin),
@@ -1140,7 +1140,7 @@ async def duplicate_scholarship_configuration(
         )
 
 
-@router.get("/configurations/", response_model=ApiResponse)
+@router.get("configurations/", response_model=ApiResponse)
 async def list_scholarship_configurations(
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),

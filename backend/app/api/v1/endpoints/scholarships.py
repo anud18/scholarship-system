@@ -170,7 +170,7 @@ async def get_all_scholarships(
 
 
 # 學生查看自己可以申請的獎學金
-@router.get("/eligible", response_model=List[EligibleScholarshipResponse])
+@router.get("eligible", response_model=List[EligibleScholarshipResponse])
 async def get_scholarship_eligibility(
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
@@ -306,7 +306,7 @@ async def get_scholarship_detail(scholarship_id: int, db: AsyncSession = Depends
     return ScholarshipTypeResponse(**response_data)
 
 
-@router.post("/dev/reset-application-periods")
+@router.post("dev/reset-application-periods")
 async def reset_application_periods(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Reset all scholarship application periods for testing (dev only)"""
     if not settings.debug:

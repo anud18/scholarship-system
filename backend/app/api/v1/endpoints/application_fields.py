@@ -45,7 +45,7 @@ async def get_fields_by_scholarship_type(
     return ApiResponse(success=True, message=f"Fields retrieved for {scholarship_type}", data=fields)
 
 
-@router.post("/fields", response_model=ApiResponse[ApplicationFieldResponse])
+@router.post("fields", response_model=ApiResponse[ApplicationFieldResponse])
 async def create_field(
     field_data: ApplicationFieldCreate,
     db: AsyncSession = Depends(get_db),
@@ -112,7 +112,7 @@ async def get_documents_by_scholarship_type(
     )
 
 
-@router.post("/documents", response_model=ApiResponse[ApplicationDocumentResponse])
+@router.post("documents", response_model=ApiResponse[ApplicationDocumentResponse])
 async def create_document(
     document_data: ApplicationDocumentCreate,
     db: AsyncSession = Depends(get_db),

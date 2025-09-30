@@ -89,7 +89,7 @@ def require_super_admin(current_user: User = Depends(require_admin)) -> User:
     return current_user
 
 
-@router.get("/applications", response_model=PaginatedResponse[ApplicationListResponse])
+@router.get("applications", response_model=PaginatedResponse[ApplicationListResponse])
 async def get_all_applications(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
@@ -351,7 +351,7 @@ async def get_historical_applications(
     )
 
 
-@router.get("/dashboard/stats", response_model=ApiResponse[Dict[str, Any]])
+@router.get("dashboard/stats", response_model=ApiResponse[Dict[str, Any]])
 async def get_dashboard_stats(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get dashboard statistics for admin"""
 
@@ -441,7 +441,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
     )
 
 
-@router.get("/system/health", response_model=ApiResponse[Dict[str, Any]])
+@router.get("system/health", response_model=ApiResponse[Dict[str, Any]])
 async def get_system_health(current_user: User = Depends(require_admin)):
     """Get system health status"""
     from app.integrations.nycu_emp import NYCUEmpError, create_nycu_emp_client_from_env
@@ -494,7 +494,7 @@ async def get_system_health(current_user: User = Depends(require_admin)):
     )
 
 
-@router.get("/debug/nycu-employee", response_model=ApiResponse[Dict[str, Any]])
+@router.get("debug/nycu-employee", response_model=ApiResponse[Dict[str, Any]])
 async def debug_nycu_employee_api(
     page: int = Query(1, ge=1, description="Page number"),
     status: str = Query("01", description="Employee status filter"),
@@ -603,7 +603,7 @@ async def debug_nycu_employee_api(
     return ApiResponse(success=True, message="NYCU Employee API debug information retrieved", data=debug_info)
 
 
-@router.get("/system-setting", response_model=ApiResponse[SystemSettingSchema])
+@router.get("system-setting", response_model=ApiResponse[SystemSettingSchema])
 async def get_system_setting(
     key: str = Query(..., description="Setting key"),
     current_user: User = Depends(require_admin),
@@ -624,7 +624,7 @@ async def get_system_setting(
     )
 
 
-@router.put("/system-setting", response_model=ApiResponse[SystemSettingSchema])
+@router.put("system-setting", response_model=ApiResponse[SystemSettingSchema])
 async def set_system_setting(
     data: SystemSettingSchema,
     current_user: User = Depends(require_admin),
@@ -639,7 +639,7 @@ async def set_system_setting(
     )
 
 
-@router.get("/email-template")
+@router.get("email-template")
 async def get_email_template(
     key: str = Query(..., description="Template key"),
     current_user: User = Depends(require_admin),
@@ -666,7 +666,7 @@ async def get_email_template(
     }
 
 
-@router.put("/email-template")
+@router.put("email-template")
 async def update_email_template(
     template: EmailTemplateUpdateSchema,
     current_user: User = Depends(require_super_admin),
@@ -716,7 +716,7 @@ async def update_email_template(
     }
 
 
-@router.get("/email-templates", response_model=List[EmailTemplateSchema])
+@router.get("email-templates", response_model=List[EmailTemplateSchema])
 async def get_email_templates(
     sending_type: Optional[str] = Query(None, description="Filter by sending type (single/bulk)"),
     current_user: User = Depends(require_admin),
@@ -740,7 +740,7 @@ async def get_email_templates(
     return [EmailTemplateSchema.model_validate(template) for template in templates]
 
 
-@router.get("/recent-applications", response_model=ApiResponse[List[ApplicationListResponse]])
+@router.get("recent-applications", response_model=ApiResponse[List[ApplicationListResponse]])
 async def get_recent_applications(
     limit: int = Query(5, ge=1, le=20, description="Number of recent applications"),
     current_user: User = Depends(require_admin),
@@ -854,7 +854,7 @@ async def get_recent_applications(
     )
 
 
-@router.get("/system-announcements", response_model=ApiResponse[List[NotificationResponse]])
+@router.get("system-announcements", response_model=ApiResponse[List[NotificationResponse]])
 async def get_system_announcements(
     limit: int = Query(5, ge=1, le=20, description="Number of announcements"),
     current_user: User = Depends(require_admin),
@@ -914,7 +914,7 @@ async def get_system_announcements(
 # === 系統公告 CRUD === #
 
 
-@router.get("/announcements", response_model=ApiResponse[dict])
+@router.get("announcements", response_model=ApiResponse[dict])
 async def get_all_announcements(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
@@ -1217,7 +1217,7 @@ async def delete_announcement(
     return ApiResponse(success=True, message="系統公告已成功刪除", data=MessageResponse(message="系統公告已成功刪除"))
 
 
-@router.get("/scholarships/stats", response_model=ApiResponse[Dict[str, Any]])
+@router.get("scholarships/stats", response_model=ApiResponse[Dict[str, Any]])
 async def get_scholarship_statistics(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get scholarship-specific statistics for admin dashboard"""
 
@@ -1852,7 +1852,7 @@ async def delete_sub_type_config(
 # === 獎學金權限管理相關 API === #
 
 
-@router.get("/scholarship-permissions", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("scholarship-permissions", response_model=ApiResponse[List[Dict[str, Any]]])
 async def get_scholarship_permissions(
     user_id: Optional[int] = Query(None, description="Filter by user ID"),
     current_user: User = Depends(require_admin),
@@ -2014,7 +2014,7 @@ async def get_current_user_scholarship_permissions(
     )
 
 
-@router.post("/scholarship-permissions", response_model=ApiResponse[Dict[str, Any]])
+@router.post("scholarship-permissions", response_model=ApiResponse[Dict[str, Any]])
 async def create_scholarship_permission(
     permission_data: Dict[str, Any],
     current_user: User = Depends(require_admin),
@@ -2219,7 +2219,7 @@ async def get_all_scholarships_for_permissions(
     )
 
 
-@router.get("/scholarships/my-scholarships", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("scholarships/my-scholarships", response_model=ApiResponse[List[Dict[str, Any]]])
 async def get_my_scholarships(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get scholarships that the current user has permission to manage"""
 
@@ -2279,7 +2279,7 @@ async def get_my_scholarships(current_user: User = Depends(require_admin), db: A
 # ============================
 
 
-@router.get("/scholarship-rules", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+@router.get("scholarship-rules", response_model=ApiResponse[List[ScholarshipRuleResponse]])
 async def get_scholarship_rules(
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
@@ -2366,7 +2366,7 @@ async def get_scholarship_rules(
     )
 
 
-@router.post("/scholarship-rules", response_model=ApiResponse[ScholarshipRuleResponse])
+@router.post("scholarship-rules", response_model=ApiResponse[ScholarshipRuleResponse])
 async def create_scholarship_rule(
     rule_data: ScholarshipRuleCreate,
     current_user: User = Depends(require_admin),
@@ -2654,7 +2654,7 @@ async def _copy_rules_in_batches(
     return ApiResponse(success=True, message=message, data=rule_responses)
 
 
-@router.post("/scholarship-rules/copy", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+@router.post("scholarship-rules/copy", response_model=ApiResponse[List[ScholarshipRuleResponse]])
 async def copy_rules_between_periods(
     copy_request: RuleCopyRequest,
     current_user: User = Depends(require_admin),
@@ -2813,7 +2813,7 @@ async def copy_rules_between_periods(
     return ApiResponse(success=True, message=message, data=rule_responses)
 
 
-@router.post("/scholarship-rules/bulk-operation", response_model=ApiResponse[Dict[str, Any]])
+@router.post("scholarship-rules/bulk-operation", response_model=ApiResponse[Dict[str, Any]])
 async def bulk_rule_operation(
     operation_request: BulkRuleOperation,
     current_user: User = Depends(require_admin),
@@ -3205,7 +3205,7 @@ async def delete_rule_template(
     )
 
 
-@router.get("/scholarships/available-years", response_model=ApiResponse[List[int]])
+@router.get("scholarships/available-years", response_model=ApiResponse[List[int]])
 async def get_available_years(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get available academic years from scholarship rules"""
 
@@ -3233,7 +3233,7 @@ async def get_available_years(current_user: User = Depends(require_admin), db: A
     )
 
 
-@router.get("/professors", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("professors", response_model=ApiResponse[List[Dict[str, Any]]])
 async def get_available_professors(
     search: Optional[str] = Query(None, description="Search by name or NYCU ID"),
     current_user: User = Depends(require_admin),
@@ -3380,7 +3380,7 @@ async def bulk_approve_applications_endpoint(
 # ============================================
 
 
-@router.get("/configurations", response_model=ApiResponse[List[ConfigurationCategorySchema]])
+@router.get("configurations", response_model=ApiResponse[List[ConfigurationCategorySchema]])
 async def get_all_configurations(
     category: Optional[ConfigCategory] = Query(None, description="Filter by category"),
     current_user: User = Depends(require_super_admin),
@@ -3464,7 +3464,7 @@ async def get_all_configurations(
         )
 
 
-@router.post("/configurations", response_model=ApiResponse[ConfigurationItemWithDecryptedValueSchema])
+@router.post("configurations", response_model=ApiResponse[ConfigurationItemWithDecryptedValueSchema])
 async def create_configuration(
     config: ConfigurationCreateSchema,
     current_user: User = Depends(require_super_admin),
@@ -3537,7 +3537,7 @@ async def create_configuration(
         )
 
 
-@router.put("/configurations/bulk", response_model=ApiResponse[List[ConfigurationItemWithDecryptedValueSchema]])
+@router.put("configurations/bulk", response_model=ApiResponse[List[ConfigurationItemWithDecryptedValueSchema]])
 async def bulk_update_configurations(
     update_request: ConfigurationBulkUpdateSchema,
     current_user: User = Depends(require_super_admin),
@@ -3628,7 +3628,7 @@ async def bulk_update_configurations(
         )
 
 
-@router.post("/configurations/validate", response_model=ApiResponse[ConfigurationValidationResultSchema])
+@router.post("configurations/validate", response_model=ApiResponse[ConfigurationValidationResultSchema])
 async def validate_configuration(
     validation_request: ConfigurationValidationSchema,
     current_user: User = Depends(require_super_admin),
@@ -3715,7 +3715,7 @@ async def delete_configuration(
 # ============================================
 
 
-@router.post("/bank-verification", response_model=ApiResponse[BankVerificationResultSchema])
+@router.post("bank-verification", response_model=ApiResponse[BankVerificationResultSchema])
 async def verify_bank_account(
     request: BankVerificationRequestSchema,
     current_user: User = Depends(require_admin),
@@ -3746,7 +3746,7 @@ async def verify_bank_account(
         )
 
 
-@router.post("/bank-verification/batch", response_model=ApiResponse[BankVerificationBatchResultSchema])
+@router.post("bank-verification/batch", response_model=ApiResponse[BankVerificationBatchResultSchema])
 async def batch_verify_bank_accounts(
     request: BankVerificationBatchRequestSchema,
     current_user: User = Depends(require_admin),

@@ -20,7 +20,7 @@ from app.services.scholarship_service import ScholarshipQuotaService
 router = APIRouter()
 
 
-@router.get("/overview")
+@router.get("overview")
 async def get_quota_overview(
     semester: Optional[str] = Query(None, description="Filter by semester"),
     current_user: User = Depends(require_staff),
@@ -214,7 +214,7 @@ async def get_detailed_quota_status(
         sync_session.close()
 
 
-@router.get("/trends")
+@router.get("trends")
 async def get_quota_trends(
     main_type: Optional[str] = Query(None),
     sub_type: Optional[str] = Query(None),
@@ -321,7 +321,7 @@ async def get_quota_trends(
         sync_session.close()
 
 
-@router.post("/adjust-quota")
+@router.post("adjust-quota")
 async def adjust_quota_limits(
     quota_adjustments: Dict[str, Any] = Body(...),
     current_user: User = Depends(require_admin),
@@ -383,7 +383,7 @@ async def adjust_quota_limits(
         sync_session.close()
 
 
-@router.get("/alerts")
+@router.get("alerts")
 async def get_quota_alerts(
     severity: Optional[str] = Query(None, description="Filter by severity: low, medium, high, critical"),
     current_user: User = Depends(require_staff),
@@ -507,7 +507,7 @@ async def get_quota_alerts(
         sync_session.close()
 
 
-@router.get("/export")
+@router.get("export")
 async def export_quota_data(
     format: str = Query("json", description="Export format: json, csv"),
     semester: Optional[str] = Query(None),

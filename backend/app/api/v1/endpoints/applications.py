@@ -158,7 +158,7 @@ async def get_my_applications(
     return await service.get_user_applications(current_user, status)
 
 
-@router.get("/dashboard/stats", response_model=DashboardStats)
+@router.get("dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats(current_user: User = Depends(require_student), db: AsyncSession = Depends(get_db)):
     """Get dashboard statistics for student"""
     service = ApplicationService(db)
@@ -309,7 +309,7 @@ async def upload_file(
 
 
 # Staff/Admin endpoints
-@router.get("/review/list", response_model=List[ApplicationListResponse])
+@router.get("review/list", response_model=List[ApplicationListResponse])
 async def get_applications_for_review(
     status: Optional[str] = Query(None, description="Filter by status"),
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
@@ -349,7 +349,7 @@ async def submit_professor_review(
     return await service.create_professor_review(application_id, current_user, review_data)
 
 
-@router.get("/college/review", response_model=List[ApplicationListResponse])
+@router.get("college/review", response_model=List[ApplicationListResponse])
 async def get_college_applications_for_review(
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
     scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),

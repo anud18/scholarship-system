@@ -36,7 +36,7 @@ def convert_user_to_dict(user: User) -> dict:
     }
 
 
-@router.get("/me")
+@router.get("me")
 async def get_my_profile(current_user: User = Depends(get_current_user)):
     """Get current user profile"""
     return {
@@ -46,7 +46,7 @@ async def get_my_profile(current_user: User = Depends(get_current_user)):
     }
 
 
-@router.get("/student-info")
+@router.get("student-info")
 async def get_student_info(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get student information"""
     from app.services.application_service import get_student_data_from_user
@@ -98,7 +98,7 @@ async def get_student_info(current_user: User = Depends(get_current_user), db: A
     }
 
 
-@router.put("/me")
+@router.put("me")
 async def update_my_profile(
     update_data: UserUpdate,
     current_user: User = Depends(get_current_user),
@@ -281,7 +281,7 @@ async def update_user(
     }
 
 
-@router.get("/stats/overview")
+@router.get("stats/overview")
 async def get_user_stats(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get user statistics (admin only)"""
     # Total users by role

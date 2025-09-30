@@ -242,7 +242,7 @@ async def delete_configuration(
         )
 
 
-@router.post("/validate", response_model=ConfigValidationResponse)
+@router.post("validate", response_model=ConfigValidationResponse)
 async def validate_configuration(
     validation_request: ConfigValidationRequest,
     db: AsyncSession = Depends(get_db),
@@ -267,7 +267,7 @@ async def validate_configuration(
         )
 
 
-@router.get("/categories/")
+@router.get("categories/")
 async def get_configuration_categories(current_user: User = Depends(require_admin)):
     """
     獲取所有配置類別
@@ -282,7 +282,7 @@ async def get_configuration_categories(current_user: User = Depends(require_admi
     }
 
 
-@router.get("/data-types/")
+@router.get("data-types/")
 async def get_configuration_data_types(current_user: User = Depends(require_admin)):
     """
     獲取所有配置數據類型

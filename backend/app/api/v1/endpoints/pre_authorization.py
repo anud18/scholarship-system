@@ -21,7 +21,7 @@ from app.services.pre_authorization_service import PreAuthorizationService
 router = APIRouter()
 
 
-@router.post("/pre-authorize/user", response_model=PreAuthorizeUserResponse)
+@router.post("pre-authorize/user", response_model=PreAuthorizeUserResponse)
 async def pre_authorize_user(
     request: PreAuthorizeUserRequest,
     current_user: User = Depends(get_current_user),
@@ -58,7 +58,7 @@ async def pre_authorize_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/assign-scholarship", response_model=AssignScholarshipResponse)
+@router.post("assign-scholarship", response_model=AssignScholarshipResponse)
 async def assign_scholarship_to_admin(
     request: AssignScholarshipRequest,
     current_user: User = Depends(get_current_user),
@@ -95,7 +95,7 @@ async def assign_scholarship_to_admin(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/pre-authorized-users", response_model=PreAuthorizedUserList)
+@router.get("pre-authorized-users", response_model=PreAuthorizedUserList)
 async def get_pre_authorized_users(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get all pre-authorized users"""
 

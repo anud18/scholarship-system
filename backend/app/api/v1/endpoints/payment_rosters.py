@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/generate", response_model=RosterResponse)
+@router.post("generate", response_model=RosterResponse)
 def generate_payment_roster(
     request: RosterCreateRequest,
     background_tasks: BackgroundTasks,

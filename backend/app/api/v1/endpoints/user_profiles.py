@@ -48,7 +48,7 @@ def get_client_info(request: Request) -> tuple[Optional[str], Optional[str]]:
     return client_ip, user_agent
 
 
-@router.get("/me")
+@router.get("me")
 async def get_my_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get current user's complete profile (read-only + editable data)"""
     service = UserProfileService(db)
@@ -57,7 +57,7 @@ async def get_my_profile(current_user: User = Depends(get_current_user), db: Asy
     return {"success": True, "message": "個人資料獲取成功", "data": profile}
 
 
-@router.post("/me", status_code=status.HTTP_201_CREATED)
+@router.post("me", status_code=status.HTTP_201_CREATED)
 async def create_my_profile(
     profile_data: UserProfileCreate,
     request: Request,
@@ -85,7 +85,7 @@ async def create_my_profile(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.put("/me")
+@router.put("me")
 async def update_my_profile(
     profile_data: UserProfileUpdate,
     request: Request,
@@ -111,7 +111,7 @@ async def update_my_profile(
     }
 
 
-@router.put("/me/bank-info")
+@router.put("me/bank-info")
 async def update_my_bank_info(
     bank_data: BankInfoUpdate,
     request: Request,
@@ -145,7 +145,7 @@ async def update_my_bank_info(
     }
 
 
-@router.put("/me/advisor-info")
+@router.put("me/advisor-info")
 async def update_my_advisor_info(
     advisor_data: AdvisorInfoUpdate,
     request: Request,
@@ -183,7 +183,7 @@ async def update_my_advisor_info(
     }
 
 
-@router.post("/me/bank-document")
+@router.post("me/bank-document")
 async def upload_bank_document(
     photo_data: str,
     filename: str,
@@ -210,7 +210,7 @@ async def upload_bank_document(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/me/bank-document/file")
+@router.post("me/bank-document/file")
 async def upload_bank_document_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
@@ -274,7 +274,7 @@ async def upload_bank_document_file(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"上傳失敗: {str(e)}")
 
 
-@router.delete("/me/bank-document")
+@router.delete("me/bank-document")
 async def delete_bank_document(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Delete bank document"""
     service = UserProfileService(db)
@@ -287,7 +287,7 @@ async def delete_bank_document(current_user: User = Depends(get_current_user), d
         return {"success": False, "message": "沒有找到銀行帳戶證明文件"}
 
 
-@router.get("/me/history")
+@router.get("me/history")
 async def get_my_profile_history(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get profile change history"""
     service = UserProfileService(db)
@@ -300,7 +300,7 @@ async def get_my_profile_history(current_user: User = Depends(get_current_user),
     }
 
 
-@router.delete("/me")
+@router.delete("me")
 async def delete_my_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Delete current user's profile data"""
     service = UserProfileService(db)
@@ -399,7 +399,7 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
 # ==================== Admin endpoints ====================
 
 
-@router.get("/admin/incomplete", dependencies=[Depends(require_admin)])
+@router.get("admin/incomplete", dependencies=[Depends(require_admin)])
 async def get_incomplete_profiles(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get users with incomplete profiles (admin only)"""
     service = UserProfileService(db)
@@ -451,7 +451,7 @@ async def get_user_profile_history_by_id(
     }
 
 
-@router.post("/bank-passbook-ocr")
+@router.post("bank-passbook-ocr")
 async def extract_bank_info_from_passbook(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
@@ -520,7 +520,7 @@ async def extract_bank_info_from_passbook(
         )
 
 
-@router.post("/document-ocr")
+@router.post("document-ocr")
 async def extract_text_from_document(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),

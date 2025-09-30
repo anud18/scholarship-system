@@ -21,7 +21,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/applications", response_model=PaginatedResponse[ApplicationListResponse])
+@router.get("applications", response_model=PaginatedResponse[ApplicationListResponse])
 @professor_rate_limit(requests=100, window_seconds=600)  # 100 requests per 10 minutes
 async def get_professor_applications(
     request: Request,
@@ -242,7 +242,7 @@ async def get_application_sub_types(
         )
 
 
-@router.get("/stats", response_model=dict)
+@router.get("stats", response_model=dict)
 @professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_professor_review_stats(
     request: Request,
