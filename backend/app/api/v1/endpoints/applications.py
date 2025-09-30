@@ -30,7 +30,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 async def create_application(
     application_data: ApplicationCreate,
     is_draft: bool = Query(False, description="Save as draft"),
@@ -147,7 +147,7 @@ async def create_application(
         )
 
 
-@router.get("", response_model=List[ApplicationListResponse])
+@router.get("/", response_model=List[ApplicationListResponse])
 async def get_my_applications(
     status: Optional[str] = Query(None, description="Filter by status"),
     current_user: User = Depends(require_student),

@@ -81,7 +81,7 @@ def generate_payment_roster(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate roster")
 
 
-@router.get("", response_model=RosterListResponse)
+@router.get("/", response_model=RosterListResponse)
 async def list_payment_rosters(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),

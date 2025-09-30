@@ -19,7 +19,7 @@ from app.services.config_management_service import ConfigurationService
 router = APIRouter()
 
 
-@router.get("")
+@router.get("/")
 async def get_all_configurations(
     category: Optional[ConfigCategory] = None,
     include_sensitive: bool = False,
@@ -130,7 +130,7 @@ async def get_configuration(
         )
 
 
-@router.post("", response_model=SystemSettingResponse)
+@router.post("/", response_model=SystemSettingResponse)
 async def create_configuration(
     configuration: SystemSettingCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):

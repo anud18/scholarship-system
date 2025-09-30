@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+@router.get("/", response_model=ApiResponse[List[ScholarshipRuleResponse]])
 async def list_scholarship_rules(
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
@@ -145,7 +145,7 @@ async def list_scholarship_rules(
     )
 
 
-@router.post("", response_model=ApiResponse[ScholarshipRuleResponse])
+@router.post("/", response_model=ApiResponse[ScholarshipRuleResponse])
 async def create_scholarship_rule(
     rule_data: ScholarshipRuleCreate,
     db: AsyncSession = Depends(get_db),
