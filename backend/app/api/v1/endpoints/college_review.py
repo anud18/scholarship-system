@@ -244,6 +244,9 @@ async def get_applications_for_review(
 
         # Create lightweight DTOs with field-level filtering for security
         filtered_applications = []
+        # Import i18n utilities
+        from app.utils.i18n import ScholarshipI18n
+
         for app in applications:
             # Extract only necessary fields to minimize data exposure
             student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
@@ -252,15 +255,19 @@ async def get_applications_for_review(
                 "id": app.get("id"),
                 "app_id": app.get("app_id"),
                 "status": app.get("status"),
+                "status_zh": ScholarshipI18n.get_application_status_text(app.get("status", "")),
                 "scholarship_type": app.get("scholarship_type"),
+                "scholarship_type_zh": app.get("scholarship_type_zh", app.get("scholarship_type")),
                 "sub_type": app.get("sub_type"),
                 "academic_year": app.get("academic_year"),
                 "semester": app.get("semester"),
+                "is_renewal": app.get("is_renewal", False),
                 "created_at": app.get("created_at"),
                 "submitted_at": app.get("submitted_at"),
                 # Student info in flat format for frontend compatibility
                 "student_id": student_data.get("std_stdcode", "未提供學號") if student_data else "N/A",
                 "student_name": student_data.get("std_cname", "未提供姓名") if student_data else "未提供學生資料",
+                "student_termcount": student_data.get("std_termcount", "N/A") if student_data else "N/A",
                 "department_code": student_data.get("std_depno", "N/A") if student_data else "N/A",
                 # Add review status for UI purposes
                 "review_status": {
@@ -975,9 +982,27 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
 
         # Import models
         from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+        from app.models.user import AdminScholarship
 
-        # Get all active scholarship types
-        scholarship_query = select(ScholarshipType).where(ScholarshipType.status == "active")
+        # Get scholarship IDs that the user has permission to access
+        permission_query = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
+        permission_result = await db.execute(permission_query)
+        allowed_scholarship_ids = [row[0] for row in permission_result.fetchall()]
+
+        logger.info(f"User {current_user.id} has permission for scholarships: {allowed_scholarship_ids}")
+
+        # If user has specific permissions, filter by those
+        # If user has no permissions set (empty list), show all (for backward compatibility or super admin)
+        if allowed_scholarship_ids:
+            scholarship_query = select(ScholarshipType).where(
+                ScholarshipType.status == "active", ScholarshipType.id.in_(allowed_scholarship_ids)
+            )
+        else:
+            # No specific permissions - could mean all or none depending on your business logic
+            # For college users without permissions, show no scholarships
+            logger.warning(f"College user {current_user.id} has no scholarship permissions set")
+            scholarship_query = select(ScholarshipType).where(ScholarshipType.id == -1)  # No results
+
         scholarship_result = await db.execute(scholarship_query)
         scholarship_types_objs = scholarship_result.scalars().all()
 
@@ -989,9 +1014,18 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
             }
             for st in scholarship_types_objs
         ]
+        logger.info(f"Returning {len(scholarship_types)} scholarship types for user {current_user.id}")
 
         # Query distinct academic years and semesters from active configurations
-        config_query = select(ScholarshipConfiguration).where(ScholarshipConfiguration.is_active == True)
+        # Filter by scholarship permissions
+        if allowed_scholarship_ids:
+            config_query = select(ScholarshipConfiguration).where(
+                ScholarshipConfiguration.is_active == True,
+                ScholarshipConfiguration.scholarship_type_id.in_(allowed_scholarship_ids),
+            )
+        else:
+            config_query = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == -1)  # No results
+
         config_result = await db.execute(config_query)
         configs = config_result.scalars().all()
 

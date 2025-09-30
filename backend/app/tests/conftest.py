@@ -193,7 +193,7 @@ async def test_application(db: AsyncSession, test_user: User, test_scholarship: 
     application = Application(
         user_id=test_user.id,
         scholarship_type_id=test_scholarship.id,
-        status=ApplicationStatus.DRAFT.value,
+        status=ApplicationStatus.draft.value,
         app_id="TEST-2024-123456",
         academic_year=2024,
         semester="first",

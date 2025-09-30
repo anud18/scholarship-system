@@ -61,9 +61,9 @@ class BulkApprovalService:
                 try:
                     # Validate application can be approved
                     if application.status not in [
-                        ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.UNDER_REVIEW.value,
-                        ApplicationStatus.RECOMMENDED.value,
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.under_review.value,
+                        ApplicationStatus.recommended.value,
                     ]:
                         results["failed_approvals"].append(
                             {
@@ -77,7 +77,7 @@ class BulkApprovalService:
 
                     # Update application status
                     old_status = application.status
-                    application.status = ApplicationStatus.APPROVED.value
+                    application.status = ApplicationStatus.approved.value
                     application.approved_at = datetime.now(timezone.utc)
                     application.decision_date = datetime.now(timezone.utc)
                     application.final_approver_id = approver_user_id
@@ -165,9 +165,9 @@ class BulkApprovalService:
                 try:
                     # Validate application can be rejected
                     if application.status not in [
-                        ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.UNDER_REVIEW.value,
-                        ApplicationStatus.RECOMMENDED.value,
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.under_review.value,
+                        ApplicationStatus.recommended.value,
                     ]:
                         results["failed_rejections"].append(
                             {
@@ -180,7 +180,7 @@ class BulkApprovalService:
 
                     # Update application status
                     old_status = application.status
-                    application.status = ApplicationStatus.REJECTED.value
+                    application.status = ApplicationStatus.rejected.value
                     application.decision_date = datetime.now(timezone.utc)
                     application.reviewer_id = rejector_user_id
                     application.rejection_reason = rejection_reason
@@ -251,8 +251,8 @@ class BulkApprovalService:
             stmt = select(Application).where(
                 Application.status.in_(
                     [
-                        ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.UNDER_REVIEW.value,
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.under_review.value,
                     ]
                 )
             )
@@ -299,7 +299,7 @@ class BulkApprovalService:
 
             for application in applications:
                 try:
-                    application.status = ApplicationStatus.APPROVED.value
+                    application.status = ApplicationStatus.approved.value
                     application.approved_at = datetime.now(timezone.utc)
                     application.decision_date = datetime.now(timezone.utc)
                     application.admin_notes = "Auto-approved based on criteria"
@@ -379,10 +379,10 @@ class BulkApprovalService:
                         application.admin_notes = update_notes
 
                     # Set specific fields based on status
-                    if new_status == ApplicationStatus.APPROVED.value:
+                    if new_status == ApplicationStatus.approved.value:
                         application.approved_at = datetime.now(timezone.utc)
                         application.final_approver_id = updater_user_id
-                    elif new_status == ApplicationStatus.REJECTED.value:
+                    elif new_status == ApplicationStatus.rejected.value:
                         application.reviewer_id = updater_user_id
 
                     application.decision_date = datetime.now(timezone.utc)

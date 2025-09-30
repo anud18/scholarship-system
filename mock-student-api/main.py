@@ -9,10 +9,8 @@ Implements HMAC-SHA256 signature verification compatible with the university's
 student information system API endpoints with in-memory data synchronized with init_db.
 """
 
-import json
 import logging
-import os
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from auth import (
     MOCK_HMAC_KEY_HEX,
@@ -21,7 +19,7 @@ from auth import (
     validate_request_params,
     verify_hmac_signature,
 )
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -179,7 +177,7 @@ SAMPLE_STUDENTS = {
     },
     "stu_direct": {
         "std_stdcode": "stu_direct",
-        "std_enrollyear": "112",
+        "std_enrollyear": "113",  # 改為113學年入學（較新）
         "std_enrollterm": "1",
         "std_highestschname": "國立清華大學",
         "std_cname": "李逕升",
@@ -191,11 +189,11 @@ SAMPLE_STUDENTS = {
         "std_sex": "1",
         "std_nation": "中華民國",
         "std_degree": "1",  # 博士
-        "std_enrolltype": "3",  # 逕讀博士
+        "std_enrolltype": "8",  # 逕讀博士 - 改為符合規則的代碼
         "std_identity": "1",
         "std_schoolid": "1",
         "std_overseaplace": "",
-        "std_termcount": "5",
+        "std_termcount": "2",  # 改為第2學期（第一學年）
         "std_studingstatus": "2",
         "mgd_title": "在學",
         "ToDoctor": "1",  # 逕讀博士
@@ -218,7 +216,7 @@ SAMPLE_STUDENTS = {
         "std_nation": "中國大陸",
         "std_degree": "1",  # 博士
         "std_enrolltype": "1",
-        "std_identity": "2",  # 陸生身份
+        "std_identity": "17",  # 陸生身份
         "std_schoolid": "1",
         "std_overseaplace": "中國大陸",
         "std_termcount": "5",
@@ -925,7 +923,7 @@ SAMPLE_TERMS = {
     "stu_direct": [
         {
             "std_stdcode": "stu_direct",
-            "trm_year": "112",
+            "trm_year": "113",
             "trm_term": "1",
             "trm_termcount": "1",
             "trm_studystatus": "1",
@@ -942,60 +940,9 @@ SAMPLE_TERMS = {
         },
         {
             "std_stdcode": "stu_direct",
-            "trm_year": "112",
-            "trm_term": "2",
-            "trm_termcount": "2",
-            "trm_studystatus": "1",
-            "trm_degree": "1",
-            "trm_academyno": "EE",
-            "trm_academyname": "電機學院",
-            "trm_depno": "3551",
-            "trm_depname": "電機工程學系博士班",
-            "trm_placings": "0",
-            "trm_placingsrate": "0.0",
-            "trm_depplacing": "0",
-            "trm_depplacingrate": "0.0",
-            "trm_ascore_gpa": "4.1",
-        },
-        {
-            "std_stdcode": "stu_direct",
-            "trm_year": "113",
-            "trm_term": "1",
-            "trm_termcount": "3",
-            "trm_studystatus": "1",
-            "trm_degree": "1",
-            "trm_academyno": "EE",
-            "trm_academyname": "電機學院",
-            "trm_depno": "3551",
-            "trm_depname": "電機工程學系博士班",
-            "trm_placings": "0",
-            "trm_placingsrate": "0.0",
-            "trm_depplacing": "0",
-            "trm_depplacingrate": "0.0",
-            "trm_ascore_gpa": "4.15",
-        },
-        {
-            "std_stdcode": "stu_direct",
-            "trm_year": "113",
-            "trm_term": "2",
-            "trm_termcount": "4",
-            "trm_studystatus": "1",
-            "trm_degree": "1",
-            "trm_academyno": "EE",
-            "trm_academyname": "電機學院",
-            "trm_depno": "3551",
-            "trm_depname": "電機工程學系博士班",
-            "trm_placings": "0",
-            "trm_placingsrate": "0.0",
-            "trm_depplacing": "0",
-            "trm_depplacingrate": "0.0",
-            "trm_ascore_gpa": "4.2",
-        },
-        {
-            "std_stdcode": "stu_direct",
             "trm_year": "114",
             "trm_term": "1",
-            "trm_termcount": "5",
+            "trm_termcount": "2",
             "trm_studystatus": "1",
             "trm_degree": "1",
             "trm_academyno": "EE",

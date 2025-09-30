@@ -85,7 +85,7 @@ class NotificationService:
             message=message,
             notification_type=notification_type,
             priority=priority,
-            channel=channels[0] if channels else NotificationChannel.IN_APP,  # Primary channel
+            channel=channels[0] if channels else NotificationChannel.in_app,  # Primary channel
             data=data,
             href=href,
             group_key=group_key,
@@ -319,19 +319,19 @@ class NotificationService:
     async def _deliver_notification(self, notification: Notification, channels: List[NotificationChannel]):
         """Deliver notification through specified channels"""
         # Real-time WebSocket delivery
-        if NotificationChannel.IN_APP in channels and notification.user_id:
+        if NotificationChannel.in_app in channels and notification.user_id:
             await self._send_websocket_notification(notification.user_id, notification.to_dict())
 
         # Email delivery (placeholder)
-        if NotificationChannel.EMAIL in channels:
+        if NotificationChannel.email in channels:
             await self._send_email_notification(notification)
 
         # SMS delivery (placeholder)
-        if NotificationChannel.SMS in channels:
+        if NotificationChannel.sms in channels:
             await self._send_sms_notification(notification)
 
         # Push notification delivery (placeholder)
-        if NotificationChannel.PUSH in channels:
+        if NotificationChannel.push in channels:
             await self._send_push_notification(notification)
 
     async def _send_websocket_notification(self, user_id: int, notification_data: Dict[str, Any]):
@@ -444,7 +444,7 @@ class NotificationService:
     ) -> List[NotificationChannel]:
         """Get user's preferred delivery channels"""
         if not user_id:
-            return [NotificationChannel.IN_APP]  # System announcements default to in-app
+            return [NotificationChannel.in_app]  # System announcements default to in-app
 
         # Check cache first
         cache_key = f"pref_{user_id}_{notification_type.value}"
@@ -464,19 +464,19 @@ class NotificationService:
                 self._notification_cache[cache_key] = pref
 
         if not pref:
-            return [NotificationChannel.IN_APP]  # Default
+            return [NotificationChannel.in_app]  # Default
 
         channels = []
         if pref.in_app_enabled:
-            channels.append(NotificationChannel.IN_APP)
+            channels.append(NotificationChannel.in_app)
         if pref.email_enabled:
-            channels.append(NotificationChannel.EMAIL)
+            channels.append(NotificationChannel.email)
         if pref.sms_enabled:
-            channels.append(NotificationChannel.SMS)
+            channels.append(NotificationChannel.sms)
         if pref.push_enabled:
-            channels.append(NotificationChannel.PUSH)
+            channels.append(NotificationChannel.push)
 
-        return channels or [NotificationChannel.IN_APP]  # Fallback
+        return channels or [NotificationChannel.in_app]  # Fallback
 
     # === Legacy Methods (Enhanced for backward compatibility) === #
 

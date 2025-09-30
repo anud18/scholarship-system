@@ -10,11 +10,13 @@ from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.core.security import check_user_roles
-from app.db.session import get_db_session
+from app.db.deps import get_db, get_sync_db
 from app.models.payment_roster import (
     PaymentRoster,
     PaymentRosterItem,
@@ -43,7 +45,7 @@ router = APIRouter()
 def generate_payment_roster(
     request: RosterCreateRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_sync_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -51,7 +53,7 @@ def generate_payment_roster(
     Generate payment roster
     """
     # 檢查權限：只有管理員和處理人員可以產生造冊
-    check_user_roles([UserRole.admin, UserRole.processor], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         roster_service = RosterService(db)
@@ -80,14 +82,14 @@ def generate_payment_roster(
 
 
 @router.get("/", response_model=RosterListResponse)
-def list_payment_rosters(
+async def list_payment_rosters(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     scholarship_configuration_id: Optional[int] = Query(None),
     status_filter: Optional[RosterStatus] = Query(None),
     period_label: Optional[str] = Query(None),
     academic_year: Optional[int] = Query(None),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -95,26 +97,31 @@ def list_payment_rosters(
     Get payment roster list
     """
     try:
-        query = db.query(PaymentRoster)
+        # Build query
+        stmt = select(PaymentRoster)
 
         # 套用篩選條件
         if scholarship_configuration_id:
-            query = query.filter(PaymentRoster.scholarship_configuration_id == scholarship_configuration_id)
+            stmt = stmt.where(PaymentRoster.scholarship_configuration_id == scholarship_configuration_id)
         if status_filter:
-            query = query.filter(PaymentRoster.status == status_filter)
+            stmt = stmt.where(PaymentRoster.status == status_filter)
         if period_label:
-            query = query.filter(PaymentRoster.period_label == period_label)
+            stmt = stmt.where(PaymentRoster.period_label == period_label)
         if academic_year:
-            query = query.filter(PaymentRoster.academic_year == academic_year)
+            stmt = stmt.where(PaymentRoster.academic_year == academic_year)
 
         # 計算總數
-        total = query.count()
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_result = await db.execute(count_stmt)
+        total = total_result.scalar()
 
         # 套用分頁
-        rosters = query.order_by(PaymentRoster.created_at.desc()).offset(skip).limit(limit).all()
+        stmt = stmt.order_by(PaymentRoster.created_at.desc()).offset(skip).limit(limit)
+        result = await db.execute(stmt)
+        rosters = result.scalars().all()
 
         return RosterListResponse(
-            items=[RosterResponse.from_orm(roster) for roster in rosters], total=total, skip=skip, limit=limit
+            items=[RosterResponse.from_orm(roster) for roster in rosters], total=total or 0, skip=skip, limit=limit
         )
 
     except Exception as e:
@@ -123,9 +130,9 @@ def list_payment_rosters(
 
 
 @router.get("/{roster_id}", response_model=RosterResponse)
-def get_payment_roster(
+async def get_payment_roster(
     roster_id: int,
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -133,7 +140,9 @@ def get_payment_roster(
     Get specific payment roster details
     """
     try:
-        roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
+        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+        result = await db.execute(stmt)
+        roster = result.scalar_one_or_none()
 
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
@@ -148,13 +157,13 @@ def get_payment_roster(
 
 
 @router.get("/{roster_id}/items", response_model=List[RosterItemResponse])
-def get_roster_items(
+async def get_roster_items(
     roster_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     verification_status: Optional[StudentVerificationStatus] = Query(None),
     is_qualified: Optional[bool] = Query(None),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -163,20 +172,25 @@ def get_roster_items(
     """
     try:
         # 檢查造冊是否存在
-        roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
+        roster_stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+        roster_result = await db.execute(roster_stmt)
+        roster = roster_result.scalar_one_or_none()
+
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
 
-        query = db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster_id)
+        stmt = select(PaymentRosterItem).where(PaymentRosterItem.roster_id == roster_id)
 
         # 套用篩選條件
         if verification_status:
-            query = query.filter(PaymentRosterItem.verification_status == verification_status)
+            stmt = stmt.where(PaymentRosterItem.verification_status == verification_status)
         if is_qualified is not None:
-            query = query.filter(PaymentRosterItem.is_qualified == is_qualified)
+            stmt = stmt.where(PaymentRosterItem.is_qualified == is_qualified)
 
         # 分頁查詢
-        items = query.order_by(PaymentRosterItem.created_at).offset(skip).limit(limit).all()
+        stmt = stmt.order_by(PaymentRosterItem.created_at).offset(skip).limit(limit)
+        result = await db.execute(stmt)
+        items = result.scalars().all()
 
         return [RosterItemResponse.from_orm(item) for item in items]
 
@@ -188,9 +202,9 @@ def get_roster_items(
 
 
 @router.post("/{roster_id}/lock")
-def lock_roster(
+async def lock_roster(
     roster_id: int,
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -201,7 +215,9 @@ def lock_roster(
     check_user_roles([UserRole.admin], current_user)
 
     try:
-        roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
+        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+        result = await db.execute(stmt)
+        roster = result.scalar_one_or_none()
 
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
@@ -213,7 +229,7 @@ def lock_roster(
         roster.locked_at = datetime.utcnow()
         roster.locked_by_user_id = current_user.id
 
-        db.commit()
+        await db.commit()
 
         logger.info(f"Roster {roster.roster_code} locked by user {current_user.id}")
 
@@ -223,14 +239,14 @@ def lock_roster(
         raise
     except Exception as e:
         logger.error(f"Failed to lock roster {roster_id}: {e}")
-        db.rollback()
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="鎖定造冊失敗")
 
 
 @router.post("/{roster_id}/unlock")
-def unlock_roster(
+async def unlock_roster(
     roster_id: int,
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -241,7 +257,11 @@ def unlock_roster(
     check_user_roles([UserRole.admin], current_user)
 
     try:
-        roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
+        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+
+        result = await db.execute(stmt)
+
+        roster = result.scalar_one_or_none()
 
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
@@ -253,7 +273,7 @@ def unlock_roster(
         roster.locked_at = None
         roster.locked_by_user_id = None
 
-        db.commit()
+        await db.commit()
 
         logger.info(f"Roster {roster.roster_code} unlocked by user {current_user.id}")
 
@@ -263,7 +283,7 @@ def unlock_roster(
         raise
     except Exception as e:
         logger.error(f"Failed to unlock roster {roster_id}: {e}")
-        db.rollback()
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="解鎖造冊失敗")
 
 
@@ -271,7 +291,7 @@ def unlock_roster(
 def preview_roster_export(
     roster_id: int,
     request: RosterExportRequest,
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_sync_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -317,7 +337,7 @@ def preview_roster_export(
 def dry_run_roster_generation(
     roster_id: int,
     request: RosterCreateRequest,
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_sync_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -326,7 +346,7 @@ def dry_run_roster_generation(
     """
     try:
         # 檢查權限
-        check_user_roles([UserRole.admin, UserRole.processor], current_user)
+        check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
         roster_service = RosterService(db)
 
@@ -366,7 +386,7 @@ def export_roster_to_excel(
     roster_id: int,
     request: RosterExportRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_sync_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -422,10 +442,10 @@ def export_roster_to_excel(
 
 
 @router.get("/{roster_id}/download")
-def download_roster_excel(
+async def download_roster_excel(
     roster_id: int,
     use_minio: bool = Query(True, description="是否使用MinIO下載"),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -433,7 +453,11 @@ def download_roster_excel(
     Download roster Excel file (supports MinIO and local files)
     """
     try:
-        roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
+        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+
+        result = await db.execute(stmt)
+
+        roster = result.scalar_one_or_none()
 
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
@@ -525,9 +549,9 @@ def download_roster_excel(
 
 
 @router.get("/{roster_id}/statistics", response_model=RosterStatisticsResponse)
-def get_roster_statistics(
+async def get_roster_statistics(
     roster_id: int,
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -535,7 +559,11 @@ def get_roster_statistics(
     Get roster statistics
     """
     try:
-        roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
+        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+
+        result = await db.execute(stmt)
+
+        roster = result.scalar_one_or_none()
 
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
@@ -544,30 +572,32 @@ def get_roster_statistics(
         verification_stats = {}
         for status_val in StudentVerificationStatus:
             count = (
-                db.query(PaymentRosterItem)
-                .filter(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.verification_status == status_val)
-                .count()
-            )
+                await db.execute(
+                    select(func.count())
+                    .select_from(PaymentRosterItem)
+                    .where(
+                        PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.verification_status == status_val
+                    )
+                )
+            ).scalar()
             verification_stats[status_val.value] = count
 
         # 統計合格/不合格人數
-        qualified_count = (
-            db.query(PaymentRosterItem)
-            .filter(
-                PaymentRosterItem.roster_id == roster_id,
-                PaymentRosterItem.is_qualified.is_(True),
-            )
-            .count()
+        qualified_stmt = (
+            select(func.count())
+            .select_from(PaymentRosterItem)
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(True))
         )
+        qualified_result = await db.execute(qualified_stmt)
+        qualified_count = qualified_result.scalar() or 0
 
-        disqualified_count = (
-            db.query(PaymentRosterItem)
-            .filter(
-                PaymentRosterItem.roster_id == roster_id,
-                PaymentRosterItem.is_qualified.is_(False),
-            )
-            .count()
+        disqualified_stmt = (
+            select(func.count())
+            .select_from(PaymentRosterItem)
+            .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(False))
         )
+        disqualified_result = await db.execute(disqualified_stmt)
+        disqualified_count = disqualified_result.scalar() or 0
 
         return RosterStatisticsResponse(
             roster_id=roster_id,
@@ -588,9 +618,9 @@ def get_roster_statistics(
 
 
 @router.delete("/{roster_id}")
-def delete_roster(
+async def delete_roster(
     roster_id: int,
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -601,7 +631,11 @@ def delete_roster(
     check_user_roles([UserRole.admin], current_user)
 
     try:
-        roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
+        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+
+        result = await db.execute(stmt)
+
+        roster = result.scalar_one_or_none()
 
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
@@ -611,7 +645,7 @@ def delete_roster(
 
         # 刪除造冊項目和稽核記錄（透過cascade）
         db.delete(roster)
-        db.commit()
+        await db.commit()
 
         logger.info(f"Roster {roster.roster_code} deleted by user {current_user.id}")
 
@@ -621,16 +655,16 @@ def delete_roster(
         raise
     except Exception as e:
         logger.error(f"Failed to delete roster {roster_id}: {e}")
-        db.rollback()
+        await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="刪除造冊失敗")
 
 
 @router.get("/{roster_id}/audit-logs")
-def get_roster_audit_logs(
+async def get_roster_audit_logs(
     roster_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
-    db: Session = Depends(get_db_session),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -638,21 +672,28 @@ def get_roster_audit_logs(
     Get roster audit logs
     """
     try:
-        roster = db.query(PaymentRoster).filter(PaymentRoster.id == roster_id).first()
+        stmt = select(PaymentRoster).where(PaymentRoster.id == roster_id)
+
+        result = await db.execute(stmt)
+
+        roster = result.scalar_one_or_none()
 
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
 
         from app.models.payment_roster import RosterAuditLog
 
-        query = (
-            db.query(RosterAuditLog)
-            .filter(RosterAuditLog.roster_id == roster_id)
+        stmt = (
+            select(RosterAuditLog)
+            .where(RosterAuditLog.roster_id == roster_id)
             .order_by(RosterAuditLog.created_at.desc())
         )
 
-        total = query.count()
-        logs = query.offset(skip).limit(limit).all()
+        count_result = await db.execute(select(func.count()).select_from(stmt.subquery()))
+        total = count_result.scalar()
+        stmt = stmt.offset(skip).limit(limit)
+        result = await db.execute(stmt)
+        logs = result.scalars().all()
 
         return {
             "items": [

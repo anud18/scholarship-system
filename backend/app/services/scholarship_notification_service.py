@@ -136,22 +136,22 @@ class ScholarshipNotificationService:
 
             # Determine notification content based on status
             status_messages = {
-                ApplicationStatus.UNDER_REVIEW.value: {
+                ApplicationStatus.under_review.value: {
                     "title": "Application Under Review",
                     "message": "Your scholarship application is now under review by our committee.",
                     "color": "#4299e1",
                 },
-                ApplicationStatus.APPROVED.value: {
+                ApplicationStatus.approved.value: {
                     "title": "Application Approved! 🎉",
                     "message": "Congratulations! Your scholarship application has been approved.",
                     "color": "#48bb78",
                 },
-                ApplicationStatus.REJECTED.value: {
+                ApplicationStatus.rejected.value: {
                     "title": "Application Decision",
                     "message": "We regret to inform you that your scholarship application was not approved this time.",
                     "color": "#f56565",
                 },
-                ApplicationStatus.RETURNED.value: {
+                ApplicationStatus.returned.value: {
                     "title": "Application Returned for Revision",
                     "message": "Your application requires additional information or corrections.",
                     "color": "#ed8936",
@@ -188,9 +188,9 @@ class ScholarshipNotificationService:
                     </ul>
                 </div>
 
-                {"<div style='background-color: #f0fff4; padding: 15px; border-radius: 5px; margin: 15px 0; border: 1px solid #9ae6b4;'><p style='margin: 0; color: #22543d;'><strong>Next Steps:</strong> Please log in to your student portal to view full details and any required actions.</p></div>" if new_status in [ApplicationStatus.APPROVED.value, ApplicationStatus.RETURNED.value] else ""}
+                {"<div style='background-color: #f0fff4; padding: 15px; border-radius: 5px; margin: 15px 0; border: 1px solid #9ae6b4;'><p style='margin: 0; color: #22543d;'><strong>Next Steps:</strong> Please log in to your student portal to view full details and any required actions.</p></div>" if new_status in [ApplicationStatus.approved.value, ApplicationStatus.returned.value] else ""}
 
-                {f"<div style='background-color: #fef5e7; padding: 15px; border-radius: 5px; margin: 15px 0;'><p style='margin: 0;'><strong>Rejection Reason:</strong> {application.rejection_reason}</p></div>" if new_status == ApplicationStatus.REJECTED.value and application.rejection_reason else ""}
+                {f"<div style='background-color: #fef5e7; padding: 15px; border-radius: 5px; margin: 15px 0;'><p style='margin: 0;'><strong>Rejection Reason:</strong> {application.rejection_reason}</p></div>" if new_status == ApplicationStatus.rejected.value and application.rejection_reason else ""}
 
                 <p>For questions or concerns, please contact the scholarship office.</p>
 
@@ -224,8 +224,8 @@ class ScholarshipNotificationService:
                     Application.review_deadline <= cutoff_date,
                     Application.status.in_(
                         [
-                            ApplicationStatus.SUBMITTED.value,
-                            ApplicationStatus.UNDER_REVIEW.value,
+                            ApplicationStatus.submitted.value,
+                            ApplicationStatus.under_review.value,
                         ]
                     ),
                 )

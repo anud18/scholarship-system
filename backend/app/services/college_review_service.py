@@ -8,6 +8,7 @@ This service handles college-level review operations including:
 - Integration with GitHub issue creation
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +22,8 @@ from app.models.college_review import CollegeRanking, CollegeRankingItem, Colleg
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration
 from app.services.email_automation_service import email_automation_service
+
+logger = logging.getLogger(__name__)
 
 
 # Custom exceptions for college review operations
@@ -94,8 +97,8 @@ class CollegeReviewService:
             raise NotFoundError("Application", str(application_id))
 
         if application.status not in [
-            ApplicationStatus.RECOMMENDED.value,
-            ApplicationStatus.UNDER_REVIEW.value,
+            ApplicationStatus.recommended.value,
+            ApplicationStatus.under_review.value,
         ]:
             raise BusinessLogicError(f"Application {application_id} is not in reviewable state")
 
@@ -174,6 +177,9 @@ class CollegeReviewService:
         semester: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Get applications that are ready for college review"""
+        logger.info(
+            f"Getting applications for college review with filters: type_id={scholarship_type_id}, type={scholarship_type}, sub_type={sub_type}, year={academic_year}, semester={semester}"
+        )
 
         # Base query for applications in reviewable state with comprehensive eager loading
         stmt = (
@@ -187,22 +193,23 @@ class CollegeReviewService:
             )
             .where(
                 or_(
-                    Application.status == ApplicationStatus.RECOMMENDED.value,
-                    Application.status == ApplicationStatus.UNDER_REVIEW.value,
+                    Application.status == ApplicationStatus.recommended.value,
+                    Application.status == ApplicationStatus.under_review.value,
                 )
             )
         )
+        logger.info("Base query created, looking for status in [recommended, under_review]")
 
         # Apply filters
         if scholarship_type_id:
             stmt = stmt.where(Application.scholarship_type_id == scholarship_type_id)
 
-        # Filter by scholarship type code
+        # Filter by scholarship type code (case-insensitive)
         if scholarship_type:
-            stmt = stmt.where(Application.main_scholarship_type == scholarship_type)
+            stmt = stmt.where(func.upper(Application.main_scholarship_type) == scholarship_type.upper())
 
         if sub_type:
-            stmt = stmt.where(Application.sub_scholarship_type == sub_type)
+            stmt = stmt.where(func.upper(Application.sub_scholarship_type) == sub_type.upper())
 
         if academic_year:
             stmt = stmt.where(Application.academic_year == academic_year)
@@ -234,6 +241,11 @@ class CollegeReviewService:
 
         result = await self.db.execute(stmt)
         applications = result.scalars().all()
+        logger.info("Query executed, found {len(applications)} applications")
+        for app in applications:
+            logger.info(
+                f"  App {app.id}: status={app.status}, type_id={app.scholarship_type_id}, year={app.academic_year}, semester={app.semester}"
+            )
 
         # Get college review data for all applications in a single batch query
         application_ids = [app.id for app in applications]
@@ -259,6 +271,7 @@ class CollegeReviewService:
                 "student_id": app.student_data.get("std_stdcode") if app.student_data else "N/A",
                 "student_name": app.student_data.get("std_cname") if app.student_data else "N/A",
                 "scholarship_type": app.main_scholarship_type,
+                "scholarship_type_zh": app.scholarship_type_ref.name if app.scholarship_type_ref else "未知獎學金",
                 "sub_type": app.sub_scholarship_type,
                 "academic_year": app.academic_year,
                 "semester": app.semester.value if app.semester else None,
@@ -266,6 +279,7 @@ class CollegeReviewService:
                 "status": app.status,
                 "created_at": app.created_at,
                 "student_data": app.student_data,  # Include full student_data for API endpoint processing
+                "is_renewal": app.is_renewal if hasattr(app, "is_renewal") else False,
                 "professor_review_completed": len(app.professor_reviews) > 0,
                 "college_review_completed": college_review is not None,
                 "college_review_score": college_review.ranking_score if college_review else None,

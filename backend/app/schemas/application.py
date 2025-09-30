@@ -333,12 +333,12 @@ class ApplicationResponse(BaseModel):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
+        return bool(self.status in [ApplicationStatus.draft.value, ApplicationStatus.returned.value])
 
     @property
     def is_submitted(self) -> bool:
         """Check if application is submitted"""
-        return bool(self.status != ApplicationStatus.DRAFT.value)
+        return bool(self.status != ApplicationStatus.draft.value)
 
     @property
     def can_be_reviewed(self) -> bool:
@@ -346,9 +346,9 @@ class ApplicationResponse(BaseModel):
         return bool(
             self.status
             in [
-                ApplicationStatus.SUBMITTED.value,
-                ApplicationStatus.UNDER_REVIEW.value,
-                ApplicationStatus.RECOMMENDED.value,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review.value,
+                ApplicationStatus.recommended.value,
             ]
         )
 
@@ -414,12 +414,12 @@ class ApplicationListResponse(BaseModel):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
+        return bool(self.status in [ApplicationStatus.draft.value, ApplicationStatus.returned.value])
 
     @property
     def is_submitted(self) -> bool:
         """Check if application is submitted"""
-        return bool(self.status != ApplicationStatus.DRAFT.value)
+        return bool(self.status != ApplicationStatus.draft.value)
 
     @property
     def can_be_reviewed(self) -> bool:
@@ -427,9 +427,9 @@ class ApplicationListResponse(BaseModel):
         return bool(
             self.status
             in [
-                ApplicationStatus.SUBMITTED.value,
-                ApplicationStatus.UNDER_REVIEW.value,
-                ApplicationStatus.RECOMMENDED.value,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review.value,
+                ApplicationStatus.recommended.value,
             ]
         )
 
@@ -515,24 +515,10 @@ class HistoricalApplicationResponse(BaseModel):
     # Status helpers
     @classmethod
     def get_status_label(cls, status: str) -> str:
-        """Get Chinese status label"""
-        status_labels = {
-            "draft": "草稿",
-            "submitted": "已提交",
-            "under_review": "審核中",
-            "pending_recommendation": "等待推薦",
-            "recommended": "已推薦",
-            "approved": "已通過",
-            "rejected": "已拒絕",
-            "returned": "已退回",
-            "cancelled": "已取消",
-            "renewal_pending": "續領審核中",
-            "renewal_reviewed": "續領已審核",
-            "manual_excluded": "手動排除",
-            "professor_review": "教授審核中",
-            "withdrawn": "已撤回",
-        }
-        return status_labels.get(status, status)
+        """Get Chinese status label using centralized i18n"""
+        from app.utils.i18n import ScholarshipI18n
+
+        return ScholarshipI18n.get_application_status_text(status)
 
     @classmethod
     def get_status_color(cls, status: str) -> str:

@@ -17,8 +17,25 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Rename metadata column to audit_metadata in roster_audit_logs table
-    op.alter_column("roster_audit_logs", "metadata", new_column_name="audit_metadata")
+    # Check if column needs renaming
+    import sqlalchemy as sa
+
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    # Check if table exists first
+    existing_tables = inspector.get_table_names()
+    if "roster_audit_logs" not in existing_tables:
+        print("⏭️  Skipping column rename - roster_audit_logs table doesn't exist")
+        return
+
+    existing_columns = {col["name"] for col in inspector.get_columns("roster_audit_logs")}
+
+    # Only rename if 'metadata' exists and 'audit_metadata' doesn't exist
+    if "metadata" in existing_columns and "audit_metadata" not in existing_columns:
+        op.alter_column("roster_audit_logs", "metadata", new_column_name="audit_metadata")
+    else:
+        print("⏭️  Skipping column rename - already renamed or doesn't need renaming")
 
 
 def downgrade() -> None:

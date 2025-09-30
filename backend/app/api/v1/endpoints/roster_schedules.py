@@ -8,8 +8,8 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
 from app.core.security import check_user_roles
@@ -34,40 +34,46 @@ router = APIRouter()
 async def list_roster_schedules(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of records to return"),
-    status: Optional[RosterScheduleStatus] = Query(None, description="Filter by status"),
+    status_filter: Optional[RosterScheduleStatus] = Query(None, description="Filter by status"),
     scholarship_configuration_id: Optional[int] = Query(None, description="Filter by scholarship configuration"),
     search: Optional[str] = Query(None, description="Search in schedule name"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     列出造冊排程
     List roster schedules with filtering and pagination
     """
-    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         # Build query
-        query = db.query(RosterSchedule)
+        stmt = select(RosterSchedule)
 
         # Apply filters
-        if status:
-            query = query.filter(RosterSchedule.status == status)
+        if status_filter:
+            stmt = stmt.where(RosterSchedule.status == status_filter)
 
         if scholarship_configuration_id:
-            query = query.filter(RosterSchedule.scholarship_configuration_id == scholarship_configuration_id)
+            stmt = stmt.where(RosterSchedule.scholarship_configuration_id == scholarship_configuration_id)
 
         if search:
             search_term = f"%{search}%"
-            query = query.filter(
+            stmt = stmt.where(
                 or_(RosterSchedule.schedule_name.ilike(search_term), RosterSchedule.description.ilike(search_term))
             )
 
         # Get total count
-        total = query.count()
+        from sqlalchemy import func
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_result = await db.execute(count_stmt)
+        total = total_result.scalar()
 
         # Apply pagination and ordering
-        schedules = query.order_by(RosterSchedule.created_at.desc()).offset(skip).limit(limit).all()
+        stmt = stmt.order_by(RosterSchedule.created_at.desc()).offset(skip).limit(limit)
+        result = await db.execute(stmt)
+        schedules = result.scalars().all()
 
         # Get scheduler status for each schedule
         schedule_data = []
@@ -93,14 +99,14 @@ async def list_roster_schedules(
 @router.post("/", response_model=RosterScheduleResponse)
 async def create_roster_schedule(
     schedule_data: RosterScheduleCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     建立新的造冊排程
     Create a new roster schedule
     """
-    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         # Validate cron expression if provided
@@ -113,11 +119,11 @@ async def create_roster_schedule(
         # Check if scholarship configuration exists
         from app.models.scholarship import ScholarshipConfiguration
 
-        config = (
-            db.query(ScholarshipConfiguration)
-            .filter(ScholarshipConfiguration.id == schedule_data.scholarship_configuration_id)
-            .first()
+        stmt = select(ScholarshipConfiguration).where(
+            ScholarshipConfiguration.id == schedule_data.scholarship_configuration_id
         )
+        result = await db.execute(stmt)
+        config = result.scalar_one_or_none()
 
         if not config:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship configuration not found")
@@ -139,8 +145,8 @@ async def create_roster_schedule(
         )
 
         db.add(new_schedule)
-        db.commit()
-        db.refresh(new_schedule)
+        await db.commit()
+        await db.refresh(new_schedule)
 
         # Add to scheduler if active and has cron expression
         if new_schedule.status == RosterScheduleStatus.ACTIVE and new_schedule.cron_expression:
@@ -156,7 +162,7 @@ async def create_roster_schedule(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logger.error(f"Error creating roster schedule: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create roster schedule"
@@ -166,16 +172,18 @@ async def create_roster_schedule(
 @router.get("/{schedule_id}", response_model=RosterScheduleResponse)
 async def get_roster_schedule(
     schedule_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     取得特定造冊排程詳情
     Get specific roster schedule details
     """
-    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
-    schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
+    stmt = select(RosterSchedule).where(RosterSchedule.id == schedule_id)
+    result = await db.execute(stmt)
+    schedule = result.scalar_one_or_none()
 
     if not schedule:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Roster schedule not found")
@@ -193,17 +201,19 @@ async def get_roster_schedule(
 async def update_roster_schedule(
     schedule_id: int,
     schedule_data: RosterScheduleUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     更新造冊排程
     Update roster schedule
     """
-    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
-        schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
+        stmt = select(RosterSchedule).where(RosterSchedule.id == schedule_id)
+        result = await db.execute(stmt)
+        schedule = result.scalar_one_or_none()
 
         if not schedule:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Roster schedule not found")
@@ -222,8 +232,8 @@ async def update_roster_schedule(
 
         schedule.updated_at = datetime.utcnow()
 
-        db.commit()
-        db.refresh(schedule)
+        await db.commit()
+        await db.refresh(schedule)
 
         # Update scheduler if needed
         if schedule.status == RosterScheduleStatus.ACTIVE and schedule.cron_expression:
@@ -242,7 +252,7 @@ async def update_roster_schedule(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logger.error(f"Error updating roster schedule {schedule_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update roster schedule"
@@ -253,17 +263,19 @@ async def update_roster_schedule(
 async def update_schedule_status(
     schedule_id: int,
     status_data: RosterScheduleStatusUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     更新排程狀態
     Update schedule status (active, paused, disabled)
     """
-    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
-        schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
+        stmt = select(RosterSchedule).where(RosterSchedule.id == schedule_id)
+        result = await db.execute(stmt)
+        schedule = result.scalar_one_or_none()
 
         if not schedule:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Roster schedule not found")
@@ -272,8 +284,8 @@ async def update_schedule_status(
         schedule.status = status_data.status
         schedule.updated_at = datetime.utcnow()
 
-        db.commit()
-        db.refresh(schedule)
+        await db.commit()
+        await db.refresh(schedule)
 
         # Handle scheduler operations based on status change
         if status_data.status == RosterScheduleStatus.ACTIVE:
@@ -298,7 +310,7 @@ async def update_schedule_status(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logger.error(f"Error updating schedule status {schedule_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update schedule status"
@@ -308,17 +320,19 @@ async def update_schedule_status(
 @router.delete("/{schedule_id}")
 async def delete_roster_schedule(
     schedule_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     刪除造冊排程
     Delete roster schedule
     """
-    check_user_roles([UserRole.ADMIN], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
-        schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
+        stmt = select(RosterSchedule).where(RosterSchedule.id == schedule_id)
+        result = await db.execute(stmt)
+        schedule = result.scalar_one_or_none()
 
         if not schedule:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Roster schedule not found")
@@ -328,7 +342,7 @@ async def delete_roster_schedule(
 
         # Delete from database
         db.delete(schedule)
-        db.commit()
+        await db.commit()
 
         logger.info(f"Deleted roster schedule {schedule_id} by user {current_user.id}")
 
@@ -337,7 +351,7 @@ async def delete_roster_schedule(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logger.error(f"Error deleting roster schedule {schedule_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete roster schedule"
@@ -347,17 +361,19 @@ async def delete_roster_schedule(
 @router.post("/{schedule_id}/execute")
 async def execute_schedule_now(
     schedule_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     立即執行排程
     Execute schedule immediately (manual trigger)
     """
-    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
-        schedule = db.query(RosterSchedule).filter(RosterSchedule.id == schedule_id).first()
+        stmt = select(RosterSchedule).where(RosterSchedule.id == schedule_id)
+        result = await db.execute(stmt)
+        schedule = result.scalar_one_or_none()
 
         if not schedule:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Roster schedule not found")
@@ -382,15 +398,35 @@ async def get_scheduler_status(
     取得排程器狀態
     Get scheduler status and all active jobs
     """
-    check_user_roles([UserRole.ADMIN, UserRole.SCHOLARSHIP_MANAGER], current_user)
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
         jobs = roster_scheduler.list_all_jobs()
+        scheduler = roster_scheduler.scheduler
+
+        # Get scheduler state
+        scheduler_running = scheduler.running if scheduler else False
+        scheduler_state = "running" if scheduler_running else "stopped"
+
+        # Count active and pending jobs
+        active_jobs = sum(1 for job in jobs if job.get("next_run_time"))
+        pending_jobs = len(jobs) - active_jobs
+
+        # Get executor info (APScheduler default)
+        executor_info = {"class": "ThreadPoolExecutor", "max_workers": 10, "current_workers": 0}
+
+        # Get jobstore info
+        jobstore_info = {"class": "MemoryJobStore", "connected": scheduler_running}
 
         return {
             "success": True,
-            "scheduler_running": roster_scheduler.scheduler.running if roster_scheduler.scheduler else False,
-            "total_jobs": len(jobs),
+            "scheduler_running": scheduler_running,
+            "scheduler_state": scheduler_state,
+            "job_count": len(jobs),
+            "active_jobs": active_jobs,
+            "pending_jobs": pending_jobs,
+            "executor_info": executor_info,
+            "jobstore_info": jobstore_info,
             "jobs": jobs,
         }
 

@@ -124,7 +124,7 @@ class TestApplicationService:
             app_id="APP-2024-000001",
             user_id=student_user.id,
             scholarship_type_id=scholarship_type.id,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
             main_scholarship_type="undergraduate_freshman",
             sub_scholarship_type="general",
             amount=Decimal("50000"),
@@ -319,7 +319,7 @@ class TestApplicationService:
     async def test_update_application_invalid_status(self, application_service, student_user, mock_application):
         """Test application update when application is not in draft status"""
         # Arrange
-        mock_application.status = ApplicationStatus.SUBMITTED.value
+        mock_application.status = ApplicationStatus.submitted.value
         update_data = ApplicationUpdate(
             submitted_form_data={"personal_statement": "Cannot update submitted application"}
         )
@@ -336,7 +336,7 @@ class TestApplicationService:
     async def test_submit_application_success(self, application_service, student_user, mock_application):
         """Test successful application submission"""
         # Arrange
-        mock_application.status = ApplicationStatus.DRAFT.value
+        mock_application.status = ApplicationStatus.draft.value
         mock_application.submitted_form_data = {
             "personal_statement": "Complete statement with 100+ characters for validation purposes.",
             "career_goals": "Detailed career goals",
@@ -352,7 +352,7 @@ class TestApplicationService:
             await application_service.submit_application(user=student_user, application_id=1)
 
             # Assert
-            assert mock_application.status == ApplicationStatus.SUBMITTED.value
+            assert mock_application.status == ApplicationStatus.submitted.value
             assert mock_application.submitted_at is not None
             application_service.db.commit.assert_called_once()
 
@@ -360,7 +360,7 @@ class TestApplicationService:
     async def test_submit_application_incomplete_data(self, application_service, student_user, mock_application):
         """Test application submission with incomplete data"""
         # Arrange
-        mock_application.status = ApplicationStatus.DRAFT.value
+        mock_application.status = ApplicationStatus.draft.value
         mock_application.submitted_form_data = {"personal_statement": "Too short"}  # Incomplete data
 
         mock_query_result = Mock()
@@ -380,7 +380,7 @@ class TestApplicationService:
     async def test_withdraw_application_success(self, application_service, student_user, mock_application):
         """Test successful application withdrawal"""
         # Arrange
-        mock_application.status = ApplicationStatus.SUBMITTED.value
+        mock_application.status = ApplicationStatus.submitted.value
 
         mock_query_result = Mock()
         mock_query_result.scalar_one_or_none.return_value = mock_application
@@ -391,14 +391,14 @@ class TestApplicationService:
         await application_service.withdraw_application(user=student_user, application_id=1, reason="Changed my mind")
 
         # Assert
-        assert mock_application.status == ApplicationStatus.WITHDRAWN.value
+        assert mock_application.status == ApplicationStatus.withdrawn.value
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_withdraw_application_invalid_status(self, application_service, student_user, mock_application):
         """Test withdrawal of application in invalid status"""
         # Arrange
-        mock_application.status = ApplicationStatus.APPROVED.value
+        mock_application.status = ApplicationStatus.approved.value
 
         mock_query_result = Mock()
         mock_query_result.scalar_one_or_none.return_value = mock_application
@@ -450,12 +450,12 @@ class TestApplicationService:
         await application_service.update_application_status(
             user=admin_user,
             application_id=1,
-            new_status=ApplicationStatus.UNDER_REVIEW,
+            new_status=ApplicationStatus.under_review,
             comments="Review started",
         )
 
         # Assert
-        assert mock_application.status == ApplicationStatus.UNDER_REVIEW.value
+        assert mock_application.status == ApplicationStatus.under_review.value
         application_service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -477,7 +477,7 @@ class TestApplicationService:
         # Act
         results, total = await application_service.search_applications(
             user=admin_user,
-            status=ApplicationStatus.SUBMITTED,
+            status=ApplicationStatus.submitted,
             scholarship_type_id=1,
             academic_year=113,
             search_term="computer science",
@@ -535,7 +535,7 @@ class TestApplicationService:
     async def test_email_notification_on_submission(self, application_service, student_user, mock_application):
         """Test email notification is sent on application submission"""
         # Arrange
-        mock_application.status = ApplicationStatus.DRAFT.value
+        mock_application.status = ApplicationStatus.draft.value
         mock_application.submitted_form_data = {
             "personal_statement": "Complete statement with sufficient length for validation."
         }

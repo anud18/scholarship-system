@@ -161,7 +161,7 @@ async def test_get_notification_analytics(dummy_service, monkeypatch):
                 "is_read": True,
                 "notification_type": NotificationType.application_approved,
                 "priority": NotificationPriority.high,
-                "channel": NotificationChannel.IN_APP,
+                "channel": NotificationChannel.in_app,
             },
         )(),
         type(
@@ -172,7 +172,7 @@ async def test_get_notification_analytics(dummy_service, monkeypatch):
                 "is_read": False,
                 "notification_type": NotificationType.application_rejected,
                 "priority": NotificationPriority.normal,
-                "channel": NotificationChannel.EMAIL,
+                "channel": NotificationChannel.email,
             },
         )(),
     ]
@@ -201,7 +201,7 @@ async def test_get_notification_analytics(dummy_service, monkeypatch):
     assert analytics["engagement_rate"] == 50.0
     assert analytics["type_breakdown"][NotificationType.application_approved.value] == 1
     assert analytics["priority_breakdown"][NotificationPriority.high.value] == 1
-    assert analytics["channel_breakdown"][NotificationChannel.EMAIL.value] == 1
+    assert analytics["channel_breakdown"][NotificationChannel.email.value] == 1
     assert analytics["user_id"] == 42
 
 

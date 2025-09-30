@@ -50,7 +50,7 @@ def test_application_response_properties():
         scholarship_type="academic_excellence",
         scholarship_name="Academic Excellence Scholarship",
         amount=5000.00,
-        status=ApplicationStatus.DRAFT.value,
+        status=ApplicationStatus.draft.value,
         status_name="Draft",
         academic_year="2024",
         semester="Fall",
@@ -98,7 +98,7 @@ def test_application_list_response_optional_fields():
         scholarship_type="academic_excellence",
         scholarship_name="Academic Excellence Scholarship",
         amount=5000.00,
-        status=ApplicationStatus.SUBMITTED.value,
+        status=ApplicationStatus.submitted.value,
         status_name="Submitted",
         submitted_at="2024-01-02T00:00:00",
         created_at="2024-01-01T00:00:00",
@@ -132,7 +132,7 @@ def test_application_model_properties():
         app_id="APP-2025-123456",
         user_id=1,
         scholarship_name="Academic Excellence",
-        status=ApplicationStatus.DRAFT.value,
+        status=ApplicationStatus.draft.value,
         academic_year=113,
         semester=Semester.first,
         scholarship_subtype_list=[],
@@ -150,7 +150,7 @@ def test_application_model_properties():
     assert app.can_be_reviewed is False
 
     # Test property values for submitted status
-    app.status = ApplicationStatus.SUBMITTED.value
+    app.status = ApplicationStatus.submitted.value
     assert app.is_editable is False
     assert app.is_submitted is True
     assert app.can_be_reviewed is True

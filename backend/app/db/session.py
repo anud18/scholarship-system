@@ -2,6 +2,8 @@
 Database session management
 """
 
+from contextlib import asynccontextmanager
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -100,16 +102,22 @@ async def handle_cached_statement_error(session: AsyncSession, operation_func, *
         raise
 
 
+@asynccontextmanager
 async def get_db_session():
     """
     Get a database session with proper error handling
 
     This function provides a database session with built-in handling
     for common PostgreSQL connection issues.
+
+    Usage:
+        async with get_db_session() as session:
+            # use session
     """
     session = AsyncSessionLocal()
     try:
         yield session
+        await session.commit()
     except Exception:
         await session.rollback()
         raise

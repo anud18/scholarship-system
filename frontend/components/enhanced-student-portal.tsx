@@ -1132,9 +1132,12 @@ export function EnhancedStudentPortal({
       {/* Scholarship Info Cards */}
       {eligibleScholarships.map(scholarship => {
         const applicationInfo = scholarshipApplicationInfo[scholarship.code];
+        // Check if scholarship has eligible sub-types AND no common errors
+        const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
         const isEligible =
           Array.isArray(scholarship.eligible_sub_types) &&
-          scholarship.eligible_sub_types.length > 0;
+          scholarship.eligible_sub_types.length > 0 &&
+          !hasCommonErrors;  // If there are common errors, student is not eligible
 
         return (
           <Card
@@ -1184,8 +1187,9 @@ export function EnhancedStudentPortal({
                   : scholarship.description_en || scholarship.description}
               </CardDescription>
 
-              {/* Eligible Programs Section */}
-              {scholarship.eligible_sub_types &&
+              {/* Eligible Programs Section - only show if student is eligible */}
+              {isEligible &&
+                scholarship.eligible_sub_types &&
                 scholarship.eligible_sub_types.length > 0 &&
                 scholarship.eligible_sub_types[0]?.value !== "general" &&
                 scholarship.eligible_sub_types[0]?.value !== null && (
@@ -1231,8 +1235,9 @@ export function EnhancedStudentPortal({
                       </div>
                     </div>
                     <div className="p-3 space-y-3">
-                      {/* Basic eligibility tags */}
+                      {/* Basic eligibility tags - show passed and errors together */}
                       <div className="flex flex-wrap gap-1">
+                        {/* Passed rules (common) */}
                         {scholarship.passed
                           ?.filter(rule => !rule.sub_type)
                           .map(rule => (
@@ -1241,6 +1246,22 @@ export function EnhancedStudentPortal({
                               variant="outline"
                               className="bg-emerald-50 text-emerald-600 border-emerald-100"
                             >
+                              {getTranslation(
+                                locale,
+                                `eligibility_tags.${rule.tag}`
+                              )}
+                            </Badge>
+                          ))}
+                        {/* Error rules (common) - show in same row */}
+                        {scholarship.errors
+                          ?.filter(rule => !rule.sub_type)
+                          .map(rule => (
+                            <Badge
+                              key={rule.rule_id}
+                              variant="outline"
+                              className="bg-rose-50 text-rose-600 border-rose-100"
+                            >
+                              <AlertTriangle className="h-3 w-3 mr-1" />
                               {getTranslation(
                                 locale,
                                 `eligibility_tags.${rule.tag}`
@@ -1306,7 +1327,7 @@ export function EnhancedStudentPortal({
                         );
                       })}
 
-                      {/* Warnings */}
+                      {/* Warnings - keep at the end */}
                       {scholarship.warnings &&
                         scholarship.warnings.length > 0 && (
                           <div className="flex flex-wrap gap-1">
@@ -1323,29 +1344,6 @@ export function EnhancedStudentPortal({
                                 )}
                               </Badge>
                             ))}
-                          </div>
-                        )}
-
-                      {/* General Errors (non-subtype specific) */}
-                      {scholarship.errors &&
-                        scholarship.errors.filter(rule => !rule.sub_type)
-                          .length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {scholarship.errors
-                              ?.filter(rule => !rule.sub_type)
-                              .map(rule => (
-                                <Badge
-                                  key={rule.rule_id}
-                                  variant="outline"
-                                  className="bg-rose-50 text-rose-600 border-rose-100"
-                                >
-                                  <AlertTriangle className="h-3 w-3 mr-1" />
-                                  {getTranslation(
-                                    locale,
-                                    `eligibility_tags.${rule.tag}`
-                                  )}
-                                </Badge>
-                              ))}
                           </div>
                         )}
                     </div>

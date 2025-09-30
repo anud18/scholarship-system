@@ -113,7 +113,7 @@ async def get_all_applications(
         stmt = stmt.where(Application.status == status)
     else:
         # Default: exclude draft applications for admin view
-        stmt = stmt.where(Application.status != ApplicationStatus.DRAFT.value)
+        stmt = stmt.where(Application.status != ApplicationStatus.draft.value)
 
     if search:
         stmt = stmt.where(
@@ -386,14 +386,14 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
     status_counts = {row[0]: row[1] for row in result.fetchall()}
 
     # Pending review count
-    pending_review = status_counts.get(ApplicationStatus.SUBMITTED.value, 0) + status_counts.get(
-        ApplicationStatus.UNDER_REVIEW.value, 0
+    pending_review = status_counts.get(ApplicationStatus.submitted.value, 0) + status_counts.get(
+        ApplicationStatus.under_review.value, 0
     )
 
     # Approved this month (filtered by permissions)
     this_month = datetime.now().replace(day=1)
     stmt = select(func.count(Application.id)).where(
-        Application.status == ApplicationStatus.APPROVED.value,
+        Application.status == ApplicationStatus.approved.value,
         Application.approved_at >= this_month,
     )
     if current_user.role in [UserRole.admin, UserRole.college] and allowed_scholarship_ids:
@@ -420,7 +420,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
         )
     ).where(
         Application.submitted_at.isnot(None),
-        Application.status.in_([ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]),
+        Application.status.in_([ApplicationStatus.approved.value, ApplicationStatus.rejected.value]),
     )
     if current_user.role in [UserRole.admin, UserRole.college] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
@@ -435,7 +435,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
             "total_applications": total_applications,
             "pending_review": pending_review,
             "approved": approved_this_month,
-            "rejected": status_counts.get(ApplicationStatus.REJECTED.value, 0),
+            "rejected": status_counts.get(ApplicationStatus.rejected.value, 0),
             "avg_processing_time": avg_processing_time,
         },
     )
@@ -769,7 +769,7 @@ async def get_recent_applications(
         .options(selectinload(Application.scholarship_configuration))
         .join(User, Application.user_id == User.id)
         .outerjoin(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
-        .where(Application.status != ApplicationStatus.DRAFT.value)
+        .where(Application.status != ApplicationStatus.draft.value)
     )
 
     # Apply scholarship permission filtering
@@ -780,14 +780,6 @@ async def get_recent_applications(
 
     result = await db.execute(stmt)
     application_tuples = result.fetchall()
-
-    # Add Chinese scholarship type names
-    scholarship_type_zh = {
-        "undergraduate_freshman": "學士班新生獎學金",
-        "phd_nstc": "國科會博士生獎學金",
-        "phd_moe": "教育部博士生獎學金",
-        "direct_phd": "逕博獎學金",
-    }
 
     response_list = []
     for app_tuple in application_tuples:
@@ -801,10 +793,7 @@ async def get_recent_applications(
             # "student_id": app.student_id,  # Removed - student data now from external API
             "scholarship_type": scholarship_type.code if scholarship_type else "unknown",
             "scholarship_type_id": app.scholarship_type_id or (scholarship_type.id if scholarship_type else None),
-            "scholarship_type_zh": scholarship_type_zh.get(
-                scholarship_type.code if scholarship_type else "unknown",
-                scholarship_type.code if scholarship_type else "unknown",
-            ),
+            "scholarship_type_zh": scholarship_type.name if scholarship_type else "未知獎學金",
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
@@ -1266,9 +1255,9 @@ async def get_scholarship_statistics(current_user: User = Depends(require_admin)
                 for app in applications
                 if app.status
                 in [
-                    ApplicationStatus.SUBMITTED.value,
-                    ApplicationStatus.UNDER_REVIEW.value,
-                    ApplicationStatus.PENDING_RECOMMENDATION.value,
+                    ApplicationStatus.submitted.value,
+                    ApplicationStatus.under_review.value,
+                    ApplicationStatus.pending_recommendation.value,
                 ]
             ]
         )
@@ -1277,7 +1266,7 @@ async def get_scholarship_statistics(current_user: User = Depends(require_admin)
         completed_apps = [
             app
             for app in applications
-            if app.status in [ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]
+            if app.status in [ApplicationStatus.approved.value, ApplicationStatus.rejected.value]
             and app.submitted_at
             and app.reviewed_at
         ]
@@ -1356,7 +1345,7 @@ async def get_applications_by_scholarship(
     if status:
         stmt = stmt.where(Application.status == status)
     else:
-        stmt = stmt.where(Application.status != ApplicationStatus.DRAFT.value)
+        stmt = stmt.where(Application.status != ApplicationStatus.draft.value)
 
     if sub_type:
         # Filter by sub-type in scholarship_subtype_list
@@ -1536,9 +1525,9 @@ async def get_scholarship_sub_types(
                 for app in applications
                 if app.status
                 in [
-                    ApplicationStatus.SUBMITTED.value,
-                    ApplicationStatus.UNDER_REVIEW.value,
-                    ApplicationStatus.PENDING_RECOMMENDATION.value,
+                    ApplicationStatus.submitted.value,
+                    ApplicationStatus.under_review.value,
+                    ApplicationStatus.pending_recommendation.value,
                 ]
             ]
         )
@@ -1547,7 +1536,7 @@ async def get_scholarship_sub_types(
         completed_apps = [
             app
             for app in applications
-            if app.status in [ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value]
+            if app.status in [ApplicationStatus.approved.value, ApplicationStatus.rejected.value]
             and app.submitted_at
             and app.reviewed_at
         ]

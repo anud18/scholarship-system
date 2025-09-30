@@ -19,10 +19,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add rule validation fields to payment_roster_items table
-    op.add_column("payment_roster_items", sa.Column("rule_validation_result", sa.JSON(), nullable=True))
-    op.add_column("payment_roster_items", sa.Column("failed_rules", sa.JSON(), nullable=True))
-    op.add_column("payment_roster_items", sa.Column("warning_rules", sa.JSON(), nullable=True))
+    # Check if columns already exist
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_columns = {col["name"] for col in inspector.get_columns("payment_roster_items")}
+
+    # Add rule validation fields to payment_roster_items table only if they don't exist
+    if "rule_validation_result" not in existing_columns:
+        op.add_column("payment_roster_items", sa.Column("rule_validation_result", sa.JSON(), nullable=True))
+    if "failed_rules" not in existing_columns:
+        op.add_column("payment_roster_items", sa.Column("failed_rules", sa.JSON(), nullable=True))
+    if "warning_rules" not in existing_columns:
+        op.add_column("payment_roster_items", sa.Column("warning_rules", sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:

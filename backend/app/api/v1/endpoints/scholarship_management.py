@@ -403,8 +403,8 @@ async def simulate_priority_processing(
                 Application.sub_scholarship_type == sub_type,
                 Application.status.in_(
                     [
-                        ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.UNDER_REVIEW.value,
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.under_review.value,
                     ]
                 ),
             )

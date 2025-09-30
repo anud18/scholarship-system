@@ -1,4 +1,5 @@
 "use client"
+import { apiClient } from "@/lib/api"
 
 import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -62,11 +63,11 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
       if (search) params.set("search", search)
       if (statusFilter !== "all") params.set("status", statusFilter)
 
-      const response = await fetch(`/api/v1/payment-rosters/?${params}`)
-      const data = await response.json()
+      const response = await apiClient.request("/payment-rosters/", { params: Object.fromEntries(params) })
+      const data = response.data || response
 
-      if (data.rosters) {
-        setRosters(data.rosters)
+      if (data.items) {
+        setRosters(data.items)
         setPagination(prev => ({ ...prev, total: data.total }))
       }
     } catch (error) {
@@ -85,31 +86,15 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
     try {
       setActionLoading(prev => ({ ...prev, [rosterId]: true }))
 
-      const response = await fetch(`/api/v1/payment-rosters/${rosterId}/download`)
+      const response = await apiClient.request(`/payment-rosters/${rosterId}/download`)
+      const data = response.data || response
 
-      if (!response.ok) {
-        throw new Error("下載失敗")
+      // For file downloads, the API should return download_url
+      if (data.download_url) {
+        window.open(data.download_url, '_blank')
+      } else {
+        throw new Error("無法取得下載連結")
       }
-
-      // Get filename from response headers
-      const contentDisposition = response.headers.get("content-disposition")
-      let filename = "payment_roster.xlsx"
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="(.+)"/)
-        if (filenameMatch) {
-          filename = filenameMatch[1]
-        }
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
 
       toast({
         title: "成功",
@@ -131,13 +116,9 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
     try {
       setActionLoading(prev => ({ ...prev, [rosterId]: true }))
 
-      const response = await fetch(`/api/v1/payment-rosters/${rosterId}/regenerate`, {
+      await apiClient.request(`/payment-rosters/${rosterId}/regenerate`, {
         method: "POST",
       })
-
-      if (!response.ok) {
-        throw new Error("重新產生失敗")
-      }
 
       toast({
         title: "成功",
@@ -162,13 +143,9 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
     if (!selectedRoster) return
 
     try {
-      const response = await fetch(`/api/v1/payment-rosters/${selectedRoster.id}`, {
+      await apiClient.request(`/payment-rosters/${selectedRoster.id}`, {
         method: "DELETE",
       })
-
-      if (!response.ok) {
-        throw new Error("刪除失敗")
-      }
 
       toast({
         title: "成功",

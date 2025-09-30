@@ -10,6 +10,7 @@ import { RosterScheduleList } from "./roster-schedule-list"
 import { PaymentRosterList } from "./payment-roster-list"
 import { SchedulerStatus } from "./scheduler-status"
 import { CreateScheduleDialog } from "./create-schedule-dialog"
+import { apiClient } from "@/lib/api"
 
 interface DashboardStats {
   totalSchedules: number
@@ -39,22 +40,22 @@ export function RosterManagementDashboard() {
       setLoading(true)
 
       // Fetch schedule stats
-      const scheduleResponse = await fetch("/api/v1/roster-schedules/")
-      const scheduleData = await scheduleResponse.json()
+      const scheduleResponse = await apiClient.request("/roster-schedules/")
+      const scheduleData = scheduleResponse.data || scheduleResponse
 
       // Fetch roster stats
-      const rosterResponse = await fetch("/api/v1/payment-rosters/")
-      const rosterData = await rosterResponse.json()
+      const rosterResponse = await apiClient.request("/payment-rosters/")
+      const rosterData = rosterResponse.data || rosterResponse
 
       // Fetch scheduler status
-      const schedulerResponse = await fetch("/api/v1/roster-schedules/scheduler/status")
-      const schedulerData = await schedulerResponse.json()
+      const schedulerResponse = await apiClient.request("/roster-schedules/scheduler/status")
+      const schedulerData = schedulerResponse.data || schedulerResponse
 
       setStats({
         totalSchedules: scheduleData.total || 0,
-        activeSchedules: scheduleData.schedules?.filter((s: any) => s.status === "active").length || 0,
+        activeSchedules: scheduleData.items?.filter((s: any) => s.status === "active").length || 0,
         totalRosters: rosterData.total || 0,
-        pendingRosters: rosterData.rosters?.filter((r: any) => r.status === "pending").length || 0,
+        pendingRosters: rosterData.items?.filter((r: any) => r.status === "pending").length || 0,
         schedulerRunning: schedulerData.scheduler_running || false
       })
     } catch (error) {

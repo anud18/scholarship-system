@@ -13,6 +13,7 @@ import { toast } from "@/components/ui/use-toast"
 import { Search, MoreHorizontal, Play, Pause, Square, Trash2, Edit, Calendar, FileText } from "lucide-react"
 import { EditScheduleDialog } from "./edit-schedule-dialog"
 import { formatDateTime, getStatusBadgeVariant } from "@/lib/utils"
+import { apiClient } from "@/lib/api"
 
 interface RosterSchedule {
   id: number
@@ -58,19 +59,19 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
   const fetchSchedules = async () => {
     try {
       setLoading(true)
-      const params = new URLSearchParams({
-        skip: pagination.skip.toString(),
-        limit: pagination.limit.toString(),
-      })
+      const params: any = {
+        skip: pagination.skip,
+        limit: pagination.limit,
+      }
 
-      if (search) params.set("search", search)
-      if (statusFilter !== "all") params.set("status", statusFilter)
+      if (search) params.search = search
+      if (statusFilter !== "all") params.status = statusFilter
 
-      const response = await fetch(`/api/v1/roster-schedules/?${params}`)
-      const data = await response.json()
+      const response = await apiClient.request("/roster-schedules/", { params })
+      const data = response.data || response
 
-      if (data.schedules) {
-        setSchedules(data.schedules)
+      if (data.items) {
+        setSchedules(data.items)
         setPagination(prev => ({ ...prev, total: data.total }))
       }
     } catch (error) {
@@ -89,17 +90,10 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
     try {
       setActionLoading(prev => ({ ...prev, [scheduleId]: true }))
 
-      const response = await fetch(`/api/v1/roster-schedules/${scheduleId}/status`, {
+      await apiClient.request(`/roster-schedules/${scheduleId}/status`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ status: newStatus }),
       })
-
-      if (!response.ok) {
-        throw new Error("狀態更新失敗")
-      }
 
       toast({
         title: "成功",
@@ -124,13 +118,9 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
     try {
       setActionLoading(prev => ({ ...prev, [scheduleId]: true }))
 
-      const response = await fetch(`/api/v1/roster-schedules/${scheduleId}/execute`, {
+      await apiClient.request(`/roster-schedules/${scheduleId}/execute`, {
         method: "POST",
       })
-
-      if (!response.ok) {
-        throw new Error("執行失敗")
-      }
 
       toast({
         title: "成功",
@@ -155,13 +145,9 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
     if (!selectedSchedule) return
 
     try {
-      const response = await fetch(`/api/v1/roster-schedules/${selectedSchedule.id}`, {
+      await apiClient.request(`/roster-schedules/${selectedSchedule.id}`, {
         method: "DELETE",
       })
-
-      if (!response.ok) {
-        throw new Error("刪除失敗")
-      }
 
       toast({
         title: "成功",

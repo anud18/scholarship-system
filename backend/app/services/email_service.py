@@ -85,7 +85,7 @@ class EmailService:
             to = [to]
 
         primary_recipient = to[0] if to else ""
-        status = EmailStatus.SENT
+        status = EmailStatus.sent
         error_message = None
 
         try:
@@ -118,7 +118,7 @@ class EmailService:
             logger.info(f"Email sent successfully to {primary_recipient}")
 
         except Exception as e:
-            status = EmailStatus.FAILED
+            status = EmailStatus.failed
             error_message = str(e)
             logger.error(f"Failed to send email to {primary_recipient}: {e}")
             # Re-raise the exception so callers can handle it
@@ -137,7 +137,7 @@ class EmailService:
                         body=body,
                         status=status,
                         error_message=error_message,
-                        email_size_bytes=email_size if status == EmailStatus.SENT else None,
+                        email_size_bytes=email_size if status == EmailStatus.sent else None,
                         **metadata,
                     )
                 except Exception as log_error:
@@ -326,7 +326,7 @@ class EmailService:
         default_body = f"您的獎學金申請({application_data.get('app_id', '')})已成功送出，請等候後續通知。"
 
         metadata = {
-            "email_category": EmailCategory.APPLICATION_STUDENT,
+            "email_category": EmailCategory.application_student,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": True,
@@ -359,7 +359,7 @@ class EmailService:
         default_body = f"有一份新的學生申請案({application_data.get('app_id', '')})需要您推薦，請至系統審查。"
 
         metadata = {
-            "email_category": EmailCategory.RECOMMENDATION_PROFESSOR,
+            "email_category": EmailCategory.recommendation_professor,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": True,
@@ -395,7 +395,7 @@ class EmailService:
         default_body = f"有一份新的申請案({application_data.get('app_id', '')})已由教授推薦，請至系統審查。"
 
         metadata = {
-            "email_category": EmailCategory.REVIEW_COLLEGE,
+            "email_category": EmailCategory.review_college,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": True,
@@ -430,7 +430,7 @@ class EmailService:
         default_body = f"{scholarship_data.get('scholarship_type', '')} 現已開放申請，請至系統進行線上申請。"
 
         metadata = {
-            "email_category": EmailCategory.APPLICATION_WHITELIST,
+            "email_category": EmailCategory.application_whitelist,
             "scholarship_type_id": scholarship_data.get("scholarship_type_id"),
             "sent_by_system": True,
         }
@@ -461,7 +461,7 @@ class EmailService:
         default_body = "您的獎學金申請草稿尚未送出，申請即將截止！請儘快完成申請。"
 
         metadata = {
-            "email_category": EmailCategory.APPLICATION_STUDENT,
+            "email_category": EmailCategory.application_student,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": True,
@@ -495,7 +495,7 @@ class EmailService:
         default_body = f"您的獎學金申請({application_data.get('app_id', '')})需要補充資料，請儘快補齊。"
 
         metadata = {
-            "email_category": EmailCategory.SUPPLEMENT_STUDENT,
+            "email_category": EmailCategory.supplement_student,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": False,  # Manual supplement requests
@@ -539,7 +539,7 @@ class EmailService:
             base_context,
             f"獎學金審核結果通知 - {base_context['scholarship_type']} ({base_context['app_id']})",
             f"您的獎學金申請審核結果已出爐：{base_context['result_status']}",
-            email_category=EmailCategory.RESULT_STUDENT,
+            email_category=EmailCategory.result_student,
             **base_metadata,
         )
 
@@ -552,7 +552,7 @@ class EmailService:
                 base_context,
                 f"學生獎學金審核結果 - {base_context['scholarship_type']} ({base_context['app_id']})",
                 f"您推薦的學生({base_context['student_name']})獎學金申請結果：{base_context['result_status']}",
-                email_category=EmailCategory.RESULT_PROFESSOR,
+                email_category=EmailCategory.result_professor,
                 **base_metadata,
             )
 
@@ -566,7 +566,7 @@ class EmailService:
                 base_context,
                 f"獎學金審核結果確認 - {base_context['scholarship_type']} ({base_context['app_id']})",
                 f"獎學金申請({base_context['app_id']})審核程序已完成，結果：{base_context['result_status']}",
-                email_category=EmailCategory.RESULT_COLLEGE,
+                email_category=EmailCategory.result_college,
                 **base_metadata,
             )
 
@@ -586,7 +586,7 @@ class EmailService:
         default_body = f"恭喜您獲得 {application_data.get('scholarship_type', '')}！"
 
         metadata = {
-            "email_category": EmailCategory.ROSTER_STUDENT,
+            "email_category": EmailCategory.roster_student,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": False,  # Manual roster notifications

@@ -1,4 +1,5 @@
 "use client"
+import { apiClient } from "@/lib/api"
 
 import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -40,9 +41,10 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
 
   const fetchScholarshipConfigurations = async () => {
     try {
-      const response = await fetch("/api/v1/scholarship-configurations/")
-      const data = await response.json()
-      setScholarshipConfigs(data.configurations || [])
+      const response = await apiClient.request("/scholarship-configurations/configurations/")
+      // apiClient already extracts response.data, so response.data is the actual array
+      const configs = Array.isArray(response.data) ? response.data : (response.data?.data || [])
+      setScholarshipConfigs(configs)
     } catch (error) {
       console.error("獲取獎學金設定失敗:", error)
       toast({
@@ -91,18 +93,13 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
         scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
       }
 
-      const response = await fetch("/api/v1/roster-schedules/", {
+      await apiClient.request("/roster-schedules/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(submitData),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "建立排程失敗")
-      }
 
       toast({
         title: "成功",
@@ -152,7 +149,7 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setOpen} modal={true}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="w-4 h-4 mr-2" />

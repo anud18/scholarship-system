@@ -1,4 +1,5 @@
 "use client"
+import { apiClient } from "@/lib/api"
 
 import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -58,16 +59,12 @@ export function SchedulerStatus() {
     try {
       setLoading(true)
 
-      // Fetch scheduler status
-      const statusResponse = await fetch("/api/v1/roster-schedules/scheduler/status")
-      const statusData = await statusResponse.json()
-
-      // Fetch job details
-      const jobsResponse = await fetch("/api/v1/roster-schedules/scheduler/jobs")
-      const jobsData = await jobsResponse.json()
+      // Fetch scheduler status (includes jobs)
+      const statusResponse = await apiClient.request("/roster-schedules/scheduler/status")
+      const statusData = statusResponse.data || statusResponse
 
       setSchedulerInfo(statusData)
-      setJobs(jobsData.jobs || [])
+      setJobs(statusData.jobs || [])
     } catch (error) {
       console.error("獲取排程器狀態失敗:", error)
       toast({
@@ -84,13 +81,10 @@ export function SchedulerStatus() {
     try {
       setActionLoading(true)
 
-      const response = await fetch(`/api/v1/roster-schedules/scheduler/${action}`, {
+      const response = await apiClient.request(`/roster-schedules/scheduler/${action}`, {
         method: "POST",
       })
 
-      if (!response.ok) {
-        throw new Error(`排程器${action}操作失敗`)
-      }
 
       const actionLabels = {
         start: "啟動",

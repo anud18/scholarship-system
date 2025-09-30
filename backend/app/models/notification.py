@@ -16,10 +16,10 @@ from app.db.base_class import Base
 class NotificationChannel(enum.Enum):
     """Notification delivery channels"""
 
-    IN_APP = "in_app"
-    EMAIL = "email"
-    SMS = "sms"
-    PUSH = "push"
+    in_app = "in_app"
+    email = "email"
+    sms = "sms"
+    push = "push"
 
 
 class NotificationType(enum.Enum):
@@ -119,7 +119,7 @@ class Notification(Base):
     # Delivery channel
     channel = Column(
         Enum(NotificationChannel, values_callable=lambda obj: [e.value for e in obj]),
-        default=NotificationChannel.IN_APP,
+        default=NotificationChannel.in_app,
         nullable=False,
     )
 
@@ -342,10 +342,10 @@ class NotificationPreference(Base):
     def is_enabled_for_channel(self, channel: NotificationChannel) -> bool:
         """Check if notifications are enabled for a specific channel"""
         channel_map = {
-            NotificationChannel.IN_APP: self.in_app_enabled,
-            NotificationChannel.EMAIL: self.email_enabled,
-            NotificationChannel.SMS: self.sms_enabled,
-            NotificationChannel.PUSH: self.push_enabled,
+            NotificationChannel.in_app: self.in_app_enabled,
+            NotificationChannel.email: self.email_enabled,
+            NotificationChannel.sms: self.sms_enabled,
+            NotificationChannel.push: self.push_enabled,
         }
         return channel_map.get(channel, False)
 

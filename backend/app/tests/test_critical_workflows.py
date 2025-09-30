@@ -74,7 +74,7 @@ class TestCriticalApplicationWorkflow:
                 is_draft=True,
             )
 
-            assert result.status == ApplicationStatus.DRAFT.value
+            assert result.status == ApplicationStatus.draft.value
             assert result.user_id == test_user.id
 
     async def test_prevent_duplicate_applications(self, db, test_user, test_scholarship):
@@ -83,7 +83,7 @@ class TestCriticalApplicationWorkflow:
         app1 = Application(
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.SUBMITTED.value,
+            status=ApplicationStatus.submitted.value,
             app_id="TEST-001",
             academic_year=113,
             semester="first",
@@ -127,7 +127,7 @@ class TestCriticalApplicationWorkflow:
         app = Application(
             user_id=test_user.id,
             scholarship_type_id=1,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
             app_id="TEST-DRAFT-001",
             academic_year=113,
             semester="first",
@@ -144,7 +144,7 @@ class TestCriticalApplicationWorkflow:
         # Submit application
         result = await service.submit_application(app.id, test_user)
 
-        assert result.status == ApplicationStatus.SUBMITTED.value
+        assert result.status == ApplicationStatus.submitted.value
         assert result.submitted_at is not None
 
         # Try to submit again - should fail
@@ -176,7 +176,7 @@ class TestCriticalAuthorizationPaths:
         app = Application(
             user_id=other_user.id,
             scholarship_type_id=1,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
             app_id="TEST-OTHER-001",
             academic_year=113,
             semester="first",
@@ -196,7 +196,7 @@ class TestCriticalAuthorizationPaths:
     async def test_cannot_edit_submitted_application(self, db, test_user, test_application):
         """CRITICAL: Cannot edit application after submission"""
         # Change status to submitted
-        test_application.status = ApplicationStatus.SUBMITTED.value
+        test_application.status = ApplicationStatus.submitted.value
         await db.commit()
 
         service = ApplicationService(db)
@@ -215,7 +215,7 @@ class TestCriticalAuthorizationPaths:
         app = Application(
             user_id=test_user.id,
             scholarship_type_id=1,
-            status=ApplicationStatus.SUBMITTED.value,
+            status=ApplicationStatus.submitted.value,
             app_id="TEST-SUBMIT-001",
             academic_year=113,
             semester="first",
@@ -285,7 +285,7 @@ class TestCriticalBusinessLogic:
             app = Application(
                 user_id=user.id,
                 scholarship_type_id=test_scholarship.id,
-                status=ApplicationStatus.SUBMITTED.value,
+                status=ApplicationStatus.submitted.value,
                 app_id=f"QUOTA-{i}",
                 academic_year=113,
                 semester="first",
@@ -329,7 +329,7 @@ class TestCriticalBusinessLogic:
         app = Application(
             user_id=test_user.id,
             scholarship_type_id=1,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
             app_id="RENEWAL-001",
             academic_year=113,
             semester="first",
@@ -361,7 +361,7 @@ class TestCriticalDataIntegrity:
         app = Application(
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
             app_id="FK-TEST-001",
             academic_year=113,
             semester="first",

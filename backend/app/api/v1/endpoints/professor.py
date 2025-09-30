@@ -32,7 +32,7 @@ async def get_professor_applications(
     db: AsyncSession = Depends(get_db),
 ):
     """Get applications requiring professor review with pagination"""
-    logger.info(f"Professor {current_user.id} requesting applications for review (page {page}, size {size})")
+    logger.info("Professor {current_user.id} requesting applications for review (page {page}, size {size})")
 
     try:
         service = ApplicationService(db)
@@ -75,7 +75,7 @@ async def get_professor_review(
     db: AsyncSession = Depends(get_db),
 ):
     """Get existing professor review for an application"""
-    logger.info(f"Professor {current_user.id} requesting review for application {application_id}")
+    logger.info("Professor {current_user.id} requesting review for application {application_id}")
 
     try:
         service = ApplicationService(db)
@@ -118,33 +118,38 @@ async def submit_professor_review(
     db: AsyncSession = Depends(get_db),
 ):
     """Submit professor review for an application"""
-    logger.info(f"Professor {current_user.id} submitting review for application {application_id}")
+    logger.info("Professor {current_user.id} submitting review for application {application_id}")
 
     try:
         service = ApplicationService(db)
 
         # Verify the professor has access to this application
+        logger.info("Endpoint Step 1: Getting application by ID")
         application = await service.get_application_by_id(application_id, current_user)
         if not application:
             raise NotFoundError("Application not found")
+        logger.info("Endpoint Step 2: Application found")
 
         # Check if professor can submit a review (with time restrictions)
         # Skip time restrictions only if configured to do so (testing environments)
         from app.core.config import settings
 
+        logger.info("Endpoint Step 3: Checking if professor can submit (bypass={settings.bypass_time_restrictions})")
         if not settings.bypass_time_restrictions and not await service.can_professor_submit_review(
             application_id, current_user.id
         ):
             raise AuthorizationError("Professor not authorized to submit review at this time or for this application")
+        logger.info("Endpoint Step 4: Professor authorized to submit")
 
         # Submit the review
+        logger.info("Endpoint Step 5: Calling submit_professor_review")
         review = await service.submit_professor_review(
             application_id=application_id,
             professor_id=current_user.id,
             review_data=review_data.dict(),
         )
 
-        logger.info(f"Professor {current_user.id} successfully submitted review for application {application_id}")
+        logger.info("Professor {current_user.id} successfully submitted review for application {application_id}")
         return review
 
     except NotFoundError:
@@ -153,6 +158,9 @@ async def submit_professor_review(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except Exception as e:
         logger.error(f"Error submitting professor review: {str(e)}")
+        import traceback
+
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while submitting review",
@@ -173,7 +181,7 @@ async def update_professor_review(
     db: AsyncSession = Depends(get_db),
 ):
     """Update an existing professor review"""
-    logger.info(f"Professor {current_user.id} updating review {review_id} for application {application_id}")
+    logger.info("Professor {current_user.id} updating review {review_id} for application {application_id}")
 
     try:
         service = ApplicationService(db)
@@ -195,7 +203,7 @@ async def update_professor_review(
         # Update the review
         review = await service.update_professor_review(review_id=review_id, review_data=review_data.dict())
 
-        logger.info(f"Professor {current_user.id} successfully updated review {review_id}")
+        logger.info("Professor {current_user.id} successfully updated review {review_id}")
         return review
 
     except AuthorizationError as e:
@@ -217,13 +225,13 @@ async def get_application_sub_types(
     db: AsyncSession = Depends(get_db),
 ):
     """Get available sub-types for an application (config-driven)"""
-    logger.info(f"Professor {current_user.id} requesting sub-types for application {application_id}")
+    logger.info("Professor {current_user.id} requesting sub-types for application {application_id}")
 
     try:
         service = ApplicationService(db)
         sub_types = await service.get_application_available_sub_types(application_id)
 
-        logger.info(f"Found {len(sub_types)} sub-types for application {application_id}")
+        logger.info("Found {len(sub_types)} sub-types for application {application_id}")
         return sub_types
 
     except Exception as e:
@@ -242,7 +250,7 @@ async def get_professor_review_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Get basic review statistics for the professor (minimal dashboard data)"""
-    logger.info(f"Professor {current_user.id} requesting review statistics")
+    logger.info("Professor {current_user.id} requesting review statistics")
 
     try:
         service = ApplicationService(db)

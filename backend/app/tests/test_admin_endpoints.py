@@ -109,7 +109,7 @@ class TestAdminEndpoints:
                 app_id="APP-2024-000001",
                 user_id=user.id,
                 scholarship_type_id=scholarship.id,
-                status=ApplicationStatus.SUBMITTED.value,
+                status=ApplicationStatus.submitted.value,
                 academic_year=113,
                 semester="FIRST",
                 sub_type_selection_mode="SINGLE",
@@ -119,7 +119,7 @@ class TestAdminEndpoints:
                 app_id="APP-2024-000002",
                 user_id=user2.id,  # Different user
                 scholarship_type_id=scholarship.id,
-                status=ApplicationStatus.UNDER_REVIEW.value,
+                status=ApplicationStatus.under_review.value,
                 academic_year=113,
                 semester="FIRST",
                 sub_type_selection_mode="SINGLE",

@@ -952,9 +952,15 @@ export function CollegeDashboard({
                                 {locale === "zh" ? "學生" : "Student"}
                               </TableHead>
                               <TableHead>
+                                {locale === "zh" ? "就讀學期數" : "Terms"}
+                              </TableHead>
+                              <TableHead>
                                 {locale === "zh"
                                   ? "獎學金類型"
                                   : "Scholarship Type"}
+                              </TableHead>
+                              <TableHead>
+                                {locale === "zh" ? "申請類別" : "Type"}
                               </TableHead>
                               <TableHead>
                                 {locale === "zh" ? "狀態" : "Status"}
@@ -981,15 +987,21 @@ export function CollegeDashboard({
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  {availableOptions?.scholarship_types?.find(
-                                    type => type.code === app.scholarship_type
-                                  )?.name || app.scholarship_type}
+                                  {app.student_termcount || "-"}
+                                </TableCell>
+                                <TableCell>
+                                  {app.scholarship_type_zh || app.scholarship_type}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={app.is_renewal ? "secondary" : "default"}>
+                                    {app.is_renewal ? "續領" : "初領"}
+                                  </Badge>
                                 </TableCell>
                                 <TableCell>
                                   <Badge
                                     variant={getStatusColor(app.status) as any}
                                   >
-                                    {getStatusName(app.status)}
+                                    {app.status_zh || getStatusName(app.status)}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>

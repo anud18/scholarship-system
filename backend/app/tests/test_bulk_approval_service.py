@@ -26,7 +26,7 @@ class TestBulkApprovalServiceApprove:
         app = Mock(spec=Application)
         app.id = 1
         app.app_id = "APP001"
-        app.status = ApplicationStatus.SUBMITTED.value
+        app.status = ApplicationStatus.submitted.value
         app.student_data = {"student_id": "112550001"}
         app.calculate_priority_score = Mock(return_value=85)
         return app
@@ -50,11 +50,11 @@ class TestBulkApprovalServiceApprove:
         assert results["total_requested"] == 1
         assert len(results["successful_approvals"]) == 1
         assert results["notifications_sent"] == 1
-        assert mock_application.status == ApplicationStatus.APPROVED.value
+        assert mock_application.status == ApplicationStatus.approved.value
 
     async def test_bulk_approve_invalid_status(self, service, mock_application):
         """Test bulk approval with invalid status"""
-        mock_application.status = ApplicationStatus.APPROVED.value
+        mock_application.status = ApplicationStatus.approved.value
 
         mock_result = Mock()
         mock_result.scalars.return_value.all.return_value = [mock_application]
@@ -113,7 +113,7 @@ class TestBulkApprovalServiceReject:
         app = Mock(spec=Application)
         app.id = 1
         app.app_id = "APP001"
-        app.status = ApplicationStatus.SUBMITTED.value
+        app.status = ApplicationStatus.submitted.value
         app.student_data = {"student_id": "112550001"}
         return app
 
@@ -137,12 +137,12 @@ class TestBulkApprovalServiceReject:
 
         assert results["total_requested"] == 1
         assert len(results["successful_rejections"]) == 1
-        assert mock_application.status == ApplicationStatus.REJECTED.value
+        assert mock_application.status == ApplicationStatus.rejected.value
         assert mock_application.rejection_reason == "Does not meet criteria"
 
     async def test_bulk_reject_invalid_status(self, service, mock_application):
         """Test bulk rejection with invalid status"""
-        mock_application.status = ApplicationStatus.REJECTED.value
+        mock_application.status = ApplicationStatus.rejected.value
 
         mock_result = Mock()
         mock_result.scalars.return_value.all.return_value = [mock_application]
@@ -171,7 +171,7 @@ class TestBulkApprovalServiceAutoApprove:
             app = Mock(spec=Application)
             app.id = i + 1
             app.app_id = f"APP00{i+1}"
-            app.status = ApplicationStatus.SUBMITTED.value
+            app.status = ApplicationStatus.submitted.value
             app.priority_score = 90 - (i * 5)
             app.is_renewal = i == 0
             app.student_data = {"student_id": f"11255000{i+1}"}
@@ -222,7 +222,7 @@ class TestBulkApprovalServiceStatusUpdate:
         app = Mock(spec=Application)
         app.id = 1
         app.app_id = "APP001"
-        app.status = ApplicationStatus.SUBMITTED.value
+        app.status = ApplicationStatus.submitted.value
         return app
 
     async def test_bulk_status_update_success(self, service, mock_application):
@@ -234,13 +234,13 @@ class TestBulkApprovalServiceStatusUpdate:
 
         results = await service.bulk_status_update(
             application_ids=[1],
-            new_status=ApplicationStatus.UNDER_REVIEW.value,
+            new_status=ApplicationStatus.under_review.value,
             updater_user_id=2,
             update_notes="Under review",
         )
 
         assert results["success_count"] == 1
-        assert mock_application.status == ApplicationStatus.UNDER_REVIEW.value
+        assert mock_application.status == ApplicationStatus.under_review.value
 
     async def test_bulk_status_update_invalid_status(self, service):
         """Test bulk status update with invalid status"""

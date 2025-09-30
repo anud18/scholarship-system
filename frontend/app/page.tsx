@@ -23,6 +23,7 @@ import {
   Award,
   GraduationCap,
   Loader2,
+  FileSpreadsheet,
 } from "lucide-react";
 import { EnhancedStudentPortal } from "@/components/enhanced-student-portal";
 import { AdminScholarshipDashboard } from "@/components/admin-scholarship-dashboard";
@@ -30,6 +31,7 @@ import { AdminManagementInterface } from "@/components/admin-management-interfac
 import { ProfessorReviewComponent } from "@/components/professor-review-component";
 import { CollegeDashboard } from "@/components/college-dashboard";
 import { AdminDashboard } from "@/components/admin-dashboard";
+import { RosterManagementDashboard } from "@/components/roster-management-dashboard";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { useLanguagePreference } from "@/hooks/use-language-preference";
@@ -46,7 +48,7 @@ export default function ScholarshipManagementSystem() {
 
   // Debug activeTab changes
   useEffect(() => {
-    console.log("📋 Active tab changed to:", activeTab);
+    // console.log(" Active tab changed to:", activeTab);
     console.log(
       "🌐 Current URL after tab change:",
       typeof window !== "undefined" ? window.location.href : "SSR"
@@ -59,18 +61,18 @@ export default function ScholarshipManagementSystem() {
       const path = window.location.pathname;
       const searchParams = new URLSearchParams(window.location.search);
 
-      console.log("🔍 Checking current path:", path);
+    // console.log(" Checking current path:", path);
       console.log(
         "🔍 URL search params:",
         Object.fromEntries(searchParams.entries())
       );
 
       if (path === "/auth/sso-callback") {
-        console.log("🎯 Detected SSO callback request in main page!");
+    // console.log(" Detected SSO callback request in main page!");
         const token = searchParams.get("token");
 
         if (token) {
-          console.log("🔓 Processing SSO callback with token in main page...");
+    // console.log(" Processing SSO callback with token in main page...");
           handleSSOCallbackInMainPage(token);
         } else {
           console.error("❌ No token found in SSO callback URL");
@@ -81,7 +83,7 @@ export default function ScholarshipManagementSystem() {
 
   const handleSSOCallbackInMainPage = async (token: string) => {
     try {
-      console.log("🔓 Decoding JWT token directly in main page...");
+    // console.log(" Decoding JWT token directly in main page...");
 
       // Simple JWT decode
       const base64Url = token.split(".")[1];
@@ -96,7 +98,7 @@ export default function ScholarshipManagementSystem() {
       );
 
       const tokenData = JSON.parse(jsonPayload);
-      console.log("🎫 Decoded token data in main page:", tokenData);
+    // console.log(" Decoded token data in main page:", tokenData);
 
       // Create user object from token data
       const userData = {
@@ -109,12 +111,12 @@ export default function ScholarshipManagementSystem() {
         updated_at: new Date().toISOString(),
       };
 
-      console.log("👤 Constructed user data in main page:", userData);
-      console.log("🔄 Calling login() from main page...");
+    // console.log(" Constructed user data in main page:", userData);
+    // console.log(" Calling login() from main page...");
 
       login(token, userData);
 
-      console.log("✅ Login completed in main page, redirecting...");
+    // console.log(" Login completed in main page, redirecting...");
 
       // Redirect based on user role
       const userRole = userData.role;
@@ -166,13 +168,13 @@ export default function ScholarshipManagementSystem() {
 
   // 調試信息
   useEffect(() => {
-    console.log("🏠 ScholarshipManagementSystem mounted");
-    console.log("👤 User:", user);
-    console.log("🔐 Is Authenticated:", isAuthenticated);
-    console.log("⏳ Auth Loading:", authLoading);
+    // console.log("🏠 ScholarshipManagementSystem mounted");
+    // console.log(" User:", user);
+    // console.log(" Is Authenticated:", isAuthenticated);
+    // console.log("⏳ Auth Loading:", authLoading);
     console.log("❌ Auth Error:", authError);
-    console.log("📄 Recent Applications:", recentApplications);
-    console.log("🚨 Error:", error);
+    // console.log("📄 Recent Applications:", recentApplications);
+    // console.log("🚨 Error:", error);
 
     // 檢查 localStorage 中的認證信息
     if (typeof window !== "undefined") {
@@ -201,25 +203,25 @@ export default function ScholarshipManagementSystem() {
 
   // Handle hash-based navigation
   useEffect(() => {
-    console.log("🔗 Hash-based navigation effect triggered");
+    // console.log("🔗 Hash-based navigation effect triggered");
     if (typeof window !== "undefined") {
       const fullHash = window.location.hash;
       const hash = fullHash.replace("#", "");
-      console.log("🌐 Current URL:", window.location.href);
-      console.log("🔗 Full hash:", fullHash);
-      console.log("🏷️ Processed hash:", hash);
+      // console.log("🌐 Current URL:", window.location.href);
+      // console.log("🔗 Full hash:", fullHash);
+      // console.log("🏷️ Processed hash:", hash);
 
       const validHashes = ["dashboard", "main", "admin"];
-      console.log("✅ Valid hashes:", validHashes);
+    // console.log(" Valid hashes:", validHashes);
 
       if (hash && validHashes.includes(hash)) {
-        console.log("🎯 Hash is valid, setting active tab to:", hash);
+    // console.log(" Hash is valid, setting active tab to:", hash);
         setActiveTab(hash);
-        console.log("✅ Active tab updated from hash navigation");
+    // console.log(" Active tab updated from hash navigation");
       } else if (hash) {
         console.log("❌ Hash is invalid:", hash);
       } else {
-        console.log("📝 No hash found in URL");
+        // console.log("📝 No hash found in URL");
       }
     } else {
       console.log("❌ Window is not defined (SSR)");
@@ -228,27 +230,27 @@ export default function ScholarshipManagementSystem() {
 
   // Set initial active tab based on user role
   useEffect(() => {
-    console.log("🎯 Setting active tab based on user role...");
+    // console.log(" Setting active tab based on user role...");
     if (user) {
-      console.log("👤 User role detected:", user.role);
+    // console.log(" User role detected:", user.role);
       // Set each role to their first available tab (index 0)
       if (user.role === "student") {
-        console.log('🎒 Student role - setting tab to "main"');
+        // console.log('🎒 Student role - setting tab to "main"');
         setActiveTab("main");
       } else if (user.role === "professor") {
-        console.log('🎓 Professor role - setting tab to "main"');
+        // console.log('🎓 Professor role - setting tab to "main"');
         setActiveTab("main");
       } else if (user.role === "college") {
-        console.log('🏫 College role - setting tab to "main"');
+        // console.log('🏫 College role - setting tab to "main"');
         setActiveTab("main");
       } else if (user.role === "admin") {
-        console.log('👑 Admin role - setting tab to "dashboard"');
+        // console.log('👑 Admin role - setting tab to "dashboard"');
         setActiveTab("dashboard");
       } else if (user.role === "super_admin") {
-        console.log('👑 Super Admin role - setting tab to "dashboard"');
+        // console.log('👑 Super Admin role - setting tab to "dashboard"');
         setActiveTab("dashboard");
       }
-      console.log("✅ Active tab set based on user role");
+    // console.log(" Active tab set based on user role");
     } else {
       console.log("❌ No user found, cannot set active tab");
     }
@@ -258,7 +260,7 @@ export default function ScholarshipManagementSystem() {
 
   // Show loading screen while checking authentication
   if (authLoading) {
-    console.log("⏳ Showing loading screen - authLoading is true");
+    // console.log("⏳ Showing loading screen - authLoading is true");
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex items-center justify-center">
         <div className="text-center">
@@ -271,16 +273,16 @@ export default function ScholarshipManagementSystem() {
 
   // Show login interface if not authenticated
   if (!isAuthenticated) {
-    console.log("🚫 User not authenticated, showing login page");
-    console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
+    // console.log("🚫 User not authenticated, showing login page");
+    // console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
     // Development mode: use DevLoginPage
     if (process.env.NODE_ENV === "development") {
-      console.log("🛠️ Development mode - showing DevLoginPage");
+      // console.log("🛠️ Development mode - showing DevLoginPage");
       return <DevLoginPage />;
     }
 
     // Production mode: use SSO login
-    console.log("🏭 Production mode - showing SSOLoginPage");
+    // console.log("🏭 Production mode - showing SSOLoginPage");
     return <SSOLoginPage />;
   }
 
@@ -332,7 +334,7 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "super_admin") {
       return (
-        <TabsList className="grid w-full grid-cols-3 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-4 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="dashboard"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -346,6 +348,13 @@ export default function ScholarshipManagementSystem() {
           >
             <Users className="h-4 w-4" />
             審核管理
+          </TabsTrigger>
+          <TabsTrigger
+            value="roster"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            造冊管理
           </TabsTrigger>
           <TabsTrigger
             value="admin"
@@ -360,7 +369,7 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "admin") {
       return (
-        <TabsList className="grid w-full grid-cols-3 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-4 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="dashboard"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -374,6 +383,13 @@ export default function ScholarshipManagementSystem() {
           >
             <Users className="h-4 w-4" />
             審核管理
+          </TabsTrigger>
+          <TabsTrigger
+            value="roster"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            造冊管理
           </TabsTrigger>
           <TabsTrigger
             value="admin"
@@ -396,15 +412,15 @@ export default function ScholarshipManagementSystem() {
     return <div>Loading...</div>;
   }
 
-  console.log("🎉 Rendering main scholarship system interface");
-  console.log("👤 Final user state:", {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    name: user.name,
-  });
-  console.log("📋 Current active tab:", activeTab);
-  console.log("🔐 Authentication state:", { isAuthenticated, authLoading });
+    // console.log(" Rendering main scholarship system interface");
+    // console.log(" Final user state:", {
+    //   id: user.id,
+    //   email: user.email,
+    //   role: user.role,
+    //   name: user.name,
+    // });
+    // console.log(" Current active tab:", activeTab);
+    // console.log(" Authentication state:", { isAuthenticated, authLoading });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex flex-col">
@@ -500,6 +516,13 @@ export default function ScholarshipManagementSystem() {
               </>
             )}
           </TabsContent>
+
+          {/* 造冊管理 - 只有 admin 和 super_admin 可見 */}
+          {(user.role === "admin" || user.role === "super_admin") && (
+            <TabsContent value="roster" className="space-y-4">
+              <RosterManagementDashboard />
+            </TabsContent>
+          )}
 
           {/* 系統管理 - 只有 admin 和 super_admin 可見 */}
           {(user.role === "admin" || user.role === "super_admin") && (

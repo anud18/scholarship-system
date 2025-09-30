@@ -15,35 +15,35 @@ from app.db.base_class import Base
 class EmailStatus(enum.Enum):
     """Email status enum"""
 
-    SENT = "sent"
-    FAILED = "failed"
-    BOUNCED = "bounced"
-    PENDING = "pending"
+    sent = "sent"
+    failed = "failed"
+    bounced = "bounced"
+    pending = "pending"
 
 
 class ScheduleStatus(enum.Enum):
     """Schedule status enum"""
 
-    PENDING = "pending"
-    SENT = "sent"
-    CANCELLED = "cancelled"
-    FAILED = "failed"
+    pending = "pending"
+    sent = "sent"
+    cancelled = "cancelled"
+    failed = "failed"
 
 
 class EmailCategory(enum.Enum):
     """Email category enum for different notification types"""
 
-    APPLICATION_WHITELIST = "application_whitelist"  # 申請通知－白名單
-    APPLICATION_STUDENT = "application_student"  # 申請通知－申請者
-    RECOMMENDATION_PROFESSOR = "recommendation_professor"  # 推薦通知－指導教授
-    REVIEW_COLLEGE = "review_college"  # 審核通知－學院
-    SUPPLEMENT_STUDENT = "supplement_student"  # 補件通知－申請者
-    RESULT_PROFESSOR = "result_professor"  # 結果通知－指導教授
-    RESULT_COLLEGE = "result_college"  # 結果通知－學院
-    RESULT_STUDENT = "result_student"  # 結果通知－申請者
-    ROSTER_STUDENT = "roster_student"  # 造冊通知－申請者
-    SYSTEM = "system"  # 系統通知
-    OTHER = "other"  # 其他
+    application_whitelist = "application_whitelist"  # 申請通知－白名單
+    application_student = "application_student"  # 申請通知－申請者
+    recommendation_professor = "recommendation_professor"  # 推薦通知－指導教授
+    review_college = "review_college"  # 審核通知－學院
+    supplement_student = "supplement_student"  # 補件通知－申請者
+    result_professor = "result_professor"  # 結果通知－指導教授
+    result_college = "result_college"  # 結果通知－學院
+    result_student = "result_student"  # 結果通知－申請者
+    roster_student = "roster_student"  # 造冊通知－申請者
+    system = "system"  # 系統通知
+    other = "other"  # 其他
 
 
 class EmailHistory(Base):
@@ -62,9 +62,7 @@ class EmailHistory(Base):
 
     # Template and categorization
     template_key = Column(String(100), ForeignKey("email_templates.key"), nullable=True)
-    email_category = Column(
-        Enum(EmailCategory, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True
-    )
+    email_category = Column(String(100), nullable=True, index=True)
 
     # Related entities (for permission filtering)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=True, index=True)
@@ -76,8 +74,8 @@ class EmailHistory(Base):
 
     # Status tracking
     status = Column(
-        Enum(EmailStatus, values_callable=lambda obj: [e.value for e in obj]),
-        default=EmailStatus.SENT,
+        String(20),
+        default=EmailStatus.sent.value,
         nullable=False,
         index=True,
     )
@@ -128,7 +126,7 @@ class ScheduledEmail(Base):
     scheduled_for = Column(DateTime(timezone=True), nullable=False, index=True)
     status = Column(
         Enum(ScheduleStatus, values_callable=lambda obj: [e.value for e in obj]),
-        default=ScheduleStatus.PENDING,
+        default=ScheduleStatus.pending,
         nullable=False,
         index=True,
     )
@@ -183,7 +181,7 @@ class ScheduledEmail(Base):
         """Check if email is ready to be sent (due and approved if needed)"""
         if not self.is_due:
             return False
-        if self.status != ScheduleStatus.PENDING:
+        if self.status != ScheduleStatus.pending:
             return False
         if self.requires_approval and not self.approved_by_user_id:
             return False
@@ -191,11 +189,11 @@ class ScheduledEmail(Base):
 
     def mark_as_sent(self):
         """Mark the scheduled email as sent"""
-        self.status = ScheduleStatus.SENT
+        self.status = ScheduleStatus.sent
 
     def mark_as_failed(self, error_message: str):
         """Mark the scheduled email as failed with error message"""
-        self.status = ScheduleStatus.FAILED
+        self.status = ScheduleStatus.failed
         self.last_error = error_message
         self.retry_count += 1
 
@@ -208,4 +206,4 @@ class ScheduledEmail(Base):
 
     def cancel(self):
         """Cancel the scheduled email"""
-        self.status = ScheduleStatus.CANCELLED
+        self.status = ScheduleStatus.cancelled

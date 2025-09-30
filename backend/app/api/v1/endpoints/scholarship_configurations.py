@@ -638,7 +638,7 @@ async def get_quota_overview(
                         Application.scholarship_type_id == stype.id,
                         Application.config_code == config.config_code,
                         Application.sub_type == sub_type_code,
-                        Application.status.in_([ApplicationStatus.APPROVED, ApplicationStatus.FUNDED]),
+                        Application.status.in_([ApplicationStatus.approved, ApplicationStatus.FUNDED]),
                     )
                 )
                 used_quota_result = await db.execute(quota_query)
@@ -650,7 +650,7 @@ async def get_quota_overview(
                         Application.scholarship_type_id == stype.id,
                         Application.config_code == config.config_code,
                         Application.sub_type == sub_type_code,
-                        Application.status.not_in([ApplicationStatus.REJECTED, ApplicationStatus.WITHDRAWN]),
+                        Application.status.not_in([ApplicationStatus.rejected, ApplicationStatus.withdrawn]),
                     )
                 )
                 total_apps_result = await db.execute(total_apps_query)

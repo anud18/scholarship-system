@@ -71,7 +71,7 @@ class ScholarshipConfigurationService:
         stmt = select(func.count(Application.id)).filter(
             and_(
                 Application.scholarship_type_id == config.scholarship_type_id,
-                Application.status == ApplicationStatus.APPROVED.value,
+                Application.status == ApplicationStatus.approved.value,
             )
         )
         result = await self.db.execute(stmt)
@@ -327,7 +327,7 @@ class ScholarshipConfigurationService:
                 Application.config_code == config.config_code,
                 Application.scholarship_type_id == config.scholarship_type_id,
                 Application.status.not_in(
-                    [ApplicationStatus.REJECTED, ApplicationStatus.WITHDRAWN, ApplicationStatus.CANCELLED]
+                    [ApplicationStatus.rejected, ApplicationStatus.withdrawn, ApplicationStatus.cancelled]
                 ),
             )
         )
@@ -526,7 +526,7 @@ class ScholarshipConfigurationService:
                 status_breakdown[status.value] = count
 
         # Usage analytics
-        approved_count = status_breakdown.get(ApplicationStatus.APPROVED.value, 0)
+        approved_count = status_breakdown.get(ApplicationStatus.approved.value, 0)
         usage_analytics = {
             "approval_rate": (approved_count / total_applications) * 100 if total_applications > 0 else 0,
             "quota_usage": None,

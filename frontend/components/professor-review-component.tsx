@@ -473,8 +473,8 @@ function ProfessorReviewComponentInner({
               <TableHeader>
                 <TableRow>
                   <TableHead>學生資訊</TableHead>
+                  <TableHead>就讀學期數</TableHead>
                   <TableHead>獎學金類型</TableHead>
-                  <TableHead>申請金額</TableHead>
                   <TableHead>提交日期</TableHead>
                   <TableHead>狀態</TableHead>
                   <TableHead>操作</TableHead>
@@ -531,6 +531,9 @@ function ProfessorReviewComponentInner({
                         </div>
                       </TableCell>
                       <TableCell>
+                        {app.student_data?.std_termcount || "-"}
+                      </TableCell>
+                      <TableCell>
                         <div>
                           <p>{app.scholarship_name}</p>
                           {app.is_renewal && (
@@ -539,11 +542,6 @@ function ProfessorReviewComponentInner({
                             </Badge>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {app.amount
-                          ? `$${app.amount.toLocaleString()}`
-                          : "未設定"}
                       </TableCell>
                       <TableCell>
                         {app.submitted_at
@@ -605,16 +603,12 @@ function ProfessorReviewComponentInner({
                       <p>{selectedApplication.student_no}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium">獎學金類型</label>
-                      <p>{selectedApplication.scholarship_name}</p>
+                      <label className="text-sm font-medium">就讀學期數</label>
+                      <p>{selectedApplication.student_data?.std_termcount || "未提供"}</p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium">申請金額</label>
-                      <p>
-                        {selectedApplication.amount
-                          ? `$${selectedApplication.amount.toLocaleString()}`
-                          : "未設定"}
-                      </p>
+                      <label className="text-sm font-medium">獎學金類型</label>
+                      <p>{selectedApplication.scholarship_name}</p>
                     </div>
                   </div>
                 </CardContent>

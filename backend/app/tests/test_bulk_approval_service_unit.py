@@ -105,8 +105,8 @@ def make_service(session, notification=None):
 
 @pytest.mark.asyncio
 async def test_bulk_approve_applications_success(monkeypatch):
-    app1 = DummyApplication("APP-1", ApplicationStatus.SUBMITTED.value)
-    app2 = DummyApplication("APP-2", ApplicationStatus.UNDER_REVIEW.value)
+    app1 = DummyApplication("APP-1", ApplicationStatus.submitted.value)
+    app2 = DummyApplication("APP-2", ApplicationStatus.under_review.value)
     session = StubSession([StubResult([app1, app2])])
     notification_stub = StubNotificationService(responses=[True, False])
     service = make_service(session, notification_stub)
@@ -119,12 +119,12 @@ async def test_bulk_approve_applications_success(monkeypatch):
     assert result["notifications_failed"] == 1
     assert session.commits == 2
     assert app1.calculate_calls == 1
-    assert all(item["new_status"] == ApplicationStatus.APPROVED.value for item in result["successful_approvals"])
+    assert all(item["new_status"] == ApplicationStatus.approved.value for item in result["successful_approvals"])
 
 
 @pytest.mark.asyncio
 async def test_bulk_approve_applications_handles_invalid_status():
-    app = DummyApplication("APP-3", ApplicationStatus.CANCELLED.value)
+    app = DummyApplication("APP-3", ApplicationStatus.cancelled.value)
     session = StubSession([StubResult([app])])
     service = make_service(session)
 
@@ -137,7 +137,7 @@ async def test_bulk_approve_applications_handles_invalid_status():
 
 @pytest.mark.asyncio
 async def test_bulk_approve_handles_missing_ids_and_no_notifications():
-    app = DummyApplication("APP-missing", ApplicationStatus.SUBMITTED.value)
+    app = DummyApplication("APP-missing", ApplicationStatus.submitted.value)
     session = StubSession([StubResult([app])])
     service = make_service(session)
 
@@ -151,7 +151,7 @@ async def test_bulk_approve_handles_missing_ids_and_no_notifications():
 
 @pytest.mark.asyncio
 async def test_bulk_approve_records_notification_error(monkeypatch):
-    app = DummyApplication("APP-4", ApplicationStatus.RECOMMENDED.value)
+    app = DummyApplication("APP-4", ApplicationStatus.recommended.value)
     session = StubSession([StubResult([app])])
     notification_stub = StubNotificationService(responses=[RuntimeError("boom")])
     service = make_service(session, notification_stub)
@@ -165,7 +165,7 @@ async def test_bulk_approve_records_notification_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_bulk_approve_handles_commit_failure():
-    app = DummyApplication("APP-commit", ApplicationStatus.SUBMITTED.value)
+    app = DummyApplication("APP-commit", ApplicationStatus.submitted.value)
     session = StubSession([StubResult([app])])
 
     async def failing_commit():
@@ -201,7 +201,7 @@ async def test_bulk_approve_outer_exception_triggers_rollback():
 
 @pytest.mark.asyncio
 async def test_bulk_reject_applications_success():
-    app = DummyApplication("APP-5", ApplicationStatus.SUBMITTED.value)
+    app = DummyApplication("APP-5", ApplicationStatus.submitted.value)
     session = StubSession([StubResult([app])])
     notification_stub = StubNotificationService(responses=[True])
     service = make_service(session, notification_stub)
@@ -215,7 +215,7 @@ async def test_bulk_reject_applications_success():
 
 @pytest.mark.asyncio
 async def test_bulk_reject_handles_failure():
-    app = DummyApplication("APP-6", ApplicationStatus.APPROVED.value)
+    app = DummyApplication("APP-6", ApplicationStatus.approved.value)
     session = StubSession([StubResult([app])])
     service = make_service(session)
 
@@ -227,7 +227,7 @@ async def test_bulk_reject_handles_failure():
 
 @pytest.mark.asyncio
 async def test_bulk_reject_commit_failure():
-    app = DummyApplication("APP-reject", ApplicationStatus.SUBMITTED.value)
+    app = DummyApplication("APP-reject", ApplicationStatus.submitted.value)
     session = StubSession([StubResult([app])])
 
     async def failing_commit():
@@ -246,7 +246,7 @@ async def test_bulk_reject_commit_failure():
 
 @pytest.mark.asyncio
 async def test_bulk_reject_no_notifications():
-    app = DummyApplication("APP-reject2", ApplicationStatus.UNDER_REVIEW.value)
+    app = DummyApplication("APP-reject2", ApplicationStatus.under_review.value)
     session = StubSession([StubResult([app])])
     service = make_service(session)
 
@@ -260,8 +260,8 @@ async def test_bulk_reject_no_notifications():
 
 @pytest.mark.asyncio
 async def test_auto_approve_by_criteria_filters(monkeypatch):
-    app1 = DummyApplication("APP-7", ApplicationStatus.SUBMITTED.value, priority_score=50)
-    app2 = DummyApplication("APP-8", ApplicationStatus.UNDER_REVIEW.value, priority_score=5)
+    app1 = DummyApplication("APP-7", ApplicationStatus.submitted.value, priority_score=50)
+    app2 = DummyApplication("APP-8", ApplicationStatus.under_review.value, priority_score=5)
     session = StubSession([StubResult([app1, app2])])
     service = make_service(session)
 
@@ -279,7 +279,7 @@ async def test_auto_approve_by_criteria_filters(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_auto_approve_by_criteria_commit_failure():
-    app = DummyApplication("APP-commit-fail", ApplicationStatus.SUBMITTED.value)
+    app = DummyApplication("APP-commit-fail", ApplicationStatus.submitted.value)
     session = StubSession([StubResult([app])])
 
     async def failing_commit():
@@ -313,7 +313,7 @@ async def test_auto_approve_by_criteria_execute_failure():
 def test_meets_approval_criteria_checks_values(caplog):
     application = DummyApplication(
         "APP-9",
-        ApplicationStatus.SUBMITTED.value,
+        ApplicationStatus.submitted.value,
         gpa="2.5",
         class_ranking_percent="50",
         is_renewal=False,
@@ -338,7 +338,7 @@ def test_meets_approval_criteria_checks_values(caplog):
 def test_meets_approval_criteria_happy_path():
     app = DummyApplication(
         "APP-criteria",
-        ApplicationStatus.SUBMITTED.value,
+        ApplicationStatus.submitted.value,
         gpa="3.5",
         class_ranking_percent="25",
         is_renewal=True,
@@ -363,23 +363,23 @@ def test_meets_approval_criteria_happy_path():
 
 @pytest.mark.asyncio
 async def test_bulk_status_update_success():
-    app = DummyApplication("APP-10", ApplicationStatus.SUBMITTED.value)
+    app = DummyApplication("APP-10", ApplicationStatus.submitted.value)
     session = StubSession([StubResult([app])])
     service = make_service(session)
 
     result = await service.bulk_status_update(
-        [app.id], ApplicationStatus.REJECTED.value, updater_user_id=55, update_notes="quality"
+        [app.id], ApplicationStatus.rejected.value, updater_user_id=55, update_notes="quality"
     )
 
     assert result["success_count"] == 1
-    assert result["successful_updates"][0]["old_status"] == ApplicationStatus.SUBMITTED.value
+    assert result["successful_updates"][0]["old_status"] == ApplicationStatus.submitted.value
     assert session.commits == 1
     assert app.reviewer_id == 55
 
 
 @pytest.mark.asyncio
 async def test_bulk_status_update_commit_failure():
-    app = DummyApplication("APP-status", ApplicationStatus.SUBMITTED.value)
+    app = DummyApplication("APP-status", ApplicationStatus.submitted.value)
     session = StubSession([StubResult([app])])
 
     async def failing_commit():
@@ -389,7 +389,7 @@ async def test_bulk_status_update_commit_failure():
     session.commit = failing_commit
     service = make_service(session)
 
-    result = await service.bulk_status_update([app.id], ApplicationStatus.APPROVED.value, updater_user_id=9)
+    result = await service.bulk_status_update([app.id], ApplicationStatus.approved.value, updater_user_id=9)
 
     assert result["failure_count"] == 1
     assert session.rollbacks == 1
@@ -406,7 +406,7 @@ async def test_bulk_status_update_invalid_status():
 
 @pytest.mark.asyncio
 async def test_batch_process_with_notifications(monkeypatch):
-    app = DummyApplication("APP-11", ApplicationStatus.SUBMITTED.value)
+    app = DummyApplication("APP-11", ApplicationStatus.submitted.value)
     session = StubSession([StubResult([app])])
     notification_stub = StubNotificationService(responses=[True])
     service = make_service(session, notification_stub)
@@ -476,7 +476,7 @@ async def test_batch_process_with_notifications_update_status(monkeypatch):
         "update_status",
         [1],
         operator_user_id=9,
-        operation_params={"new_status": ApplicationStatus.REJECTED.value, "update_notes": "note"},
+        operation_params={"new_status": ApplicationStatus.rejected.value, "update_notes": "note"},
     )
 
     assert result["operation_metadata"]["operation_type"] == "update_status"

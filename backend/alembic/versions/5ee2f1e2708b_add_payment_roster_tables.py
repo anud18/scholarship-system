@@ -19,7 +19,28 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # SQLAlchemy will automatically create enum types when creating tables
+    # Get database inspector to check for existing objects
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_tables = inspector.get_table_names()
+
+    # Check for existing enum types
+    result = bind.execute(
+        sa.text(
+            """
+        SELECT typname FROM pg_type
+        WHERE typname IN ('rostercycle', 'rosterstatus', 'rostertriggertype',
+                          'studentverificationstatus', 'rosterauditaction', 'rosterauditlevel')
+    """
+        )
+    )
+    # Check existing enums for future use
+    _ = {row[0] for row in result}
+
+    # Only create tables if they don't exist
+    if "payment_rosters" in existing_tables:
+        print("⏭️  Skipping payment_rosters table - already exists")
+        return
 
     # Create payment_rosters table
     op.create_table(
