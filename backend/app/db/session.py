@@ -183,12 +183,14 @@ def invalidate_connection_pools_sync():
         logger.error(f"Failed to invalidate sync connection pool: {e}")
 
 
-# Event listeners for connection management
-@event.listens_for(async_engine.sync_engine, "connect")
+# Event listeners for connection management (for sync engine only)
+@event.listens_for(sync_engine, "connect")
 def set_postgresql_connection_options(dbapi_connection, connection_record):
     """
-    Set PostgreSQL connection options to prevent cached statement issues
+    Set PostgreSQL connection options for sync connections.
+
+    Note: Async engine connections are configured via connect_args in create_async_engine.
     """
     if hasattr(dbapi_connection, "autocommit"):
         # Configure connection settings for better error handling
-        pass  # asyncpg connections are handled differently
+        pass  # Configuration is handled via connect_args
