@@ -258,7 +258,7 @@ export default function SystemConfigurationManagement() {
     }
 
     if (config.data_type === "boolean") {
-      const isEnabled = config.value === "true" || config.value === true;
+      const isEnabled = String(config.value) === "true";
       return (
         <div className="flex items-center space-x-2">
           <div

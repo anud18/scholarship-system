@@ -107,6 +107,7 @@ export interface Application {
   form_data?: Record<string, any>; // 動態表單資料 (前端格式)
   submitted_form_data?: Record<string, any>; // 後端格式的表單資料，包含整合後的文件資訊
   meta_data?: Record<string, any>; // 額外的元資料
+  student_data?: Record<string, any>; // 學生資料
 
   // 後端 ApplicationResponse 實際返回的欄位
   user_id?: number;
@@ -114,8 +115,10 @@ export interface Application {
   scholarship_name?: string;
   amount?: number;
   status_name?: string;
+  status_zh?: string; // 中文狀態名稱
   student_name?: string;
   student_no?: string;
+  student_termcount?: number; // 學生學期數
   gpa?: number;
   department?: string;
   nationality?: string;
@@ -222,7 +225,7 @@ export interface SystemConfiguration {
     | "NOTIFICATION"
     | "OCR"
     | "INTEGRATIONS";
-  data_type: "STRING" | "INTEGER" | "FLOAT" | "BOOLEAN" | "JSON";
+  data_type: "string" | "integer" | "float" | "boolean" | "json";
   is_sensitive: boolean;
   description?: string;
   validation_regex?: string;
@@ -246,7 +249,7 @@ export interface SystemConfigurationCreate {
     | "NOTIFICATION"
     | "OCR"
     | "INTEGRATIONS";
-  data_type: "STRING" | "INTEGER" | "FLOAT" | "BOOLEAN" | "JSON";
+  data_type: "string" | "integer" | "float" | "boolean" | "json";
   is_sensitive?: boolean;
   description?: string;
   validation_regex?: string;
@@ -264,7 +267,7 @@ export interface SystemConfigurationUpdate {
     | "NOTIFICATION"
     | "OCR"
     | "INTEGRATIONS";
-  data_type?: "STRING" | "INTEGER" | "FLOAT" | "BOOLEAN" | "JSON";
+  data_type?: "string" | "integer" | "float" | "boolean" | "json";
   is_sensitive?: boolean;
   description?: string;
   validation_regex?: string;
@@ -272,7 +275,7 @@ export interface SystemConfigurationUpdate {
 
 export interface SystemConfigurationValidation {
   value: string;
-  data_type: "STRING" | "INTEGER" | "FLOAT" | "BOOLEAN" | "JSON";
+  data_type: "string" | "integer" | "float" | "boolean" | "json";
   validation_regex?: string;
 }
 

@@ -252,20 +252,20 @@ class EmailAutomationService:
     def _get_email_category_from_template_key(self, template_key: str) -> EmailCategory:
         """Map template key to appropriate email category"""
         category_mapping = {
-            "application_submitted_student": EmailCategory.APPLICATION_STUDENT,
-            "application_notify_professor": EmailCategory.RECOMMENDATION_PROFESSOR,
-            "review_submitted_professor": EmailCategory.RECOMMENDATION_PROFESSOR,
-            "whitelist_notification": EmailCategory.APPLICATION_WHITELIST,
-            "deadline_reminder_draft": EmailCategory.APPLICATION_STUDENT,
-            "college_review_notification": EmailCategory.REVIEW_COLLEGE,
-            "supplement_request": EmailCategory.SUPPLEMENT_STUDENT,
-            "result_notification_student": EmailCategory.RESULT_STUDENT,
-            "result_notification_professor": EmailCategory.RESULT_PROFESSOR,
-            "result_notification_college": EmailCategory.RESULT_COLLEGE,
-            "roster_notification": EmailCategory.ROSTER_STUDENT,
+            "application_submitted_student": EmailCategory.application_student,
+            "application_notify_professor": EmailCategory.recommendation_professor,
+            "review_submitted_professor": EmailCategory.recommendation_professor,
+            "whitelist_notification": EmailCategory.application_whitelist,
+            "deadline_reminder_draft": EmailCategory.application_student,
+            "college_review_notification": EmailCategory.review_college,
+            "supplement_request": EmailCategory.supplement_student,
+            "result_notification_student": EmailCategory.result_student,
+            "result_notification_professor": EmailCategory.result_professor,
+            "result_notification_college": EmailCategory.result_college,
+            "roster_notification": EmailCategory.roster_student,
         }
 
-        return category_mapping.get(template_key, EmailCategory.SYSTEM)
+        return category_mapping.get(template_key, EmailCategory.system)
 
     # Trigger methods for common events
     async def trigger_application_submitted(
@@ -364,7 +364,7 @@ class EmailAutomationService:
                     metadata = {
                         "email_category": EmailCategory(email_row.email_category)
                         if email_row.email_category
-                        else EmailCategory.SYSTEM,
+                        else EmailCategory.system,
                         "application_id": email_row.application_id,
                         "scholarship_type_id": email_row.scholarship_type_id,
                         "sent_by_system": True,
