@@ -3,7 +3,7 @@ Security utilities for authentication and authorization
 """
 
 from datetime import datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -108,6 +108,13 @@ def require_roles(*required_roles: UserRole):
         return current_user
 
     return roles_checker
+
+
+def check_user_roles(required_roles: List[UserRole], current_user: User) -> None:
+    """Check if user has any of the required roles - utility function for direct use"""
+    if not any(current_user.has_role(role) for role in required_roles):
+        role_names = [role.value for role in required_roles]
+        raise AuthorizationError(f"Access denied. Required roles: {', '.join(role_names)}")
 
 
 # Role-specific dependencies

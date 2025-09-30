@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import * as React from "react";
+import { Check, ChevronsUpDown } from "lucide-react";
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -12,25 +12,25 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command"
+} from "@/components/ui/command";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
+} from "@/components/ui/popover";
 
 export interface ScholarshipTypeOption {
-  code: string
-  name: string
-  name_en?: string
+  code: string;
+  name: string;
+  name_en?: string;
 }
 
 interface ScholarshipTypeSelectorProps {
-  value?: string
-  onValueChange?: (value: string) => void
-  options: ScholarshipTypeOption[]
-  placeholder?: string
-  disabled?: boolean
+  value?: string;
+  onValueChange?: (value: string) => void;
+  options: ScholarshipTypeOption[];
+  placeholder?: string;
+  disabled?: boolean;
 }
 
 export function ScholarshipTypeSelector({
@@ -38,9 +38,9 @@ export function ScholarshipTypeSelector({
   onValueChange,
   options,
   placeholder = "選擇獎學金類型...",
-  disabled = false
+  disabled = false,
 }: ScholarshipTypeSelectorProps) {
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = React.useState(false);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -53,7 +53,7 @@ export function ScholarshipTypeSelector({
           disabled={disabled}
         >
           {value
-            ? options.find((option) => option.code === value)?.name || value
+            ? options.find(option => option.code === value)?.name || value
             : placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -64,13 +64,13 @@ export function ScholarshipTypeSelector({
           <CommandList>
             <CommandEmpty>無符合條件的獎學金類型</CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {options.map(option => (
                 <CommandItem
                   key={option.code}
                   value={option.code}
-                  onSelect={(currentValue) => {
-                    onValueChange?.(currentValue === value ? "" : currentValue)
-                    setOpen(false)
+                  onSelect={currentValue => {
+                    onValueChange?.(currentValue === value ? "" : currentValue);
+                    setOpen(false);
                   }}
                 >
                   <Check
@@ -94,5 +94,5 @@ export function ScholarshipTypeSelector({
         </Command>
       </PopoverContent>
     </Popover>
-  )
+  );
 }

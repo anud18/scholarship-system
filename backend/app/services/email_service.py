@@ -8,6 +8,7 @@ import aiosmtplib
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.dynamic_config import dynamic_config
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail
 from app.services.system_setting_service import EmailTemplateService
 
@@ -15,12 +16,43 @@ logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    def __init__(self):
-        self.host = settings.smtp_host
-        self.port = settings.smtp_port
-        self.username = settings.smtp_user
-        self.password = settings.smtp_password
-        self.from_addr = settings.email_from
+    def __init__(self, db: Optional[AsyncSession] = None):
+        """
+        Initialize Email Service.
+
+        Args:
+            db: Database session for loading dynamic configuration.
+                If provided, will use database settings; otherwise falls back to environment variables.
+        """
+        self.db = db
+        self._config_loaded = False
+        self.host = None
+        self.port = None
+        self.username = None
+        self.password = None
+        self.from_addr = None
+        self.from_name = None
+
+    async def _load_config(self):
+        """Load email configuration from database or environment variables"""
+        if self.db and not self._config_loaded:
+            # Load from database with dynamic config
+            self.host = await dynamic_config.get_str("smtp_host", self.db, settings.smtp_host)
+            self.port = await dynamic_config.get_int("smtp_port", self.db, settings.smtp_port)
+            self.username = await dynamic_config.get_str("smtp_user", self.db, settings.smtp_user)
+            self.password = await dynamic_config.get_str("smtp_password", self.db, settings.smtp_password)
+            self.from_addr = await dynamic_config.get_str("email_from", self.db, settings.email_from)
+            self.from_name = await dynamic_config.get_str("email_from_name", self.db, settings.email_from_name)
+            self._config_loaded = True
+            logger.info("Email configuration loaded from database")
+        elif not self.db:
+            # Fall back to environment variables
+            self.host = settings.smtp_host
+            self.port = settings.smtp_port
+            self.username = settings.smtp_user
+            self.password = settings.smtp_password
+            self.from_addr = settings.email_from
+            self.from_name = settings.email_from_name
 
     async def send_email(
         self,
@@ -44,16 +76,25 @@ class EmailService:
             db: Database session for logging
             **metadata: Additional metadata for logging (template_key, application_id, etc.)
         """
+        # Load configuration before sending (picks up any changes from database)
+        if db:
+            self.db = db
+        await self._load_config()
+
         if isinstance(to, str):
             to = [to]
 
         primary_recipient = to[0] if to else ""
-        status = EmailStatus.SENT
+        status = EmailStatus.sent
         error_message = None
 
         try:
             msg = EmailMessage()
-            msg["From"] = self.from_addr
+            # Use from_name if available
+            if self.from_name:
+                msg["From"] = f"{self.from_name} <{self.from_addr}>"
+            else:
+                msg["From"] = self.from_addr
             msg["To"] = ", ".join(to)
             msg["Subject"] = subject
             if cc:
@@ -77,7 +118,7 @@ class EmailService:
             logger.info(f"Email sent successfully to {primary_recipient}")
 
         except Exception as e:
-            status = EmailStatus.FAILED
+            status = EmailStatus.failed
             error_message = str(e)
             logger.error(f"Failed to send email to {primary_recipient}: {e}")
             # Re-raise the exception so callers can handle it
@@ -96,7 +137,7 @@ class EmailService:
                         body=body,
                         status=status,
                         error_message=error_message,
-                        email_size_bytes=email_size if status == EmailStatus.SENT else None,
+                        email_size_bytes=email_size if status == EmailStatus.sent else None,
                         **metadata,
                     )
                 except Exception as log_error:
@@ -285,7 +326,7 @@ class EmailService:
         default_body = f"您的獎學金申請({application_data.get('app_id', '')})已成功送出，請等候後續通知。"
 
         metadata = {
-            "email_category": EmailCategory.APPLICATION_STUDENT,
+            "email_category": EmailCategory.application_student,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": True,
@@ -318,7 +359,7 @@ class EmailService:
         default_body = f"有一份新的學生申請案({application_data.get('app_id', '')})需要您推薦，請至系統審查。"
 
         metadata = {
-            "email_category": EmailCategory.RECOMMENDATION_PROFESSOR,
+            "email_category": EmailCategory.recommendation_professor,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": True,
@@ -354,7 +395,7 @@ class EmailService:
         default_body = f"有一份新的申請案({application_data.get('app_id', '')})已由教授推薦，請至系統審查。"
 
         metadata = {
-            "email_category": EmailCategory.REVIEW_COLLEGE,
+            "email_category": EmailCategory.review_college,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": True,
@@ -389,7 +430,7 @@ class EmailService:
         default_body = f"{scholarship_data.get('scholarship_type', '')} 現已開放申請，請至系統進行線上申請。"
 
         metadata = {
-            "email_category": EmailCategory.APPLICATION_WHITELIST,
+            "email_category": EmailCategory.application_whitelist,
             "scholarship_type_id": scholarship_data.get("scholarship_type_id"),
             "sent_by_system": True,
         }
@@ -420,7 +461,7 @@ class EmailService:
         default_body = "您的獎學金申請草稿尚未送出，申請即將截止！請儘快完成申請。"
 
         metadata = {
-            "email_category": EmailCategory.APPLICATION_STUDENT,
+            "email_category": EmailCategory.application_student,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": True,
@@ -454,7 +495,7 @@ class EmailService:
         default_body = f"您的獎學金申請({application_data.get('app_id', '')})需要補充資料，請儘快補齊。"
 
         metadata = {
-            "email_category": EmailCategory.SUPPLEMENT_STUDENT,
+            "email_category": EmailCategory.supplement_student,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": False,  # Manual supplement requests
@@ -498,7 +539,7 @@ class EmailService:
             base_context,
             f"獎學金審核結果通知 - {base_context['scholarship_type']} ({base_context['app_id']})",
             f"您的獎學金申請審核結果已出爐：{base_context['result_status']}",
-            email_category=EmailCategory.RESULT_STUDENT,
+            email_category=EmailCategory.result_student,
             **base_metadata,
         )
 
@@ -511,7 +552,7 @@ class EmailService:
                 base_context,
                 f"學生獎學金審核結果 - {base_context['scholarship_type']} ({base_context['app_id']})",
                 f"您推薦的學生({base_context['student_name']})獎學金申請結果：{base_context['result_status']}",
-                email_category=EmailCategory.RESULT_PROFESSOR,
+                email_category=EmailCategory.result_professor,
                 **base_metadata,
             )
 
@@ -525,7 +566,7 @@ class EmailService:
                 base_context,
                 f"獎學金審核結果確認 - {base_context['scholarship_type']} ({base_context['app_id']})",
                 f"獎學金申請({base_context['app_id']})審核程序已完成，結果：{base_context['result_status']}",
-                email_category=EmailCategory.RESULT_COLLEGE,
+                email_category=EmailCategory.result_college,
                 **base_metadata,
             )
 
@@ -545,7 +586,7 @@ class EmailService:
         default_body = f"恭喜您獲得 {application_data.get('scholarship_type', '')}！"
 
         metadata = {
-            "email_category": EmailCategory.ROSTER_STUDENT,
+            "email_category": EmailCategory.roster_student,
             "application_id": application_data.get("id"),
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "sent_by_system": False,  # Manual roster notifications

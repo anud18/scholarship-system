@@ -1,41 +1,64 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { FileUpload } from "@/components/file-upload"
-import { FilePreviewDialog } from "@/components/file-preview-dialog"
-import { Loader2, AlertCircle, FileText, FormInput, Eye, CheckCircle } from "lucide-react"
-import { api } from "@/lib/api"
-import type { ApplicationField, ApplicationDocument, ScholarshipFormConfig } from "@/lib/api"
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FileUpload } from "@/components/file-upload";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import {
+  Loader2,
+  AlertCircle,
+  FileText,
+  FormInput,
+  Eye,
+  CheckCircle,
+} from "lucide-react";
+import { api } from "@/lib/api";
+import type {
+  ApplicationField,
+  ApplicationDocument,
+  ScholarshipFormConfig,
+} from "@/lib/api";
 
-type Locale = "zh" | "en"
+type Locale = "zh" | "en";
 
 interface DynamicApplicationFormProps {
-  scholarshipType: string
-  locale?: Locale
-  onFieldChange?: (fieldName: string, value: any) => void
-  onFileChange?: (documentType: string, files: File[]) => void
-  initialValues?: Record<string, any>
-  initialFiles?: Record<string, File[]>
-  className?: string
-  selectedSubTypes?: string[]
-  currentUserId?: number // 當前用戶ID，用於預覽現有文件
+  scholarshipType: string;
+  locale?: Locale;
+  onFieldChange?: (fieldName: string, value: any) => void;
+  onFileChange?: (documentType: string, files: File[]) => void;
+  initialValues?: Record<string, any>;
+  initialFiles?: Record<string, File[]>;
+  className?: string;
+  selectedSubTypes?: string[];
+  currentUserId?: number; // 當前用戶ID，用於預覽現有文件
 }
 
 interface FormData {
-  [key: string]: any
+  [key: string]: any;
 }
 
 interface FileData {
-  [key: string]: File[]
+  [key: string]: File[];
 }
 
 export function DynamicApplicationForm({
@@ -47,114 +70,131 @@ export function DynamicApplicationForm({
   initialFiles = {},
   className,
   selectedSubTypes,
-  currentUserId
+  currentUserId,
 }: DynamicApplicationFormProps) {
   // State
-  const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(null)
-  const [formData, setFormData] = useState<FormData>(initialValues)
-  const [fileData, setFileData] = useState<FileData>(initialFiles)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(
+    null
+  );
+  const [formData, setFormData] = useState<FormData>(initialValues);
+  const [fileData, setFileData] = useState<FileData>(initialFiles);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{
-    url: string
-    filename: string
-    type: string
-    downloadUrl?: string
-  } | null>(null)
-  const [showPreview, setShowPreview] = useState(false)
+    url: string;
+    filename: string;
+    type: string;
+    downloadUrl?: string;
+  } | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   // Load form configuration
   useEffect(() => {
-    loadFormConfiguration()
-  }, [scholarshipType])
+    loadFormConfiguration();
+  }, [scholarshipType]);
 
   // Update form data when initial values change
   useEffect(() => {
-    setFormData(initialValues)
-  }, [initialValues])
+    setFormData(initialValues);
+  }, [initialValues]);
 
   // Update file data when initial files change
   useEffect(() => {
-    setFileData(initialFiles)
-  }, [initialFiles])
+    setFileData(initialFiles);
+  }, [initialFiles]);
 
   const loadFormConfiguration = async () => {
     try {
-      setIsLoading(true)
-      setError(null)
+      setIsLoading(true);
+      setError(null);
 
-      const response = await api.applicationFields.getFormConfig(scholarshipType)
+      const response =
+        await api.applicationFields.getFormConfig(scholarshipType);
 
       if (response.success && response.data) {
-        setFormConfig(response.data)
+        setFormConfig(response.data);
       } else {
-        setError(locale === "zh" ? "無法載入表單配置" : "Failed to load form configuration")
+        setError(
+          locale === "zh"
+            ? "無法載入表單配置"
+            : "Failed to load form configuration"
+        );
       }
     } catch (err) {
-      console.error('Failed to load form configuration:', err)
-      setError(locale === "zh" ? "載入表單配置時發生錯誤" : "Error loading form configuration")
+      console.error("Failed to load form configuration:", err);
+      setError(
+        locale === "zh"
+          ? "載入表單配置時發生錯誤"
+          : "Error loading form configuration"
+      );
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleFieldChange = (fieldName: string, value: any) => {
-    const newFormData = { ...formData, [fieldName]: value }
-    setFormData(newFormData)
-    onFieldChange?.(fieldName, value)
-  }
+    const newFormData = { ...formData, [fieldName]: value };
+    setFormData(newFormData);
+    onFieldChange?.(fieldName, value);
+  };
 
   const handleFileChange = (documentType: string, files: File[]) => {
-    const newFileData = { ...fileData, [documentType]: files }
-    setFileData(newFileData)
-    onFileChange?.(documentType, files)
-  }
+    const newFileData = { ...fileData, [documentType]: files };
+    setFileData(newFileData);
+    onFileChange?.(documentType, files);
+  };
 
   const handlePreviewExistingFile = (document: ApplicationDocument) => {
-    if (!document.existing_file_url) return
+    if (!document.existing_file_url) return;
 
     // 從文件 URL 提取檔名
-    const documentUrl = document.existing_file_url
-    const filename = documentUrl.split('/').pop()?.split('?')[0] || 'bank_document'
+    const documentUrl = document.existing_file_url;
+    const filename =
+      documentUrl.split("/").pop()?.split("?")[0] || "bank_document";
 
     // 從 URL 中提取 token（如果有的話）
-    let token = ''
-    const urlParts = documentUrl.split('?')
+    let token = "";
+    const urlParts = documentUrl.split("?");
     if (urlParts.length > 1) {
-      const urlParams = new URLSearchParams(urlParts[1])
-      token = urlParams.get('token') || ''
+      const urlParams = new URLSearchParams(urlParts[1]);
+      token = urlParams.get("token") || "";
     }
 
     // 如果 URL 中沒有 token，嘗試從存儲中獲取
     if (!token) {
-      token = localStorage.getItem('auth_token') ||
-              localStorage.getItem('token') ||
-              sessionStorage.getItem('auth_token') ||
-              sessionStorage.getItem('token') ||
-              ''
+      token =
+        localStorage.getItem("auth_token") ||
+        localStorage.getItem("token") ||
+        sessionStorage.getItem("auth_token") ||
+        sessionStorage.getItem("token") ||
+        "";
 
       if (!token) {
-        console.error('No authentication token available')
-        return null
+        console.error("No authentication token available");
+        return null;
       }
     }
 
     // 對於個人資料的文件，使用檔名作為 fileId
-    const fileId = filename
-    const fileType = encodeURIComponent('存摺封面')
+    const fileId = filename;
+    const fileType = encodeURIComponent("存摺封面");
 
     // 使用傳遞的用戶ID或預設值
-    const userId = currentUserId || 1
+    const userId = currentUserId || 1;
 
     // 建立預覽 URL
-    const previewUrl = `/api/v1/preview?fileId=${fileId}&filename=${encodeURIComponent(filename)}&type=${fileType}&userId=${userId}&token=${token}`
+    const previewUrl = `/api/v1/preview?fileId=${fileId}&filename=${encodeURIComponent(filename)}&type=${fileType}&userId=${userId}&token=${token}`;
 
     // 判斷文件類型
-    let fileTypeDisplay = 'other'
-    if (filename.toLowerCase().endsWith('.pdf')) {
-      fileTypeDisplay = 'application/pdf'
-    } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].some(ext => filename.toLowerCase().endsWith(ext))) {
-      fileTypeDisplay = 'image'
+    let fileTypeDisplay = "other";
+    if (filename.toLowerCase().endsWith(".pdf")) {
+      fileTypeDisplay = "application/pdf";
+    } else if (
+      [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some(ext =>
+        filename.toLowerCase().endsWith(ext)
+      )
+    ) {
+      fileTypeDisplay = "image";
     }
 
     // 設定預覽文件資訊並打開modal
@@ -162,52 +202,64 @@ export function DynamicApplicationForm({
       url: previewUrl,
       filename: filename,
       type: fileTypeDisplay,
-      downloadUrl: documentUrl // 使用原始URL作為下載連結
-    })
+      downloadUrl: documentUrl, // 使用原始URL作為下載連結
+    });
 
-    setShowPreview(true)
-  }
+    setShowPreview(true);
+  };
 
   const handleClosePreview = () => {
-    setShowPreview(false)
-    setPreviewFile(null)
-  }
+    setShowPreview(false);
+    setPreviewFile(null);
+  };
 
   const getFieldLabel = (field: ApplicationField) => {
-    return locale === "en" && field.field_label_en ? field.field_label_en : field.field_label
-  }
+    return locale === "en" && field.field_label_en
+      ? field.field_label_en
+      : field.field_label;
+  };
 
   const getFieldPlaceholder = (field: ApplicationField) => {
-    return locale === "en" && field.placeholder_en ? field.placeholder_en : field.placeholder || ""
-  }
+    return locale === "en" && field.placeholder_en
+      ? field.placeholder_en
+      : field.placeholder || "";
+  };
 
   const getFieldHelpText = (field: ApplicationField) => {
-    return locale === "en" && field.help_text_en ? field.help_text_en : field.help_text
-  }
+    return locale === "en" && field.help_text_en
+      ? field.help_text_en
+      : field.help_text;
+  };
 
   const getDocumentName = (doc: ApplicationDocument) => {
-    return locale === "en" && doc.document_name_en ? doc.document_name_en : doc.document_name
-  }
+    return locale === "en" && doc.document_name_en
+      ? doc.document_name_en
+      : doc.document_name;
+  };
 
   const getDocumentDescription = (doc: ApplicationDocument) => {
-    return locale === "en" && doc.description_en ? doc.description_en : doc.description
-  }
+    return locale === "en" && doc.description_en
+      ? doc.description_en
+      : doc.description;
+  };
 
   const getDocumentInstructions = (doc: ApplicationDocument) => {
-    return locale === "en" && doc.upload_instructions_en ? doc.upload_instructions_en : doc.upload_instructions
-  }
+    return locale === "en" && doc.upload_instructions_en
+      ? doc.upload_instructions_en
+      : doc.upload_instructions;
+  };
 
   const renderField = (field: ApplicationField) => {
-    if (!field.is_active) return null
+    if (!field.is_active) return null;
 
     // Use prefill value for fixed fields if no current value exists
-    const fieldValue = formData[field.field_name] || field.prefill_value || ""
-    const label = getFieldLabel(field)
-    const placeholder = getFieldPlaceholder(field)
-    const helpText = getFieldHelpText(field)
+    const fieldValue = formData[field.field_name] || field.prefill_value || "";
+    const label = getFieldLabel(field);
+    const placeholder = getFieldPlaceholder(field);
+    const helpText = getFieldHelpText(field);
 
     // Add fixed field indicator
-    const isFixedField = field.is_fixed === true
+    const isFixedField = field.is_fixed === true;
 
     switch (field.field_type) {
       case "text":
@@ -216,7 +268,9 @@ export function DynamicApplicationForm({
           <div key={field.field_name} className="space-y-2">
             <Label htmlFor={field.field_name}>
               {label}
-              {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {field.is_required && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
               {isFixedField && (
                 <Badge variant="outline" className="ml-2 text-xs">
                   {locale === "zh" ? "固定欄位" : "Fixed Field"}
@@ -227,11 +281,13 @@ export function DynamicApplicationForm({
               id={field.field_name}
               type={field.field_type}
               value={fieldValue}
-              onChange={(e) => handleFieldChange(field.field_name, e.target.value)}
+              onChange={e =>
+                handleFieldChange(field.field_name, e.target.value)
+              }
               placeholder={placeholder}
               maxLength={field.max_length}
               required={field.is_required}
-              className={`w-full ${isFixedField ? 'bg-blue-50 border-blue-200' : ''}`}
+              className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
             {isFixedField && (
               <p className="text-sm text-blue-600">
@@ -244,14 +300,16 @@ export function DynamicApplicationForm({
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
           </div>
-        )
+        );
 
       case "number":
         return (
           <div key={field.field_name} className="space-y-2">
             <Label htmlFor={field.field_name}>
               {label}
-              {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {field.is_required && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
               {isFixedField && (
                 <Badge variant="outline" className="ml-2 text-xs">
                   {locale === "zh" ? "固定欄位" : "Fixed Field"}
@@ -262,13 +320,18 @@ export function DynamicApplicationForm({
               id={field.field_name}
               type="number"
               value={fieldValue}
-              onChange={(e) => handleFieldChange(field.field_name, parseFloat(e.target.value) || "")}
+              onChange={e =>
+                handleFieldChange(
+                  field.field_name,
+                  parseFloat(e.target.value) || ""
+                )
+              }
               placeholder={placeholder}
               min={field.min_value}
               max={field.max_value}
               step={field.step_value}
               required={field.is_required}
-              className={`w-full ${isFixedField ? 'bg-blue-50 border-blue-200' : ''}`}
+              className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
             {isFixedField && (
               <p className="text-sm text-blue-600">
@@ -281,14 +344,16 @@ export function DynamicApplicationForm({
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
           </div>
-        )
+        );
 
       case "date":
         return (
           <div key={field.field_name} className="space-y-2">
             <Label htmlFor={field.field_name}>
               {label}
-              {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {field.is_required && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
               {isFixedField && (
                 <Badge variant="outline" className="ml-2 text-xs">
                   {locale === "zh" ? "固定欄位" : "Fixed Field"}
@@ -299,9 +364,11 @@ export function DynamicApplicationForm({
               id={field.field_name}
               type="date"
               value={fieldValue}
-              onChange={(e) => handleFieldChange(field.field_name, e.target.value)}
+              onChange={e =>
+                handleFieldChange(field.field_name, e.target.value)
+              }
               required={field.is_required}
-              className={`w-full ${isFixedField ? 'bg-blue-50 border-blue-200' : ''}`}
+              className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
             {isFixedField && (
               <p className="text-sm text-blue-600">
@@ -314,14 +381,16 @@ export function DynamicApplicationForm({
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
           </div>
-        )
+        );
 
       case "textarea":
         return (
           <div key={field.field_name} className="space-y-2">
             <Label htmlFor={field.field_name}>
               {label}
-              {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {field.is_required && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
               {isFixedField && (
                 <Badge variant="outline" className="ml-2 text-xs">
                   {locale === "zh" ? "固定欄位" : "Fixed Field"}
@@ -331,11 +400,13 @@ export function DynamicApplicationForm({
             <Textarea
               id={field.field_name}
               value={fieldValue}
-              onChange={(e) => handleFieldChange(field.field_name, e.target.value)}
+              onChange={e =>
+                handleFieldChange(field.field_name, e.target.value)
+              }
               placeholder={placeholder}
               maxLength={field.max_length}
               required={field.is_required}
-              className={`w-full min-h-[120px] ${isFixedField ? 'bg-blue-50 border-blue-200' : ''}`}
+              className={`w-full min-h-[120px] ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
               rows={6}
             />
             {isFixedField && (
@@ -347,34 +418,40 @@ export function DynamicApplicationForm({
             )}
             {field.max_length && (
               <p className="text-sm text-muted-foreground text-right">
-                {(fieldValue?.length || 0)} / {field.max_length}
+                {fieldValue?.length || 0} / {field.max_length}
               </p>
             )}
             {helpText && (
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
           </div>
-        )
+        );
 
       case "select":
         return (
           <div key={field.field_name} className="space-y-2">
             <Label htmlFor={field.field_name}>
               {label}
-              {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {field.is_required && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
             </Label>
             <Select
               value={fieldValue}
-              onValueChange={(value) => handleFieldChange(field.field_name, value)}
+              onValueChange={value =>
+                handleFieldChange(field.field_name, value)
+              }
               required={field.is_required}
             >
               <SelectTrigger>
                 <SelectValue placeholder={placeholder} />
               </SelectTrigger>
               <SelectContent>
-                {field.field_options?.map((option) => (
+                {field.field_options?.map(option => (
                   <SelectItem key={option.value} value={option.value}>
-                    {locale === "en" && option.label_en ? option.label_en : option.label}
+                    {locale === "en" && option.label_en
+                      ? option.label_en
+                      : option.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -383,7 +460,7 @@ export function DynamicApplicationForm({
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
           </div>
-        )
+        );
 
       case "checkbox":
         return (
@@ -392,29 +469,35 @@ export function DynamicApplicationForm({
               <Checkbox
                 id={field.field_name}
                 checked={fieldValue || false}
-                onCheckedChange={(checked) => handleFieldChange(field.field_name, checked)}
+                onCheckedChange={checked =>
+                  handleFieldChange(field.field_name, checked)
+                }
                 required={field.is_required}
               />
               <Label htmlFor={field.field_name} className="text-sm font-normal">
                 {label}
-                {field.is_required && <span className="text-red-500 ml-1">*</span>}
+                {field.is_required && (
+                  <span className="text-red-500 ml-1">*</span>
+                )}
               </Label>
             </div>
             {helpText && (
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
           </div>
-        )
+        );
 
       case "radio":
         return (
           <div key={field.field_name} className="space-y-2">
             <Label>
               {label}
-              {field.is_required && <span className="text-red-500 ml-1">*</span>}
+              {field.is_required && (
+                <span className="text-red-500 ml-1">*</span>
+              )}
             </Label>
             <div className="space-y-2">
-              {field.field_options?.map((option) => (
+              {field.field_options?.map(option => (
                 <div key={option.value} className="flex items-center space-x-2">
                   <input
                     type="radio"
@@ -422,12 +505,19 @@ export function DynamicApplicationForm({
                     name={field.field_name}
                     value={option.value}
                     checked={fieldValue === option.value}
-                    onChange={(e) => handleFieldChange(field.field_name, e.target.value)}
+                    onChange={e =>
+                      handleFieldChange(field.field_name, e.target.value)
+                    }
                     required={field.is_required}
                     className="w-4 h-4"
                   />
-                  <Label htmlFor={`${field.field_name}_${option.value}`} className="text-sm font-normal">
-                    {locale === "en" && option.label_en ? option.label_en : option.label}
+                  <Label
+                    htmlFor={`${field.field_name}_${option.value}`}
+                    className="text-sm font-normal"
+                  >
+                    {locale === "en" && option.label_en
+                      ? option.label_en
+                      : option.label}
                   </Label>
                 </div>
               ))}
@@ -436,28 +526,33 @@ export function DynamicApplicationForm({
               <p className="text-sm text-muted-foreground">{helpText}</p>
             )}
           </div>
-        )
+        );
 
       default:
-        return null
+        return null;
     }
-  }
+  };
 
   const renderDocument = (document: ApplicationDocument) => {
-    if (!document.is_active) return null
+    if (!document.is_active) return null;
 
-    const documentName = getDocumentName(document)
-    const description = getDocumentDescription(document)
-    const instructions = getDocumentInstructions(document)
-    const files = fileData[document.document_name] || []
-    const isFixedDocument = document.is_fixed === true
+    const documentName = getDocumentName(document);
+    const description = getDocumentDescription(document);
+    const instructions = getDocumentInstructions(document);
+    const files = fileData[document.document_name] || [];
+    const isFixedDocument = document.is_fixed === true;
 
     return (
-      <div key={document.document_name} className={`space-y-3 p-4 border rounded-lg ${isFixedDocument ? 'border-blue-200 bg-blue-50/50' : ''}`}>
+      <div
+        key={document.document_name}
+        className={`space-y-3 p-4 border rounded-lg ${isFixedDocument ? "border-blue-200 bg-blue-50/50" : ""}`}
+      >
         <div className="flex items-center justify-between">
           <Label className="text-base font-medium">
             {documentName}
-            {document.is_required && <span className="text-red-500 ml-1">*</span>}
+            {document.is_required && (
+              <span className="text-red-500 ml-1">*</span>
+            )}
             {isFixedDocument && (
               <Badge variant="outline" className="ml-2 text-xs">
                 {locale === "zh" ? "固定文件" : "Fixed Document"}
@@ -474,7 +569,10 @@ export function DynamicApplicationForm({
         {isFixedDocument && document.existing_file_url && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium">
-              {locale === "zh" ? "已上傳檔案 (1/1) - " : "Uploaded files (1/1) - "}{documentName}
+              {locale === "zh"
+                ? "已上傳檔案 (1/1) - "
+                : "Uploaded files (1/1) - "}
+              {documentName}
             </h4>
             <Card>
               <CardContent className="flex items-center justify-between p-3">
@@ -520,9 +618,15 @@ export function DynamicApplicationForm({
         )}
 
         <FileUpload
-          onFilesChange={(files) => handleFileChange(document.document_name, files)}
-          acceptedTypes={document.accepted_file_types.map(type => `.${type.toLowerCase()}`)}
-          maxSize={parseInt(document.max_file_size.replace(/[^\d]/g, '')) * 1024 * 1024} // Convert MB to bytes
+          onFilesChange={files =>
+            handleFileChange(document.document_name, files)
+          }
+          acceptedTypes={document.accepted_file_types.map(
+            type => `.${type.toLowerCase()}`
+          )}
+          maxSize={
+            parseInt(document.max_file_size.replace(/[^\d]/g, "")) * 1024 * 1024
+          } // Convert MB to bytes
           maxFiles={document.max_file_count}
           initialFiles={files}
           fileType={document.document_name}
@@ -542,13 +646,11 @@ export function DynamicApplicationForm({
             {locale === "zh" ? "最多檔案數：" : "Maximum files: "}
             {document.max_file_count}
           </p>
-          {instructions && (
-            <p className="text-blue-600">{instructions}</p>
-          )}
+          {instructions && <p className="text-blue-600">{instructions}</p>}
         </div>
       </div>
-    )
-  }
+    );
+  };
 
   if (isLoading) {
     return (
@@ -558,7 +660,7 @@ export function DynamicApplicationForm({
           {locale === "zh" ? "載入表單中..." : "Loading form..."}
         </span>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -569,7 +671,7 @@ export function DynamicApplicationForm({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
-    )
+    );
   }
 
   if (!formConfig) {
@@ -578,20 +680,22 @@ export function DynamicApplicationForm({
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {locale === "zh" ? "尚未設定表單配置" : "Form configuration not available"}
+            {locale === "zh"
+              ? "尚未設定表單配置"
+              : "Form configuration not available"}
           </AlertDescription>
         </Alert>
       </div>
-    )
+    );
   }
 
   const activeFields = formConfig.fields
     .filter(field => field.is_active)
-    .sort((a, b) => a.display_order - b.display_order)
+    .sort((a, b) => a.display_order - b.display_order);
 
   const activeDocuments = formConfig.documents
     .filter(doc => doc.is_active)
-    .sort((a, b) => a.display_order - b.display_order)
+    .sort((a, b) => a.display_order - b.display_order);
 
   return (
     <div className={`space-y-6 ${className}`}>
@@ -654,5 +758,5 @@ export function DynamicApplicationForm({
         locale={locale}
       />
     </div>
-  )
+  );
 }

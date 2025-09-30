@@ -2,6 +2,8 @@
 Database session management
 """
 
+from contextlib import asynccontextmanager
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -100,16 +102,22 @@ async def handle_cached_statement_error(session: AsyncSession, operation_func, *
         raise
 
 
+@asynccontextmanager
 async def get_db_session():
     """
     Get a database session with proper error handling
 
     This function provides a database session with built-in handling
     for common PostgreSQL connection issues.
+
+    Usage:
+        async with get_db_session() as session:
+            # use session
     """
     session = AsyncSessionLocal()
     try:
         yield session
+        await session.commit()
     except Exception:
         await session.rollback()
         raise
@@ -137,7 +145,8 @@ async def invalidate_connection_pools():
         sync_pool = sync_engine.pool
 
         logger.info(
-            f"Before invalidation - Async pool: {async_pool.size()} connections, Sync pool: {sync_pool.size()} connections"
+            f"Before invalidation - Async pool: {async_pool.size()} connections, "
+            f"Sync pool: {sync_pool.size()} connections"
         )
 
         # Dispose and recreate pools (SQLAlchemy 2.0 approach)
@@ -166,7 +175,8 @@ def invalidate_connection_pools_sync():
 
         # For async engine, we can't dispose it synchronously, but we can log the issue
         logger.warning(
-            "Async engine disposal requires async context - consider using invalidate_connection_pools() in async context"
+            "Async engine disposal requires async context - consider using "
+            "invalidate_connection_pools() in async context"
         )
 
     except Exception as e:

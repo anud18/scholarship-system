@@ -88,10 +88,16 @@ class User(Base):
 
     # Professor-Student relationships
     professor_relationships = relationship(
-        "ProfessorStudentRelationship", foreign_keys="[ProfessorStudentRelationship.professor_id]", lazy="select"
+        "ProfessorStudentRelationship",
+        foreign_keys="[ProfessorStudentRelationship.professor_id]",
+        lazy="select",
+        overlaps="professor",
     )
     student_relationships = relationship(
-        "ProfessorStudentRelationship", foreign_keys="[ProfessorStudentRelationship.student_id]", lazy="select"
+        "ProfessorStudentRelationship",
+        foreign_keys="[ProfessorStudentRelationship.student_id]",
+        lazy="select",
+        overlaps="student",
     )
 
     def __repr__(self):
@@ -165,11 +171,7 @@ class User(Base):
 
         # Check for active professor-student relationship with required permission
         for rel in self.professor_relationships:
-            if (
-                rel.student_id == student_id
-                and rel.is_active
-                and rel.has_permission(permission)
-            ):
+            if rel.student_id == student_id and rel.is_active and rel.has_permission(permission):
                 return True
 
         return False

@@ -80,7 +80,7 @@ class ScholarshipType(Base):
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]),
         default=SubTypeSelectionMode.single,
-        nullable=False
+        nullable=False,
     )
 
     # 申請週期設定
@@ -440,7 +440,9 @@ class ScholarshipRule(Base):
 
     # Academic context - rules can be specific to academic year and semester
     academic_year = Column(Integer, nullable=True, index=True)  # 民國年，如 113 表示 113 學年度
-    semester = Column(Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True)  # 學期，學年制可為 NULL
+    semester = Column(
+        Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True
+    )  # 學期，學年制可為 NULL
 
     # Rule template information
     is_template = Column(Boolean, default=False, nullable=False)  # 是否為規則模板
@@ -571,7 +573,9 @@ class ScholarshipConfiguration(Base):
 
     # 週期識別 - 作為唯一標識符
     academic_year = Column(Integer, nullable=False, index=True)  # 民國年，如 113 表示 113 學年度
-    semester = Column(Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True)  # 學期制獎學金需要，學年制可為 NULL
+    semester = Column(
+        Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True, index=True
+    )  # 學期制獎學金需要，學年制可為 NULL
 
     # 基本配置資訊
     config_name = Column(String(200), nullable=False)  # 配置名稱
@@ -644,6 +648,7 @@ class ScholarshipConfiguration(Base):
     previous_config = relationship("ScholarshipConfiguration", remote_side=[id])
     creator = relationship("User", foreign_keys=[created_by])
     updater = relationship("User", foreign_keys=[updated_by])
+    roster_schedules = relationship("RosterSchedule", back_populates="scholarship_configuration")
 
     # 唯一性約束：每個獎學金類型在每個學年度/學期只能有一個配置
     __table_args__ = (

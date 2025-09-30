@@ -5,7 +5,7 @@ export const useScholarshipPermissions = () => ({
   canDelete: false,
   canApprove: false,
   canReject: false,
-  userRole: 'admin',
+  userRole: "admin",
   permissions: {
     scholarships: {
       create: true,
@@ -22,4 +22,4 @@ export const useScholarshipPermissions = () => ({
       reject: false,
     },
   },
-})
+});

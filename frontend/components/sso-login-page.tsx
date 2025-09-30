@@ -1,6 +1,12 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { GraduationCap, ExternalLink } from "lucide-react";
 
@@ -17,15 +23,14 @@ export function SSOLoginPage() {
           <div className="nycu-gradient h-16 w-16 rounded-xl flex items-center justify-center nycu-shadow mx-auto mb-4">
             <GraduationCap className="h-8 w-8 text-white" />
           </div>
-          <CardTitle className="text-2xl text-nycu-navy-800">登入系統</CardTitle>
+          <CardTitle className="text-2xl text-nycu-navy-800">
+            登入系統
+          </CardTitle>
           <CardDescription>獎學金申請與簽核作業管理系統</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <Button
-              onClick={handleSSOLogin}
-              className="w-full"
-            >
+            <Button onClick={handleSSOLogin} className="w-full">
               <ExternalLink className="h-4 w-4 mr-2" />
               使用 SSO 登入
             </Button>

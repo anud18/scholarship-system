@@ -110,6 +110,24 @@ class Settings(BaseSettings):
     roster_template_dir: str = "./app/templates"
     roster_export_dir: str = "./exports"
     roster_excel_template: str = "STD_UP_MIXLISTA.xlsx"
+    roster_retention_days: int = 90  # 造冊檔案保留天數
+    roster_minio_bucket: str = "roster-files"  # MinIO bucket for roster files
+
+    # Excel Export Configuration
+    excel_max_rows: int = 10000  # 單檔最大筆數
+    excel_encoding: str = "utf-8-sig"  # UTF-8 with BOM
+    excel_auto_width: bool = True  # 自動調整欄寬
+
+    # Student Verification Enhanced Configuration
+    student_verify_timeout: int = 5  # API逾時秒數
+    student_verify_retry_count: int = 3  # 重試次數
+    student_verify_batch_size: int = 50  # 批次驗證大小
+
+    # Roster Processing Configuration
+    roster_scheduler_enabled: bool = True
+    roster_scheduler_timezone: str = "Asia/Taipei"
+    roster_auto_lock_after_completion: bool = False
+    roster_max_execution_time_minutes: int = 60
 
     # Student Verification Configuration
     student_verification_api_url: Optional[str] = None
@@ -124,7 +142,6 @@ class Settings(BaseSettings):
     nycu_emp_insecure: bool = False
     nycu_emp_timeout: float = 10.0
     nycu_emp_retries: int = 3
-
 
     @field_validator("database_url", mode="before")
     @classmethod

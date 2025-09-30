@@ -1,32 +1,38 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Modal } from "@/components/ui/modal"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Save, X } from "lucide-react"
-import { ScholarshipRule, SubTypeOption, api } from "@/lib/api"
+import { useState, useEffect } from "react";
+import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Save, X } from "lucide-react";
+import { ScholarshipRule, SubTypeOption, api } from "@/lib/api";
 
 interface ScholarshipRuleModalProps {
-  isOpen: boolean
-  onClose: () => void
-  rule?: ScholarshipRule | null
-  scholarshipTypeId: number
-  academicYear: number
-  semester?: string | null
-  onSubmit: (rule: Partial<ScholarshipRule>) => Promise<void>
-  isLoading?: boolean
+  isOpen: boolean;
+  onClose: () => void;
+  rule?: ScholarshipRule | null;
+  scholarshipTypeId: number;
+  academicYear: number;
+  semester?: string | null;
+  onSubmit: (rule: Partial<ScholarshipRule>) => Promise<void>;
+  isLoading?: boolean;
 }
 
 const RULE_TYPES = [
   { value: "student", label: "學生資料" },
-  { value: "student_term", label: "學生學期資料"}
-]
+  { value: "student_term", label: "學生學期資料" },
+];
 
 const OPERATORS = [
   { value: "==", label: "等於 (==)" },
@@ -38,14 +44,17 @@ const OPERATORS = [
   { value: "in", label: "包含於 (in)" },
   { value: "not_in", label: "不包含於 (not_in)" },
   { value: "contains", label: "包含 (contains)" },
-  { value: "not_contains", label: "不包含 (not_contains)" }
-]
+  { value: "not_contains", label: "不包含 (not_contains)" },
+];
 
 const STUDENT_FIELDS = [
   { value: "std_stdcode", label: "學號 (std_stdcode)" },
   { value: "std_enrollyear", label: "入學年度 (std_enrollyear)" },
   { value: "std_enrollterm", label: "入學學期 (std_enrollterm)" },
-  { value: "std_highestschname", label: "最高學歷學校名稱 (std_highestschname)" },
+  {
+    value: "std_highestschname",
+    label: "最高學歷學校名稱 (std_highestschname)",
+  },
   { value: "std_cname", label: "中文姓名 (std_cname)" },
   { value: "std_ename", label: "英文姓名 (std_ename)" },
   { value: "std_pid", label: "身分證字號 (std_pid)" },
@@ -65,8 +74,8 @@ const STUDENT_FIELDS = [
   { value: "ToDoctor", label: "是否逕讀博士 (ToDoctor)" },
   { value: "com_commadd", label: "通訊地址 (com_commadd)" },
   { value: "com_email", label: "電子信箱 (com_email)" },
-  { value: "com_cellphone", label: "手機號碼 (com_cellphone)" }
-]
+  { value: "com_cellphone", label: "手機號碼 (com_cellphone)" },
+];
 
 const STUDENT_TERM_FIELDS = [
   { value: "std_stdcode", label: "學號 (std_stdcode)" },
@@ -83,8 +92,8 @@ const STUDENT_TERM_FIELDS = [
   { value: "trm_placingsrate", label: "總排名百分比 (trm_placingsrate)" },
   { value: "trm_depplacing", label: "系排名 (trm_depplacing)" },
   { value: "trm_depplacingrate", label: "系排名百分比 (trm_depplacingrate)" },
-  { value: "trm_ascore_gpa", label: "GPA (trm_ascore_gpa)" }
-]
+  { value: "trm_ascore_gpa", label: "GPA (trm_ascore_gpa)" },
+];
 
 export function ScholarshipRuleModal({
   isOpen,
@@ -94,19 +103,18 @@ export function ScholarshipRuleModal({
   academicYear,
   semester,
   onSubmit,
-  isLoading = false
+  isLoading = false,
 }: ScholarshipRuleModalProps) {
-
   const getAvailableFields = (ruleType: string) => {
     switch (ruleType) {
       case "student":
-        return STUDENT_FIELDS
+        return STUDENT_FIELDS;
       case "student_term":
-        return STUDENT_TERM_FIELDS
+        return STUDENT_TERM_FIELDS;
       default:
-        return []
+        return [];
     }
-  }
+  };
   const [formData, setFormData] = useState<Partial<ScholarshipRule>>({
     rule_name: "",
     rule_type: "",
@@ -128,14 +136,14 @@ export function ScholarshipRuleModal({
     semester: semester ?? undefined,
     is_template: false,
     template_name: undefined,
-    template_description: undefined
-  })
+    template_description: undefined,
+  });
 
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [subTypeOptions, setSubTypeOptions] = useState<SubTypeOption[]>([
-    { value: null, label: "通用", label_en: "General", is_default: true }
-  ])
-  const [loadingSubTypes, setLoadingSubTypes] = useState(false)
+    { value: null, label: "通用", label_en: "General", is_default: true },
+  ]);
+  const [loadingSubTypes, setLoadingSubTypes] = useState(false);
 
   useEffect(() => {
     if (rule) {
@@ -160,8 +168,8 @@ export function ScholarshipRuleModal({
         semester: rule.semester ?? semester ?? undefined,
         is_template: rule.is_template,
         template_name: rule.template_name ?? undefined,
-        template_description: rule.template_description ?? undefined
-      })
+        template_description: rule.template_description ?? undefined,
+      });
     } else {
       setFormData({
         rule_name: "",
@@ -184,11 +192,11 @@ export function ScholarshipRuleModal({
         semester: semester ?? undefined,
         is_template: false,
         template_name: undefined,
-        template_description: undefined
-      })
+        template_description: undefined,
+      });
     }
-    setErrors({})
-  }, [rule, academicYear, semester])
+    setErrors({});
+  }, [rule, academicYear, semester]);
 
   // Load sub-type options when modal opens
   useEffect(() => {
@@ -196,90 +204,96 @@ export function ScholarshipRuleModal({
       if (!isOpen || !scholarshipTypeId) {
         // Reset to default options when modal closes or no scholarship type
         setSubTypeOptions([
-          { value: null, label: "通用", label_en: "General", is_default: true }
-        ])
-        return
+          { value: null, label: "通用", label_en: "General", is_default: true },
+        ]);
+        return;
       }
 
-      setLoadingSubTypes(true)
+      setLoadingSubTypes(true);
       try {
-        const response = await api.admin.getScholarshipRuleSubTypes(scholarshipTypeId)
+        const response =
+          await api.admin.getScholarshipRuleSubTypes(scholarshipTypeId);
         if (response.success && response.data && Array.isArray(response.data)) {
-          setSubTypeOptions(response.data)
+          setSubTypeOptions(response.data);
         } else {
-          console.error('Failed to load sub-types:', response.message)
+          console.error("Failed to load sub-types:", response.message);
           // Keep default options on error
           setSubTypeOptions([
-            { value: null, label: "通用", label_en: "General", is_default: true }
-          ])
+            {
+              value: null,
+              label: "通用",
+              label_en: "General",
+              is_default: true,
+            },
+          ]);
         }
       } catch (error) {
-        console.error('Error loading sub-types:', error)
+        console.error("Error loading sub-types:", error);
         // Keep default options on error
         setSubTypeOptions([
-          { value: null, label: "通用", label_en: "General", is_default: true }
-        ])
+          { value: null, label: "通用", label_en: "General", is_default: true },
+        ]);
       } finally {
-        setLoadingSubTypes(false)
+        setLoadingSubTypes(false);
       }
-    }
+    };
 
-    loadSubTypes()
-  }, [isOpen, scholarshipTypeId])
+    loadSubTypes();
+  }, [isOpen, scholarshipTypeId]);
 
   const handleChange = (field: keyof ScholarshipRule, value: any) => {
     setFormData(prev => {
-      const newData = { ...prev, [field]: value }
+      const newData = { ...prev, [field]: value };
 
       // 當規則類型改變時，清空條件欄位
       if (field === "rule_type" && prev.rule_type !== value) {
-        newData.condition_field = ""
+        newData.condition_field = "";
       }
 
-      return newData
-    })
+      return newData;
+    });
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }))
+      setErrors(prev => ({ ...prev, [field]: "" }));
     }
-  }
+  };
 
   const validateForm = () => {
-    const newErrors: Record<string, string> = {}
+    const newErrors: Record<string, string> = {};
 
     if (!formData.rule_name?.trim()) {
-      newErrors.rule_name = "規則名稱為必填項目"
+      newErrors.rule_name = "規則名稱為必填項目";
     }
     if (!formData.rule_type?.trim()) {
-      newErrors.rule_type = "規則類型為必填項目"
+      newErrors.rule_type = "規則類型為必填項目";
     }
     if (!formData.condition_field?.trim()) {
-      newErrors.condition_field = "條件欄位為必填項目"
+      newErrors.condition_field = "條件欄位為必填項目";
     }
     if (!formData.operator?.trim()) {
-      newErrors.operator = "運算子為必填項目"
+      newErrors.operator = "運算子為必填項目";
     }
     if (!formData.expected_value?.trim()) {
-      newErrors.expected_value = "期望值為必填項目"
+      newErrors.expected_value = "期望值為必填項目";
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return
+    if (!validateForm()) return;
 
     try {
       const submitData = {
         ...formData,
-        scholarship_type_id: scholarshipTypeId
-      }
-      await onSubmit(submitData)
-      onClose()
+        scholarship_type_id: scholarshipTypeId,
+      };
+      await onSubmit(submitData);
+      onClose();
     } catch (error) {
-      console.error('提交規則失敗:', error)
+      console.error("提交規則失敗:", error);
     }
-  }
+  };
 
   return (
     <Modal
@@ -295,7 +309,7 @@ export function ScholarshipRuleModal({
             <Label>規則名稱 *</Label>
             <Input
               value={formData.rule_name || ""}
-              onChange={(e) => handleChange("rule_name", e.target.value)}
+              onChange={e => handleChange("rule_name", e.target.value)}
               placeholder="輸入規則名稱"
               className={errors.rule_name ? "border-red-500" : ""}
             />
@@ -307,13 +321,15 @@ export function ScholarshipRuleModal({
             <Label>規則類型 *</Label>
             <Select
               value={formData.rule_type || ""}
-              onValueChange={(value) => handleChange("rule_type", value)}
+              onValueChange={value => handleChange("rule_type", value)}
             >
-              <SelectTrigger className={errors.rule_type ? "border-red-500" : ""}>
+              <SelectTrigger
+                className={errors.rule_type ? "border-red-500" : ""}
+              >
                 <SelectValue placeholder="選擇規則類型" />
               </SelectTrigger>
               <SelectContent>
-                {RULE_TYPES.map((type) => (
+                {RULE_TYPES.map(type => (
                   <SelectItem key={type.value} value={type.value}>
                     {type.label}
                   </SelectItem>
@@ -331,7 +347,7 @@ export function ScholarshipRuleModal({
             <Label>標籤</Label>
             <Input
               value={formData.tag || ""}
-              onChange={(e) => handleChange("tag", e.target.value)}
+              onChange={e => handleChange("tag", e.target.value)}
               placeholder="例：博士生、中華民國國籍"
             />
           </div>
@@ -339,15 +355,22 @@ export function ScholarshipRuleModal({
             <Label>子類型</Label>
             <Select
               value={formData.sub_type || "__general__"}
-              onValueChange={(value) => handleChange("sub_type", value === "__general__" ? null : value)}
+              onValueChange={value =>
+                handleChange("sub_type", value === "__general__" ? null : value)
+              }
               disabled={loadingSubTypes}
             >
               <SelectTrigger>
-                <SelectValue placeholder={loadingSubTypes ? "載入中..." : "選擇子類型"} />
+                <SelectValue
+                  placeholder={loadingSubTypes ? "載入中..." : "選擇子類型"}
+                />
               </SelectTrigger>
               <SelectContent>
-                {subTypeOptions.map((option) => (
-                  <SelectItem key={option.value || "__general__"} value={option.value || "__general__"}>
+                {subTypeOptions.map(option => (
+                  <SelectItem
+                    key={option.value || "__general__"}
+                    value={option.value || "__general__"}
+                  >
                     {option.label}
                   </SelectItem>
                 ))}
@@ -361,7 +384,9 @@ export function ScholarshipRuleModal({
               min="1"
               max="999"
               value={formData.priority || 1}
-              onChange={(e) => handleChange("priority", parseInt(e.target.value) || 1)}
+              onChange={e =>
+                handleChange("priority", parseInt(e.target.value) || 1)
+              }
             />
           </div>
         </div>
@@ -370,7 +395,7 @@ export function ScholarshipRuleModal({
           <Label>規則描述</Label>
           <Textarea
             value={formData.description || ""}
-            onChange={(e) => handleChange("description", e.target.value)}
+            onChange={e => handleChange("description", e.target.value)}
             placeholder="輸入規則描述"
             rows={2}
           />
@@ -384,13 +409,15 @@ export function ScholarshipRuleModal({
               <Label>條件欄位 *</Label>
               <Select
                 value={formData.condition_field || ""}
-                onValueChange={(value) => handleChange("condition_field", value)}
+                onValueChange={value => handleChange("condition_field", value)}
               >
-                <SelectTrigger className={errors.condition_field ? "border-red-500" : ""}>
+                <SelectTrigger
+                  className={errors.condition_field ? "border-red-500" : ""}
+                >
                   <SelectValue placeholder="選擇欄位" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getAvailableFields(formData.rule_type || "").map((field) => (
+                  {getAvailableFields(formData.rule_type || "").map(field => (
                     <SelectItem key={field.value} value={field.value}>
                       {field.label}
                     </SelectItem>
@@ -405,13 +432,15 @@ export function ScholarshipRuleModal({
               <Label>運算子 *</Label>
               <Select
                 value={formData.operator || "=="}
-                onValueChange={(value) => handleChange("operator", value)}
+                onValueChange={value => handleChange("operator", value)}
               >
-                <SelectTrigger className={errors.operator ? "border-red-500" : ""}>
+                <SelectTrigger
+                  className={errors.operator ? "border-red-500" : ""}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {OPERATORS.map((op) => (
+                  {OPERATORS.map(op => (
                     <SelectItem key={op.value} value={op.value}>
                       {op.label}
                     </SelectItem>
@@ -426,7 +455,7 @@ export function ScholarshipRuleModal({
               <Label>期望值 *</Label>
               <Input
                 value={formData.expected_value || ""}
-                onChange={(e) => handleChange("expected_value", e.target.value)}
+                onChange={e => handleChange("expected_value", e.target.value)}
                 placeholder="例：1, 1,2,3, 中華民國"
                 className={errors.expected_value ? "border-red-500" : ""}
               />
@@ -445,7 +474,7 @@ export function ScholarshipRuleModal({
               <Label>中文訊息</Label>
               <Textarea
                 value={formData.message || ""}
-                onChange={(e) => handleChange("message", e.target.value)}
+                onChange={e => handleChange("message", e.target.value)}
                 placeholder="當規則不符合時顯示的中文訊息"
                 rows={2}
               />
@@ -454,7 +483,7 @@ export function ScholarshipRuleModal({
               <Label>英文訊息</Label>
               <Textarea
                 value={formData.message_en || ""}
-                onChange={(e) => handleChange("message_en", e.target.value)}
+                onChange={e => handleChange("message_en", e.target.value)}
                 placeholder="當規則不符合時顯示的英文訊息"
                 rows={2}
               />
@@ -470,31 +499,43 @@ export function ScholarshipRuleModal({
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium">硬性規則</Label>
-                  <p className="text-xs text-muted-foreground">必須滿足，否則不會顯示在學生頁面</p>
+                  <p className="text-xs text-muted-foreground">
+                    必須滿足，否則不會顯示在學生頁面
+                  </p>
                 </div>
                 <Switch
                   checked={formData.is_hard_rule || false}
-                  onCheckedChange={(checked) => handleChange("is_hard_rule", checked)}
+                  onCheckedChange={checked =>
+                    handleChange("is_hard_rule", checked)
+                  }
                 />
               </div>
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium">警告規則</Label>
-                  <p className="text-xs text-muted-foreground">不符合時顯示警告</p>
+                  <p className="text-xs text-muted-foreground">
+                    不符合時顯示警告
+                  </p>
                 </div>
                 <Switch
                   checked={formData.is_warning || false}
-                  onCheckedChange={(checked) => handleChange("is_warning", checked)}
+                  onCheckedChange={checked =>
+                    handleChange("is_warning", checked)
+                  }
                 />
               </div>
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium">規則啟用</Label>
-                  <p className="text-xs text-muted-foreground">整體規則是否啟用</p>
+                  <p className="text-xs text-muted-foreground">
+                    整體規則是否啟用
+                  </p>
                 </div>
                 <Switch
                   checked={formData.is_active || false}
-                  onCheckedChange={(checked) => handleChange("is_active", checked)}
+                  onCheckedChange={checked =>
+                    handleChange("is_active", checked)
+                  }
                 />
               </div>
             </div>
@@ -502,22 +543,30 @@ export function ScholarshipRuleModal({
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium">初領適用</Label>
-                  <p className="text-xs text-muted-foreground">是否適用於初次申請</p>
+                  <p className="text-xs text-muted-foreground">
+                    是否適用於初次申請
+                  </p>
                 </div>
                 <Switch
                   checked={formData.is_initial_enabled || false}
-                  onCheckedChange={(checked) => handleChange("is_initial_enabled", checked)}
+                  onCheckedChange={checked =>
+                    handleChange("is_initial_enabled", checked)
+                  }
                   className="data-[state=checked]:bg-blue-500"
                 />
               </div>
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium">續領適用</Label>
-                  <p className="text-xs text-muted-foreground">是否適用於續領申請</p>
+                  <p className="text-xs text-muted-foreground">
+                    是否適用於續領申請
+                  </p>
                 </div>
                 <Switch
                   checked={formData.is_renewal_enabled || false}
-                  onCheckedChange={(checked) => handleChange("is_renewal_enabled", checked)}
+                  onCheckedChange={checked =>
+                    handleChange("is_renewal_enabled", checked)
+                  }
                   className="data-[state=checked]:bg-orange-500"
                 />
               </div>
@@ -530,15 +579,23 @@ export function ScholarshipRuleModal({
           <Label className="text-sm font-medium">規則屬性預覽</Label>
           <div className="flex flex-wrap gap-2">
             {formData.is_hard_rule && (
-              <Badge variant="destructive" className="text-xs">必要規則</Badge>
+              <Badge variant="destructive" className="text-xs">
+                必要規則
+              </Badge>
             )}
             {formData.is_warning && (
-              <Badge variant="outline" className="text-xs">警告規則</Badge>
+              <Badge variant="outline" className="text-xs">
+                警告規則
+              </Badge>
             )}
             {formData.is_active ? (
-              <Badge variant="default" className="text-xs">已啟用</Badge>
+              <Badge variant="default" className="text-xs">
+                已啟用
+              </Badge>
             ) : (
-              <Badge variant="secondary" className="text-xs">已停用</Badge>
+              <Badge variant="secondary" className="text-xs">
+                已停用
+              </Badge>
             )}
             {formData.is_initial_enabled && (
               <Badge className="text-xs bg-blue-500">初領適用</Badge>
@@ -556,11 +613,15 @@ export function ScholarshipRuleModal({
           <X className="h-4 w-4 mr-1" />
           取消
         </Button>
-        <Button onClick={handleSubmit} disabled={isLoading} className="nycu-gradient text-white">
+        <Button
+          onClick={handleSubmit}
+          disabled={isLoading}
+          className="nycu-gradient text-white"
+        >
           <Save className="h-4 w-4 mr-1" />
           {isLoading ? "處理中..." : rule ? "更新規則" : "建立規則"}
         </Button>
       </div>
     </Modal>
-  )
+  );
 }

@@ -68,7 +68,7 @@ class TestEmailManagementService:
                 recipient_email="student1@university.edu",
                 subject="Application Confirmation",
                 body="Your application has been received",
-                status=EmailStatus.SENT,
+                status=EmailStatus.sent,
                 category=EmailCategory.APPLICATION_CONFIRMATION,
                 sent_at=now - timedelta(hours=1),
                 created_at=now - timedelta(hours=2),
@@ -79,7 +79,7 @@ class TestEmailManagementService:
                 recipient_email="student2@university.edu",
                 subject="Review Required",
                 body="Your application needs review",
-                status=EmailStatus.PENDING,
+                status=EmailStatus.pending,
                 category=EmailCategory.REVIEW_NOTIFICATION,
                 created_at=now - timedelta(hours=3),
                 updated_at=now - timedelta(hours=3),
@@ -89,7 +89,7 @@ class TestEmailManagementService:
                 recipient_email="student3@university.edu",
                 subject="Application Failed",
                 body="Email delivery failed",
-                status=EmailStatus.FAILED,
+                status=EmailStatus.failed,
                 category=EmailCategory.APPLICATION_CONFIRMATION,
                 error_message="SMTP timeout",
                 created_at=now - timedelta(hours=4),
@@ -144,7 +144,7 @@ class TestEmailManagementService:
     async def test_get_email_history_with_filters(self, email_service, mock_db_session, admin_user):
         """Test email history retrieval with various filters"""
         # Arrange
-        filtered_emails = [Mock(id=1, status=EmailStatus.SENT)]
+        filtered_emails = [Mock(id=1, status=EmailStatus.sent)]
         mock_query_result = Mock()
         mock_query_result.scalars.return_value.all.return_value = filtered_emails
         mock_db_session.execute.return_value = mock_query_result
@@ -158,7 +158,7 @@ class TestEmailManagementService:
             db=mock_db_session,
             user=admin_user,
             email_category=EmailCategory.APPLICATION_CONFIRMATION,
-            status=EmailStatus.SENT,
+            status=EmailStatus.sent,
             recipient_email="test@university.edu",
         )
 
@@ -218,7 +218,7 @@ class TestEmailManagementService:
         """Test that admin can access all scheduled emails"""
         # Arrange
         scheduled_emails = [
-            Mock(id=1, status=ScheduleStatus.PENDING),
+            Mock(id=1, status=ScheduleStatus.pending),
             Mock(id=2, status=ScheduleStatus.SCHEDULED),
         ]
         mock_query_result = Mock()
@@ -308,7 +308,7 @@ class TestEmailManagementService:
         await email_service.cancel_scheduled_email(db=mock_db_session, user=admin_user, email_id=email_id)
 
         # Assert
-        assert mock_email.status == ScheduleStatus.CANCELLED
+        assert mock_email.status == ScheduleStatus.cancelled
         mock_db_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -329,7 +329,7 @@ class TestEmailManagementService:
         """Test cancellation of already sent email"""
         # Arrange
         email_id = 1
-        mock_email = Mock(id=email_id, status=ScheduleStatus.SENT, created_by=admin_user.id)
+        mock_email = Mock(id=email_id, status=ScheduleStatus.sent, created_by=admin_user.id)
 
         mock_query_result = Mock()
         mock_query_result.scalar_one_or_none.return_value = mock_email

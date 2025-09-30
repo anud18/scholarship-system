@@ -266,19 +266,13 @@ async def seed_professor_student_relationships(session: AsyncSession):
     print("🔗 Creating professor-student relationships...")
 
     # Get professor and student IDs
-    professor_result = await session.execute(
-        text("SELECT id FROM users WHERE nycu_id = 'professor'")
-    )
+    professor_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'professor'"))
     professor_id = professor_result.scalar()
 
-    student_phd_result = await session.execute(
-        text("SELECT id FROM users WHERE nycu_id = 'stu_phd'")
-    )
+    student_phd_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stu_phd'"))
     student_phd_id = student_phd_result.scalar()
 
-    student_under_result = await session.execute(
-        text("SELECT id FROM users WHERE nycu_id = 'stu_under'")
-    )
+    student_under_result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'stu_under'"))
     student_under_id = student_under_result.scalar()
 
     if not all([professor_id, student_phd_id, student_under_id]):
@@ -298,7 +292,7 @@ async def seed_professor_student_relationships(session: AsyncSession):
             "can_view_applications": True,
             "can_upload_documents": True,
             "can_review_applications": True,
-            "notes": "PhD advisor relationship"
+            "notes": "PhD advisor relationship",
         },
         {
             "professor_id": professor_id,
@@ -311,13 +305,14 @@ async def seed_professor_student_relationships(session: AsyncSession):
             "can_view_applications": True,
             "can_upload_documents": False,
             "can_review_applications": False,
-            "notes": "Undergraduate project supervisor"
-        }
+            "notes": "Undergraduate project supervisor",
+        },
     ]
 
     for rel_data in relationships:
         await session.execute(
-            text("""
+            text(
+                """
                 INSERT INTO professor_student_relationships
                 (professor_id, student_id, relationship_type, department, academic_year,
                  semester, is_active, can_view_applications, can_upload_documents,
@@ -332,8 +327,9 @@ async def seed_professor_student_relationships(session: AsyncSession):
                     can_upload_documents = EXCLUDED.can_upload_documents,
                     can_review_applications = EXCLUDED.can_review_applications,
                     updated_at = NOW()
-            """),
-            rel_data
+            """
+            ),
+            rel_data,
         )
 
     await session.commit()
@@ -362,8 +358,6 @@ async def seed_admin_user(session: AsyncSession):
             user_type = 'employee',
             status = '在職',
             updated_at = NOW()
->>>>>>> Stashed changes
->>>>>>> Stashed changes
     """
         ),
         {"nycu_id": admin_email.split("@")[0], "name": "System Administrator", "email": admin_email},
@@ -566,6 +560,26 @@ async def seed_development():
             # 4. Application fields
             await seed_application_fields(session)
 
+            # 5. Scholarship configurations, rules, sub-types, and email templates
+            print("\n🎓 Initializing scholarship configurations, rules, and templates...")
+            from app.db.seed_scholarship_configs import (
+                seed_email_templates,
+                seed_scholarship_configurations,
+                seed_scholarship_rules,
+                seed_scholarship_sub_type_configs,
+            )
+
+            await seed_scholarship_configurations(session)
+            await seed_scholarship_rules(session)
+            await seed_scholarship_sub_type_configs(session)
+            await seed_email_templates(session)
+
+            # 6. System settings initialization
+            print("\n⚙️ Initializing system settings...")
+            from app.db.seed_system_settings import seed_system_settings as _seed_system_settings
+
+            await _seed_system_settings(session, system_user_id=1)
+
             print("\n📋 Test User Accounts:")
             print("- Admin: admin@nycu.edu.tw")
             print("- Super Admin: super_admin@nycu.edu.tw")
@@ -610,6 +624,12 @@ async def seed_production():
 
             # Production: Only admin user
             await seed_admin_user(session)
+
+            # System settings initialization
+            print("\n⚙️ Initializing system settings...")
+            from app.db.seed_system_settings import seed_system_settings as _seed_system_settings_prod
+
+            await _seed_system_settings_prod(session, system_user_id=1)
 
             print("\n⚠️ Production mode: Only admin user configured")
             print("  Please set initial password through admin panel")

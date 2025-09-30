@@ -145,7 +145,7 @@ async def get_all_users(
     # Apply role filters
     if roles:
         # Handle multiple roles (comma-separated)
-        role_list = [r.strip() for r in roles.split(",") if r.strip()]
+        role_list = [r.strip().lower() for r in roles.split(",") if r.strip()]
         try:
             user_roles = [UserRole(r) for r in role_list]
             stmt = stmt.where(User.role.in_(user_roles))
@@ -154,7 +154,7 @@ async def get_all_users(
     elif role:
         # Handle single role (backward compatibility)
         try:
-            user_role = UserRole(role)
+            user_role = UserRole(role.lower())
             stmt = stmt.where(User.role == user_role)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid role: {role}")

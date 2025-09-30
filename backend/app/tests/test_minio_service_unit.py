@@ -15,6 +15,7 @@ BASE_CONFIG = dict(
     minio_secret_key="",
     minio_secure=False,
     minio_bucket="test-bucket",
+    roster_minio_bucket="test-roster-bucket",
     testing=True,
 )
 
@@ -40,10 +41,16 @@ def _build_upload_file(filename: str, content: bytes, content_type: str = "appli
 
 @pytest.fixture
 def minio_service(monkeypatch):
-    service = MinIOService.__new__(MinIOService)
-    service.client = MagicMock()
-    service.bucket_name = BASE_CONFIG["minio_bucket"]
+    # Mock the settings first
     monkeypatch.setattr("app.services.minio_service.settings", SimpleNamespace(**BASE_CONFIG))
+
+    # Create service instance
+    service = MinIOService()
+
+    # Since client is now a property, we need to mock it differently
+    mock_client = MagicMock()
+    service._client = mock_client
+
     return service
 
 
@@ -211,8 +218,18 @@ def test_minio_service_bucket_creation(monkeypatch):
     monkeypatch.setattr("app.services.minio_service.Minio", FakeMinio)
 
     service = MinIOService()
-    assert service.bucket_name == BASE_CONFIG["minio_bucket"]
-    assert events == ["exists", f"create:{BASE_CONFIG['minio_bucket']}"]
+    # Trigger client initialization which will call bucket creation
+    _ = service.client
+    assert service.default_bucket == BASE_CONFIG["minio_bucket"]
+    assert service.roster_bucket == BASE_CONFIG["roster_minio_bucket"]
+    # Should check existence for both buckets and create them
+    expected_events = [
+        "exists",
+        f"create:{BASE_CONFIG['roster_minio_bucket']}",
+        "exists",
+        f"create:{BASE_CONFIG['minio_bucket']}",
+    ]
+    assert events == expected_events
 
 
 def test_minio_service_bucket_exists(monkeypatch):
@@ -230,7 +247,9 @@ def test_minio_service_bucket_exists(monkeypatch):
     monkeypatch.setattr("app.services.minio_service.Minio", FakeMinio)
 
     service = MinIOService()
-    assert service.bucket_name == BASE_CONFIG["minio_bucket"]
+    # Trigger client initialization
+    _ = service.client
+    assert service.default_bucket == BASE_CONFIG["minio_bucket"]
 
 
 def test_minio_service_bucket_error(monkeypatch):

@@ -1,20 +1,34 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { User, Shield, Crown, GraduationCap, BookOpen, AlertTriangle, Users } from "lucide-react";
+import {
+  User,
+  Shield,
+  Crown,
+  GraduationCap,
+  BookOpen,
+  AlertTriangle,
+  Users,
+} from "lucide-react";
 import { apiClient as api } from "@/lib/api";
 
 interface MockUser {
-  nycu_id: string;  // 改為 nycu_id
+  nycu_id: string; // 改為 nycu_id
   email: string;
-  name: string;  // 改為 name
+  name: string; // 改為 name
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
@@ -24,9 +38,9 @@ interface MockUser {
 }
 
 interface MockUserResponse {
-  nycu_id: string;  // 改為 nycu_id
+  nycu_id: string; // 改為 nycu_id
   email: string;
-  name: string;  // 改為 name
+  name: string; // 改為 name
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
@@ -35,9 +49,9 @@ interface MockUserResponse {
 }
 
 interface DeveloperProfile {
-  nycu_id: string;  // 改為 nycu_id
+  nycu_id: string; // 改為 nycu_id
   email: string;
-  name: string;  // 改為 name
+  name: string; // 改為 name
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
@@ -51,7 +65,7 @@ const roleIcons = {
   professor: <BookOpen className="h-4 w-4" />,
   college: <User className="h-4 w-4" />,
   admin: <Shield className="h-4 w-4" />,
-  super_admin: <Crown className="h-4 w-4" />
+  super_admin: <Crown className="h-4 w-4" />,
 };
 
 const roleColors = {
@@ -59,12 +73,14 @@ const roleColors = {
   professor: "bg-green-100 text-green-800",
   college: "bg-purple-100 text-purple-800",
   admin: "bg-orange-100 text-orange-800",
-  super_admin: "bg-red-100 text-red-800"
+  super_admin: "bg-red-100 text-red-800",
 };
 
 export function MockSSOLogin() {
   const [mockUsers, setMockUsers] = useState<MockUser[]>([]);
-  const [developerProfiles, setDeveloperProfiles] = useState<DeveloperProfile[]>([]);
+  const [developerProfiles, setDeveloperProfiles] = useState<
+    DeveloperProfile[]
+  >([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState<string | null>(null);
@@ -94,7 +110,9 @@ export function MockSSOLogin() {
 
   const fetchDeveloperProfiles = async () => {
     try {
-      const developersResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/dev-profiles/developers`);
+      const developersResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/dev-profiles/developers`
+      );
       if (!developersResponse.ok) return;
 
       const developersData = await developersResponse.json();
@@ -104,19 +122,24 @@ export function MockSSOLogin() {
 
       for (const developerId of developersData.data) {
         try {
-          const profilesResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/dev-profiles/${developerId}`);
+          const profilesResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/dev-profiles/${developerId}`
+          );
           if (profilesResponse.ok) {
             const profilesData = await profilesResponse.json();
             if (profilesData.success) {
               const profiles = profilesData.data.map((profile: any) => ({
                 ...profile,
-                developer_id: developerId
+                developer_id: developerId,
               }));
               allProfiles.push(...profiles);
             }
           }
         } catch (err) {
-          console.warn(`Failed to fetch profiles for developer ${developerId}:`, err);
+          console.warn(
+            `Failed to fetch profiles for developer ${developerId}:`,
+            err
+          );
         }
       }
 
@@ -151,10 +174,11 @@ export function MockSSOLogin() {
     }
   };
 
-
-
   const renderUserCard = (user: MockUser | DeveloperProfile) => (
-    <Card key={user.nycu_id} className="border border-gray-200 hover:border-gray-300 transition-colors">
+    <Card
+      key={user.nycu_id}
+      className="border border-gray-200 hover:border-gray-300 transition-colors"
+    >
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -167,15 +191,14 @@ export function MockSSOLogin() {
           <p className="text-sm font-medium">
             {user.raw_data?.chinese_name && user.raw_data?.english_name
               ? `${user.raw_data.chinese_name} (${user.raw_data.english_name})`
-              : user.name
-            }
+              : user.name}
           </p>
           <p className="text-xs text-gray-500">{user.email}</p>
         </div>
       </CardHeader>
 
       <CardContent className="pt-0">
-        {'description' in user && (
+        {"description" in user && (
           <p className="text-xs text-gray-600 mb-3">{user.description}</p>
         )}
         <Button
@@ -184,7 +207,9 @@ export function MockSSOLogin() {
           className="w-full"
           size="sm"
         >
-          {loginLoading === user.nycu_id ? "Logging in..." : "Login as this user"}
+          {loginLoading === user.nycu_id
+            ? "Logging in..."
+            : "Login as this user"}
         </Button>
       </CardContent>
     </Card>
@@ -199,11 +224,13 @@ export function MockSSOLogin() {
       <CardHeader>
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-5 w-5 text-amber-500" />
-          <CardTitle className="text-lg">Mock SSO Login (Development Only)</CardTitle>
+          <CardTitle className="text-lg">
+            Mock SSO Login (Development Only)
+          </CardTitle>
         </div>
         <CardDescription>
-          Quick login as predefined test users for development and testing purposes.
-          This feature is automatically disabled in production.
+          Quick login as predefined test users for development and testing
+          purposes. This feature is automatically disabled in production.
         </CardDescription>
       </CardHeader>
 
@@ -236,7 +263,10 @@ export function MockSSOLogin() {
               <Users className="h-4 w-4" />
               Mock Users ({mockUsers.length})
             </TabsTrigger>
-            <TabsTrigger value="dev-profiles" className="flex items-center gap-2">
+            <TabsTrigger
+              value="dev-profiles"
+              className="flex items-center gap-2"
+            >
               <GraduationCap className="h-4 w-4" />
               Developer Profiles ({developerProfiles.length})
             </TabsTrigger>
@@ -249,7 +279,10 @@ export function MockSSOLogin() {
 
             {mockUsers.length === 0 && !isLoading && (
               <div className="text-center py-8 text-gray-500">
-                <p>No mock users available. Please ensure the database is initialized with test users.</p>
+                <p>
+                  No mock users available. Please ensure the database is
+                  initialized with test users.
+                </p>
               </div>
             )}
           </TabsContent>
@@ -261,7 +294,10 @@ export function MockSSOLogin() {
 
             {developerProfiles.length === 0 && (
               <div className="text-center py-8 text-gray-500">
-                <p>No developer profiles found. Use the Developer Profile Manager to create them.</p>
+                <p>
+                  No developer profiles found. Use the Developer Profile Manager
+                  to create them.
+                </p>
               </div>
             )}
           </TabsContent>
@@ -270,13 +306,26 @@ export function MockSSOLogin() {
         <Separator />
 
         <div className="text-xs text-gray-500 space-y-1">
-          <p><strong>Development Notes:</strong></p>
+          <p>
+            <strong>Development Notes:</strong>
+          </p>
           <ul className="list-disc list-inside space-y-1 ml-2">
-            <li>All test users have the password: <code className="bg-gray-100 px-1 rounded">dev123456</code></li>
-            <li>Developer profiles are created using the Developer Profile Manager</li>
+            <li>
+              All test users have the password:{" "}
+              <code className="bg-gray-100 px-1 rounded">dev123456</code>
+            </li>
+            <li>
+              Developer profiles are created using the Developer Profile Manager
+            </li>
             <li>This interface is only available in development environment</li>
-            <li>Tokens generated are real JWT tokens that work with all protected endpoints</li>
-            <li>Click any user card above to login instantly without typing credentials</li>
+            <li>
+              Tokens generated are real JWT tokens that work with all protected
+              endpoints
+            </li>
+            <li>
+              Click any user card above to login instantly without typing
+              credentials
+            </li>
           </ul>
         </div>
       </CardContent>

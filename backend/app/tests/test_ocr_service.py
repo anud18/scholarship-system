@@ -5,7 +5,7 @@ Test suite for OCR Service using Google Gemini API
 import io
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image

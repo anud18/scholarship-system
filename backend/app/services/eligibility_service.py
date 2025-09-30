@@ -472,19 +472,19 @@ class EligibilityService:
 
         # Check for any existing application
         active_statuses = [
-            ApplicationStatus.DRAFT.value,
-            ApplicationStatus.SUBMITTED.value,
-            ApplicationStatus.UNDER_REVIEW.value,
-            ApplicationStatus.PENDING_RECOMMENDATION.value,
-            ApplicationStatus.RECOMMENDED.value,
-            ApplicationStatus.APPROVED.value,
-            ApplicationStatus.REJECTED.value,
-            ApplicationStatus.RETURNED.value,
-            ApplicationStatus.CANCELLED.value,
-            ApplicationStatus.RENEWAL_PENDING.value,
-            ApplicationStatus.RENEWAL_REVIEWED.value,
-            ApplicationStatus.PROFESSOR_REVIEW.value,
-            ApplicationStatus.WITHDRAWN.value,
+            ApplicationStatus.draft.value,
+            ApplicationStatus.submitted.value,
+            ApplicationStatus.under_review.value,
+            ApplicationStatus.pending_recommendation.value,
+            ApplicationStatus.recommended.value,
+            ApplicationStatus.approved.value,
+            ApplicationStatus.rejected.value,
+            ApplicationStatus.returned.value,
+            ApplicationStatus.cancelled.value,
+            ApplicationStatus.renewal_pending.value,
+            ApplicationStatus.renewal_reviewed.value,
+            ApplicationStatus.professor_review.value,
+            ApplicationStatus.withdrawn.value,
         ]
 
         # Handle semester comparison - use enum name for PostgreSQL compatibility
@@ -522,25 +522,25 @@ class EligibilityService:
 
         # Determine if user can apply/edit
         can_apply = status in [
-            ApplicationStatus.DRAFT.value,
-            ApplicationStatus.RETURNED.value,
+            ApplicationStatus.draft.value,
+            ApplicationStatus.returned.value,
         ]
 
         # Determine display status
         status_display_mapping = {
-            ApplicationStatus.DRAFT.value: "草稿",
-            ApplicationStatus.SUBMITTED.value: "已申請",
-            ApplicationStatus.UNDER_REVIEW.value: "審核中",
-            ApplicationStatus.PENDING_RECOMMENDATION.value: "待推薦",
-            ApplicationStatus.RECOMMENDED.value: "已推薦",
-            ApplicationStatus.APPROVED.value: "已核准",
-            ApplicationStatus.REJECTED.value: "已拒絕",
-            ApplicationStatus.RETURNED.value: "已退回",
-            ApplicationStatus.CANCELLED.value: "已取消",
-            ApplicationStatus.RENEWAL_PENDING.value: "續領待審",
-            ApplicationStatus.RENEWAL_REVIEWED.value: "續領已審",
-            ApplicationStatus.PROFESSOR_REVIEW.value: "教授審核中",
-            ApplicationStatus.WITHDRAWN.value: "已撤回",
+            ApplicationStatus.draft.value: "草稿",
+            ApplicationStatus.submitted.value: "已申請",
+            ApplicationStatus.under_review.value: "審核中",
+            ApplicationStatus.pending_recommendation.value: "待推薦",
+            ApplicationStatus.recommended.value: "已推薦",
+            ApplicationStatus.approved.value: "已核准",
+            ApplicationStatus.rejected.value: "已拒絕",
+            ApplicationStatus.returned.value: "已退回",
+            ApplicationStatus.cancelled.value: "已取消",
+            ApplicationStatus.renewal_pending.value: "續領待審",
+            ApplicationStatus.renewal_reviewed.value: "續領已審",
+            ApplicationStatus.professor_review.value: "教授審核中",
+            ApplicationStatus.withdrawn.value: "已撤回",
         }
 
         status_display = status_display_mapping.get(status, "未知狀態")
@@ -641,15 +641,15 @@ class EligibilityService:
         # Get active applications (not cancelled, withdrawn, or rejected)
         # DRAFT status is excluded to allow students to see scholarships they have drafts for
         active_statuses = [
-            ApplicationStatus.SUBMITTED.value,
-            ApplicationStatus.UNDER_REVIEW.value,
-            ApplicationStatus.PENDING_RECOMMENDATION.value,
-            ApplicationStatus.RECOMMENDED.value,
-            ApplicationStatus.APPROVED.value,
-            ApplicationStatus.RENEWAL_PENDING.value,
-            ApplicationStatus.RENEWAL_REVIEWED.value,
-            ApplicationStatus.PROFESSOR_REVIEW.value,
-            ApplicationStatus.RETURNED.value,  # Returned applications can still be edited
+            ApplicationStatus.submitted.value,
+            ApplicationStatus.under_review.value,
+            ApplicationStatus.pending_recommendation.value,
+            ApplicationStatus.recommended.value,
+            ApplicationStatus.approved.value,
+            ApplicationStatus.renewal_pending.value,
+            ApplicationStatus.renewal_reviewed.value,
+            ApplicationStatus.professor_review.value,
+            ApplicationStatus.returned.value,  # Returned applications can still be edited
         ]
 
         # Handle semester comparison - use enum name for PostgreSQL compatibility

@@ -221,7 +221,7 @@ class TestApplicationServiceListResponse:
         application.user_id = 1
         application.scholarship_type_id = 1
         application.scholarship_subtype_list = ["type_a"]
-        application.status = ApplicationStatus.DRAFT.value
+        application.status = ApplicationStatus.draft.value
         application.status_name = "草稿"
         application.is_renewal = False
         application.academic_year = 113
@@ -238,7 +238,7 @@ class TestApplicationServiceListResponse:
         response = service._create_application_list_response(application, user, integrated_data)
 
         assert response.app_id == "APP001"
-        assert response.status == ApplicationStatus.DRAFT.value
+        assert response.status == ApplicationStatus.draft.value
 
 
 @pytest.mark.asyncio

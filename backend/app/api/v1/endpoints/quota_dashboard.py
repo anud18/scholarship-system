@@ -65,12 +65,12 @@ async def get_quota_overview(
             base_query = base_query.filter(Application.semester == semester)
 
         total_applications = base_query.count()
-        approved_applications = base_query.filter(Application.status == ApplicationStatus.APPROVED.value).count()
+        approved_applications = base_query.filter(Application.status == ApplicationStatus.approved.value).count()
         pending_applications = base_query.filter(
             Application.status.in_(
                 [
-                    ApplicationStatus.SUBMITTED.value,
-                    ApplicationStatus.UNDER_REVIEW.value,
+                    ApplicationStatus.submitted.value,
+                    ApplicationStatus.under_review.value,
                 ]
             )
         ).count()
@@ -182,7 +182,7 @@ async def get_detailed_quota_status(
             for app in applications
             if app.review_deadline
             and app.review_deadline < now
-            and app.status in [ApplicationStatus.SUBMITTED.value, ApplicationStatus.UNDER_REVIEW.value]
+            and app.status in [ApplicationStatus.submitted.value, ApplicationStatus.under_review.value]
         ]
 
         # Get quota information
@@ -259,13 +259,13 @@ async def get_quota_trends(
 
                 monthly_data[month_key]["total"] += 1
 
-                if app.status == ApplicationStatus.APPROVED.value:
+                if app.status == ApplicationStatus.approved.value:
                     monthly_data[month_key]["approved"] += 1
-                elif app.status == ApplicationStatus.REJECTED.value:
+                elif app.status == ApplicationStatus.rejected.value:
                     monthly_data[month_key]["rejected"] += 1
                 elif app.status in [
-                    ApplicationStatus.SUBMITTED.value,
-                    ApplicationStatus.UNDER_REVIEW.value,
+                    ApplicationStatus.submitted.value,
+                    ApplicationStatus.under_review.value,
                 ]:
                     monthly_data[month_key]["pending"] += 1
 
@@ -454,8 +454,8 @@ async def get_quota_alerts(
                     Application.review_deadline < now,
                     Application.status.in_(
                         [
-                            ApplicationStatus.SUBMITTED.value,
-                            ApplicationStatus.UNDER_REVIEW.value,
+                            ApplicationStatus.submitted.value,
+                            ApplicationStatus.under_review.value,
                         ]
                     ),
                 )

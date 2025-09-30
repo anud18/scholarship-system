@@ -265,7 +265,7 @@ class EmailManagementService:
             .where(
                 and_(
                     ScheduledEmail.scheduled_for <= now,
-                    ScheduledEmail.status == ScheduleStatus.PENDING,
+                    ScheduledEmail.status == ScheduleStatus.pending,
                     or_(
                         ScheduledEmail.requires_approval.is_(False),
                         and_(
@@ -311,7 +311,7 @@ class EmailManagementService:
         if not scheduled_email:
             raise ValueError(f"Scheduled email with ID {email_id} not found")
 
-        if scheduled_email.status != ScheduleStatus.PENDING:
+        if scheduled_email.status != ScheduleStatus.pending:
             raise ValueError(f"Cannot approve email with status {scheduled_email.status}")
 
         if not scheduled_email.requires_approval:
@@ -348,7 +348,7 @@ class EmailManagementService:
         if not scheduled_email:
             raise ValueError(f"Scheduled email with ID {email_id} not found")
 
-        if scheduled_email.status != ScheduleStatus.PENDING:
+        if scheduled_email.status != ScheduleStatus.pending:
             raise ValueError(f"Cannot cancel email with status {scheduled_email.status}")
 
         scheduled_email.cancel()
@@ -387,7 +387,7 @@ class EmailManagementService:
         if not scheduled_email:
             raise ValueError(f"Scheduled email with ID {email_id} not found")
 
-        if scheduled_email.status != ScheduleStatus.PENDING:
+        if scheduled_email.status != ScheduleStatus.pending:
             raise ValueError(f"Cannot update email with status {scheduled_email.status}")
 
         # Update fields if provided

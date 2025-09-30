@@ -1,28 +1,38 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Modal } from "@/components/ui/modal"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Copy, X } from "lucide-react"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ScholarshipRule, ScholarshipType } from "@/lib/api"
+import { useState } from "react";
+import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Copy, X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScholarshipRule, ScholarshipType } from "@/lib/api";
 
 interface CopyRulesModalProps {
-  isOpen: boolean
-  onClose: () => void
-  rules: ScholarshipRule[]
-  scholarshipTypes: ScholarshipType[]
-  currentScholarshipType: ScholarshipType
-  currentYear: number | null
-  currentSemester: string | null
-  availableYears: number[]
-  onCopy: (targetYear: number, targetSemester?: string, overwriteExisting?: boolean) => Promise<void>
-  isBulkMode?: boolean
+  isOpen: boolean;
+  onClose: () => void;
+  rules: ScholarshipRule[];
+  scholarshipTypes: ScholarshipType[];
+  currentScholarshipType: ScholarshipType;
+  currentYear: number | null;
+  currentSemester: string | null;
+  availableYears: number[];
+  onCopy: (
+    targetYear: number,
+    targetSemester?: string,
+    overwriteExisting?: boolean
+  ) => Promise<void>;
+  isBulkMode?: boolean;
 }
 
 export function CopyRulesModal({
@@ -35,57 +45,60 @@ export function CopyRulesModal({
   currentSemester,
   availableYears,
   onCopy,
-  isBulkMode = false
+  isBulkMode = false,
 }: CopyRulesModalProps) {
-  const [targetYear, setTargetYear] = useState<number | null>(null)
-  const [customYear, setCustomYear] = useState<string>("")
-  const [targetSemester, setTargetSemester] = useState<string | null>(null)
-  const [yearInputMode, setYearInputMode] = useState<"existing" | "custom">("existing")
-  const [overwriteExisting, setOverwriteExisting] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [targetYear, setTargetYear] = useState<number | null>(null);
+  const [customYear, setCustomYear] = useState<string>("");
+  const [targetSemester, setTargetSemester] = useState<string | null>(null);
+  const [yearInputMode, setYearInputMode] = useState<"existing" | "custom">(
+    "existing"
+  );
+  const [overwriteExisting, setOverwriteExisting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleCopy = async () => {
-    const finalYear = yearInputMode === "custom" ? parseInt(customYear) : targetYear
+    const finalYear =
+      yearInputMode === "custom" ? parseInt(customYear) : targetYear;
     if (!finalYear || isNaN(finalYear)) {
-      setError('請選擇或輸入有效的學年')
-      return
+      setError("請選擇或輸入有效的學年");
+      return;
     }
 
-    setIsLoading(true)
-    setError(null) // Clear previous errors
+    setIsLoading(true);
+    setError(null); // Clear previous errors
 
     try {
-      await onCopy(finalYear, targetSemester || undefined, overwriteExisting)
-      onClose()
+      await onCopy(finalYear, targetSemester || undefined, overwriteExisting);
+      onClose();
     } catch (error: any) {
       // Extract meaningful error message
-      let errorMessage = '複製失敗，請稍後再試'
+      let errorMessage = "複製失敗，請稍後再試";
 
       if (error?.message) {
-        errorMessage = error.message
-      } else if (typeof error === 'string') {
-        errorMessage = error
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
       } else if (error?.response?.data?.message) {
-        errorMessage = error.response.data.message
+        errorMessage = error.response.data.message;
       }
 
-      setError(errorMessage)
-      console.error('複製失敗:', error)
+      setError(errorMessage);
+      console.error("複製失敗:", error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleClose = () => {
-    setTargetYear(null)
-    setCustomYear("")
-    setTargetSemester(null)
-    setYearInputMode("existing")
-    setOverwriteExisting(false)
-    setError(null)
-    onClose()
-  }
+    setTargetYear(null);
+    setCustomYear("");
+    setTargetSemester(null);
+    setYearInputMode("existing");
+    setOverwriteExisting(false);
+    setError(null);
+    onClose();
+  };
 
   return (
     <Modal
@@ -107,11 +120,14 @@ export function CopyRulesModal({
               <span className="text-muted-foreground">學年度：</span>
               {currentYear || "未指定"}學年
             </div>
-            {currentScholarshipType.application_cycle === 'semester' && (
+            {currentScholarshipType.application_cycle === "semester" && (
               <div>
                 <span className="text-muted-foreground">學期：</span>
-                {currentSemester === 'first' ? '第一學期' :
-                 currentSemester === 'second' ? '第二學期' : '未指定'}
+                {currentSemester === "first"
+                  ? "第一學期"
+                  : currentSemester === "second"
+                    ? "第二學期"
+                    : "未指定"}
               </div>
             )}
             <div>
@@ -126,11 +142,13 @@ export function CopyRulesModal({
           <Card className="p-4">
             <h4 className="font-semibold mb-3">要複製的規則</h4>
             <div className="space-y-2">
-              {rules.map((rule) => (
+              {rules.map(rule => (
                 <div key={rule.id} className="text-sm p-2 bg-muted/30 rounded">
                   <div className="font-medium">{rule.rule_name}</div>
                   {rule.tag && (
-                    <div className="text-xs text-muted-foreground">標籤: {rule.tag}</div>
+                    <div className="text-xs text-muted-foreground">
+                      標籤: {rule.tag}
+                    </div>
                   )}
                 </div>
               ))}
@@ -143,7 +161,12 @@ export function CopyRulesModal({
           <h4 className="font-semibold">複製到</h4>
 
           {/* 學年度選擇方式 */}
-          <Tabs value={yearInputMode} onValueChange={(value) => setYearInputMode(value as "existing" | "custom")}>
+          <Tabs
+            value={yearInputMode}
+            onValueChange={value =>
+              setYearInputMode(value as "existing" | "custom")
+            }
+          >
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="existing">現有學年</TabsTrigger>
               <TabsTrigger value="custom">自定義學年</TabsTrigger>
@@ -154,13 +177,13 @@ export function CopyRulesModal({
                 <Label>目標學年度 *</Label>
                 <Select
                   value={targetYear?.toString() || ""}
-                  onValueChange={(value) => setTargetYear(parseInt(value))}
+                  onValueChange={value => setTargetYear(parseInt(value))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="選擇現有學年度" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableYears.map((year) => (
+                    {availableYears.map(year => (
                       <SelectItem key={year} value={year.toString()}>
                         {year}學年
                       </SelectItem>
@@ -177,7 +200,7 @@ export function CopyRulesModal({
                   type="number"
                   placeholder="例如：114"
                   value={customYear}
-                  onChange={(e) => setCustomYear(e.target.value)}
+                  onChange={e => setCustomYear(e.target.value)}
                   min="100"
                   max="200"
                 />
@@ -189,7 +212,7 @@ export function CopyRulesModal({
           </Tabs>
 
           {/* 學期選擇 */}
-          {currentScholarshipType.application_cycle === 'semester' && (
+          {currentScholarshipType.application_cycle === "semester" && (
             <div className="space-y-2">
               <Label>目標學期</Label>
               <Select
@@ -212,7 +235,9 @@ export function CopyRulesModal({
             <Checkbox
               id="overwrite-existing"
               checked={overwriteExisting}
-              onCheckedChange={(checked) => setOverwriteExisting(checked === true)}
+              onCheckedChange={checked =>
+                setOverwriteExisting(checked === true)
+              }
             />
             <Label htmlFor="overwrite-existing" className="text-sm">
               覆蓋已存在的重複規則
@@ -222,8 +247,12 @@ export function CopyRulesModal({
 
         {/* 提示說明 */}
         <div className="text-xs text-muted-foreground bg-blue-50 p-3 rounded-md">
-          <p>• <strong>現有學年</strong>：複製到已存在的學年/學期</p>
-          <p>• <strong>自定義學年</strong>：創建新的學年/學期規則（如 114學年度）</p>
+          <p>
+            • <strong>現有學年</strong>：複製到已存在的學年/學期
+          </p>
+          <p>
+            • <strong>自定義學年</strong>：創建新的學年/學期規則（如 114學年度）
+          </p>
           <p>• 複製規則時會保持原規則的所有設定，僅更改學年度和學期</p>
           <p>• 預設會跳過已存在的重複規則，勾選「覆蓋」選項可強制替換</p>
           <p>• 重複檢查基於：規則名稱、類型、條件欄位、運算子和期望值</p>
@@ -247,8 +276,9 @@ export function CopyRulesModal({
         <Button
           onClick={handleCopy}
           disabled={
-            (yearInputMode === "existing" ? !targetYear : !customYear || isNaN(parseInt(customYear))) ||
-            isLoading
+            (yearInputMode === "existing"
+              ? !targetYear
+              : !customYear || isNaN(parseInt(customYear))) || isLoading
           }
           className="nycu-gradient text-white"
         >
@@ -257,5 +287,5 @@ export function CopyRulesModal({
         </Button>
       </div>
     </Modal>
-  )
+  );
 }

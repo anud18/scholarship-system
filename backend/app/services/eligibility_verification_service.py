@@ -126,9 +126,9 @@ class EligibilityVerificationService:
                     Application.semester == semester,
                     Application.status.notin_(
                         [
-                            ApplicationStatus.WITHDRAWN.value,
-                            ApplicationStatus.REJECTED.value,
-                            ApplicationStatus.CANCELLED.value,
+                            ApplicationStatus.withdrawn.value,
+                            ApplicationStatus.rejected.value,
+                            ApplicationStatus.cancelled.value,
                         ]
                     ),
                 )
@@ -383,7 +383,7 @@ class EligibilityVerificationService:
                 and_(
                     Application.student_id == student_id,
                     Application.scholarship_type_id == scholarship_type_id,
-                    Application.status == ApplicationStatus.APPROVED.value,
+                    Application.status == ApplicationStatus.approved.value,
                 )
             )
             .order_by(Application.created_at.desc())

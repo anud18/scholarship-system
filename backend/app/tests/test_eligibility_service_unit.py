@@ -311,7 +311,7 @@ async def test_get_application_status(monkeypatch):
 
     submitted_app = SimpleNamespace(
         id=99,
-        status=ApplicationStatus.SUBMITTED.value,
+        status=ApplicationStatus.submitted.value,
         scholarship_type_id=config.scholarship_type_id,
         academic_year=config.academic_year,
     )
@@ -330,7 +330,7 @@ async def test_get_application_status(monkeypatch):
 async def test_check_existing_applications(monkeypatch):
     config = build_config()
     session = StubSession(
-        [StubResult(scalar=None), StubResult(scalar=SimpleNamespace(status=ApplicationStatus.SUBMITTED.value))]
+        [StubResult(scalar=None), StubResult(scalar=SimpleNamespace(status=ApplicationStatus.submitted.value))]
     )
     service = EligibilityService(db=session)
 

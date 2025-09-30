@@ -202,7 +202,7 @@ class TestApplicationModel:
             "app_id": "APP-2024-000001",
             "user_id": test_user.id,
             "scholarship_type_id": test_scholarship.id,
-            "status": ApplicationStatus.DRAFT.value,
+            "status": ApplicationStatus.draft.value,
             "amount": Decimal("50000"),
             "academic_year": 113,
             "semester": Semester.first,
@@ -220,7 +220,7 @@ class TestApplicationModel:
         # Assert
         assert application.id is not None
         assert application.app_id == "APP-2024-000001"
-        assert application.status == ApplicationStatus.DRAFT.value
+        assert application.status == ApplicationStatus.draft.value
         assert application.amount == Decimal("50000")
         assert application.created_at is not None
 
@@ -234,14 +234,14 @@ class TestApplicationModel:
             app_id=app_id,
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
         )
 
         app2 = Application(
             app_id=app_id,  # Duplicate app_id
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
         )
 
         # Act & Assert
@@ -260,26 +260,26 @@ class TestApplicationModel:
             app_id="APP-2024-STATUS",
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
         )
         db.add(application)
         await db.commit()
 
         # Act & Assert - Test valid transitions
-        application.status = ApplicationStatus.SUBMITTED.value
+        application.status = ApplicationStatus.submitted.value
         application.submitted_at = datetime.now(timezone.utc)
         await db.commit()
 
-        application.status = ApplicationStatus.UNDER_REVIEW.value
+        application.status = ApplicationStatus.under_review.value
         await db.commit()
 
-        application.status = ApplicationStatus.APPROVED.value
+        application.status = ApplicationStatus.approved.value
         application.approved_at = datetime.now(timezone.utc)
         await db.commit()
 
         # Verify final state
         await db.refresh(application)
-        assert application.status == ApplicationStatus.APPROVED.value
+        assert application.status == ApplicationStatus.approved.value
         assert application.submitted_at is not None
         assert application.approved_at is not None
 
@@ -291,7 +291,7 @@ class TestApplicationModel:
             app_id="APP-2024-REL",
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
         )
         db.add(application)
         await db.commit()
@@ -333,7 +333,7 @@ class TestApplicationModel:
             app_id="APP-2024-JSON",
             user_id=test_user.id,
             scholarship_type_id=test_scholarship.id,
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
             student_data=student_data,
             submitted_form_data=form_data,
         )
@@ -466,7 +466,7 @@ class TestScholarshipTypeModel:
                 app_id=f"APP-2024-{i:06d}",
                 user_id=test_user.id,
                 scholarship_type_id=scholarship.id,
-                status=ApplicationStatus.SUBMITTED.value,
+                status=ApplicationStatus.submitted.value,
             )
             db.add(app)
 
@@ -494,7 +494,7 @@ class TestEmailHistoryModel:
             "recipient_email": "student@university.edu",
             "subject": "Application Confirmation",
             "body": "Your application has been received successfully.",
-            "status": EmailStatus.SENT,
+            "status": EmailStatus.sent,
             "category": EmailCategory.APPLICATION_CONFIRMATION,
             "sent_at": datetime.now(timezone.utc),
             "template_data": {"student_name": "John Doe", "app_id": "APP-2024-000001"},
@@ -509,7 +509,7 @@ class TestEmailHistoryModel:
         # Assert
         assert email.id is not None
         assert email.recipient_email == "student@university.edu"
-        assert email.status == EmailStatus.SENT
+        assert email.status == EmailStatus.sent
         assert email.template_data["student_name"] == "John Doe"
 
     @pytest.mark.asyncio
@@ -520,7 +520,7 @@ class TestEmailHistoryModel:
             recipient_email="test@university.edu",
             subject="Test",
             body="Test body",
-            status=EmailStatus.PENDING,
+            status=EmailStatus.pending,
         )
 
         # Act
@@ -529,14 +529,14 @@ class TestEmailHistoryModel:
         await db.refresh(email)
 
         # Assert
-        assert email.status == EmailStatus.PENDING
+        assert email.status == EmailStatus.pending
 
         # Test status change
-        email.status = EmailStatus.FAILED
+        email.status = EmailStatus.failed
         email.error_message = "SMTP timeout"
         await db.commit()
 
-        assert email.status == EmailStatus.FAILED
+        assert email.status == EmailStatus.failed
         assert email.error_message == "SMTP timeout"
 
 
@@ -553,7 +553,7 @@ class TestNotificationModel:
             "title": "Application Update",
             "message": "Your application status has been updated.",
             "notification_type": NotificationType.APPLICATION_STATUS,
-            "priority": NotificationPriority.NORMAL,
+            "priority": NotificationPriority.normal,
             "is_read": False,
             "data": {"application_id": 1, "new_status": "approved"},
         }

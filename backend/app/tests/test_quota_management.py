@@ -7,8 +7,6 @@ from httpx import AsyncClient
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base_class import Base
-
 from app.core.college_mappings import get_all_colleges, is_valid_college_code
 from app.db.base_class import Base
 from app.models.application import Application, ApplicationStatus
@@ -272,19 +270,19 @@ class TestQuotaUsageCalculation:
             scholarship_type_id=phd_scholarship.id,
             student_id=student_e.id,
             academic_year=113,
-            status=ApplicationStatus.APPROVED,
+            status=ApplicationStatus.approved,
         )
         app2 = Application(
             scholarship_type_id=phd_scholarship.id,
             student_id=student_e.id,
             academic_year=113,
-            status=ApplicationStatus.APPROVED,
+            status=ApplicationStatus.approved,
         )
         app3 = Application(
             scholarship_type_id=phd_scholarship.id,
             student_id=student_c.id,
             academic_year=113,
-            status=ApplicationStatus.APPROVED,
+            status=ApplicationStatus.approved,
         )
         db_session.add_all([app1, app2, app3])
         await db_session.commit()

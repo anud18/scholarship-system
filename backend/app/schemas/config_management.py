@@ -12,6 +12,7 @@ from app.models.system_setting import ConfigCategory, ConfigDataType
 
 class ConfigurationItemSchema(BaseModel):
     """Schema for individual configuration item"""
+
     model_config = ConfigDict(from_attributes=True)
 
     key: str = Field(..., description="Configuration key")
@@ -30,6 +31,7 @@ class ConfigurationItemSchema(BaseModel):
 
 class ConfigurationItemWithDecryptedValueSchema(BaseModel):
     """Schema for configuration item with decrypted value"""
+
     model_config = ConfigDict(from_attributes=True)
 
     key: str
@@ -50,6 +52,7 @@ class ConfigurationItemWithDecryptedValueSchema(BaseModel):
 
 class ConfigurationUpdateSchema(BaseModel):
     """Schema for updating a configuration"""
+
     key: str = Field(..., description="Configuration key")
     value: Any = Field(..., description="New value")
     change_reason: Optional[str] = Field(None, description="Reason for the change")
@@ -57,10 +60,11 @@ class ConfigurationUpdateSchema(BaseModel):
 
 class ConfigurationCreateSchema(BaseModel):
     """Schema for creating a new configuration"""
+
     key: str = Field(..., description="Configuration key")
     value: Any = Field(..., description="Configuration value")
     category: ConfigCategory = Field(..., description="Configuration category")
-    data_type: ConfigDataType = Field(ConfigDataType.STRING, description="Data type")
+    data_type: ConfigDataType = Field(ConfigDataType.string, description="Data type")
     is_sensitive: bool = Field(False, description="Whether the value is sensitive")
     is_readonly: bool = Field(False, description="Whether the configuration is readonly")
     description: Optional[str] = Field(None, description="Description")
@@ -71,6 +75,7 @@ class ConfigurationCreateSchema(BaseModel):
 
 class ConfigurationCategorySchema(BaseModel):
     """Schema for configuration category with all items"""
+
     category: ConfigCategory = Field(..., description="Category name")
     display_name: str = Field(..., description="Human-readable category name")
     description: str = Field(..., description="Category description")
@@ -84,12 +89,14 @@ class ConfigurationCategorySchema(BaseModel):
 
 class ConfigurationBulkUpdateSchema(BaseModel):
     """Schema for bulk configuration updates"""
+
     updates: List[ConfigurationUpdateSchema] = Field(..., description="List of updates")
     change_reason: Optional[str] = Field(None, description="Reason for bulk update")
 
 
 class ConfigurationValidationSchema(BaseModel):
     """Schema for configuration validation request"""
+
     key: str = Field(..., description="Configuration key")
     value: Any = Field(..., description="Value to validate")
     data_type: ConfigDataType = Field(..., description="Expected data type")
@@ -98,6 +105,7 @@ class ConfigurationValidationSchema(BaseModel):
 
 class ConfigurationValidationResultSchema(BaseModel):
     """Schema for configuration validation result"""
+
     is_valid: bool = Field(..., description="Whether the value is valid")
     message: str = Field(..., description="Validation message")
     suggested_value: Optional[str] = Field(None, description="Suggested corrected value")
@@ -105,6 +113,7 @@ class ConfigurationValidationResultSchema(BaseModel):
 
 class ConfigurationAuditLogSchema(BaseModel):
     """Schema for configuration audit log"""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -120,12 +129,14 @@ class ConfigurationAuditLogSchema(BaseModel):
 
 class BankVerificationRequestSchema(BaseModel):
     """Schema for bank account verification request"""
+
     application_id: int = Field(..., description="Application ID to verify")
     force_recheck: bool = Field(False, description="Force re-verification even if cached")
 
 
 class BankFieldComparisonSchema(BaseModel):
     """Schema for individual bank field comparison"""
+
     field_name: str = Field(..., description="Human-readable field name")
     form_value: str = Field(..., description="Value from application form")
     ocr_value: str = Field(..., description="Value extracted from OCR")
@@ -136,35 +147,32 @@ class BankFieldComparisonSchema(BaseModel):
 
 class BankVerificationResultSchema(BaseModel):
     """Schema for bank account verification result"""
+
     success: bool = Field(..., description="Whether verification was successful")
     application_id: int = Field(..., description="Application ID")
     verification_status: str = Field(..., description="Overall verification status")
     overall_match: bool = Field(..., description="Whether all fields match")
     average_confidence: float = Field(..., description="Average confidence score")
     compared_fields: int = Field(..., description="Number of fields compared")
-    comparisons: Dict[str, BankFieldComparisonSchema] = Field(
-        {}, description="Detailed field comparisons"
-    )
+    comparisons: Dict[str, BankFieldComparisonSchema] = Field({}, description="Detailed field comparisons")
     form_data: Dict[str, str] = Field({}, description="Bank data from form")
     ocr_data: Dict[str, Any] = Field({}, description="Bank data from OCR")
-    passbook_document: Optional[Dict[str, str]] = Field(
-        None, description="Information about passbook document"
-    )
+    passbook_document: Optional[Dict[str, str]] = Field(None, description="Information about passbook document")
     recommendations: List[str] = Field([], description="Verification recommendations")
     error: Optional[str] = Field(None, description="Error message if failed")
 
 
 class BankVerificationBatchRequestSchema(BaseModel):
     """Schema for batch bank verification request"""
+
     application_ids: List[int] = Field(..., description="List of application IDs")
     force_recheck: bool = Field(False, description="Force re-verification")
 
 
 class BankVerificationBatchResultSchema(BaseModel):
     """Schema for batch bank verification result"""
-    results: Dict[int, BankVerificationResultSchema] = Field(
-        {}, description="Verification results by application ID"
-    )
+
+    results: Dict[int, BankVerificationResultSchema] = Field({}, description="Verification results by application ID")
     total_processed: int = Field(..., description="Total applications processed")
     successful_verifications: int = Field(..., description="Number of successful verifications")
     failed_verifications: int = Field(..., description="Number of failed verifications")
@@ -173,10 +181,9 @@ class BankVerificationBatchResultSchema(BaseModel):
 
 class ConfigurationExportSchema(BaseModel):
     """Schema for configuration export"""
+
     export_timestamp: datetime = Field(..., description="Export timestamp")
-    categories: List[ConfigurationCategorySchema] = Field(
-        [], description="All configuration categories"
-    )
+    categories: List[ConfigurationCategorySchema] = Field([], description="All configuration categories")
     total_configurations: int = Field(..., description="Total number of configurations")
     sensitive_configurations: int = Field(..., description="Number of sensitive configurations")
     export_notes: Optional[str] = Field(None, description="Export notes")
@@ -184,15 +191,15 @@ class ConfigurationExportSchema(BaseModel):
 
 class ConfigurationImportSchema(BaseModel):
     """Schema for configuration import"""
-    configurations: List[ConfigurationCreateSchema] = Field(
-        [], description="Configurations to import"
-    )
+
+    configurations: List[ConfigurationCreateSchema] = Field([], description="Configurations to import")
     overwrite_existing: bool = Field(False, description="Whether to overwrite existing configs")
     change_reason: Optional[str] = Field(None, description="Reason for import")
 
 
 class ConfigurationImportResultSchema(BaseModel):
     """Schema for configuration import result"""
+
     success: bool = Field(..., description="Whether import was successful")
     imported_count: int = Field(..., description="Number of configurations imported")
     updated_count: int = Field(..., description="Number of configurations updated")
@@ -205,16 +212,16 @@ class ConfigurationImportResultSchema(BaseModel):
 def get_category_display_name(category: ConfigCategory) -> str:
     """Get human-readable category name"""
     display_names = {
-        ConfigCategory.DATABASE: "資料庫設定",
-        ConfigCategory.API_KEYS: "API 金鑰",
-        ConfigCategory.EMAIL: "電子郵件設定",
-        ConfigCategory.OCR: "OCR 設定",
-        ConfigCategory.FILE_STORAGE: "檔案儲存設定",
-        ConfigCategory.SECURITY: "安全性設定",
-        ConfigCategory.FEATURES: "功能開關",
-        ConfigCategory.INTEGRATIONS: "系統整合",
-        ConfigCategory.PERFORMANCE: "效能設定",
-        ConfigCategory.LOGGING: "日誌設定",
+        ConfigCategory.database: "資料庫設定",
+        ConfigCategory.api_keys: "API 金鑰",
+        ConfigCategory.email: "電子郵件設定",
+        ConfigCategory.ocr: "OCR 設定",
+        ConfigCategory.file_storage: "檔案儲存設定",
+        ConfigCategory.security: "安全性設定",
+        ConfigCategory.features: "功能開關",
+        ConfigCategory.integrations: "系統整合",
+        ConfigCategory.performance: "效能設定",
+        ConfigCategory.logging: "日誌設定",
     }
     return display_names.get(category, category.value)
 
@@ -222,16 +229,16 @@ def get_category_display_name(category: ConfigCategory) -> str:
 def get_category_description(category: ConfigCategory) -> str:
     """Get category description"""
     descriptions = {
-        ConfigCategory.DATABASE: "資料庫連接與設定相關選項",
-        ConfigCategory.API_KEYS: "外部服務 API 金鑰與認證資訊",
-        ConfigCategory.EMAIL: "SMTP 伺服器與電子郵件發送設定",
-        ConfigCategory.OCR: "OCR 服務與 Gemini API 設定",
-        ConfigCategory.FILE_STORAGE: "MinIO 與檔案上傳儲存設定",
-        ConfigCategory.SECURITY: "安全性、CORS 與驗證相關設定",
-        ConfigCategory.FEATURES: "系統功能開關與特性設定",
-        ConfigCategory.INTEGRATIONS: "NYCU API 與外部系統整合設定",
-        ConfigCategory.PERFORMANCE: "系統效能與快取設定",
-        ConfigCategory.LOGGING: "日誌記錄與除錯設定",
+        ConfigCategory.database: "資料庫連接與設定相關選項",
+        ConfigCategory.api_keys: "外部服務 API 金鑰與認證資訊",
+        ConfigCategory.email: "SMTP 伺服器與電子郵件發送設定",
+        ConfigCategory.ocr: "OCR 服務與 Gemini API 設定",
+        ConfigCategory.file_storage: "MinIO 與檔案上傳儲存設定",
+        ConfigCategory.security: "安全性、CORS 與驗證相關設定",
+        ConfigCategory.features: "系統功能開關與特性設定",
+        ConfigCategory.integrations: "NYCU API 與外部系統整合設定",
+        ConfigCategory.performance: "系統效能與快取設定",
+        ConfigCategory.logging: "日誌記錄與除錯設定",
     }
     return descriptions.get(category, "系統設定分類")
 

@@ -54,7 +54,7 @@ class TestApplicationRenewal:
 
         # Assert
         assert application.is_renewal is True
-        assert application.status == ApplicationStatus.SUBMITTED.value
+        assert application.status == ApplicationStatus.submitted.value
 
     @pytest.mark.asyncio
     async def test_create_new_application(self, db: AsyncSession, test_user: User, test_scholarship: ScholarshipType):
@@ -93,7 +93,7 @@ class TestApplicationRenewal:
 
         # Assert
         assert application.is_renewal is False
-        assert application.status == ApplicationStatus.SUBMITTED.value
+        assert application.status == ApplicationStatus.submitted.value
 
     @pytest.mark.asyncio
     async def test_update_application_renewal_status(

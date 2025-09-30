@@ -238,3 +238,6 @@ class StudentVerificationError(ScholarshipException):
             error_code="STUDENT_VERIFICATION_ERROR",
             details=details,
         )
+
+
+# FileStorageError is already defined above at line 91

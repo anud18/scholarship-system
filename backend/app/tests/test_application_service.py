@@ -249,7 +249,7 @@ class TestApplicationService:
             mock_final_app = Mock(spec=Application)
             mock_final_app.id = 1
             mock_final_app.app_id = "APP-2024-123456"
-            mock_final_app.status = ApplicationStatus.DRAFT.value
+            mock_final_app.status = ApplicationStatus.draft.value
             mock_execute.return_value.scalar_one.return_value = mock_final_app
 
             result = await service.create_application(
@@ -262,7 +262,7 @@ class TestApplicationService:
             # Verify application was created as draft
             mock_add.assert_called_once()
             added_application = mock_add.call_args[0][0]
-            assert added_application.status == ApplicationStatus.DRAFT.value
+            assert added_application.status == ApplicationStatus.draft.value
             assert added_application.status_name == "草稿"
             assert added_application.submitted_at is None
 
@@ -309,7 +309,7 @@ class TestApplicationService:
             mock_final_app = Mock(spec=Application)
             mock_final_app.id = 1
             mock_final_app.app_id = "APP-2024-123456"
-            mock_final_app.status = ApplicationStatus.SUBMITTED.value
+            mock_final_app.status = ApplicationStatus.submitted.value
             mock_execute.return_value.scalar_one.return_value = mock_final_app
 
             result = await service.create_application(
@@ -322,7 +322,7 @@ class TestApplicationService:
             # Verify application was created as submitted
             mock_add.assert_called_once()
             added_application = mock_add.call_args[0][0]
-            assert added_application.status == ApplicationStatus.SUBMITTED.value
+            assert added_application.status == ApplicationStatus.submitted.value
             assert added_application.status_name == "已提交"
             assert added_application.submitted_at is not None
 
@@ -421,7 +421,7 @@ class TestApplicationService:
                 academic_achievements="Updated achievements",
                 documents=[],
             ),
-            status=ApplicationStatus.DRAFT.value,
+            status=ApplicationStatus.draft.value,
             is_renewal=True,
         )
 
@@ -431,7 +431,7 @@ class TestApplicationService:
             result = await service.update_application(application_id, update_data, mock_user)
 
             assert result == mock_application
-            assert mock_application.status == ApplicationStatus.DRAFT.value
+            assert mock_application.status == ApplicationStatus.draft.value
             assert mock_application.is_renewal
             mock_commit.assert_called_once()
             mock_refresh.assert_called_once()
@@ -476,7 +476,7 @@ class TestApplicationService:
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
         mock_application.user_id = user_id
-        mock_application.status = ApplicationStatus.DRAFT.value
+        mock_application.status = ApplicationStatus.draft.value
         mock_application.submitted_form_data = {}
 
         with patch.object(service.db, "execute") as mock_execute, patch.object(
@@ -503,7 +503,7 @@ class TestApplicationService:
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
         mock_application.user_id = user_id
-        mock_application.status = ApplicationStatus.SUBMITTED.value  # Not draft
+        mock_application.status = ApplicationStatus.submitted.value  # Not draft
 
         with patch.object(service.db, "execute") as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = mock_application
@@ -525,7 +525,7 @@ class TestApplicationService:
         mock_application = Mock(spec=Application)
         mock_application.id = application_id
         mock_application.user_id = other_user_id  # Different user owns this
-        mock_application.status = ApplicationStatus.DRAFT.value
+        mock_application.status = ApplicationStatus.draft.value
 
         with patch.object(service.db, "execute") as mock_execute:
             mock_execute.return_value.scalar_one_or_none.return_value = mock_application

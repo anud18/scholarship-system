@@ -1,4 +1,4 @@
-import React from 'react'
+import React from "react";
 
 export const Button = ({ children, onClick, variant, size, ...props }: any) => (
   <button
@@ -10,4 +10,4 @@ export const Button = ({ children, onClick, variant, size, ...props }: any) => (
   >
     {children}
   </button>
-)
+);

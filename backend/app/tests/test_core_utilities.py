@@ -16,13 +16,7 @@ import pytest
 from jose import jwt
 
 from app.core.config import settings
-from app.core.exceptions import (
-    AuthorizationError,
-    BusinessLogicError,
-    FileStorageError,
-    NotFoundError,
-    ValidationError,
-)
+from app.core.exceptions import AuthorizationError, BusinessLogicError, FileStorageError, NotFoundError, ValidationError
 from app.core.security import create_access_token
 
 # Note: These utilities are defined in the tests for demonstration
@@ -108,6 +102,7 @@ def map_college_to_system_code(college_name: str) -> str | None:
     if not college_name:
         return None
     return _COLLEGE_TO_SYSTEM_CODE.get(college_name, "UNKNOWN")
+
 
 @pytest.mark.unit
 class TestSecurityFunctions:

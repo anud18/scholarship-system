@@ -89,9 +89,9 @@ def test_get_email_category_from_template_key():
 
     assert (
         service._get_email_category_from_template_key("application_submitted_student")
-        == EmailCategory.APPLICATION_STUDENT
+        == EmailCategory.application_student
     )
-    assert service._get_email_category_from_template_key("nonexistent_template") == EmailCategory.SYSTEM
+    assert service._get_email_category_from_template_key("nonexistent_template") == EmailCategory.system
 
 
 @pytest.mark.asyncio
@@ -106,7 +106,7 @@ async def test_send_automated_email_invokes_email_service():
         template_key="application_submitted_student",
         recipient_email="user@example.com",
         context={"name": "User"},
-        email_category=EmailCategory.APPLICATION_STUDENT,
+        email_category=EmailCategory.application_student,
         trigger_context={"application_id": 5, "scholarship_type_id": 9},
     )
 
@@ -114,7 +114,7 @@ async def test_send_automated_email_invokes_email_service():
     payload = stub_email_service.sent_with_template[0]
     assert payload["to"] == "user@example.com"
     assert payload["default_subject"].startswith("Automated notification")
-    assert payload["email_category"] == EmailCategory.APPLICATION_STUDENT
+    assert payload["email_category"] == EmailCategory.application_student
     assert payload["application_id"] == 5
 
 
@@ -145,7 +145,7 @@ async def test_schedule_automated_email_formats_and_calls_service(monkeypatch):
         recipient_email="user@example.com",
         context={"name": "Person"},
         scheduled_for=scheduled_at,
-        email_category=EmailCategory.APPLICATION_STUDENT,
+        email_category=EmailCategory.application_student,
         trigger_context={"application_id": 1, "scholarship_type_id": 2},
     )
 
@@ -251,7 +251,7 @@ async def test_process_single_rule_immediate_send(monkeypatch):
     call = send_calls[0]
     assert call["recipient_email"] == "person@example.com"
     assert call["recipient_context"]["extra"] == "data"
-    assert call["email_category"] == EmailCategory.RESULT_STUDENT
+    assert call["email_category"] == EmailCategory.result_student
 
 
 @pytest.mark.asyncio
@@ -296,5 +296,5 @@ async def test_process_single_rule_schedules_when_delay_set(monkeypatch):
     assert len(scheduled_calls) == 1
     scheduled = scheduled_calls[0]
     assert scheduled["recipient"] == "person@example.com"
-    assert scheduled["email_category"] == EmailCategory.APPLICATION_STUDENT
+    assert scheduled["email_category"] == EmailCategory.application_student
     assert before <= scheduled["scheduled_for"] <= after + timedelta(hours=3, minutes=1)

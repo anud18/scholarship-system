@@ -4,7 +4,7 @@ Application field configuration models
 
 import enum
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -28,6 +28,9 @@ class ApplicationField(Base):
     """Application field configuration model"""
 
     __tablename__ = "application_fields"
+    __table_args__ = (
+        UniqueConstraint('scholarship_type', 'field_name', name='uq_application_field_type_name'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     scholarship_type = Column(String(50), nullable=False, index=True)  # undergraduate, phd, direct_phd

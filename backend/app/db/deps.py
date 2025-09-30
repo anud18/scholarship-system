@@ -2,11 +2,12 @@
 Database dependency injection for FastAPI
 """
 
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Generator
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, SessionLocal
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
@@ -36,3 +37,21 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     async for session in get_async_session():
         yield session
+
+
+def get_sync_db() -> Generator[Session, None, None]:
+    """
+    Dependency function to get synchronous database session.
+
+    Yields:
+        Session: Database session for sync operations
+    """
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()

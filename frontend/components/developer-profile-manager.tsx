@@ -1,6 +1,12 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export function DeveloperProfileManager() {
   if (process.env.NODE_ENV === "production") {
@@ -16,7 +22,10 @@ export function DeveloperProfileManager() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <p>Developer profile management functionality temporarily disabled for system testing.</p>
+        <p>
+          Developer profile management functionality temporarily disabled for
+          system testing.
+        </p>
       </CardContent>
     </Card>
   );

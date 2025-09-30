@@ -244,6 +244,9 @@ async def get_applications_for_review(
 
         # Create lightweight DTOs with field-level filtering for security
         filtered_applications = []
+        # Import i18n utilities
+        from app.utils.i18n import ScholarshipI18n
+
         for app in applications:
             # Extract only necessary fields to minimize data exposure
             student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
@@ -252,15 +255,19 @@ async def get_applications_for_review(
                 "id": app.get("id"),
                 "app_id": app.get("app_id"),
                 "status": app.get("status"),
+                "status_zh": ScholarshipI18n.get_application_status_text(app.get("status", "")),
                 "scholarship_type": app.get("scholarship_type"),
+                "scholarship_type_zh": app.get("scholarship_type_zh", app.get("scholarship_type")),
                 "sub_type": app.get("sub_type"),
                 "academic_year": app.get("academic_year"),
                 "semester": app.get("semester"),
+                "is_renewal": app.get("is_renewal", False),
                 "created_at": app.get("created_at"),
                 "submitted_at": app.get("submitted_at"),
                 # Student info in flat format for frontend compatibility
                 "student_id": student_data.get("std_stdcode", "未提供學號") if student_data else "N/A",
                 "student_name": student_data.get("std_cname", "未提供姓名") if student_data else "未提供學生資料",
+                "student_termcount": student_data.get("std_termcount", "N/A") if student_data else "N/A",
                 "department_code": student_data.get("std_depno", "N/A") if student_data else "N/A",
                 # Add review status for UI purposes
                 "review_status": {
@@ -968,56 +975,81 @@ async def get_college_review_statistics(
 
 @router.get("/available-combinations", response_model=ApiResponse[Dict[str, Any]])
 async def get_available_combinations(current_user: User = Depends(require_college), db: AsyncSession = Depends(get_db)):
-    """Get available combinations of scholarship types, academic years, and semesters from database"""
+    """Get available combinations of scholarship types, academic years, and semesters from configurations"""
 
     try:
-        logger.info("College user requesting available combinations from database")
+        logger.info("College user requesting available combinations from configurations")
 
-        # Query distinct scholarship types from applications and get their full names
-        from app.models.scholarship import ScholarshipType
+        # Import models
+        from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+        from app.models.user import AdminScholarship
 
-        scholarship_query = select(Application.main_scholarship_type).distinct()
+        # Get scholarship IDs that the user has permission to access
+        permission_query = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
+        permission_result = await db.execute(permission_query)
+        allowed_scholarship_ids = [row[0] for row in permission_result.fetchall()]
+
+        logger.info(f"User {current_user.id} has permission for scholarships: {allowed_scholarship_ids}")
+
+        # If user has specific permissions, filter by those
+        # If user has no permissions set (empty list), show all (for backward compatibility or super admin)
+        if allowed_scholarship_ids:
+            scholarship_query = select(ScholarshipType).where(
+                ScholarshipType.status == "active", ScholarshipType.id.in_(allowed_scholarship_ids)
+            )
+        else:
+            # No specific permissions - could mean all or none depending on your business logic
+            # For college users without permissions, show no scholarships
+            logger.warning(f"College user {current_user.id} has no scholarship permissions set")
+            scholarship_query = select(ScholarshipType).where(ScholarshipType.id == -1)  # No results
+
         scholarship_result = await db.execute(scholarship_query)
-        scholarship_types_raw = scholarship_result.scalars().all()
+        scholarship_types_objs = scholarship_result.scalars().all()
 
-        # Get scholarship type details from ScholarshipType table
-        scholarship_types = []
-        for st in scholarship_types_raw:
-            if st:  # Only include non-None values
-                # Query the ScholarshipType table for the full name (case insensitive)
-                type_query = select(ScholarshipType).where(ScholarshipType.code.ilike(st))
-                type_result = await db.execute(type_query)
-                type_obj = type_result.scalar_one_or_none()
+        scholarship_types = [
+            {
+                "code": st.code,
+                "name": st.name,
+                "name_en": st.name_en if st.name_en else st.name,
+            }
+            for st in scholarship_types_objs
+        ]
+        logger.info(f"Returning {len(scholarship_types)} scholarship types for user {current_user.id}")
 
-                scholarship_types.append(
-                    {
-                        "code": st,
-                        "name": type_obj.name if type_obj else st,
-                        "name_en": type_obj.name_en if type_obj else st,
-                    }
-                )
+        # Query distinct academic years and semesters from active configurations
+        # Filter by scholarship permissions
+        if allowed_scholarship_ids:
+            config_query = select(ScholarshipConfiguration).where(
+                ScholarshipConfiguration.is_active,
+                ScholarshipConfiguration.scholarship_type_id.in_(allowed_scholarship_ids),
+            )
+        else:
+            config_query = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == -1)  # No results
 
-        # Query distinct academic years from applications
-        year_query = select(Application.academic_year).distinct().where(Application.academic_year.isnot(None))
-        year_result = await db.execute(year_query)
-        academic_years = sorted([y for y in year_result.scalars().all() if y is not None])
+        config_result = await db.execute(config_query)
+        configs = config_result.scalars().all()
 
-        # Query distinct semesters from applications (including NULL for yearly scholarships)
-        semester_query = select(Application.semester).distinct()
-        semester_result = await db.execute(semester_query)
-        semesters = semester_result.scalars().all()
-
-        # Convert semester enum values to strings if needed
-        semester_strings = []
+        # Collect unique academic years and semesters from configurations
+        academic_years_set = set()
+        semesters_set = set()
         has_yearly_scholarships = False
 
-        for sem in semesters:
-            if sem is None:
-                has_yearly_scholarships = True
-            elif hasattr(sem, "value"):
-                semester_strings.append(sem.value)
+        for config in configs:
+            if config.academic_year:
+                academic_years_set.add(config.academic_year)
+
+            if config.semester:
+                # Semester is an enum, get its value
+                if hasattr(config.semester, "value"):
+                    semesters_set.add(config.semester.value)
+                else:
+                    semesters_set.add(str(config.semester))
             else:
-                semester_strings.append(str(sem))
+                # No semester means yearly scholarship
+                has_yearly_scholarships = True
+
+        academic_years = sorted(list(academic_years_set))
+        semester_strings = sorted(list(semesters_set))
 
         # Add a special "YEARLY" option if there are yearly scholarships
         if has_yearly_scholarships:

@@ -406,7 +406,7 @@ class ScholarshipApplicationService:
     #             Application.student_id == student_id,
     #             Application.scholarship_type_id == scholarship_type_id,
     #             Application.semester == semester,
-    #             Application.status.notin_([ApplicationStatus.WITHDRAWN.value, ApplicationStatus.REJECTED.value])
+    #             Application.status.notin_([ApplicationStatus.withdrawn.value, ApplicationStatus.rejected.value])
     #         )
     #     )
     #     result = await self.db.execute(stmt)
@@ -439,7 +439,7 @@ class ScholarshipApplicationService:
     #         academic_year=academic_year,
     #         is_renewal=is_renewal,
     #         previous_application_id=previous_application_id,
-    #         status=ApplicationStatus.DRAFT.value,
+    #         status=ApplicationStatus.draft.value,
     #         priority_score=priority_score,
     #         amount=application_data.get('requested_amount'),
     #         form_data=application_data
@@ -460,7 +460,7 @@ class ScholarshipApplicationService:
         if not application:
             return False, "Application not found"
 
-        if application.status != ApplicationStatus.DRAFT.value:
+        if application.status != ApplicationStatus.draft.value:
             return False, "Application is not in draft status"
 
         # Validate required documents
@@ -469,7 +469,7 @@ class ScholarshipApplicationService:
             return False, validation_result[1]
 
         # Update application status
-        application.status = ApplicationStatus.SUBMITTED.value
+        application.status = ApplicationStatus.submitted.value
         application.submitted_at = datetime.now(timezone.utc)
 
         # Set review deadline (30 days from submission)
@@ -520,7 +520,7 @@ class ScholarshipApplicationService:
                 and_(
                     Application.semester == semester,
                     Application.is_renewal.is_(True),
-                    Application.status == ApplicationStatus.SUBMITTED,
+                    Application.status == ApplicationStatus.submitted,
                 )
             )
             .order_by(desc(Application.priority_score))
@@ -534,12 +534,12 @@ class ScholarshipApplicationService:
         for app in renewal_apps:
             # Auto-approve if meets renewal criteria
             if self._meets_renewal_criteria(app):
-                app.status = ApplicationStatus.APPROVED
+                app.status = ApplicationStatus.approved
                 app.decision_date = datetime.now(timezone.utc)
                 approved_count += 1
             else:
                 # Move to regular review process
-                app.status = ApplicationStatus.UNDER_REVIEW
+                app.status = ApplicationStatus.under_review
 
             processed_count += 1
 
@@ -695,7 +695,7 @@ class ScholarshipQuotaService:
                 Application.main_scholarship_type == main_scholarship_type,
                 Application.sub_scholarship_type == sub_scholarship_type,
                 Application.semester == semester,
-                Application.status == ApplicationStatus.APPROVED.value,
+                Application.status == ApplicationStatus.approved.value,
             )
         )
         result = await self.db.execute(stmt)
@@ -709,8 +709,8 @@ class ScholarshipQuotaService:
                 Application.semester == semester,
                 Application.status.in_(
                     [
-                        ApplicationStatus.SUBMITTED.value,
-                        ApplicationStatus.UNDER_REVIEW.value,
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.under_review.value,
                     ]
                 ),
             )
@@ -762,8 +762,8 @@ class ScholarshipQuotaService:
                     Application.semester == semester,
                     Application.status.in_(
                         [
-                            ApplicationStatus.SUBMITTED.value,
-                            ApplicationStatus.UNDER_REVIEW.value,
+                            ApplicationStatus.submitted.value,
+                            ApplicationStatus.under_review.value,
                         ]
                     ),
                 )
@@ -786,13 +786,13 @@ class ScholarshipQuotaService:
 
             if remaining_quota > 0:
                 # Approve within quota
-                app.status = ApplicationStatus.APPROVED.value
+                app.status = ApplicationStatus.approved.value
                 app.decision_date = datetime.now(timezone.utc)
                 approved_count += 1
                 remaining_quota -= 1
             else:
                 # Reject due to quota limit
-                app.status = ApplicationStatus.REJECTED.value
+                app.status = ApplicationStatus.rejected.value
                 app.rejection_reason = "Quota limit reached"
                 app.decision_date = datetime.now(timezone.utc)
 

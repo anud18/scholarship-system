@@ -3,6 +3,7 @@ Facebook-style notification service for creating and managing user notifications
 """
 
 import json
+import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,8 @@ from app.models.notification import (
     NotificationType,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class NotificationService:
     """Facebook-style notification service with real-time delivery, batching, and preferences"""
@@ -39,7 +42,7 @@ class NotificationService:
         notification_type: NotificationType,
         data: Dict[str, Any],
         channels: Optional[List[NotificationChannel]] = None,
-        priority: NotificationPriority = NotificationPriority.NORMAL,
+        priority: NotificationPriority = NotificationPriority.normal,
         href: Optional[str] = None,
         group_key: Optional[str] = None,
         scheduled_for: Optional[datetime] = None,
@@ -82,7 +85,7 @@ class NotificationService:
             message=message,
             notification_type=notification_type,
             priority=priority,
-            channel=channels[0] if channels else NotificationChannel.IN_APP,  # Primary channel
+            channel=channels[0] if channels else NotificationChannel.in_app,  # Primary channel
             data=data,
             href=href,
             group_key=group_key,
@@ -316,19 +319,19 @@ class NotificationService:
     async def _deliver_notification(self, notification: Notification, channels: List[NotificationChannel]):
         """Deliver notification through specified channels"""
         # Real-time WebSocket delivery
-        if NotificationChannel.IN_APP in channels and notification.user_id:
+        if NotificationChannel.in_app in channels and notification.user_id:
             await self._send_websocket_notification(notification.user_id, notification.to_dict())
 
         # Email delivery (placeholder)
-        if NotificationChannel.EMAIL in channels:
+        if NotificationChannel.email in channels:
             await self._send_email_notification(notification)
 
         # SMS delivery (placeholder)
-        if NotificationChannel.SMS in channels:
+        if NotificationChannel.sms in channels:
             await self._send_sms_notification(notification)
 
         # Push notification delivery (placeholder)
-        if NotificationChannel.PUSH in channels:
+        if NotificationChannel.push in channels:
             await self._send_push_notification(notification)
 
     async def _send_websocket_notification(self, user_id: int, notification_data: Dict[str, Any]):
@@ -362,7 +365,7 @@ class NotificationService:
             return
 
         try:
-            from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
+            from fastapi_mail import ConnectionConfig, FastMail, MessageSchema
 
             # Configure email connection
             conf = ConnectionConfig(
@@ -375,7 +378,7 @@ class NotificationService:
                 MAIL_STARTTLS=settings.smtp_use_tls,
                 MAIL_SSL_TLS=False,
                 USE_CREDENTIALS=True,
-                VALIDATE_CERTS=True
+                VALIDATE_CERTS=True,
             )
 
             # Create email message
@@ -396,7 +399,7 @@ class NotificationService:
                 </body>
                 </html>
                 """,
-                subtype="html"
+                subtype="html",
             )
 
             # Send email
@@ -441,7 +444,7 @@ class NotificationService:
     ) -> List[NotificationChannel]:
         """Get user's preferred delivery channels"""
         if not user_id:
-            return [NotificationChannel.IN_APP]  # System announcements default to in-app
+            return [NotificationChannel.in_app]  # System announcements default to in-app
 
         # Check cache first
         cache_key = f"pref_{user_id}_{notification_type.value}"
@@ -461,19 +464,19 @@ class NotificationService:
                 self._notification_cache[cache_key] = pref
 
         if not pref:
-            return [NotificationChannel.IN_APP]  # Default
+            return [NotificationChannel.in_app]  # Default
 
         channels = []
         if pref.in_app_enabled:
-            channels.append(NotificationChannel.IN_APP)
+            channels.append(NotificationChannel.in_app)
         if pref.email_enabled:
-            channels.append(NotificationChannel.EMAIL)
+            channels.append(NotificationChannel.email)
         if pref.sms_enabled:
-            channels.append(NotificationChannel.SMS)
+            channels.append(NotificationChannel.sms)
         if pref.push_enabled:
-            channels.append(NotificationChannel.PUSH)
+            channels.append(NotificationChannel.push)
 
-        return channels or [NotificationChannel.IN_APP]  # Fallback
+        return channels or [NotificationChannel.in_app]  # Fallback
 
     # === Legacy Methods (Enhanced for backward compatibility) === #
 
@@ -484,8 +487,8 @@ class NotificationService:
         message: str,
         title_en: Optional[str] = None,
         message_en: Optional[str] = None,
-        notification_type: NotificationType = NotificationType.INFO,
-        priority: NotificationPriority = NotificationPriority.NORMAL,
+        notification_type: NotificationType = NotificationType.info,
+        priority: NotificationPriority = NotificationPriority.normal,
         related_resource_type: Optional[str] = None,
         related_resource_id: Optional[int] = None,
         action_url: Optional[str] = None,
@@ -539,8 +542,8 @@ class NotificationService:
         message: str,
         title_en: Optional[str] = None,
         message_en: Optional[str] = None,
-        notification_type: NotificationType = NotificationType.INFO,
-        priority: NotificationPriority = NotificationPriority.NORMAL,
+        notification_type: NotificationType = NotificationType.info,
+        priority: NotificationPriority = NotificationPriority.normal,
         action_url: Optional[str] = None,
         expires_at: Optional[datetime] = None,
         metadata: Optional[Dict[str, Any]] = None,
@@ -624,8 +627,8 @@ class NotificationService:
             },
         )
 
-        notification_type = NotificationType.SUCCESS if new_status == "approved" else NotificationType.INFO
-        priority = NotificationPriority.HIGH if new_status in ["approved", "rejected"] else NotificationPriority.NORMAL
+        notification_type = NotificationType.success if new_status == "approved" else NotificationType.info
+        priority = NotificationPriority.high if new_status in ["approved", "rejected"] else NotificationPriority.normal
 
         # Enhanced: Use new Facebook-style notification system
         return await self.create_notification(
@@ -679,8 +682,8 @@ class NotificationService:
             title_en="Document Requirement Notification",
             message=message,
             message_en=message_en,
-            notification_type=NotificationType.WARNING,
-            priority=NotificationPriority.HIGH,
+            notification_type=NotificationType.warning,
+            priority=NotificationPriority.high,
             related_resource_type="application",
             related_resource_id=application_id,
             action_url=f"/applications/{application_id}/documents",
@@ -725,7 +728,7 @@ class NotificationService:
             message = f"{title}的截止日期已到期"
             message_en = f"The deadline for {title_en or title} has passed"
 
-        priority = NotificationPriority.CRITICAL if days_left <= 1 else NotificationPriority.HIGH
+        priority = NotificationPriority.urgent if days_left <= 1 else NotificationPriority.high
 
         return await self.createUserNotification(
             user_id=user_id,
@@ -733,7 +736,7 @@ class NotificationService:
             title_en=f"Deadline Reminder: {title_en or title}",
             message=message,
             message_en=message_en,
-            notification_type=NotificationType.REMINDER,
+            notification_type=NotificationType.reminder,
             priority=priority,
             action_url=action_url,
             expires_at=deadline + timedelta(days=7) if deadline else None,  # 過期後7天自動清理
@@ -751,8 +754,8 @@ class NotificationService:
         message: str,
         title_en: Optional[str] = None,
         message_en: Optional[str] = None,
-        notification_type: NotificationType = NotificationType.INFO,
-        priority: NotificationPriority = NotificationPriority.NORMAL,
+        notification_type: NotificationType = NotificationType.info,
+        priority: NotificationPriority = NotificationPriority.normal,
         action_url: Optional[str] = None,
         expires_at: Optional[datetime] = None,
         metadata: Optional[Dict[str, Any]] = None,
@@ -1075,7 +1078,7 @@ class NotificationService:
         Returns:
             batch_id if batching enabled, otherwise list of notifications
         """
-        notification_type = NotificationType.NEW_SCHOLARSHIP_AVAILABLE
+        notification_type = NotificationType.new_scholarship_available
         data = {
             "title": f"新獎學金機會：{scholarship_data['name']}",
             "title_en": f"New Scholarship Opportunity: {scholarship_data['name']}",
@@ -1104,7 +1107,7 @@ class NotificationService:
                     data=data,
                     href=f"/scholarships/{scholarship_data['id']}",
                     group_key="new_scholarships",
-                    priority=NotificationPriority.HIGH,
+                    priority=NotificationPriority.high,
                 )
                 notifications.append(notification)
             return notifications
@@ -1146,15 +1149,15 @@ class NotificationService:
                 if approved_count > 0 and rejected_count == 0:
                     title = f"獎學金申請結果通知 - {approved_count} 項申請獲得核准"
                     message = f"恭喜！您有 {approved_count} 項獎學金申請已獲得核准"
-                    notification_type = NotificationType.APPLICATION_APPROVED
+                    notification_type = NotificationType.application_approved
                 elif rejected_count > 0 and approved_count == 0:
                     title = f"獎學金申請結果通知 - {rejected_count} 項申請"
                     message = f"您有 {rejected_count} 項獎學金申請的審核結果已出爐"
-                    notification_type = NotificationType.APPLICATION_REJECTED
+                    notification_type = NotificationType.application_rejected
                 else:
                     title = f"獎學金申請結果通知 - {len(updates)} 項申請"
                     message = f"您有 {len(updates)} 項獎學金申請的審核結果已出爐（核准：{approved_count}，其他：{rejected_count}）"
-                    notification_type = NotificationType.INFO
+                    notification_type = NotificationType.info
 
                 await self.create_notification(
                     user_id=user_id,
@@ -1169,7 +1172,7 @@ class NotificationService:
                     },
                     href="/applications",
                     group_key="application_results",
-                    priority=NotificationPriority.HIGH,
+                    priority=NotificationPriority.high,
                 )
                 aggregated_notifications += 1
 
@@ -1226,13 +1229,13 @@ class NotificationService:
             queue_entry = NotificationQueue(
                 user_id=notif_data["user_id"],
                 batch_id=batch_id,
-                notification_type=NotificationType.DEADLINE_APPROACHING,
+                notification_type=NotificationType.deadline_approaching,
                 notifications_data={
                     "user_ids": [notif_data["user_id"]],
                     "data": notif_data["data"],
                 },
                 scheduled_for=reminder_time + timedelta(seconds=30 * i),  # Stagger by 30 seconds
-                priority=NotificationPriority.HIGH,
+                priority=NotificationPriority.high,
             )
             self.db.add(queue_entry)
 

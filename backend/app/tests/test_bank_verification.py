@@ -2,8 +2,9 @@
 Tests for Bank Account Verification Service
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.models.application import Application, ApplicationFile
 from app.services.bank_verification_service import BankVerificationService
@@ -51,7 +52,9 @@ class TestBankVerificationService:
 
         for text1, text2, expected_min in test_cases:
             similarity = verification_service.calculate_similarity(text1, text2)
-            assert similarity >= expected_min, f"Failed for '{text1}' vs '{text2}': got {similarity}, expected >= {expected_min}"
+            assert (
+                similarity >= expected_min
+            ), f"Failed for '{text1}' vs '{text2}': got {similarity}, expected >= {expected_min}"
 
     def test_extract_bank_fields_from_application(self, verification_service):
         """Test extraction of bank fields from application"""
@@ -63,30 +66,21 @@ class TestBankVerificationService:
                     "field_id": "bank_account",
                     "field_type": "text",
                     "value": "123456789012",
-                    "required": True
+                    "required": True,
                 },
-                "bank_name": {
-                    "field_id": "bank_name",
-                    "field_type": "text",
-                    "value": "台灣銀行",
-                    "required": True
-                },
+                "bank_name": {"field_id": "bank_name", "field_type": "text", "value": "台灣銀行", "required": True},
                 "account_holder": {
                     "field_id": "account_holder",
                     "field_type": "text",
                     "value": "王小明",
-                    "required": True
-                }
+                    "required": True,
+                },
             }
         }
 
         result = verification_service.extract_bank_fields_from_application(application)
 
-        expected = {
-            "account_number": "123456789012",
-            "bank_name": "台灣銀行",
-            "account_holder": "王小明"
-        }
+        expected = {"account_number": "123456789012", "bank_name": "台灣銀行", "account_holder": "王小明"}
 
         assert result == expected
 
@@ -137,12 +131,7 @@ class TestBankVerificationService:
         # Mock application with bank data but no document
         application = Application()
         application.id = 1
-        application.form_data = {
-            "fields": {
-                "bank_account": {"value": "123456789"}
-            },
-            "documents": []
-        }
+        application.form_data = {"fields": {"bank_account": {"value": "123456789"}}, "documents": []}
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.side_effect = [application, None]  # App found, document not found
@@ -155,7 +144,7 @@ class TestBankVerificationService:
         assert result["verification_status"] == "no_document"
 
     @pytest.mark.asyncio
-    @patch('app.services.bank_verification_service.get_ocr_service')
+    @patch("app.services.bank_verification_service.get_ocr_service")
     async def test_verify_bank_account_success_scenario(self, mock_get_ocr_service, verification_service, mock_db):
         """Test successful bank account verification"""
         # Mock OCR service
@@ -167,7 +156,7 @@ class TestBankVerificationService:
             "account_number": "123456789012",
             "account_holder": "王小明",
             "branch_name": "台北分行",
-            "confidence": 0.95
+            "confidence": 0.95,
         }
         mock_get_ocr_service.return_value = mock_ocr_service
 
@@ -178,15 +167,11 @@ class TestBankVerificationService:
             "fields": {
                 "bank_account": {"value": "123456789012"},
                 "bank_name": {"value": "台灣銀行"},
-                "account_holder": {"value": "王小明"}
+                "account_holder": {"value": "王小明"},
             },
             "documents": [
-                {
-                    "document_id": "bank_account_cover",
-                    "file_path": "test.pdf",
-                    "original_filename": "passbook.pdf"
-                }
-            ]
+                {"document_id": "bank_account_cover", "file_path": "test.pdf", "original_filename": "passbook.pdf"}
+            ],
         }
 
         # Mock passbook document
@@ -251,15 +236,15 @@ class TestBankVerificationService:
                 "form_value": "台灣銀行",
                 "ocr_value": "中國信託",
                 "is_match": False,
-                "confidence": "high"
+                "confidence": "high",
             },
             "account_number": {
                 "field_name": "帳戶號碼",
                 "form_value": "123456",
                 "ocr_value": "123456",
                 "is_match": True,
-                "confidence": "high"
-            }
+                "confidence": "high",
+            },
         }
 
         recommendations = verification_service.generate_recommendations("verification_failed", comparisons)
@@ -267,12 +252,7 @@ class TestBankVerificationService:
         assert any("台灣銀行" in rec and "中國信託" in rec for rec in recommendations)
 
         # Test low confidence scenario
-        comparisons_low_confidence = {
-            "bank_name": {
-                "confidence": "low",
-                "is_match": True
-            }
-        }
+        comparisons_low_confidence = {"bank_name": {"confidence": "low", "is_match": True}}
 
         recommendations = verification_service.generate_recommendations("verified", comparisons_low_confidence)
         assert any("信心度較低" in rec for rec in recommendations)
@@ -285,14 +265,8 @@ class TestBankVerificationService:
         application.id = 1
         application.form_data = {
             "documents": [
-                {
-                    "document_id": "bank_account_cover",
-                    "file_path": "passbook.pdf"
-                },
-                {
-                    "document_id": "other_document",
-                    "file_path": "other.pdf"
-                }
+                {"document_id": "bank_account_cover", "file_path": "passbook.pdf"},
+                {"document_id": "other_document", "file_path": "other.pdf"},
             ]
         }
 
@@ -314,14 +288,7 @@ class TestBankVerificationService:
         """Test when passbook document is not found"""
         # Mock application without passbook document
         application = Application()
-        application.form_data = {
-            "documents": [
-                {
-                    "document_id": "other_document",
-                    "file_path": "other.pdf"
-                }
-            ]
-        }
+        application.form_data = {"documents": [{"document_id": "other_document", "file_path": "other.pdf"}]}
 
         result = await verification_service.get_bank_passbook_document(application)
         assert result is None

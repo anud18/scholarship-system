@@ -191,13 +191,19 @@ async def get_scholarship_eligibility(
     # Convert scholarship dictionaries to EligibleScholarshipResponse with rule details
     response_data = []
     for scholarship in eligible_scholarships:
+        # Handle sub_type_list - ensure it's a list of dicts, not strings
+        sub_type_list = scholarship.get("sub_type_list", [])
+        if not sub_type_list:
+            # If empty, provide a default "general" subtype as a dict
+            sub_type_list = [{"value": "general", "label": "通用", "label_en": "General", "is_default": True}]
+
         response_item = EligibleScholarshipResponse(
             id=scholarship["id"],
             configuration_id=scholarship["configuration_id"],  # Pass through configuration ID
             code=scholarship["code"],
             name=scholarship["name"],
             name_en=scholarship.get("name_en") or scholarship["name"],
-            eligible_sub_types=scholarship.get("sub_type_list", []) or ["general"],
+            eligible_sub_types=sub_type_list,
             category=scholarship["category"],
             academic_year=scholarship.get("academic_year"),
             semester=scholarship.get("semester"),

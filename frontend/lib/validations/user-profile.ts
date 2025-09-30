@@ -3,44 +3,46 @@
  */
 
 export interface ValidationResult {
-  isValid: boolean
-  errors: string[]
+  isValid: boolean;
+  errors: string[];
 }
 
 export interface AdvisorInfo {
-  advisor_name?: string
-  advisor_email?: string
-  advisor_nycu_id?: string
+  advisor_name?: string;
+  advisor_email?: string;
+  advisor_nycu_id?: string;
 }
 
 export interface BankInfo {
-  bank_code?: string
-  account_number?: string
+  bank_code?: string;
+  account_number?: string;
 }
 
 /**
  * Email validation regex - matches backend validation
  */
-const EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+const EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 /**
  * Validate advisor email field
  * Aligns with backend AdvisorInfoBase validation
  */
-export function validateAdvisorEmail(email: string | undefined | null): ValidationResult {
-  const errors: string[] = []
+export function validateAdvisorEmail(
+  email: string | undefined | null
+): ValidationResult {
+  const errors: string[] = [];
 
   // Empty string or null/undefined is valid (optional field)
-  if (!email || email.trim() === '') {
-    return { isValid: true, errors: [] }
+  if (!email || email.trim() === "") {
+    return { isValid: true, errors: [] };
   }
 
   // If provided, must be valid email format
   if (!EMAIL_PATTERN.test(email.trim())) {
-    errors.push('請輸入有效的Email格式 (例：professor@nycu.edu.tw)')
+    errors.push("請輸入有效的Email格式 (例：professor@nycu.edu.tw)");
   }
 
-  return { isValid: errors.length === 0, errors }
+  return { isValid: errors.length === 0, errors };
 }
 
 /**
@@ -48,25 +50,25 @@ export function validateAdvisorEmail(email: string | undefined | null): Validati
  * Aligns with backend AdvisorInfoUpdate schema
  */
 export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
-  const errors: string[] = []
+  const errors: string[] = [];
 
   // Validate advisor name (optional, max 100 chars)
   if (data.advisor_name && data.advisor_name.length > 100) {
-    errors.push('指導教授姓名不能超過100個字符')
+    errors.push("指導教授姓名不能超過100個字符");
   }
 
   // Validate advisor email
-  const emailValidation = validateAdvisorEmail(data.advisor_email)
+  const emailValidation = validateAdvisorEmail(data.advisor_email);
   if (!emailValidation.isValid) {
-    errors.push(...emailValidation.errors)
+    errors.push(...emailValidation.errors);
   }
 
   // Validate advisor NYCU ID (optional, max 20 chars)
   if (data.advisor_nycu_id && data.advisor_nycu_id.length > 20) {
-    errors.push('指導教授學校工號不能超過20個字符')
+    errors.push("指導教授學校工號不能超過20個字符");
   }
 
-  return { isValid: errors.length === 0, errors }
+  return { isValid: errors.length === 0, errors };
 }
 
 /**
@@ -74,30 +76,32 @@ export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
  * Aligns with backend BankInfoUpdate schema
  */
 export function validateBankInfo(data: BankInfo): ValidationResult {
-  const errors: string[] = []
+  const errors: string[] = [];
 
   // Validate bank code (optional, max 20 chars)
   if (data.bank_code && data.bank_code.length > 20) {
-    errors.push('銀行代碼不能超過20個字符')
+    errors.push("銀行代碼不能超過20個字符");
   }
 
   // Validate account number (optional, max 50 chars)
   if (data.account_number && data.account_number.length > 50) {
-    errors.push('帳戶號碼不能超過50個字符')
+    errors.push("帳戶號碼不能超過50個字符");
   }
 
-  return { isValid: errors.length === 0, errors }
+  return { isValid: errors.length === 0, errors };
 }
 
 /**
  * Sanitize advisor email for API submission
  * Converts empty strings to undefined to align with backend validation
  */
-export function sanitizeAdvisorEmail(email: string | undefined | null): string | undefined {
-  if (!email || email.trim() === '') {
-    return undefined
+export function sanitizeAdvisorEmail(
+  email: string | undefined | null
+): string | undefined {
+  if (!email || email.trim() === "") {
+    return undefined;
   }
-  return email.trim()
+  return email.trim();
 }
 
 /**
@@ -108,8 +112,8 @@ export function sanitizeAdvisorInfo(data: AdvisorInfo): AdvisorInfo {
   return {
     advisor_name: data.advisor_name?.trim() || undefined,
     advisor_email: sanitizeAdvisorEmail(data.advisor_email),
-    advisor_nycu_id: data.advisor_nycu_id?.trim() || undefined
-  }
+    advisor_nycu_id: data.advisor_nycu_id?.trim() || undefined,
+  };
 }
 
 /**
@@ -118,6 +122,6 @@ export function sanitizeAdvisorInfo(data: AdvisorInfo): AdvisorInfo {
 export function sanitizeBankInfo(data: BankInfo): BankInfo {
   return {
     bank_code: data.bank_code?.trim() || undefined,
-    account_number: data.account_number?.trim() || undefined
-  }
+    account_number: data.account_number?.trim() || undefined,
+  };
 }

@@ -33,20 +33,20 @@ if TYPE_CHECKING:
 class ApplicationStatus(enum.Enum):
     """Application status enum"""
 
-    DRAFT = "draft"
-    SUBMITTED = "submitted"
-    UNDER_REVIEW = "under_review"
-    PENDING_RECOMMENDATION = "pending_recommendation"
-    RECOMMENDED = "recommended"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    RETURNED = "returned"
-    CANCELLED = "cancelled"
-    RENEWAL_PENDING = "renewal_pending"
-    RENEWAL_REVIEWED = "renewal_reviewed"
-    MANUAL_EXCLUDED = "manual_excluded"
-    PROFESSOR_REVIEW = "professor_review"
-    WITHDRAWN = "withdrawn"
+    draft = "draft"
+    submitted = "submitted"
+    under_review = "under_review"
+    pending_recommendation = "pending_recommendation"
+    recommended = "recommended"
+    approved = "approved"
+    rejected = "rejected"
+    returned = "returned"
+    cancelled = "cancelled"
+    renewal_pending = "renewal_pending"
+    renewal_reviewed = "renewal_reviewed"
+    manual_excluded = "manual_excluded"
+    professor_review = "professor_review"
+    withdrawn = "withdrawn"
 
 
 class ScholarshipMainType(enum.Enum):
@@ -117,7 +117,9 @@ class Application(Base):
     scholarship_name = Column(String(200))
     amount = Column(Numeric(10, 2))
     scholarship_subtype_list = Column(JSON, nullable=False, default=[])
-    sub_type_selection_mode = Column(Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    sub_type_selection_mode = Column(
+        Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]), nullable=False
+    )
 
     # New fields for comprehensive scholarship system (Issue #10)
     main_scholarship_type = Column(String(50))  # UNDERGRADUATE_FRESHMAN, PHD, DIRECT_PHD
@@ -129,12 +131,14 @@ class Application(Base):
     decision_date = Column(DateTime(timezone=True))
 
     # 申請狀態
-    status = Column(String(50), default=ApplicationStatus.DRAFT.value)
+    status = Column(String(50), default=ApplicationStatus.draft.value)
     status_name = Column(String(100))
 
     # 學期資訊 (申請當時的學期)
     academic_year = Column(Integer, nullable=False)  # 民國年，例如 113
-    semester = Column(Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True)  # Can be NULL for yearly scholarships
+    semester = Column(
+        Enum(Semester, values_callable=lambda obj: [e.value for e in obj]), nullable=True
+    )  # Can be NULL for yearly scholarships
 
     # 申請資料 (申請當時)
     student_data = Column(JSON)  # Student 資料
@@ -212,12 +216,12 @@ class Application(Base):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
+        return bool(self.status in [ApplicationStatus.draft.value, ApplicationStatus.returned.value])
 
     @property
     def is_submitted(self) -> bool:
         """Check if application is submitted"""
-        return bool(self.status != ApplicationStatus.DRAFT.value)
+        return bool(self.status != ApplicationStatus.draft.value)
 
     @property
     def can_be_reviewed(self) -> bool:
@@ -225,9 +229,9 @@ class Application(Base):
         return bool(
             self.status
             in [
-                ApplicationStatus.SUBMITTED.value,
-                ApplicationStatus.UNDER_REVIEW.value,
-                ApplicationStatus.RECOMMENDED.value,
+                ApplicationStatus.submitted.value,
+                ApplicationStatus.under_review.value,
+                ApplicationStatus.recommended.value,
             ]
         )
 
@@ -303,14 +307,14 @@ class Application(Base):
     def get_review_stage(self) -> Optional[str]:
         """Get current review stage based on application type and status"""
         if self.is_renewal:
-            if self.status == ApplicationStatus.SUBMITTED.value:
+            if self.status == ApplicationStatus.submitted.value:
                 return "renewal_professor"
-            elif self.status == ApplicationStatus.RECOMMENDED.value:
+            elif self.status == ApplicationStatus.recommended.value:
                 return "renewal_college"
         else:
-            if self.status == ApplicationStatus.SUBMITTED.value:
+            if self.status == ApplicationStatus.submitted.value:
                 return "general_professor"
-            elif self.status == ApplicationStatus.RECOMMENDED.value:
+            elif self.status == ApplicationStatus.recommended.value:
                 return "general_college"
         return None
 

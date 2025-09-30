@@ -4,23 +4,16 @@ Handles system configuration with encryption for sensitive values
 """
 
 import json
-import os
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from cryptography.fernet import Fernet
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.system_setting import (
-    ConfigCategory,
-    ConfigDataType,
-    ConfigurationAuditLog,
-    SystemSetting,
-)
-from app.models.user import User
+from app.models.system_setting import ConfigCategory, ConfigDataType, ConfigurationAuditLog, SystemSetting
 
 
 class ConfigEncryption:
@@ -28,9 +21,10 @@ class ConfigEncryption:
 
     def __init__(self):
         # Use a key derived from SECRET_KEY for configuration encryption
-        key_material = settings.secret_key.encode()[:32].ljust(32, b'0')  # Ensure 32 bytes
+        key_material = settings.secret_key.encode()[:32].ljust(32, b"0")  # Ensure 32 bytes
         import base64
         import hashlib
+
         key = base64.urlsafe_b64encode(hashlib.sha256(key_material).digest())
         self.fernet = Fernet(key)
 
@@ -56,9 +50,7 @@ class ConfigurationService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_configurations_by_category(
-        self, category: ConfigCategory
-    ) -> List[SystemSetting]:
+    async def get_configurations_by_category(self, category: ConfigCategory) -> List[SystemSetting]:
         """Get all configurations in a category"""
         stmt = select(SystemSetting).where(SystemSetting.category == category)
         result = await self.db.execute(stmt)
@@ -83,13 +75,13 @@ class ConfigurationService:
                 pass
 
         # Convert to appropriate type
-        if setting.data_type == ConfigDataType.BOOLEAN:
-            return value.lower() in ('true', '1', 'yes', 'on')
-        elif setting.data_type == ConfigDataType.INTEGER:
+        if setting.data_type == ConfigDataType.boolean:
+            return value.lower() in ("true", "1", "yes", "on")
+        elif setting.data_type == ConfigDataType.integer:
             return int(value)
-        elif setting.data_type == ConfigDataType.FLOAT:
+        elif setting.data_type == ConfigDataType.float:
             return float(value)
-        elif setting.data_type == ConfigDataType.JSON:
+        elif setting.data_type == ConfigDataType.json:
             return json.loads(value)
         else:
             return value
@@ -99,8 +91,8 @@ class ConfigurationService:
         key: str,
         value: Any,
         user_id: int,
-        category: ConfigCategory = ConfigCategory.FEATURES,
-        data_type: ConfigDataType = ConfigDataType.STRING,
+        category: ConfigCategory = ConfigCategory.features,
+        data_type: ConfigDataType = ConfigDataType.string,
         is_sensitive: bool = False,
         is_readonly: bool = False,
         description: str = None,
@@ -111,9 +103,9 @@ class ConfigurationService:
         """Set or update a configuration value"""
 
         # Convert value to string
-        if data_type == ConfigDataType.JSON:
+        if data_type == ConfigDataType.json:
             string_value = json.dumps(value)
-        elif data_type == ConfigDataType.BOOLEAN:
+        elif data_type == ConfigDataType.boolean:
             string_value = str(bool(value)).lower()
         else:
             string_value = str(value)
@@ -174,9 +166,7 @@ class ConfigurationService:
         await self.db.refresh(setting)
         return setting
 
-    async def delete_configuration(
-        self, key: str, user_id: int, change_reason: str = None
-    ) -> bool:
+    async def delete_configuration(self, key: str, user_id: int, change_reason: str = None) -> bool:
         """Delete a configuration"""
         setting = await self.get_configuration(key)
         if not setting:
@@ -212,8 +202,8 @@ class ConfigurationService:
                     key=update["key"],
                     value=update["value"],
                     user_id=user_id,
-                    category=update.get("category", ConfigCategory.FEATURES),
-                    data_type=update.get("data_type", ConfigDataType.STRING),
+                    category=update.get("category", ConfigCategory.features),
+                    data_type=update.get("data_type", ConfigDataType.string),
                     is_sensitive=update.get("is_sensitive", False),
                     is_readonly=update.get("is_readonly", False),
                     description=update.get("description"),
@@ -231,14 +221,14 @@ class ConfigurationService:
     async def validate_configuration(self, key: str, value: Any, data_type: ConfigDataType) -> Tuple[bool, str]:
         """Validate a configuration value"""
         try:
-            if data_type == ConfigDataType.INTEGER:
+            if data_type == ConfigDataType.integer:
                 int(value)
-            elif data_type == ConfigDataType.FLOAT:
+            elif data_type == ConfigDataType.float:
                 float(value)
-            elif data_type == ConfigDataType.BOOLEAN:
-                if str(value).lower() not in ('true', 'false', '1', '0', 'yes', 'no', 'on', 'off'):
+            elif data_type == ConfigDataType.boolean:
+                if str(value).lower() not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
                     return False, "Boolean value must be true/false, 1/0, yes/no, or on/off"
-            elif data_type == ConfigDataType.JSON:
+            elif data_type == ConfigDataType.json:
                 json.loads(str(value))
 
             return True, "Valid"
@@ -246,10 +236,7 @@ class ConfigurationService:
             return False, f"Validation error: {str(e)}"
 
     async def get_audit_logs(
-        self,
-        setting_key: str = None,
-        user_id: int = None,
-        limit: int = 100
+        self, setting_key: str = None, user_id: int = None, limit: int = 100
     ) -> List[ConfigurationAuditLog]:
         """Get audit logs for configuration changes"""
         stmt = select(ConfigurationAuditLog).order_by(ConfigurationAuditLog.changed_at.desc())
@@ -269,169 +256,164 @@ class ConfigurationService:
         return {
             # OCR Settings
             "ocr_service_enabled": {
-                "category": ConfigCategory.OCR,
-                "data_type": ConfigDataType.BOOLEAN,
+                "category": ConfigCategory.ocr,
+                "data_type": ConfigDataType.boolean,
                 "is_sensitive": False,
                 "description": "Enable or disable OCR service for bank passbook extraction",
                 "default_value": "false",
             },
             "gemini_api_key": {
-                "category": ConfigCategory.API_KEYS,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.api_keys,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "Google Gemini API key for OCR services",
                 "validation_regex": r"^AIza[0-9A-Za-z-_]{35}$",
             },
             "gemini_model": {
-                "category": ConfigCategory.OCR,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.ocr,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": False,
                 "description": "Gemini model to use for OCR",
                 "default_value": "gemini-2.0-flash",
                 "validation_regex": r"^gemini-[0-9\.]+-[a-z]+$",
             },
             "ocr_timeout": {
-                "category": ConfigCategory.OCR,
-                "data_type": ConfigDataType.INTEGER,
+                "category": ConfigCategory.ocr,
+                "data_type": ConfigDataType.integer,
                 "is_sensitive": False,
                 "description": "OCR request timeout in seconds",
                 "default_value": "30",
                 "validation_regex": r"^[1-9]\d*$",
             },
-
             # Email Settings
             "smtp_host": {
-                "category": ConfigCategory.EMAIL,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.email,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": False,
                 "description": "SMTP server hostname",
                 "default_value": "smtp.gmail.com",
             },
             "smtp_port": {
-                "category": ConfigCategory.EMAIL,
-                "data_type": ConfigDataType.INTEGER,
+                "category": ConfigCategory.email,
+                "data_type": ConfigDataType.integer,
                 "is_sensitive": False,
                 "description": "SMTP server port",
                 "default_value": "587",
                 "validation_regex": r"^[1-9]\d{1,4}$",
             },
             "smtp_username": {
-                "category": ConfigCategory.EMAIL,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.email,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "SMTP username for authentication",
             },
             "smtp_password": {
-                "category": ConfigCategory.EMAIL,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.email,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "SMTP password for authentication",
             },
             "smtp_from_email": {
-                "category": ConfigCategory.EMAIL,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.email,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": False,
                 "description": "Default sender email address",
                 "validation_regex": r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
             },
-
             # File Storage Settings
             "minio_endpoint": {
-                "category": ConfigCategory.FILE_STORAGE,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.file_storage,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": False,
                 "description": "MinIO server endpoint",
                 "default_value": "localhost:9000",
             },
             "minio_access_key": {
-                "category": ConfigCategory.FILE_STORAGE,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.file_storage,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "MinIO access key",
             },
             "minio_secret_key": {
-                "category": ConfigCategory.FILE_STORAGE,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.file_storage,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "MinIO secret key",
             },
             "minio_bucket": {
-                "category": ConfigCategory.FILE_STORAGE,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.file_storage,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": False,
                 "description": "MinIO bucket name for file storage",
                 "default_value": "scholarship-files",
             },
             "max_file_size": {
-                "category": ConfigCategory.FILE_STORAGE,
-                "data_type": ConfigDataType.INTEGER,
+                "category": ConfigCategory.file_storage,
+                "data_type": ConfigDataType.integer,
                 "is_sensitive": False,
                 "description": "Maximum file size in bytes (10MB default)",
                 "default_value": "10485760",
                 "validation_regex": r"^[1-9]\d*$",
             },
-
             # Security Settings
             "cors_origins": {
-                "category": ConfigCategory.SECURITY,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.security,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": False,
                 "description": "Comma-separated list of allowed CORS origins",
                 "default_value": "http://localhost:3000",
             },
             "access_token_expire_minutes": {
-                "category": ConfigCategory.SECURITY,
-                "data_type": ConfigDataType.INTEGER,
+                "category": ConfigCategory.security,
+                "data_type": ConfigDataType.integer,
                 "is_sensitive": False,
                 "description": "JWT access token expiry time in minutes",
                 "default_value": "30",
                 "validation_regex": r"^[1-9]\d*$",
             },
-
             # API Integration Settings
             "nycu_emp_account": {
-                "category": ConfigCategory.INTEGRATIONS,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.integrations,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "NYCU Employee API account",
             },
             "nycu_emp_key_hex": {
-                "category": ConfigCategory.INTEGRATIONS,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.integrations,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "NYCU Employee API HMAC key in hex format",
             },
             "student_api_account": {
-                "category": ConfigCategory.INTEGRATIONS,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.integrations,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "Student API account for data retrieval",
             },
             "student_api_hmac_key": {
-                "category": ConfigCategory.INTEGRATIONS,
-                "data_type": ConfigDataType.STRING,
+                "category": ConfigCategory.integrations,
+                "data_type": ConfigDataType.string,
                 "is_sensitive": True,
                 "description": "Student API HMAC key for authentication",
             },
-
             # Feature Flags
             "enable_mock_sso": {
-                "category": ConfigCategory.FEATURES,
-                "data_type": ConfigDataType.BOOLEAN,
+                "category": ConfigCategory.features,
+                "data_type": ConfigDataType.boolean,
                 "is_sensitive": False,
                 "description": "Enable mock SSO for development",
                 "default_value": "false",
             },
             "portal_sso_enabled": {
-                "category": ConfigCategory.FEATURES,
-                "data_type": ConfigDataType.BOOLEAN,
+                "category": ConfigCategory.features,
+                "data_type": ConfigDataType.boolean,
                 "is_sensitive": False,
                 "description": "Enable Portal SSO authentication",
                 "default_value": "true",
             },
             "enable_virus_scan": {
-                "category": ConfigCategory.FEATURES,
-                "data_type": ConfigDataType.BOOLEAN,
+                "category": ConfigCategory.features,
+                "data_type": ConfigDataType.boolean,
                 "is_sensitive": False,
                 "description": "Enable virus scanning for uploaded files",
                 "default_value": "false",

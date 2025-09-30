@@ -14,6 +14,7 @@ from app.models.application import Application
 from app.models.enums import ApplicationCycle, Semester
 from app.models.scholarship import ScholarshipType
 from app.models.student import Academy, Degree, Department, EnrollType, Identity, SchoolIdentity, StudyingStatus
+from app.schemas.common import ApiResponse
 
 router = APIRouter()
 
@@ -65,12 +66,14 @@ async def get_school_identities(
 @router.get("/academies")
 async def get_academies(
     session: AsyncSession = Depends(get_db),
-) -> List[dict]:
+) -> ApiResponse[List[dict]]:
     """Get all academy/college information"""
     result = await session.execute(select(Academy).order_by(Academy.code))
     academies = result.scalars().all()
 
-    return [{"id": academy.id, "code": academy.code, "name": academy.name} for academy in academies]
+    data = [{"id": academy.id, "code": academy.code, "name": academy.name} for academy in academies]
+
+    return ApiResponse(success=True, message="Academies retrieved successfully", data=data)
 
 
 @router.get("/departments")

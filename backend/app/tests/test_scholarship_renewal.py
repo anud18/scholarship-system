@@ -150,7 +150,7 @@ class TestApplicationRenewal:
             is_renewal=True,
             academic_year=113,
             semester=Semester.first,
-            status=ApplicationStatus.SUBMITTED.value,
+            status=ApplicationStatus.submitted.value,
         )
 
         assert renewal_app.is_renewal_application is True
@@ -167,7 +167,7 @@ class TestApplicationRenewal:
             is_renewal=False,
             academic_year=113,
             semester=Semester.first,
-            status=ApplicationStatus.SUBMITTED.value,
+            status=ApplicationStatus.submitted.value,
         )
 
         assert general_app.is_renewal_application is False

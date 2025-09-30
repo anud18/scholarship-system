@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { ErrorBoundary } from "@/components/error-boundary"
-import { Check, ChevronsUpDown, Search, User } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { Check, ChevronsUpDown, Search, User } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -12,29 +12,29 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command"
+} from "@/components/ui/command";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { Badge } from "@/components/ui/badge"
-import apiClient from "@/lib/api"
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import apiClient from "@/lib/api";
 
 interface Professor {
-  nycu_id: string
-  name: string
-  dept_code: string
-  dept_name: string
-  email?: string
+  nycu_id: string;
+  name: string;
+  dept_code: string;
+  dept_name: string;
+  email?: string;
 }
 
 interface ProfessorAssignmentDropdownProps {
-  applicationId: number
-  currentProfessorId?: string
-  onAssigned?: (professor: Professor) => void
-  disabled?: boolean
-  compact?: boolean
+  applicationId: number;
+  currentProfessorId?: string;
+  onAssigned?: (professor: Professor) => void;
+  disabled?: boolean;
+  compact?: boolean;
 }
 
 function ProfessorAssignmentDropdownInner({
@@ -42,72 +42,78 @@ function ProfessorAssignmentDropdownInner({
   currentProfessorId,
   onAssigned,
   disabled = false,
-  compact = false
+  compact = false,
 }: ProfessorAssignmentDropdownProps) {
-  const [open, setOpen] = useState(false)
-  const [search, setSearch] = useState("")
-  const [professors, setProfessors] = useState<Professor[]>([])
-  const [selectedProfessor, setSelectedProfessor] = useState<Professor | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [assigning, setAssigning] = useState(false)
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [professors, setProfessors] = useState<Professor[]>([]);
+  const [selectedProfessor, setSelectedProfessor] = useState<Professor | null>(
+    null
+  );
+  const [loading, setLoading] = useState(false);
+  const [assigning, setAssigning] = useState(false);
 
   // Load professors
   useEffect(() => {
-    fetchProfessors("")
-  }, [])
+    fetchProfessors("");
+  }, []);
 
   // Set current professor if exists
   useEffect(() => {
     if (currentProfessorId && professors.length > 0) {
-      const current = professors.find(p => p.nycu_id === currentProfessorId)
-      if (current) setSelectedProfessor(current)
+      const current = professors.find(p => p.nycu_id === currentProfessorId);
+      if (current) setSelectedProfessor(current);
     }
-  }, [currentProfessorId, professors])
+  }, [currentProfessorId, professors]);
 
   const fetchProfessors = async (searchQuery: string) => {
-    setLoading(true)
+    setLoading(true);
     try {
-      const response = await apiClient.admin.getProfessors(searchQuery)
+      const response = await apiClient.admin.getProfessors(searchQuery);
       if (response.success && response.data) {
-        setProfessors(response.data)
+        setProfessors(response.data);
       }
     } catch (error) {
-      console.error("Failed to fetch professors:", error)
+      console.error("Failed to fetch professors:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   // Debounced search effect to prevent memory leaks
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (search !== undefined) { // Only fetch if search has been set
-        fetchProfessors(search)
+      if (search !== undefined) {
+        // Only fetch if search has been set
+        fetchProfessors(search);
       }
-    }, 300)
+    }, 300);
 
-    return () => clearTimeout(timer) // Proper cleanup
-  }, [search])
+    return () => clearTimeout(timer); // Proper cleanup
+  }, [search]);
 
   const handleSearch = (value: string) => {
-    setSearch(value)
-  }
+    setSearch(value);
+  };
 
   const handleAssign = async (professor: Professor) => {
-    setAssigning(true)
+    setAssigning(true);
     try {
-      const response = await apiClient.admin.assignProfessor(applicationId, professor.nycu_id)
+      const response = await apiClient.admin.assignProfessor(
+        applicationId,
+        professor.nycu_id
+      );
       if (response.success) {
-        setSelectedProfessor(professor)
-        setOpen(false)
-        onAssigned?.(professor)
+        setSelectedProfessor(professor);
+        setOpen(false);
+        onAssigned?.(professor);
       }
     } catch (error) {
-      console.error("Failed to assign professor:", error)
+      console.error("Failed to assign professor:", error);
     } finally {
-      setAssigning(false)
+      setAssigning(false);
     }
-  }
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -126,19 +132,19 @@ function ProfessorAssignmentDropdownInner({
             ) : (
               <span className="text-xs">選擇</span>
             )
+          ) : // Full mode for when no professor is assigned
+          selectedProfessor ? (
+            <div className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              <span>{selectedProfessor.name}</span>
+              <Badge variant="secondary">{selectedProfessor.nycu_id}</Badge>
+            </div>
           ) : (
-            // Full mode for when no professor is assigned
-            selectedProfessor ? (
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                <span>{selectedProfessor.name}</span>
-                <Badge variant="secondary">{selectedProfessor.nycu_id}</Badge>
-              </div>
-            ) : (
-              <span className="text-muted-foreground">選擇教授...</span>
-            )
+            <span className="text-muted-foreground">選擇教授...</span>
           )}
-          {!compact && <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />}
+          {!compact && (
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0">
@@ -155,7 +161,7 @@ function ProfessorAssignmentDropdownInner({
               <CommandEmpty>找不到符合的教授</CommandEmpty>
             ) : (
               <CommandGroup>
-                {professors.map((professor) => (
+                {professors.map(professor => (
                   <CommandItem
                     key={professor.nycu_id}
                     value={professor.nycu_id}
@@ -188,18 +194,20 @@ function ProfessorAssignmentDropdownInner({
         </Command>
       </PopoverContent>
     </Popover>
-  )
+  );
 }
 
 // Export wrapped component with error boundary
-export function ProfessorAssignmentDropdown(props: ProfessorAssignmentDropdownProps) {
+export function ProfessorAssignmentDropdown(
+  props: ProfessorAssignmentDropdownProps
+) {
   return (
     <ErrorBoundary
       onError={(error, errorInfo) => {
-        console.error('Professor Assignment Dropdown Error:', error, errorInfo)
+        console.error("Professor Assignment Dropdown Error:", error, errorInfo);
       }}
     >
       <ProfessorAssignmentDropdownInner {...props} />
     </ErrorBoundary>
-  )
+  );
 }

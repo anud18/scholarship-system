@@ -16,6 +16,7 @@ from app.services.scholarship_service import ScholarshipService
 if TYPE_CHECKING:
     from app.schemas.scholarship import CombinedScholarshipCreate
 else:  # pragma: no cover - placeholder until schema is implemented
+
     class CombinedScholarshipCreate:  # pylint: disable=too-few-public-methods
         """Lightweight placeholder that accepts arbitrary keyword arguments."""
 

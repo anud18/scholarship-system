@@ -42,8 +42,8 @@ class TestNotificationService:
             title_en="Test Notification",
             message="這是一個測試通知",
             message_en="This is a test notification",
-            notification_type=NotificationType.INFO.value,
-            priority=NotificationPriority.NORMAL.value,
+            notification_type=NotificationType.info.value,
+            priority=NotificationPriority.normal.value,
         )
 
         # Assertions
@@ -53,8 +53,8 @@ class TestNotificationService:
         assert notification.title_en == "Test Notification"
         assert notification.message == "這是一個測試通知"
         assert notification.message_en == "This is a test notification"
-        assert notification.notification_type == NotificationType.INFO.value
-        assert notification.priority == NotificationPriority.NORMAL.value
+        assert notification.notification_type == NotificationType.info.value
+        assert notification.priority == NotificationPriority.normal.value
         assert notification.is_read is False
         assert notification.is_dismissed is False
 
@@ -68,8 +68,8 @@ class TestNotificationService:
             title_en="System Announcement",
             message="這是一個系統公告",
             message_en="This is a system announcement",
-            notification_type=NotificationType.WARNING.value,
-            priority=NotificationPriority.HIGH.value,
+            notification_type=NotificationType.warning.value,
+            priority=NotificationPriority.high.value,
         )
 
         # Assertions
@@ -77,8 +77,8 @@ class TestNotificationService:
         assert notification.user_id is None  # System announcement
         assert notification.title == "系統公告"
         assert notification.related_resource_type == "system"
-        assert notification.notification_type == NotificationType.WARNING.value
-        assert notification.priority == NotificationPriority.HIGH.value
+        assert notification.notification_type == NotificationType.warning.value
+        assert notification.priority == NotificationPriority.high.value
 
     @pytest.mark.asyncio
     async def test_notify_application_status_change(self, db_session: AsyncSession):
@@ -108,8 +108,8 @@ class TestNotificationService:
         assert notification.user_id == user.id
         assert notification.related_resource_type == "application"
         assert notification.related_resource_id == 1
-        assert notification.notification_type == NotificationType.SUCCESS.value
-        assert notification.priority == NotificationPriority.HIGH.value
+        assert notification.notification_type == NotificationType.success.value
+        assert notification.priority == NotificationPriority.high.value
         assert "恭喜" in notification.message
         assert "Congratulations" in notification.message_en
 
@@ -137,24 +137,24 @@ class TestNotificationAPI:
                 user_id=user.id,
                 title="個人通知 1",
                 message="這是第一個個人通知",
-                notification_type=NotificationType.INFO.value,
-                priority=NotificationPriority.NORMAL.value,
+                notification_type=NotificationType.info.value,
+                priority=NotificationPriority.normal.value,
                 is_read=False,
             ),
             Notification(
                 user_id=user.id,
                 title="個人通知 2",
                 message="這是第二個個人通知",
-                notification_type=NotificationType.WARNING.value,
-                priority=NotificationPriority.HIGH.value,
+                notification_type=NotificationType.warning.value,
+                priority=NotificationPriority.high.value,
                 is_read=True,
             ),
             Notification(
                 user_id=None,  # System announcement
                 title="系統公告",
                 message="這是系統公告",
-                notification_type=NotificationType.INFO.value,
-                priority=NotificationPriority.NORMAL.value,
+                notification_type=NotificationType.info.value,
+                priority=NotificationPriority.normal.value,
                 related_resource_type="system",
                 is_read=False,
             ),
@@ -287,8 +287,8 @@ class TestNotificationIntegration:
         system_announcement = await notification_service.createSystemAnnouncement(
             title="重要公告",
             message="這是一個重要的系統公告",
-            notification_type=NotificationType.WARNING.value,
-            priority=NotificationPriority.HIGH.value,
+            notification_type=NotificationType.warning.value,
+            priority=NotificationPriority.high.value,
         )
 
         # 2. System sends application status notification to student
@@ -320,7 +320,7 @@ class TestNotificationIntegration:
         assert student_count.scalar() == 2
 
         # Verify notification types and priorities
-        assert system_announcement.notification_type == NotificationType.WARNING.value
-        assert status_notification.notification_type == NotificationType.SUCCESS.value
-        assert doc_notification.notification_type == NotificationType.WARNING.value
-        assert doc_notification.priority == NotificationPriority.HIGH.value
+        assert system_announcement.notification_type == NotificationType.warning.value
+        assert status_notification.notification_type == NotificationType.success.value
+        assert doc_notification.notification_type == NotificationType.warning.value
+        assert doc_notification.priority == NotificationPriority.high.value
