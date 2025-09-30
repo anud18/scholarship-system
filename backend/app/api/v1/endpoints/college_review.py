@@ -1020,7 +1020,7 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
         # Filter by scholarship permissions
         if allowed_scholarship_ids:
             config_query = select(ScholarshipConfiguration).where(
-                ScholarshipConfiguration.is_active == True,
+                ScholarshipConfiguration.is_active,
                 ScholarshipConfiguration.scholarship_type_id.in_(allowed_scholarship_ids),
             )
         else:
