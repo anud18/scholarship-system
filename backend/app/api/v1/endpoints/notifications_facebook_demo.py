@@ -44,7 +44,7 @@ class PreferenceUpdateRequest(BaseModel):
     frequency: str = "immediate"
 
 
-@router.post("notifications/create")
+@router.post("/notifications/create")
 async def create_facebook_style_notification(
     request: CreateNotificationRequest,
     db: AsyncSession = Depends(get_db),
@@ -85,7 +85,7 @@ async def create_facebook_style_notification(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("notifications/batch")
+@router.post("/notifications/batch")
 async def create_batch_notifications(
     request: BatchNotificationRequest,
     db: AsyncSession = Depends(get_db),
@@ -134,7 +134,7 @@ async def get_aggregated_notifications(
     }
 
 
-@router.post("notifications/preferences")
+@router.post("/notifications/preferences")
 async def update_notification_preferences(
     request: PreferenceUpdateRequest,
     db: AsyncSession = Depends(get_db),
@@ -174,7 +174,7 @@ async def update_notification_preferences(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("notifications/analytics")
+@router.get("/notifications/analytics")
 async def get_notification_analytics(
     days: int = 30,
     db: AsyncSession = Depends(get_db),
@@ -188,7 +188,7 @@ async def get_notification_analytics(
     return {"success": True, "analytics": analytics}
 
 
-@router.post("scholarships/notify-new")
+@router.post("/scholarships/notify-new")
 async def notify_new_scholarship_demo(
     scholarship_data: Dict[str, Any],
     user_ids: List[int],
@@ -219,7 +219,7 @@ async def notify_new_scholarship_demo(
         }
 
 
-@router.post("applications/batch-status-updates")
+@router.post("/applications/batch-status-updates")
 async def batch_application_status_updates_demo(
     application_updates: List[Dict[str, Any]],
     db: AsyncSession = Depends(get_db),
@@ -237,7 +237,7 @@ async def batch_application_status_updates_demo(
     }
 
 
-@router.post("queue/process")
+@router.post("/queue/process")
 async def process_notification_queue_demo(
     db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):

@@ -39,7 +39,7 @@ class EmployeeSearchResponse(BaseModel):
     filtered_count: int
 
 
-@router.get("employees", response_model=EmployeeListResponse)
+@router.get("/employees", response_model=EmployeeListResponse)
 async def get_employees(
     page: int = Query(1, ge=1, description="Page number (starting from 1)"),
     status: str = Query("01", description="Employee status filter (01=active, 02=inactive)"),
@@ -91,7 +91,7 @@ async def get_employees(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
-@router.get("employees/all", response_model=List[EmployeeListResponse])
+@router.get("/employees/all", response_model=List[EmployeeListResponse])
 async def get_all_employees(
     status: str = Query("01", description="Employee status filter (01=active, 02=inactive)"),
 ):
@@ -148,7 +148,7 @@ async def get_all_employees(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
-@router.get("employees/search", response_model=EmployeeSearchResponse)
+@router.get("/employees/search", response_model=EmployeeSearchResponse)
 async def search_employees(
     query: Optional[str] = Query(None, description="Search query for employee name or ID"),
     dept_name: Optional[str] = Query(None, description="Department name filter"),

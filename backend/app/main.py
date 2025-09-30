@@ -91,6 +91,7 @@ app = FastAPI(
     docs_url="/api/v1/docs",
     redoc_url="/api/v1/redoc",
     lifespan=lifespan,
+    redirect_slashes=False,  # Disable automatic slash redirects to prevent 307 in both dev and staging
 )
 
 # Configure CORS

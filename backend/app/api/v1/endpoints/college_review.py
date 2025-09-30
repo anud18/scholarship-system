@@ -206,7 +206,7 @@ async def _check_application_review_permission(user: User, application_id: int, 
     return True  # Default allow if no specific restrictions
 
 
-@router.get("applications", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("/applications", response_model=ApiResponse[List[Dict[str, Any]]])
 @professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_applications_for_review(
     request: Request,
@@ -475,7 +475,7 @@ async def update_college_review(
         )
 
 
-@router.get("rankings", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("/rankings", response_model=ApiResponse[List[Dict[str, Any]]])
 async def get_rankings(
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
@@ -554,7 +554,7 @@ async def get_rankings(
         )
 
 
-@router.post("rankings", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/rankings", response_model=ApiResponse[Dict[str, Any]])
 async def create_ranking(
     scholarship_type_id: int = Body(..., description="Scholarship type ID"),
     sub_type_code: str = Body(..., description="Sub-type code"),
@@ -846,7 +846,7 @@ async def finalize_ranking(
         )
 
 
-@router.get("quota-status", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/quota-status", response_model=ApiResponse[Dict[str, Any]])
 async def get_quota_status(
     scholarship_type_id: int = Query(..., description="Scholarship type ID"),
     academic_year: int = Query(..., description="Academic year"),
@@ -887,7 +887,7 @@ async def get_quota_status(
         )
 
 
-@router.get("statistics", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/statistics", response_model=ApiResponse[Dict[str, Any]])
 async def get_college_review_statistics(
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
@@ -973,7 +973,7 @@ async def get_college_review_statistics(
         )
 
 
-@router.get("available-combinations", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/available-combinations", response_model=ApiResponse[Dict[str, Any]])
 async def get_available_combinations(current_user: User = Depends(require_college), db: AsyncSession = Depends(get_db)):
     """Get available combinations of scholarship types, academic years, and semesters from configurations"""
 

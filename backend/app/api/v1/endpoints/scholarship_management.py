@@ -21,7 +21,7 @@ router = APIRouter()
 # Application Management Endpoints
 
 
-@router.post("applications/create-comprehensive")
+@router.post("/applications/create-comprehensive")
 async def create_comprehensive_application(
     application_data: Dict[str, Any] = Body(...),
     current_user: User = Depends(require_student),
@@ -101,7 +101,7 @@ async def submit_comprehensive_application(
         sync_session.close()
 
 
-@router.get("applications/by-priority")
+@router.get("/applications/by-priority")
 async def get_applications_by_priority(
     scholarship_type_id: Optional[int] = Query(None),
     semester: Optional[str] = Query(None),
@@ -175,7 +175,7 @@ async def get_applications_by_priority(
 # Quota Management Endpoints
 
 
-@router.get("quota/status")
+@router.get("/quota/status")
 async def get_quota_status(
     main_type: str = Query(..., description="Main scholarship type"),
     sub_type: str = Query(..., description="Sub scholarship type"),
@@ -213,7 +213,7 @@ async def get_quota_status(
         sync_session.close()
 
 
-@router.post("quota/process-by-priority")
+@router.post("/quota/process-by-priority")
 async def process_applications_by_priority(
     main_type: str = Body(...),
     sub_type: str = Body(...),
@@ -250,7 +250,7 @@ async def process_applications_by_priority(
 # Renewal Processing Endpoints
 
 
-@router.post("renewals/process-priority")
+@router.post("/renewals/process-priority")
 async def process_renewal_applications(
     semester: str = Body(...),
     current_user: User = Depends(require_admin),
@@ -280,7 +280,7 @@ async def process_renewal_applications(
 # Analytics and Dashboard Endpoints
 
 
-@router.get("analytics/dashboard")
+@router.get("/analytics/dashboard")
 async def get_scholarship_dashboard(
     semester: Optional[str] = Query(None),
     current_user: User = Depends(require_staff),
@@ -358,7 +358,7 @@ async def get_scholarship_dashboard(
         sync_session.close()
 
 
-@router.get("types/available")
+@router.get("/types/available")
 async def get_available_scholarship_types(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
@@ -376,7 +376,7 @@ async def get_available_scholarship_types(
 # Development and Testing Endpoints
 
 
-@router.post("dev/simulate-priority-processing")
+@router.post("/dev/simulate-priority-processing")
 async def simulate_priority_processing(
     semester: str = Body(...),
     main_type: str = Body(...),

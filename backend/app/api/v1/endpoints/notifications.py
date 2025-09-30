@@ -48,7 +48,7 @@ async def getUserNotifications(
         raise HTTPException(status_code=500, detail=f"獲取通知失敗: {str(e)}")
 
 
-@router.get("unread-count", response_model=ApiResponse[int])
+@router.get("/unread-count", response_model=ApiResponse[int])
 async def getUnreadNotificationCount(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
@@ -92,7 +92,7 @@ async def markNotificationAsRead(
         raise HTTPException(status_code=500, detail=f"標記通知為已讀失敗: {str(e)}")
 
 
-@router.patch("mark-all-read", response_model=ApiResponse[dict])
+@router.patch("/mark-all-read", response_model=ApiResponse[dict])
 async def markAllNotificationsAsRead(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
@@ -275,7 +275,7 @@ async def createSystemAnnouncement(
         raise HTTPException(status_code=500, detail=f"創建系統公告失敗: {str(e)}")
 
 
-@router.post("admin/create-test-notifications", response_model=ApiResponse[dict])
+@router.post("/admin/create-test-notifications", response_model=ApiResponse[dict])
 async def createTestNotifications(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """
     創建測試通知（僅管理員可用，用於演示）
@@ -341,7 +341,7 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
 # === Admin Announcement Management Endpoints === #
 
 
-@router.get("admin/announcements", response_model=ApiResponse[dict])
+@router.get("/admin/announcements", response_model=ApiResponse[dict])
 async def getAllAnnouncements(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -484,7 +484,7 @@ async def getAnnouncement(
         raise HTTPException(status_code=500, detail=f"獲取系統公告詳情失敗: {str(e)}")
 
 
-@router.post("admin/announcements", response_model=ApiResponse[NotificationResponse])
+@router.post("/admin/announcements", response_model=ApiResponse[NotificationResponse])
 async def createAnnouncement(
     notification_data: NotificationCreate,
     current_user: User = Depends(get_current_user),

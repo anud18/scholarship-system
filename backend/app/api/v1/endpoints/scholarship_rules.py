@@ -301,7 +301,7 @@ async def delete_scholarship_rule(
     )
 
 
-@router.post("bulk", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/bulk", response_model=ApiResponse[Dict[str, Any]])
 async def bulk_rule_operation(
     operation: BulkRuleOperation,
     db: AsyncSession = Depends(get_db),
@@ -352,7 +352,7 @@ async def bulk_rule_operation(
     )
 
 
-@router.post("copy", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/copy", response_model=ApiResponse[Dict[str, Any]])
 async def copy_rules(
     copy_request: RuleCopyRequest,
     db: AsyncSession = Depends(get_db),

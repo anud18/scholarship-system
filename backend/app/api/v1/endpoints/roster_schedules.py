@@ -390,7 +390,7 @@ async def execute_schedule_now(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to execute schedule")
 
 
-@router.get("scheduler/status")
+@router.get("/scheduler/status")
 async def get_scheduler_status(
     current_user: User = Depends(get_current_user),
 ):

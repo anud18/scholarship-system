@@ -27,7 +27,7 @@ router = APIRouter()
 email_service = EmailManagementService()
 
 
-@router.get("history", response_model=ApiResponse[EmailHistoryListResponse])
+@router.get("/history", response_model=ApiResponse[EmailHistoryListResponse])
 async def get_email_history(
     *,
     db: AsyncSession = Depends(get_db),
@@ -67,7 +67,7 @@ async def get_email_history(
     return ApiResponse(success=True, message="Email history retrieved successfully", data=response_data)
 
 
-@router.get("scheduled", response_model=ApiResponse[ScheduledEmailListResponse])
+@router.get("/scheduled", response_model=ApiResponse[ScheduledEmailListResponse])
 async def get_scheduled_emails(
     *,
     db: AsyncSession = Depends(get_db),
@@ -111,7 +111,7 @@ async def get_scheduled_emails(
     )
 
 
-@router.get("scheduled/due", response_model=List[ScheduledEmailRead])
+@router.get("/scheduled/due", response_model=List[ScheduledEmailRead])
 async def get_due_scheduled_emails(
     *,
     db: AsyncSession = Depends(get_db),
@@ -205,7 +205,7 @@ async def update_scheduled_email(
         raise HTTPException(status_code=500, detail="Failed to update scheduled email")
 
 
-@router.post("scheduled/process", response_model=EmailProcessingStats)
+@router.post("/scheduled/process", response_model=EmailProcessingStats)
 async def process_due_emails(
     *,
     db: AsyncSession = Depends(get_db),
@@ -226,7 +226,7 @@ async def process_due_emails(
         raise HTTPException(status_code=500, detail=f"Failed to process emails: {str(e)}")
 
 
-@router.get("categories", response_model=List[str])
+@router.get("/categories", response_model=List[str])
 async def get_email_categories(
     current_user: User = Depends(require_admin),
 ):
@@ -236,7 +236,7 @@ async def get_email_categories(
     return [category.value for category in EmailCategory]
 
 
-@router.get("statuses", response_model=dict)
+@router.get("/statuses", response_model=dict)
 async def get_email_statuses(
     current_user: User = Depends(require_admin),
 ):
