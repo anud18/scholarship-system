@@ -138,15 +138,28 @@ export function CollegeDashboard({
       if (!currentAvailableOptions) {
         console.log("Available options not loaded yet, fetching now...");
         const response = await apiClient.college.getAvailableCombinations();
+        console.log("Available combinations API response:", response);
+
         if (response.success && response.data) {
           currentAvailableOptions = response.data;
+        } else {
+          console.error("API returned unsuccessful response:", response);
         }
       }
 
       // If still not available after fetching, throw error
       if (!currentAvailableOptions?.scholarship_types) {
+        console.error("No scholarship types available:", currentAvailableOptions);
         throw new Error(
           "Unable to load available scholarship options from college API"
+        );
+      }
+
+      // Check if scholarship_types is empty
+      if (currentAvailableOptions.scholarship_types.length === 0) {
+        console.error("Scholarship types array is empty");
+        throw new Error(
+          "No active scholarships available. Please contact administrator."
         );
       }
 
@@ -244,8 +257,12 @@ export function CollegeDashboard({
 
   const fetchAvailableOptions = async () => {
     try {
+      console.log("Fetching available combinations...");
       const response = await apiClient.college.getAvailableCombinations();
+      console.log("fetchAvailableOptions response:", response);
+
       if (response.success && response.data) {
+        console.log("Setting availableOptions:", response.data);
         setAvailableOptions(response.data);
 
         // 取得當前學期資訊
