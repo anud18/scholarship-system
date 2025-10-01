@@ -68,6 +68,7 @@ class DynamicConfig:
         "api_v1_str",
         "upload_dir",
         "redis_url",
+        "frontend_url",
         # MinIO Storage Settings (static - requires restart)
         "minio_endpoint",
         "minio_access_key",

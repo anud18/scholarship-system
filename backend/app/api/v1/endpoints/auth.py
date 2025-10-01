@@ -230,7 +230,7 @@ async def portal_sso_verify(
         # Create redirect URL with token (for frontend to handle)
         from fastapi.responses import RedirectResponse
 
-        frontend_url = "https://140.113.7.148"  # Your frontend URL
+        frontend_url = settings.frontend_url
         redirect_url = f"{frontend_url}/auth/sso-callback?token={auth_result['access_token']}&redirect=dashboard"
 
         user_info = auth_result.get("user", {})

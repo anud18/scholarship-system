@@ -29,15 +29,23 @@ services:
       SECRET_KEY: staging-secret-key-for-docker-staging-only
       DEBUG: "true"
       CORS_ORIGINS: "*"
-      ENVIRONMENT: development
+      ENVIRONMENT: staging
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin123
-      MINIO_BUCKET_NAME: scholarship-documents
+      MINIO_BUCKET: scholarship-documents
       MINIO_SECURE: "false"
       # Mock SSO Configuration for Testing (fallback)
       ENABLE_MOCK_SSO: "true"
       MOCK_SSO_DOMAIN: staging.university.edu
+      # Portal SSO Configuration (real Portal for testing)
+      PORTAL_SSO_ENABLED: "true"
+      PORTAL_JWT_SERVER_URL: "https://portal.test.nycu.edu.tw/jwt/portal"
+      PORTAL_TEST_MODE: "false"
+      PORTAL_SSO_TIMEOUT: "10.0"
+      FRONTEND_URL: "https://ss.test.nycu.edu.tw"
+      # Security Configuration
+      BYPASS_TIME_RESTRICTIONS: "false"
       # Student API Configuration (Real NYCU API)
       STUDENT_API_ENABLED: "true"
       STUDENT_API_BASE_URL: "http://140.113.7.136/api/SoAA"
