@@ -25,7 +25,6 @@ from sqlalchemy.sql import func
 from app.db.base_class import Base
 
 
-
 class RosterCycle(enum.Enum):
     """造冊週期枚舉"""
 

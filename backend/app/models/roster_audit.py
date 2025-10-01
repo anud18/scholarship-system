@@ -4,7 +4,6 @@ Roster audit log models for tracking all roster operations
 """
 
 import enum
-from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, String, Text
@@ -171,4 +170,3 @@ class RosterAuditLog(Base):
         if self.warning_message:
             message += f" (警告: {self.warning_message})"
         return message
-
