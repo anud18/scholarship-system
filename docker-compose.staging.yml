@@ -1,26 +1,4 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: scholarship_postgres_staging
-    environment:
-      POSTGRES_DB: scholarship_db
-      POSTGRES_USER: scholarship_user
-      POSTGRES_PASSWORD: scholarship_pass
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_staging_data:/var/lib/postgresql/data
-    networks:
-      - scholarship_staging_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U scholarship_user -d scholarship_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # Redis Cache
   redis:
     image: redis:7-alpine
@@ -37,46 +15,21 @@ services:
       timeout: 5s
       retries: 5
 
-  # MinIO Object Storage
-  minio:
-    image: minio/minio:latest
-    container_name: scholarship_minio_staging
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
-    volumes:
-      - minio_staging_data:/data
-    networks:
-      - scholarship_staging_network
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-
   # FastAPI Backend
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/jotpalch/scholarship-system-backend:${TAG:-latest}
     container_name: scholarship_backend_staging
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     expose:
       - "8000"
-    env_file:
-      - ./.env.staging
     environment:
-      DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
-      DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@10.113.74.25:5432/scholarship_db
+      DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@10.113.74.25:5432/scholarship_db
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: staging-secret-key-for-docker-staging-only
       DEBUG: "true"
       CORS_ORIGINS: "*"
-      ENVIRONMENT: staging
+      ENVIRONMENT: development
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin123
@@ -85,24 +38,15 @@ services:
       # Mock SSO Configuration for Testing (fallback)
       ENABLE_MOCK_SSO: "true"
       MOCK_SSO_DOMAIN: staging.university.edu
-      # Portal SSO Configuration (real Portal for testing)
-      PORTAL_SSO_ENABLED: "true"
-      PORTAL_JWT_SERVER_URL: "https://portal.test.nycu.edu.tw/jwt/portal"
-      PORTAL_STAGING_MODE: "false"
-      PORTAL_SSO_TIMEOUT: "10.0"
       # Student API Configuration (Real NYCU API)
       STUDENT_API_ENABLED: "true"
-      STUDENT_API_BASE_URL: "https://mapi.it.nycu.edu.tw"
+      STUDENT_API_BASE_URL: "http://140.113.7.136/api/SoAA"
       STUDENT_API_ACCOUNT: "scholarship"
-      STUDENT_API_HMAC_KEY: "2a5e453eb3a673a8ab3d65eb5ffa0b290acbadb6ecdd160d41"
+      STUDENT_API_HMAC_KEY: "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
       STUDENT_API_TIMEOUT: "10.0"
       STUDENT_API_ENCODE_TYPE: "UTF-8"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
-        condition: service_healthy
-      minio:
         condition: service_healthy
     networks:
       - scholarship_staging_network
@@ -131,16 +75,13 @@ services:
 
   # Next.js Frontend
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: builder
+    image: ghcr.io/jotpalch/scholarship-system-frontend:${TAG:-latest}
     container_name: scholarship_frontend_staging
     command: npm start
     expose:
       - "3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://140.113.7.148 # TODO
+      NEXT_PUBLIC_API_URL: https://ss.test.nycu.edu.tw
       NODE_ENV: production
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
@@ -151,11 +92,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_staging_data:
-    driver: local
   redis_staging_data:
-    driver: local
-  minio_staging_data:
     driver: local
 
 networks:

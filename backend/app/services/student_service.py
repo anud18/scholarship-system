@@ -86,7 +86,7 @@ class StudentService:
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.api_base_url}/getsoaascholarshipstudent",
+                    f"{self.api_base_url}/ScholarshipStudent",
                     headers=headers,
                     content=request_body,
                     timeout=self.api_timeout,
@@ -135,7 +135,7 @@ class StudentService:
         try:
             request_data = {
                 "account": self.api_account,
-                "action": "qrySoaaScholarshipStudentTerm",
+                "action": "qrySoaaScholarshipStudent",
                 "stdcode": student_code,
                 "trmyear": academic_year,
                 "trmterm": term,
@@ -154,7 +154,7 @@ class StudentService:
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    f"{self.api_base_url}/getsoaascholarshipstudentterm",
+                    f"{self.api_base_url}/ScholarshipStudentTerm",
                     headers=headers,
                     content=request_body,
                     timeout=self.api_timeout,
