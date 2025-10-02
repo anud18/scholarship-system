@@ -11,6 +11,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_staging_data:/var/lib/postgresql/data
+    networks:
+      - scholarship_staging_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U scholarship_user -d scholarship_db"]
       interval: 10s
@@ -29,6 +31,8 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin123
     volumes:
       - minio_staging_data:/data
+    networks:
+      - scholarship_staging_network
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -41,3 +45,7 @@ volumes:
     driver: local
   minio_staging_data:
     driver: local
+
+networks:
+  scholarship_staging_network:
+    external: true
