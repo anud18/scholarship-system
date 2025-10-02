@@ -85,10 +85,12 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("");
 
-  // 學期選擇狀態
-  const [selectedCombination, setSelectedCombination] = useState<string>();
-  const [currentAcademicYear, setCurrentAcademicYear] = useState<number>();
-  const [currentSemester, setCurrentSemester] = useState<string>();
+  // 學期選擇狀態 - 使用 Record 為每個獎學金儲存獨立的選擇
+  const [selectedCombinations, setSelectedCombinations] = useState<Record<string, {
+    combination: string;
+    academicYear: number;
+    semester: string | null;
+  }>>({});
 
   // Get user's scholarship permissions
   const { filterScholarshipsByPermission, isLoading: permissionsLoading } =
@@ -96,24 +98,29 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
 
   // 處理學期選擇變更
   const handleSemesterChange = async (
+    scholarshipCode: string,
     combination: string,
     academicYear: number,
     semester: string | null
   ) => {
-    setSelectedCombination(combination);
-    setCurrentAcademicYear(academicYear);
-    setCurrentSemester(semester || "first");
+    // 更新該獎學金的選擇
+    setSelectedCombinations(prev => ({
+      ...prev,
+      [scholarshipCode]: { combination, academicYear, semester: semester || "first" }
+    }));
 
     // 重新載入該學期的獎學金時間軸資料
     // 對於學年制獎學金，不傳遞學期參數
     await fetchScholarshipTimelines(academicYear, semester ?? undefined);
   };
 
-  // 重置篩選
-  const resetFilter = () => {
-    setSelectedCombination(undefined);
-    setCurrentAcademicYear(undefined);
-    setCurrentSemester(undefined);
+  // 重置特定獎學金的篩選
+  const resetFilter = (scholarshipCode: string) => {
+    setSelectedCombinations(prev => {
+      const newState = { ...prev };
+      delete newState[scholarshipCode];
+      return newState;
+    });
     fetchScholarshipTimelines();
   };
 
@@ -668,7 +675,7 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
               className="space-y-4"
             >
               {/* 學期選擇器 */}
-              <Card className="bg-gradient-to-r from-nycu-blue-50 to-nycu-teal-50 border-nycu-blue-200">
+              <Card className="bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
@@ -684,14 +691,16 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
                       <SemesterSelector
                         mode="combined"
                         scholarshipCode={scholarship.code}
-                        selectedCombination={selectedCombination}
-                        onCombinationChange={handleSemesterChange}
+                        selectedCombination={selectedCombinations[scholarship.code]?.combination}
+                        onCombinationChange={(combination, academicYear, semester) =>
+                          handleSemesterChange(scholarship.code, combination, academicYear, semester)
+                        }
                       />
-                      {selectedCombination && (
+                      {selectedCombinations[scholarship.code] && (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={resetFilter}
+                          onClick={() => resetFilter(scholarship.code)}
                           className="text-nycu-navy-600 hover:text-nycu-navy-800"
                         >
                           <RefreshCw className="h-4 w-4 mr-2" />
@@ -710,12 +719,12 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
                     {scholarship.name}
                   </h3>
                   <p className="text-sm text-nycu-navy-600">
-                    {selectedCombination
-                      ? `${currentAcademicYear}學年度${
+                    {selectedCombinations[scholarship.code]
+                      ? `${selectedCombinations[scholarship.code].academicYear}學年度${
                           scholarship.applicationCycle === "semester" &&
-                          currentSemester &&
-                          currentSemester !== "null"
-                            ? currentSemester === "first"
+                          selectedCombinations[scholarship.code].semester &&
+                          selectedCombinations[scholarship.code].semester !== "null"
+                            ? selectedCombinations[scholarship.code].semester === "first"
                               ? " 第一學期"
                               : " 第二學期"
                             : ""

@@ -128,6 +128,13 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
           await apiClient.admin.getAvailableSemesters(scholarshipCode);
 
         if (result.success && result.data) {
+          // 計算當前學期（台灣學年：8月後=第一學期，8月前=第二學期）
+          const now = new Date();
+          const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
+          const currentTaiwanYear = now.getFullYear() - 1911;
+          const currentAcademicYear = currentMonth >= 8 ? currentTaiwanYear : currentTaiwanYear - 1;
+          const currentSemester = currentMonth >= 8 ? "first" : "second";
+
           // 轉換 API 回傳的期間格式為組件需要的格式
           const configuredPeriods = result.data.map((period: string) => {
             if (period.includes("-")) {
@@ -136,6 +143,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
               const academicYear = parseInt(year);
               const semester = sem === "1" ? "first" : "second";
               const semesterLabel = sem === "1" ? "第一學期" : "第二學期";
+              const isCurrent = academicYear === currentAcademicYear && semester === currentSemester;
 
               return {
                 value: period,
@@ -143,12 +151,13 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
                 semester: semester,
                 label: `${academicYear}學年${semesterLabel}`,
                 label_en: `Academic Year ${academicYear + 1911}-${academicYear + 1912} ${sem === "1" ? "First" : "Second"} Semester`,
-                is_current: false, // TODO: 需要判斷當前學期
+                is_current: isCurrent,
                 cycle: "semester",
               };
             } else {
               // 學年制：格式如 "114"
               const academicYear = parseInt(period);
+              const isCurrent = academicYear === currentAcademicYear;
 
               return {
                 value: period,
@@ -156,7 +165,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
                 semester: null,
                 label: `${academicYear}學年`,
                 label_en: `Academic Year ${academicYear + 1911}-${academicYear + 1912}`,
-                is_current: false, // TODO: 需要判斷當前學年
+                is_current: isCurrent,
                 cycle: "yearly",
               };
             }
@@ -240,6 +249,14 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
 
       if (response.success && response.data) {
         const payload = response.data;
+
+        // 計算當前學期
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentTaiwanYear = now.getFullYear() - 1911;
+        const currentAcademicYear = currentMonth >= 8 ? currentTaiwanYear : currentTaiwanYear - 1;
+        const currentSemester = currentMonth >= 8 ? "first" : "second";
+
         // 將 API 回傳的資料轉換為組合選項格式
         const combinationOptions: CombinationOption[] = [];
 
@@ -249,14 +266,16 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
             const semesterLabel =
               semester === "FIRST" ? "第一學期" : "第二學期";
             const semesterNum = semester === "FIRST" ? "1" : "2";
+            const semesterValue = semester.toLowerCase(); // Convert to lowercase to match enum
+            const isCurrent = year === currentAcademicYear && semesterValue === currentSemester;
 
             combinationOptions.push({
               value: `${year}-${semesterNum}`,
               academic_year: year,
-              semester: semester.toLowerCase(), // Convert to lowercase to match enum
+              semester: semesterValue,
               label: `${year}學年${semesterLabel}`,
               label_en: `Academic Year ${year + 1911}-${year + 1912} ${semester === "FIRST" ? "First" : "Second"} Semester`,
-              is_current: false, // TODO: Add current period detection
+              is_current: isCurrent,
             });
           });
         });
@@ -264,13 +283,15 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
         // 如果只有一個學期選項，可能是學年制
         if (payload.semesters.length === 0) {
           payload.academic_years.forEach((year: number) => {
+            const isCurrent = year === currentAcademicYear;
+
             combinationOptions.push({
               value: year.toString(),
               academic_year: year,
               semester: null,
               label: `${year}學年`,
               label_en: `Academic Year ${year + 1911}-${year + 1912}`,
-              is_current: false,
+              is_current: isCurrent,
             });
           });
         }
