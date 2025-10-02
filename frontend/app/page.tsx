@@ -447,7 +447,7 @@ export default function ScholarshipManagementSystem() {
               <p className="text-lg text-nycu-navy-600 mt-1">
                 {user.role === "student"
                   ? t("system.subtitle")
-                  : "Scholarship Application and Approval Management System"}
+                  : "NYCU Admissions Scholarship System"}
               </p>
               <p className="text-sm text-nycu-blue-600 font-medium mt-1">
                 國立陽明交通大學教務處 | NYCU Office of Academic Affairs
