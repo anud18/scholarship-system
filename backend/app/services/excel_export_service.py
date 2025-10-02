@@ -745,6 +745,8 @@ class ExcelExportService:
         template_name: str = "STD_UP_MIXLISTA",
         include_header: bool = True,
         max_preview_rows: int = 10,
+        *,
+        include_excluded: bool = False,
     ) -> Dict[str, Any]:
         """
         預覽造冊匯出內容
@@ -752,7 +754,7 @@ class ExcelExportService:
         """
         try:
             # 取得造冊項目
-            roster_items = self._get_filtered_roster_items(roster, include_excluded=False)
+            roster_items = self._get_filtered_roster_items(roster, include_excluded=include_excluded)
 
             # 準備Excel資料
             excel_data = self._prepare_excel_data(roster, roster_items)
@@ -791,6 +793,11 @@ class ExcelExportService:
         roster_id: int,
         task_id: str,
         user_id: int,
+        *,
+        template_name: Optional[str] = None,
+        include_header: bool = True,
+        include_statistics: bool = True,
+        include_excluded: bool = False,
     ):
         """
         處理非同步匯出任務
@@ -813,10 +820,11 @@ class ExcelExportService:
                 # 執行匯出
                 export_result = self.export_roster_to_excel(
                     roster=roster,
-                    template_name="STD_UP_MIXLISTA",
-                    include_header=True,
-                    include_statistics=True,
-                    async_mode=False,  # 這裡執行同步匯出
+                    template_name=template_name or self.default_template_name,
+                    include_header=include_header,
+                    include_statistics=include_statistics,
+                    include_excluded=include_excluded,
+                    async_mode=False,
                 )
 
                 # 上傳到MinIO
@@ -835,7 +843,7 @@ class ExcelExportService:
                     roster_id=roster_id,
                     filename=minio_result["object_name"],
                     file_size=minio_result["file_size"],
-                    record_count=len(self._get_filtered_roster_items(roster, include_excluded=False)),
+                    record_count=len(self._get_filtered_roster_items(roster, include_excluded=include_excluded)),
                     user_id=user_id,
                     user_name=f"user_{user_id}",
                     export_format="xlsx",

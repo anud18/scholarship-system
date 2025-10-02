@@ -7,7 +7,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from sqlalchemy import and_, asc, desc, select
+from sqlalchemy import and_, asc, desc
+from sqlalchemy import func as sa_func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -553,9 +555,7 @@ class ScholarshipApplicationService:
         """Generate unique application ID using existing format"""
 
         # Get count of applications for this year
-        from sqlalchemy import func
-
-        stmt = select(func.count(Application.id)).where(Application.academic_year == academic_year)
+        stmt = select(sa_func.count(Application.id)).where(Application.academic_year == academic_year)
         result = await self.db.execute(stmt)
         count = result.scalar()
 
@@ -690,9 +690,7 @@ class ScholarshipQuotaService:
         """Get quota status for a scholarship type combination"""
 
         # Count approved applications by type
-        from sqlalchemy import func
-
-        stmt = select(func.count(Application.id)).where(
+        stmt = select(sa_func.count(Application.id)).where(
             and_(
                 Application.main_scholarship_type == main_scholarship_type,
                 Application.sub_scholarship_type == sub_scholarship_type,
@@ -704,7 +702,7 @@ class ScholarshipQuotaService:
         approved_count = result.scalar()
 
         # Get pending applications
-        stmt = select(func.count(Application.id)).where(
+        stmt = select(sa_func.count(Application.id)).where(
             and_(
                 Application.main_scholarship_type == main_scholarship_type,
                 Application.sub_scholarship_type == sub_scholarship_type,

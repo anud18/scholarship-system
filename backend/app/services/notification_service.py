@@ -9,7 +9,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
 
-from sqlalchemy import and_, desc, func, or_, select, update
+from sqlalchemy import and_, desc
+from sqlalchemy import func as sa_func
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import (
@@ -22,6 +24,8 @@ from app.models.notification import (
     NotificationTemplate,
     NotificationType,
 )
+
+func: Any = sa_func
 
 logger = logging.getLogger(__name__)
 

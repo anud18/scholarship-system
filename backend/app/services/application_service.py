@@ -8,7 +8,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, desc
+from sqlalchemy import func as sa_func
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -30,6 +32,8 @@ from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
 from app.services.student_service import StudentService
+
+func: Any = sa_func
 
 logger = logging.getLogger(__name__)
 

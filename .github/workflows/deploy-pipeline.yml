@@ -257,8 +257,8 @@ jobs:
           echo "Running smoke tests..."
 
           # Test API endpoints
-          curl -f http://localhost:8000/api/v1/health || exit 1
-          curl -f http://localhost:8000/docs || exit 1
+          curl -f http://localhost:8000/health || exit 1
+          curl -f http://localhost:8000/api/v1/docs || exit 1
 
           echo "✅ Smoke tests passed"
 

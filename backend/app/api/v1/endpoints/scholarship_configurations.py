@@ -6,7 +6,9 @@ Clean, database-driven approach for dynamic scholarship configuration management
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_
+from sqlalchemy import func as sa_func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
@@ -633,7 +635,7 @@ async def get_quota_overview(
                     allocated_quota = config.total_quota // num_sub_types if num_sub_types > 0 else config.total_quota
 
                 # Get actual usage from applications
-                quota_query = select(func.count(Application.id)).where(
+                quota_query = select(sa_func.count(Application.id)).where(
                     and_(
                         Application.scholarship_type_id == stype.id,
                         Application.config_code == config.config_code,
@@ -645,7 +647,7 @@ async def get_quota_overview(
                 used_quota = used_quota_result.scalar() or 0
 
                 # Get total applications count (all statuses except rejected/withdrawn)
-                total_apps_query = select(func.count(Application.id)).where(
+                total_apps_query = select(sa_func.count(Application.id)).where(
                     and_(
                         Application.scholarship_type_id == stype.id,
                         Application.config_code == config.config_code,

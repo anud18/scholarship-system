@@ -5,13 +5,17 @@ Handles business logic for dynamic scholarship configurations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_
+from sqlalchemy import func as sa_func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import QuotaManagementMode
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+
+func: Any = sa_func
 
 
 class ScholarshipConfigurationService:
