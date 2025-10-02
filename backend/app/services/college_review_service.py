@@ -12,7 +12,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import and_, asc, case, func, or_, select
+from sqlalchemy import and_, asc, case
+from sqlalchemy import func as sa_func
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -22,6 +24,8 @@ from app.models.college_review import CollegeRanking, CollegeRankingItem, Colleg
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration
 from app.services.email_automation_service import email_automation_service
+
+func: Any = sa_func
 
 logger = logging.getLogger(__name__)
 

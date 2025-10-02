@@ -9,7 +9,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ValidationError
-from app.models.scholarship import Scholarship
+from app.models.scholarship import ScholarshipType
 from app.models.user import AdminScholarship, EmployeeStatus, User, UserRole, UserType
 
 
@@ -224,9 +224,9 @@ class PreAuthorizationService:
 
         return False
 
-    async def _get_scholarship(self, scholarship_id: int) -> Optional[Scholarship]:
+    async def _get_scholarship(self, scholarship_id: int) -> Optional[ScholarshipType]:
         """Get scholarship by ID"""
-        stmt = select(Scholarship).where(Scholarship.id == scholarship_id)
+        stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 

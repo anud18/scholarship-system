@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import desc
+from sqlalchemy import func as sa_func
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
@@ -76,6 +78,8 @@ from app.services.bank_verification_service import BankVerificationService
 from app.services.bulk_approval_service import BulkApprovalService
 from app.services.config_management_service import ConfigurationService
 from app.services.system_setting_service import EmailTemplateService, SystemSettingService
+
+func: Any = sa_func
 
 logger = logging.getLogger(__name__)
 

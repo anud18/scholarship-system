@@ -192,6 +192,7 @@ jobs:
           FRONTEND_URL: ${{ secrets.STAGING_API_URL }}
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}
           NEXT_PUBLIC_NYCU_PORTAL_URL: ${{ secrets.NEXT_PUBLIC_NYCU_PORTAL_URL }}
+          NODE_ENV: ${{ secrets.NODE_ENV }}
           STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
           STUDENT_API_ACCOUNT: ${{ secrets.STUDENT_API_ACCOUNT }}
           STUDENT_API_HMAC_KEY: ${{ secrets.STUDENT_API_HMAC_KEY }}

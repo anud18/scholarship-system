@@ -3,10 +3,12 @@ Notification endpoints for managing user notifications and system announcements
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy import and_, delete
+from sqlalchemy import func as sa_func
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, get_db
@@ -15,6 +17,8 @@ from app.models.user import User
 from app.schemas.notification import NotificationCreate, NotificationResponse
 from app.schemas.response import ApiResponse
 from app.services.notification_service import NotificationService
+
+func: Any = sa_func
 
 router = APIRouter()
 

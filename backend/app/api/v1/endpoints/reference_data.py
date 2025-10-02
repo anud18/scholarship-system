@@ -2,10 +2,12 @@
 Reference data API endpoints for lookup tables
 """
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_
+from sqlalchemy import func as sa_func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,6 +17,8 @@ from app.models.enums import ApplicationCycle, Semester
 from app.models.scholarship import ScholarshipType
 from app.models.student import Academy, Degree, Department, EnrollType, Identity, SchoolIdentity, StudyingStatus
 from app.schemas.common import ApiResponse
+
+func: Any = sa_func
 
 router = APIRouter()
 

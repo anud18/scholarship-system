@@ -42,13 +42,13 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
 
   // Only show when explicitly enabled via environment variable or in test mode
   const isTestEnvironment = () => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-    return apiUrl.includes("test") || apiUrl.includes("staging") || apiUrl.includes("localhost") || apiUrl.includes("140.113.7.148");
+    if (typeof window === 'undefined') return false;
+    const hostname = window.location.hostname;
+    return hostname.includes("test") || hostname.includes("staging") || hostname.includes("localhost") || hostname === "140.113.7.148";
   };
 
   const shouldShow =
     isTestMode ||
-    process.env.NEXT_PUBLIC_ENABLE_DEBUG_PANEL === "true" ||
     process.env.NODE_ENV === "development" ||
     isTestEnvironment();
 

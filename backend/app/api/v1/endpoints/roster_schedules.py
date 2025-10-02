@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.functions import count
 
 from app.core.deps import get_current_user
 from app.core.security import check_user_roles
@@ -64,9 +65,7 @@ async def list_roster_schedules(
             )
 
         # Get total count
-        from sqlalchemy import func
-
-        count_stmt = select(func.count()).select_from(stmt.subquery())
+        count_stmt = select(count()).select_from(stmt.subquery())
         total_result = await db.execute(count_stmt)
         total = total_result.scalar()
 

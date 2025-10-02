@@ -10,9 +10,10 @@ from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.functions import count
 
 from app.core.deps import get_current_user
 from app.core.security import check_user_roles
@@ -111,7 +112,7 @@ async def list_payment_rosters(
             stmt = stmt.where(PaymentRoster.academic_year == academic_year)
 
         # 計算總數
-        count_stmt = select(func.count()).select_from(stmt.subquery())
+        count_stmt = select(count()).select_from(stmt.subquery())
         total_result = await db.execute(count_stmt)
         total = total_result.scalar()
 
@@ -571,20 +572,20 @@ async def get_roster_statistics(
         # 統計各驗證狀態的人數
         verification_stats = {}
         for status_val in StudentVerificationStatus:
-            count = (
+            item_count = (
                 await db.execute(
-                    select(func.count())
+                    select(count())
                     .select_from(PaymentRosterItem)
                     .where(
                         PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.verification_status == status_val
                     )
                 )
             ).scalar()
-            verification_stats[status_val.value] = count
+            verification_stats[status_val.value] = item_count
 
         # 統計合格/不合格人數
         qualified_stmt = (
-            select(func.count())
+            select(count())
             .select_from(PaymentRosterItem)
             .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(True))
         )
@@ -592,7 +593,7 @@ async def get_roster_statistics(
         qualified_count = qualified_result.scalar() or 0
 
         disqualified_stmt = (
-            select(func.count())
+            select(count())
             .select_from(PaymentRosterItem)
             .where(PaymentRosterItem.roster_id == roster_id, PaymentRosterItem.is_qualified.is_(False))
         )
@@ -681,7 +682,7 @@ async def get_roster_audit_logs(
         if not roster:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的造冊")
 
-        from app.models.payment_roster import RosterAuditLog
+        from app.models.roster_audit import RosterAuditLog
 
         stmt = (
             select(RosterAuditLog)
@@ -689,7 +690,7 @@ async def get_roster_audit_logs(
             .order_by(RosterAuditLog.created_at.desc())
         )
 
-        count_result = await db.execute(select(func.count()).select_from(stmt.subquery()))
+        count_result = await db.execute(select(count()).select_from(stmt.subquery()))
         total = count_result.scalar()
         stmt = stmt.offset(skip).limit(limit)
         result = await db.execute(stmt)

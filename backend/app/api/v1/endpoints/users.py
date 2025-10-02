@@ -5,8 +5,9 @@ User management API endpoints
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.functions import count
 
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
@@ -190,7 +191,7 @@ async def get_all_users(
     # All users are considered active in the new model
 
     # Get total count
-    count_stmt = select(func.count()).select_from(stmt.subquery())
+    count_stmt = select(count()).select_from(stmt.subquery())
     total_result = await db.execute(count_stmt)
     total = total_result.scalar()
 
@@ -305,32 +306,32 @@ async def get_user_stats(current_user: User = Depends(require_admin), db: AsyncS
     # Total users by role
     role_stats = {}
     for role in UserRole:
-        stmt = select(func.count(User.id)).where(User.role == role)
+        stmt = select(count(User.id)).where(User.role == role)
         result = await db.execute(stmt)
-        count = result.scalar()
-        role_stats[role.value] = count
+        user_count = result.scalar()
+        role_stats[role.value] = user_count
 
     # User type distribution
     user_type_stats = {}
     for user_type in UserType:
-        stmt = select(func.count(User.id)).where(User.user_type == user_type)
+        stmt = select(count(User.id)).where(User.user_type == user_type)
         result = await db.execute(stmt)
-        count = result.scalar()
-        user_type_stats[user_type.value] = count
+        user_count = result.scalar()
+        user_type_stats[user_type.value] = user_count
 
     # Status distribution
     status_stats = {}
     for employee_status in EmployeeStatus:
-        stmt = select(func.count(User.id)).where(User.status == employee_status)
+        stmt = select(count(User.id)).where(User.status == employee_status)
         result = await db.execute(stmt)
-        count = result.scalar()
-        status_stats[employee_status.value] = count
+        user_count = result.scalar()
+        status_stats[employee_status.value] = user_count
 
     # Recent registrations (last 30 days)
     from datetime import datetime, timedelta
 
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    recent_stmt = select(func.count(User.id)).where(User.created_at >= thirty_days_ago)
+    recent_stmt = select(count(User.id)).where(User.created_at >= thirty_days_ago)
     recent_result = await db.execute(recent_stmt)
     recent_count = recent_result.scalar()
 

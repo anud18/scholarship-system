@@ -13,7 +13,17 @@ import { GraduationCap, ExternalLink } from "lucide-react";
 export function SSOLoginPage() {
   const handleSSOLogin = () => {
     // Redirect to NYCU Portal for SSO authentication
-    const portalUrl = process.env.NEXT_PUBLIC_NYCU_PORTAL_URL || 'https://portal.test.nycu.edu.tw';
+    // Detect environment from hostname to determine correct Portal URL
+    let portalUrl = 'https://portal.nycu.edu.tw'; // Default production
+
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      // Use test portal for test/staging/dev environments
+      if (hostname.includes('test') || hostname.includes('staging') || hostname.includes('localhost') || hostname === '140.113.7.148') {
+        portalUrl = 'https://portal.test.nycu.edu.tw';
+      }
+    }
+
     window.location.href = `${portalUrl}/#/redirect/scholarship`;
   };
 

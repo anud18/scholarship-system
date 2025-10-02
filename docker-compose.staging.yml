@@ -91,7 +91,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ss.test.nycu.edu.tw}
       NEXT_PUBLIC_NYCU_PORTAL_URL: ${NEXT_PUBLIC_NYCU_PORTAL_URL:-https://portal.test.nycu.edu.tw}
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
       # Debug Panel Control

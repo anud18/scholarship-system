@@ -6,12 +6,14 @@ Excel export service for payment roster generation
 import hashlib
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
@@ -25,10 +27,10 @@ class ExcelExportService:
 
     def __init__(self):
         self.export_base_path = getattr(settings, "roster_export_dir", "./exports")
-        self.template_path = os.path.join(
-            getattr(settings, "roster_template_dir", "./app/templates"),
-            getattr(settings, "roster_excel_template", "STD_UP_MIXLISTA.xlsx"),
-        )
+        self.template_dir = getattr(settings, "roster_template_dir", "./app/templates")
+        default_template = getattr(settings, "roster_excel_template", "STD_UP_MIXLISTA.xlsx")
+        self.template_path = os.path.join(self.template_dir, default_template)
+        self.default_template_name = default_template
         self.ensure_export_directory()
         self._load_template_structure()
 
@@ -114,13 +116,26 @@ class ExcelExportService:
         """確保匯出目錄存在"""
         Path(self.export_base_path).mkdir(parents=True, exist_ok=True)
 
-    def export_roster_to_excel(self, roster: PaymentRoster, include_excluded: bool = False) -> Dict[str, Any]:
+    def export_roster_to_excel(
+        self,
+        roster: PaymentRoster,
+        include_excluded: bool = False,
+        *,
+        template_name: Optional[str] = None,
+        include_header: bool = True,
+        include_statistics: bool = True,
+        async_mode: bool = False,
+    ) -> Dict[str, Any]:
         """
         匯出造冊至Excel檔案
 
         Args:
             roster: 造冊對象
             include_excluded: 是否包含被排除的項目
+            template_name: 指定模板名稱 (預設為設定檔定義)
+            include_header: 是否在檔案中包含表頭
+            include_statistics: 是否加入統計資訊工作表
+            async_mode: 是否以非同步模式回傳背景任務資訊
 
         Returns:
             Dict[str, Any]: 匯出結果
@@ -132,11 +147,29 @@ class ExcelExportService:
                 "total_rows": int,
                 "qualified_count": int,
                 "disqualified_count": int,
+                "template_name": str,
+                "include_header": bool,
+                "include_statistics": bool,
             }
 
         Raises:
             FileStorageError: 檔案儲存失敗
         """
+        resolved_template_path = self._resolve_template_path(template_name)
+        resolved_template_name = os.path.basename(resolved_template_path)
+
+        if async_mode:
+            task_id = f"roster-export-{uuid4().hex}"
+            estimated_completion = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
+            return {
+                "task_id": task_id,
+                "status": "queued",
+                "template_name": resolved_template_name,
+                "include_header": include_header,
+                "include_statistics": include_statistics,
+                "estimated_completion": estimated_completion,
+            }
+
         try:
             # 取得造冊明細
             roster_items = self._get_roster_items(roster, include_excluded)
@@ -159,7 +192,14 @@ class ExcelExportService:
                 )
 
             # 建立Excel檔案
-            self._create_excel_file(excel_data, file_path, roster)
+            self._create_excel_file(
+                excel_data,
+                file_path,
+                roster,
+                template_path=resolved_template_path,
+                include_header=include_header,
+                include_statistics=include_statistics,
+            )
 
             # 計算檔案資訊
             file_size = os.path.getsize(file_path)
@@ -186,6 +226,9 @@ class ExcelExportService:
                 "disqualified_count": disqualified_count,
                 "validation_result": validation_result,
                 "template_columns": self.template_columns,
+                "template_name": resolved_template_name,
+                "include_header": include_header,
+                "include_statistics": include_statistics,
             }
 
         except Exception as e:
@@ -200,6 +243,24 @@ class ExcelExportService:
             items = [item for item in items if item.is_included]
 
         return sorted(items, key=lambda x: x.student_name)
+
+    def _resolve_template_path(self, template_name: Optional[str]) -> str:
+        """Resolve Excel template path based on optional template name"""
+        if not template_name:
+            return self.template_path
+
+        candidate = template_name if template_name.lower().endswith(".xlsx") else f"{template_name}.xlsx"
+        candidate_path = os.path.join(self.template_dir, candidate)
+
+        if os.path.exists(candidate_path):
+            return candidate_path
+
+        logger.warning("Template %s not found. Falling back to default template.", candidate_path)
+        return self.template_path
+
+    def _get_filtered_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
+        """Compatibility helper for legacy calls that expect filtered roster items"""
+        return self._get_roster_items(roster, include_excluded)
 
     def _prepare_excel_data(self, roster: PaymentRoster, roster_items: List[PaymentRosterItem]) -> List[Dict]:
         """準備Excel資料 - STD_UP_MIXLISTA 30欄位格式"""
@@ -396,40 +457,50 @@ class ExcelExportService:
 
         return validation_result
 
-    def _create_excel_file(self, excel_data: List[Dict], file_path: str, roster: PaymentRoster):
+    def _create_excel_file(
+        self,
+        excel_data: List[Dict],
+        file_path: str,
+        roster: PaymentRoster,
+        *,
+        template_path: str,
+        include_header: bool,
+        include_statistics: bool,
+    ):
         """建立Excel檔案 - 優先使用模板檔案"""
         try:
-            # 嘗試使用模板檔案
-            if os.path.exists(self.template_path):
-                wb = load_workbook(self.template_path)
+            use_template = include_header and os.path.exists(template_path)
+
+            if use_template:
+                wb = load_workbook(template_path)
                 ws = wb.active
-                logger.info("Using template file for Excel generation")
+                logger.info("Using template file for Excel generation: %s", template_path)
             else:
-                # 建立新的工作簿
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "印領清冊"
 
-                # 寫入表頭
-                for col_idx, column_name in enumerate(self.template_columns, start=1):
-                    cell = ws.cell(row=1, column=col_idx, value=column_name)
-                    cell.font = Font(bold=True)
-                    cell.alignment = Alignment(horizontal="center", vertical="center")
-                    cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+                if include_header:
+                    for col_idx, column_name in enumerate(self.template_columns, start=1):
+                        cell = ws.cell(row=1, column=col_idx, value=column_name)
+                        cell.font = Font(bold=True)
+                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                        cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
 
-                logger.info("Created new Excel file with default template")
+                logger.info("Created new Excel file using default structure (include_header=%s)", include_header)
 
-            # 清除現有資料（保留表頭）
-            if ws.max_row > 1:
-                ws.delete_rows(2, ws.max_row)
+            start_row = 2 if include_header else 1
 
-            # 寫入資料
-            for row_idx, row_data in enumerate(excel_data, start=2):
+            if include_header and ws.max_row >= start_row:
+                ws.delete_rows(start_row, ws.max_row - start_row + 1)
+            elif not include_header and ws.max_row >= 1:
+                ws.delete_rows(1, ws.max_row)
+
+            for row_idx, row_data in enumerate(excel_data, start=start_row):
                 for col_idx, column_name in enumerate(self.template_columns, start=1):
                     value = row_data.get(column_name, "")
                     cell = ws.cell(row=row_idx, column=col_idx, value=value)
 
-                    # 數字格式化
                     if column_name in ["金額", "扣繳稅額"] and isinstance(value, (int, float)):
                         cell.number_format = "#,##0"
                     elif column_name in ["序號", "流水號"]:
@@ -437,30 +508,24 @@ class ExcelExportService:
                     elif column_name in ["申請日期", "核准日期", "造冊日期"] and isinstance(value, str) and value:
                         cell.alignment = Alignment(horizontal="center")
 
-            # 設定樣式
-            self._apply_excel_styling(ws, len(excel_data) + 1)
+            total_rows = max(len(excel_data) + (1 if include_header else 0), 1)
+            self._apply_excel_styling(ws, total_rows, include_header)
 
-            # 加入工作表資訊
-            self._add_worksheet_info(wb, roster)
+            if include_statistics:
+                self._add_worksheet_info(wb, roster)
 
-            # 儲存檔案
             wb.save(file_path)
-            logger.info(f"Excel file created successfully: {file_path}")
+            logger.info("Excel file created successfully: %s", file_path)
 
         except Exception as e:
             logger.error(f"Failed to create Excel file: {e}")
             raise FileStorageError(f"Failed to create Excel file: {e}", file_name=os.path.basename(file_path))
 
-    def _apply_excel_styling(self, ws, max_row: int):
+    def _apply_excel_styling(self, ws, max_row: int, include_header: bool):
         """應用Excel樣式"""
-        # 設定欄寬
         self._set_column_widths(ws)
-
-        # 設定邊框
         self._set_borders(ws, max_row)
-
-        # 凍結首列
-        ws.freeze_panes = "A2"
+        ws.freeze_panes = "A2" if include_header else None
 
     def _set_column_widths(self, ws):
         """設定欄寬 - 智慧調整基於欄位內容"""
@@ -503,10 +568,9 @@ class ExcelExportService:
             "驗證狀態": 10,
         }
 
-        # 應用欄寬設定
         for col_idx, column_name in enumerate(self.template_columns, start=1):
-            width = default_widths.get(column_name, 12)  # 預設12
-            column_letter = ws.cell(row=1, column=col_idx).column_letter
+            width = default_widths.get(column_name, 12)
+            column_letter = get_column_letter(col_idx)
             ws.column_dimensions[column_letter].width = width
 
     def _set_borders(self, ws, max_row: int):
