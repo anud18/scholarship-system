@@ -1231,6 +1231,46 @@ export function EnhancedStudentPortal({
                         const commonPassedRules = scholarship.passed?.filter(rule => !rule.sub_type) || [];
                         const commonErrorRules = scholarship.errors?.filter(rule => !rule.sub_type) || [];
 
+                        const hasSubTypes = scholarship.eligible_sub_types &&
+                          scholarship.eligible_sub_types.some(st => st.value && st.value !== "general");
+
+                        // If no subtypes (general scholarship), show common rules directly
+                        if (!hasSubTypes && (commonPassedRules.length > 0 || commonErrorRules.length > 0)) {
+                          return (
+                            <div>
+                              <div className="flex flex-wrap gap-1">
+                                {/* Passed rules */}
+                                {commonPassedRules.map(rule => (
+                                  <Badge
+                                    key={rule.rule_id}
+                                    variant="outline"
+                                    className="bg-emerald-50 text-emerald-600 border-emerald-100"
+                                  >
+                                    {getTranslation(
+                                      locale,
+                                      `eligibility_tags.${rule.tag}`
+                                    )}
+                                  </Badge>
+                                ))}
+                                {/* Error rules */}
+                                {commonErrorRules.map(rule => (
+                                  <Badge
+                                    key={rule.rule_id}
+                                    variant="outline"
+                                    className="bg-rose-50 text-rose-600 border-rose-100"
+                                  >
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    {getTranslation(
+                                      locale,
+                                      `eligibility_tags.${rule.tag}`
+                                    )}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+
                         // Sub-type specific sections with common rules appended
                         return scholarship.eligible_sub_types?.map((subTypeInfo) => {
                           const subType = subTypeInfo.value;
