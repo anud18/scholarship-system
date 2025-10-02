@@ -414,8 +414,8 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
       >
         <SelectTrigger
           className={cn(
-            "h-8 min-w-[140px]",
-            isYearlyMode ? "w-[140px]" : "w-[180px]"
+            "h-9 min-w-[160px]",
+            isYearlyMode ? "w-[160px]" : "w-[200px]"
           )}
         >
           <SelectValue placeholder={placeholderText} />
