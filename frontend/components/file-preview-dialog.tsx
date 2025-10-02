@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Eye, FileText } from "lucide-react";
 import { Locale } from "@/lib/validators";
 
@@ -30,7 +31,14 @@ export function FilePreviewDialog({
   file,
   locale,
 }: FilePreviewDialogProps) {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Reset loading state when dialog opens or file changes
+  useEffect(() => {
+    if (isOpen && file) {
+      setIsLoading(true);
+    }
+  }, [isOpen, file?.url]);
 
   const handleOpenInNewWindow = () => {
     if (!file) return;
@@ -71,21 +79,54 @@ export function FilePreviewDialog({
           <DialogDescription>{file.filename}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden relative">
           {file.type.includes("pdf") ? (
-            <iframe
-              src={file.url}
-              className="w-full h-[70vh] border rounded"
-              title={file.filename}
-              onLoad={() => setIsLoading(false)}
-              onError={() => setIsLoading(false)}
-            />
+            <>
+              {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background p-8">
+                  <div className="w-full max-w-2xl space-y-4">
+                    <div className="space-y-3">
+                      <Skeleton className="h-6 w-full" />
+                      <Skeleton className="h-6 w-[90%]" />
+                      <Skeleton className="h-6 w-[85%]" />
+                      <Skeleton className="h-6 w-[95%]" />
+                      <Skeleton className="h-6 w-[80%]" />
+                    </div>
+                    <div className="space-y-3 pt-4">
+                      <Skeleton className="h-6 w-full" />
+                      <Skeleton className="h-6 w-[88%]" />
+                      <Skeleton className="h-6 w-[92%]" />
+                    </div>
+                    <p className="text-sm text-muted-foreground text-center pt-4">
+                      {locale === "zh" ? "載入中..." : "Loading..."}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <iframe
+                src={file.url}
+                className={`w-full h-[70vh] border rounded transition-opacity duration-300 ${
+                  isLoading ? "opacity-0" : "opacity-100"
+                }`}
+                title={file.filename}
+                onLoad={() => setIsLoading(false)}
+                onError={() => setIsLoading(false)}
+              />
+            </>
           ) : file.type.includes("image") ? (
-            <div className="flex justify-center items-center h-[70vh] bg-muted rounded">
+            <div className="flex justify-center items-center h-[70vh] bg-muted rounded relative">
+              {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center p-8">
+                  <Skeleton className="w-full h-full max-w-3xl max-h-[60vh] rounded-lg" />
+                </div>
+              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={file.url}
                 alt={file.filename}
-                className="max-w-full max-h-full object-contain"
+                className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${
+                  isLoading ? "opacity-0" : "opacity-100"
+                }`}
                 onLoad={() => setIsLoading(false)}
                 onError={() => setIsLoading(false)}
               />
@@ -103,17 +144,6 @@ export function FilePreviewDialog({
                 <Eye className="h-4 w-4 mr-2" />
                 {locale === "zh" ? "在新視窗開啟" : "Open in New Window"}
               </Button>
-            </div>
-          )}
-
-          {isLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/80">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                <p className="text-sm text-muted-foreground">
-                  {locale === "zh" ? "載入中..." : "Loading..."}
-                </p>
-              </div>
             </div>
           )}
 

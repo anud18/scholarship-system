@@ -274,17 +274,17 @@ class ApplicationFieldService:
             "id": 0,  # Temporary ID for fixed field
             "scholarship_type": scholarship_type,
             "field_name": "bank_account",
-            "field_label": "郵局局帳號/玉山帳號",
+            "field_label": "郵局帳號",
             "field_label_en": "Post Office/ESUN Bank Account Number",
             "field_type": "text",
             "is_required": True,
             "is_fixed": True,  # Mark as fixed field
-            "placeholder": "請輸入您的郵局局帳號或玉山銀行帳號",
+            "placeholder": "請輸入您的郵局帳號",
             "placeholder_en": "Please enter your Post Office or ESUN Bank account number",
             "max_length": 30,
             "display_order": display_order,
             "is_active": True,
-            "help_text": "請填寫正確的郵局局帳號或玉山銀行帳號以便獎學金匯款",
+            "help_text": "請填寫正確的郵局帳號以便獎學金匯款",
             "help_text_en": "Please provide your correct Post Office or ESUN Bank account number for scholarship remittance",
             "prefill_value": prefill_data.get("account_number", "") if prefill_data else "",
             "bank_code": prefill_data.get("bank_code", "") if prefill_data else "",
@@ -395,17 +395,17 @@ class ApplicationFieldService:
                 "id": 0,  # Temporary ID for fixed field
                 "scholarship_type": scholarship_type,
                 "field_name": "advisor_nycu_id",
-                "field_label": "指導教授交大編號",
+                "field_label": "指導教授本校人事編號",
                 "field_label_en": "Advisor NYCU ID",
                 "field_type": "text",
                 "is_required": True,
                 "is_fixed": True,  # Mark as fixed field
-                "placeholder": "請輸入指導教授的交大編號",
+                "placeholder": "請輸入指導教授的本校人事編號",
                 "placeholder_en": "Please enter the advisor NYCU ID",
                 "max_length": 20,
                 "display_order": display_order_start + 2,
                 "is_active": True,
-                "help_text": "請填寫指導教授的交大編號（必填）",
+                "help_text": "請填寫指導教授的本校人事編號（必填）",
                 "help_text_en": "Please provide the advisor NYCU ID (required)",
                 "prefill_value": prefill_data.get("advisor_nycu_id", "") if prefill_data else "",
                 "created_at": datetime.now().isoformat(),
@@ -527,12 +527,30 @@ class ApplicationFieldService:
                 f"Fixed fields injected, total fields: {len(fields_dict)}, total documents: {len(documents_dict)}"
             )
 
+            # Get scholarship type details for additional metadata
+            from sqlalchemy import select
+
+            from app.models.scholarship import ScholarshipType
+
+            stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
+            result = await self.db.execute(stmt)
+            scholarship_model = result.scalar_one_or_none()
+
             # Create config using model_validate to handle extra fields
             config_data = {
                 "scholarship_type": scholarship_type,
                 "fields": fields_dict,
                 "documents": documents_dict,
+                "terms_document_url": scholarship_model.terms_document_url if scholarship_model else None,
             }
+
+            # Add optional metadata if scholarship model exists
+            if scholarship_model:
+                config_data["hasWhitelist"] = scholarship_model.whitelist_enabled
+                config_data["title"] = scholarship_model.name  # Add Chinese name
+                config_data["title_en"] = scholarship_model.name_en  # Add English name
+                config_data["terms_document_url"] = scholarship_model.terms_document_url
+
             config = ScholarshipFormConfigResponse.model_validate(config_data)
 
             self.logger.info(f"Form config created successfully for {scholarship_type}")

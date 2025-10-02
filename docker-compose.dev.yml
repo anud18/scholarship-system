@@ -128,6 +128,8 @@ services:
       INTERNAL_API_URL: http://backend:8000
       # Mock Student API URL for development
       MOCK_STUDENT_API_URL: http://mock-student-api:8080
+      # Debug Panel Control
+      NEXT_PUBLIC_ENABLE_DEBUG_PANEL: "true"
     volumes:
       - ./frontend:/app
       - /app/node_modules

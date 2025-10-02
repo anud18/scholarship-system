@@ -144,6 +144,11 @@ class ScholarshipFormConfigResponse(BaseModel):
     scholarship_type: str
     fields: List[ApplicationFieldResponse]
     documents: List[ApplicationDocumentResponse]
+    title: Optional[str] = None
+    title_en: Optional[str] = None
+    color: Optional[str] = None
+    hasWhitelist: Optional[bool] = None
+    terms_document_url: Optional[str] = None
 
     class Config:
         from_attributes = True

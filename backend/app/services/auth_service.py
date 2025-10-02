@@ -83,9 +83,8 @@ class AuthService:
             settings.environment in ["development", "testing"]
             or settings.portal_test_mode
             or settings.debug
-            or
             # Also include for test deployments (when host contains test indicators)
-            any(indicator in settings.base_url.lower() for indicator in ["test", "140.113.7.148", "localhost"])
+            or any(indicator in settings.base_url.lower() for indicator in ["test", "140.113.7.148", "localhost"])
         )
 
         if is_debug_mode:

@@ -181,8 +181,8 @@ class RosterService:
                 try:
                     # 取得申請中的學生資料
                     stored_student_data = application.student_data or {}
-                    student_id_number = stored_student_data.get("student_id")
-                    student_name = stored_student_data.get("name")
+                    student_id_number = stored_student_data.get("std_stdcode")
+                    student_name = stored_student_data.get("std_cname")
 
                     if not student_id_number or not student_name:
                         logger.warning(f"Application {application.id} missing student ID or name")
@@ -506,9 +506,9 @@ class RosterService:
         roster_item = PaymentRosterItem(
             roster_id=roster.id,
             application_id=application.id,
-            student_id_number=student_data.get("student_id", ""),
-            student_name=student_data.get("name", ""),
-            student_email=student_data.get("email", ""),
+            student_id_number=student_data.get("std_stdcode", ""),
+            student_name=student_data.get("std_cname", ""),
+            student_email=student_data.get("com_email", ""),
             bank_account=student_data.get("bank_account", ""),
             bank_code=student_data.get("bank_code", ""),
             bank_name=student_data.get("bank_name", ""),

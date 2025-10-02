@@ -105,98 +105,11 @@ export function AdminDashboard({
           <div>
             <h2 className="text-2xl font-bold mb-2">獎學金管理系統儀表板</h2>
             <p className="text-white/90">
-              歡迎使用陽明交通大學獎學金申請與簽核作業管理系統，提升獎學金作業效率與透明度
+              歡迎使用陽明交通大學獎學金申請與簽核系統，提升獎學金作業效率與透明度
             </p>
           </div>
         </div>
       </div>
-
-      {/* 開發者調試工具欄 */}
-      {process.env.NODE_ENV === "development" && (
-        <div className="bg-gray-100 border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="text-sm">
-              <h3 className="font-medium text-gray-800 mb-2">開發者調試信息</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-600">
-                <div>
-                  <strong>認證狀態:</strong>{" "}
-                  {isAuthenticated ? "✅ 已認證" : "❌ 未認證"}
-                  <br />
-                  <strong>用戶:</strong> {user?.name || "未知"} (
-                  {user?.role || "未知"})<br />
-                  <strong>用戶ID:</strong> {user?.id || "未知"}
-                </div>
-                <div>
-                  <strong>最近申請數量:</strong> {recentApplications.length}
-                  <br />
-                  <strong>載入狀態:</strong>{" "}
-                  {isRecentLoading ? "載入中..." : "完成"}
-                  <br />
-                  <strong>錯誤:</strong> {error || "無"}
-                </div>
-                <div>
-                  <strong>Token:</strong>{" "}
-                  {typeof window !== "undefined" &&
-                  localStorage.getItem("auth_token")
-                    ? "存在"
-                    : "不存在"}
-                  <br />
-                  <strong>API端點:</strong> {api.constructor.name}
-                  <br />
-                  <strong>統計數據:</strong>{" "}
-                  {stats ? `${stats.total_applications} 總申請` : "未載入"}
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={async () => {
-                  console.log("Testing super_admin login...");
-                  try {
-                    const response = await api.auth.mockSSOLogin("super_admin");
-                    console.log("Mock login response:", response);
-
-                    if (response.success && response.data) {
-                      const { access_token, user: userData } = response.data;
-                      login(access_token, userData);
-                      console.log("Super admin login successful");
-
-                      // 手動觸發數據刷新
-                      setTimeout(() => {
-                        fetchRecentApplications();
-                        fetchDashboardStats();
-                      }, 1000);
-                    }
-                  } catch (e) {
-                    console.error("Test login failed:", e);
-                  }
-                }}
-                className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-              >
-                登錄為 Super Admin
-              </button>
-              <button
-                onClick={() => {
-                  console.log("Refreshing all data...");
-                  fetchRecentApplications();
-                  fetchDashboardStats();
-                }}
-                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-              >
-                刷新數據
-              </button>
-              <button
-                onClick={() => {
-                  logout();
-                }}
-                className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-              >
-                登出
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Error Display */}
       {error && (

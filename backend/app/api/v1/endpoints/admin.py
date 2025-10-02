@@ -168,10 +168,12 @@ async def get_all_applications(
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
             # Additional fields for display - get from student_data first, fallback to user
-            "student_name": (app.student_data.get("cname") if app.student_data else None)
+            "student_name": (app.student_data.get("std_cname") if app.student_data else None)
             or (user.name if user else None),
-            "student_no": (app.student_data.get("stdNo") if app.student_data else None)
+            "student_no": (app.student_data.get("std_stdcode") if app.student_data else None)
             or getattr(user, "nycu_id", None),
+            "student_email": (app.student_data.get("com_email") if app.student_data else None)
+            or (user.email if user else None),
             "days_waiting": None,
             # Include scholarship configuration for professor review settings
             "scholarship_configuration": {
@@ -815,10 +817,12 @@ async def get_recent_applications(
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
             # Additional fields for display - get from student_data first, fallback to user
-            "student_name": (app.student_data.get("cname") if app.student_data else None)
+            "student_name": (app.student_data.get("std_cname") if app.student_data else None)
             or (user.name if user else None),
-            "student_no": (app.student_data.get("stdNo") if app.student_data else None)
+            "student_no": (app.student_data.get("std_stdcode") if app.student_data else None)
             or getattr(user, "nycu_id", None),
+            "student_email": (app.student_data.get("com_email") if app.student_data else None)
+            or (user.email if user else None),
             "days_waiting": None,
             # Include scholarship configuration for professor review settings
             "scholarship_configuration": {
@@ -1447,10 +1451,12 @@ async def get_applications_by_scholarship(
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
             # Additional fields for display - get from student_data first, fallback to user
-            "student_name": (app.student_data.get("cname") if app.student_data else None)
+            "student_name": (app.student_data.get("std_cname") if app.student_data else None)
             or (user.name if user else None),
-            "student_no": (app.student_data.get("stdNo") if app.student_data else None)
+            "student_no": (app.student_data.get("std_stdcode") if app.student_data else None)
             or getattr(user, "nycu_id", None),
+            "student_email": (app.student_data.get("com_email") if app.student_data else None)
+            or (user.email if user else None),
             "days_waiting": None,
             # Include scholarship configuration for professor review settings
             "scholarship_configuration": {

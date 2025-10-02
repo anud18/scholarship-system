@@ -45,7 +45,7 @@ class ScholarshipNotificationService:
                 logger.error(f"Student data not found for application {application.id}")
                 return False
 
-            student_name = student_data.get("name", "N/A")
+            student_name = student_data.get("std_cname", "N/A")
 
             # Prepare email content
             subject = f"Scholarship Application Submitted - {application.app_id}"
@@ -132,7 +132,7 @@ class ScholarshipNotificationService:
                 logger.error(f"Student data not found for application {application.id}")
                 return False
 
-            student_name = student_data.get("name", "N/A")
+            student_name = student_data.get("std_cname", "N/A")
 
             # Determine notification content based on status
             status_messages = {
@@ -251,7 +251,7 @@ class ScholarshipNotificationService:
                         failed_count += 1
                         continue
 
-                    student_name = student_data.get("name", "N/A")
+                    student_name = student_data.get("std_cname", "N/A")
 
                     days_remaining = (application.review_deadline - datetime.now(timezone.utc)).days
 
@@ -317,8 +317,8 @@ class ScholarshipNotificationService:
                 logger.error(f"Student data not found for application {application.id}")
                 return False
 
-            student_name = student_data.get("name", "N/A")
-            student_no = student_data.get("student_id", "N/A")
+            student_name = student_data.get("std_cname", "N/A")
+            student_no = student_data.get("std_stdcode", "N/A")
 
             subject = f"Professor Review Request - {application.app_id}"
 

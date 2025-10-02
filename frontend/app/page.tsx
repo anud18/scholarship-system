@@ -442,7 +442,7 @@ export default function ScholarshipManagementSystem() {
               <h1 className="text-4xl font-bold tracking-tight text-nycu-navy-800">
                 {user.role === "student"
                   ? t("system.title")
-                  : "獎學金申請與簽核作業管理系統"}
+                  : "獎學金申請與簽核系統"}
               </h1>
               <p className="text-lg text-nycu-navy-600 mt-1">
                 {user.role === "student"

@@ -53,6 +53,11 @@ export interface Student {
   updated_at: string;
 }
 
+export interface StudentInfoResponse {
+  student: Record<string, any>;
+  semesters: Array<Record<string, any>>;
+}
+
 export interface ApplicationFile {
   id: number;
   filename: string;
@@ -454,6 +459,7 @@ export interface ScholarshipType {
   application_start_date?: string;
   application_end_date?: string;
   sub_type_selection_mode?: "single" | "multiple" | "hierarchical";
+  terms_document_url?: string;
   eligible_sub_types?: Array<{
     value: string | null;
     label: string;
@@ -853,6 +859,7 @@ export interface ScholarshipFormConfig {
   color?: string;
   hasWhitelist?: boolean;
   whitelist_student_ids?: Record<string, number[]>;
+  terms_document_url?: string;
 }
 
 export interface FormConfigSaveRequest {
@@ -1461,7 +1468,7 @@ class ApiClient {
       });
     },
 
-    getStudentInfo: async (): Promise<ApiResponse<Student>> => {
+    getStudentInfo: async (): Promise<ApiResponse<StudentInfoResponse>> => {
       return this.request("/users/student-info");
     },
 

@@ -289,7 +289,7 @@ export function DynamicApplicationForm({
               required={field.is_required}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
-            {isFixedField && (
+            {isFixedField && fieldValue && (
               <p className="text-sm text-blue-600">
                 {locale === "zh"
                   ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
@@ -333,7 +333,7 @@ export function DynamicApplicationForm({
               required={field.is_required}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
-            {isFixedField && (
+            {isFixedField && fieldValue && (
               <p className="text-sm text-blue-600">
                 {locale === "zh"
                   ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
@@ -370,7 +370,7 @@ export function DynamicApplicationForm({
               required={field.is_required}
               className={`w-full ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
             />
-            {isFixedField && (
+            {isFixedField && fieldValue && (
               <p className="text-sm text-blue-600">
                 {locale === "zh"
                   ? "此欄位已從您的個人檔案自動填入，您可以修改內容"
@@ -409,7 +409,7 @@ export function DynamicApplicationForm({
               className={`w-full min-h-[120px] ${isFixedField ? "bg-blue-50 border-blue-200" : ""}`}
               rows={6}
             />
-            {isFixedField && (
+            {isFixedField && fieldValue && (
               <p className="text-sm text-blue-600">
                 {locale === "zh"
                   ? "此欄位已從您的個人檔案自動填入，您可以修改內容"

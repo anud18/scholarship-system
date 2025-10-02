@@ -71,6 +71,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     refreshUnreadCount();
   }, [refreshUnreadCount]);
 
+  // 監聽 notification panel 開啟事件，當面板開啟時刷新未讀數量
+  useEffect(() => {
+    const handlePanelOpen = () => {
+      refreshUnreadCount();
+    };
+
+    window.addEventListener("notification-panel-open", handlePanelOpen);
+    return () => window.removeEventListener("notification-panel-open", handlePanelOpen);
+  }, [refreshUnreadCount]);
+
+  // 監聽頁面焦點變化，當用戶切回視窗時刷新未讀數量
+  useEffect(() => {
+    const handleFocus = () => {
+      refreshUnreadCount();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [refreshUnreadCount]);
+
   const value: NotificationContextValue = {
     unreadCount,
     refreshUnreadCount,

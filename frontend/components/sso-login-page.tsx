@@ -13,7 +13,7 @@ import { GraduationCap, ExternalLink } from "lucide-react";
 export function SSOLoginPage() {
   const handleSSOLogin = () => {
     // Redirect to backend SSO endpoint
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/sso/login`;
+    window.location.href = `${process.env.NEXT_PUBLIC_NYCU_PORTAL_URL}/#/redirect/scholarship`;
   };
 
   return (
@@ -26,16 +26,16 @@ export function SSOLoginPage() {
           <CardTitle className="text-2xl text-nycu-navy-800">
             登入系統
           </CardTitle>
-          <CardDescription>獎學金申請與簽核作業管理系統</CardDescription>
+          <CardDescription>獎學金申請與簽核系統</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <Button onClick={handleSSOLogin} className="w-full">
               <ExternalLink className="h-4 w-4 mr-2" />
-              使用 SSO 登入
+              使用 NYCU Portal 登入
             </Button>
             <p className="text-center text-sm text-gray-600">
-              請使用您的校園帳號登入系統
+              請使用您的校園帳號登入 NYCU Portal 並授權登入系統
             </p>
           </div>
         </CardContent>

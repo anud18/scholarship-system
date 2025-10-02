@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     portal_test_mode: bool = False  # Set to True for testing with mock data
     portal_sso_timeout: float = 10.0  # Timeout for Portal JWT verification
 
+    # Super Admin Configuration
+    super_admin_nycu_id: str = "super_admin"  # NYCU ID that should be granted super_admin role
+
     # Security configurations
     bypass_time_restrictions: bool = False  # Only True in testing environments
 

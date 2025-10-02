@@ -657,19 +657,19 @@ async def get_ranking(
                         # Minimal student info - only what's needed for ranking display
                         "student_info": {
                             "display_name": (
-                                item.application.student_data.get("cname", "學生")
+                                item.application.student_data.get("std_cname", "學生")
                                 if item.application.student_data and isinstance(item.application.student_data, dict)
                                 else "學生"
                             ),
                             "student_id_masked": (
-                                f"{item.application.student_data.get('stdNo', 'N/A')[:3]}***"
+                                f"{item.application.student_data.get('std_stdcode', 'N/A')[:3]}***"
                                 if item.application.student_data
                                 and isinstance(item.application.student_data, dict)
-                                and item.application.student_data.get("stdNo")
+                                and item.application.student_data.get("std_stdcode")
                                 else "N/A"
                             ),  # Partially mask student ID for privacy
                             "dept_code": (
-                                item.application.student_data.get("deptCode", "N/A")[:3]
+                                item.application.student_data.get("std_depno", "N/A")[:3]
                                 if item.application.student_data and isinstance(item.application.student_data, dict)
                                 else "N/A"
                             ),  # Use department code instead of full name

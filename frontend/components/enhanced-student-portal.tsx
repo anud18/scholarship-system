@@ -26,6 +26,7 @@ import { ProgressTimeline } from "@/components/progress-timeline";
 import { FileUpload } from "@/components/file-upload";
 import { DynamicApplicationForm } from "@/components/dynamic-application-form";
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import UserProfileManagement from "@/components/user-profile-management";
 import {
   Edit,
@@ -39,6 +40,7 @@ import {
   User as UserIcon,
   Loader2,
   Check,
+  ClipboardList,
 } from "lucide-react";
 import {
   Dialog,
@@ -91,7 +93,21 @@ export function EnhancedStudentPortal({
   const t = (key: string) => getTranslation(locale, key);
   const validator = useMemo(() => new FormValidator(locale), [locale]);
 
-  const [activeTab, setActiveTab] = useState("applications");
+  const {
+    applications,
+    isLoading: applicationsLoading,
+    error: applicationsError,
+    fetchApplications,
+    createApplication,
+    saveApplicationDraft,
+    submitApplication: submitApplicationApi,
+    withdrawApplication,
+    uploadDocument,
+    updateApplication,
+    deleteApplication,
+  } = useApplications();
+
+  const [activeTab, setActiveTab] = useState("new-application");
   const [editingApplication, setEditingApplication] =
     useState<Application | null>(null);
   const [selectedSubTypes, setSelectedSubTypes] = useState<
@@ -174,6 +190,17 @@ export function EnhancedStudentPortal({
     });
   };
 
+  // Update active tab based on applications
+  useEffect(() => {
+    if (!applicationsLoading && !applicationsError) {
+      if (!applications || applications.length === 0) {
+        setActiveTab("new-application");
+      } else if (activeTab === "new-application") {
+        setActiveTab("applications");
+      }
+    }
+  }, [applications, applicationsLoading, applicationsError, activeTab]);
+
   // Debug authentication status
   useEffect(() => {
     console.log("EnhancedStudentPortal mounted with user:", user);
@@ -187,20 +214,6 @@ export function EnhancedStudentPortal({
   }, [user]);
 
   // Use real application data from API
-  const {
-    applications,
-    isLoading: applicationsLoading,
-    error: applicationsError,
-    fetchApplications,
-    createApplication,
-    saveApplicationDraft,
-    submitApplication: submitApplicationApi,
-    withdrawApplication,
-    uploadDocument,
-    updateApplication,
-    deleteApplication,
-  } = useApplications();
-
   // State for eligible scholarships
   const [eligibleScholarships, setEligibleScholarships] = useState<
     ScholarshipType[]
@@ -364,6 +377,14 @@ export function EnhancedStudentPortal({
   // Terms agreement state
   const [agreeTerms, setAgreeTerms] = useState(false);
 
+  // Terms preview modal
+  const [showTermsPreview, setShowTermsPreview] = useState(false);
+  const [termsPreviewFile, setTermsPreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+
   // File upload state (for backwards compatibility)
   const [uploadedFiles, setUploadedFiles] = useState<{
     [documentType: string]: File[];
@@ -428,7 +449,16 @@ export function EnhancedStudentPortal({
         // Check required fields completion
         requiredFields.forEach(field => {
           const fieldValue = dynamicFormData[field.field_name];
-          if (
+          const isFixed = field.is_fixed === true;
+          const hasPrefillValue =
+            field.prefill_value !== undefined &&
+            field.prefill_value !== null &&
+            field.prefill_value !== "";
+
+          // Fixed fields with prefill values are auto-completed
+          if (isFixed && hasPrefillValue) {
+            completedItems++;
+          } else if (
             fieldValue !== undefined &&
             fieldValue !== null &&
             fieldValue !== ""
@@ -879,6 +909,11 @@ export function EnhancedStudentPortal({
   };
 
   // 編輯處理函數
+  const handleCloseTermsPreview = () => {
+    setShowTermsPreview(false);
+    setTermsPreviewFile(null);
+  };
+
   const handleEditApplication = async (application: Application) => {
     // 設置編輯模式
     setEditingApplication(application);
@@ -1552,13 +1587,39 @@ export function EnhancedStudentPortal({
         className="space-y-4"
       >
         <TabsList>
-          <TabsTrigger value="applications">
-            {t("portal.my_applications")}
-          </TabsTrigger>
-          <TabsTrigger value="new-application">
-            {t("applications.new_application")}
-          </TabsTrigger>
-          <TabsTrigger value="profile">{t("nav.profile")}</TabsTrigger>
+          {applications.length === 0 ? (
+            // 沒有申請時：新增申請 > 我的申請 > 個人資料
+            <>
+              <TabsTrigger value="new-application">
+                <FileText className="h-4 w-4 mr-2" />
+                {t("applications.new_application")}
+              </TabsTrigger>
+              <TabsTrigger value="applications">
+                <ClipboardList className="h-4 w-4 mr-2" />
+                {t("portal.my_applications")}
+              </TabsTrigger>
+              <TabsTrigger value="profile">
+                <UserIcon className="h-4 w-4 mr-2" />
+                {t("nav.profile")}
+              </TabsTrigger>
+            </>
+          ) : (
+            // 有申請時：我的申請 > 新增申請 > 個人資料
+            <>
+              <TabsTrigger value="applications">
+                <ClipboardList className="h-4 w-4 mr-2" />
+                {t("portal.my_applications")}
+              </TabsTrigger>
+              <TabsTrigger value="new-application">
+                <FileText className="h-4 w-4 mr-2" />
+                {t("applications.new_application")}
+              </TabsTrigger>
+              <TabsTrigger value="profile">
+                <UserIcon className="h-4 w-4 mr-2" />
+                {t("nav.profile")}
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="applications" className="space-y-4">
@@ -1581,7 +1642,7 @@ export function EnhancedStudentPortal({
                   {applicationsError}
                 </div>
               ) : applications.length === 0 ? (
-                <div className="text-center py-8">
+                <div className="text-center py-8" data-testid="applications-empty-state">
                   <div className="flex flex-col items-center gap-2">
                     <FileText className="h-12 w-12 text-muted-foreground" />
                     <p className="text-lg font-medium text-muted-foreground">
@@ -1798,22 +1859,54 @@ export function EnhancedStudentPortal({
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      {eligibleScholarships
-                        .filter(
-                          scholarship =>
-                            Array.isArray(scholarship.eligible_sub_types) &&
-                            scholarship.eligible_sub_types.length > 0
-                        )
-                        .map(scholarship => (
+                      {(() => {
+                        const filteredScholarships = eligibleScholarships.filter(scholarship => {
+                          const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
+                          return Array.isArray(scholarship.eligible_sub_types) &&
+                            scholarship.eligible_sub_types.length > 0 &&
+                            !hasCommonErrors;  // Exclude scholarships with common errors
+                        });
+
+                        if (filteredScholarships.length === 0) {
+                          return (
+                            <SelectItem value="no-eligible" disabled>
+                              {locale === "zh"
+                                ? "目前沒有符合資格的獎學金"
+                                : "No eligible scholarships available"}
+                            </SelectItem>
+                          );
+                        }
+
+                        return filteredScholarships.map(scholarship => (
                           <SelectItem
                             key={scholarship.id}
                             value={scholarship.code}
                           >
                             {scholarship.name}
                           </SelectItem>
-                        ))}
+                        ));
+                      })()}
                     </SelectContent>
                   </Select>
+                  {(() => {
+                    const filteredScholarships = eligibleScholarships.filter(scholarship => {
+                      const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
+                      return Array.isArray(scholarship.eligible_sub_types) &&
+                        scholarship.eligible_sub_types.length > 0 &&
+                        !hasCommonErrors;
+                    });
+
+                    if (filteredScholarships.length === 0 && !editingApplication) {
+                      return (
+                        <p className="text-sm text-amber-600 ml-1 my-1">
+                          {locale === "zh"
+                            ? "目前沒有符合資格的獎學金，請檢查您的申請資格"
+                            : "No eligible scholarships available, please check your eligibility"}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                   {editingApplication && (
                     <p className="text-sm text-muted-foreground mt-1">
                       {locale === "zh"
@@ -1997,17 +2090,44 @@ export function EnhancedStudentPortal({
               </div>
 
               {/* Terms Agreement */}
-              <div className="flex items-center space-x-2 pt-4">
-                <Checkbox
-                  id="agree_terms"
-                  checked={agreeTerms}
-                  onCheckedChange={checked => setAgreeTerms(checked as boolean)}
-                />
-                <Label htmlFor="agree_terms" className="text-sm">
-                  {locale === "zh"
-                    ? `我已閱讀並同意${selectedScholarship?.name || "獎學金"}申請相關條款與規定`
-                    : `I have read and agree to the terms and conditions for ${selectedScholarship?.name || "scholarship"} application`}
-                </Label>
+              <div className="pt-4">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="agree_terms"
+                    checked={agreeTerms}
+                    onCheckedChange={checked => setAgreeTerms(checked as boolean)}
+                  />
+                  <Label htmlFor="agree_terms" className="text-sm">
+                    {locale === "zh"
+                      ? "我已閱讀並同意相關條款與規定"
+                      : "I have read and agree to the terms and conditions"
+                    }
+                  </Label>
+
+                  {/* Terms Preview Button */}
+                  {selectedScholarship?.terms_document_url && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const token = localStorage.getItem("auth_token");
+                        // Token is now sent via cookie, not URL, to prevent exposure in logs
+                        const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}`;
+
+                        setTermsPreviewFile({
+                          url: previewUrl,
+                          filename: `${selectedScholarship.name || "獎學金"}_申請條款.pdf`,
+                          type: "application/pdf",
+                        });
+                        setShowTermsPreview(true);
+                      }}
+                      className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium whitespace-nowrap ml-1"
+                    >
+                      <Eye className="h-4 w-4" />
+                      {locale === "zh" ? "預覽申請條款" : "Preview Terms"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Action buttons */}
@@ -2103,6 +2223,14 @@ export function EnhancedStudentPortal({
         onClose={() => setIsDetailsDialogOpen(false)}
         locale={locale}
         user={user}
+      />
+
+      {/* Terms Preview Dialog */}
+      <FilePreviewDialog
+        isOpen={showTermsPreview}
+        onClose={handleCloseTermsPreview}
+        file={termsPreviewFile}
+        locale={locale}
       />
     </div>
   );

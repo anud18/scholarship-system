@@ -72,6 +72,7 @@ class ScholarshipTypeBase(BaseModel):
     requires_college_review: bool = False
     review_workflow: Optional[Dict[str, Any]] = None
     auto_approval_rules: Optional[Dict[str, Any]] = None
+    terms_document_url: Optional[str] = None
 
     @field_validator("sub_type_list")
     @classmethod
@@ -272,6 +273,7 @@ class EligibleScholarshipResponse(BaseModel):
     college_review_start: Optional[datetime] = None
     college_review_end: Optional[datetime] = None
     sub_type_selection_mode: SubTypeSelectionModeEnum
+    terms_document_url: Optional[str] = None
     passed: List[RuleMessage]
     warnings: List[RuleMessage]
     errors: List[RuleMessage]

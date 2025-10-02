@@ -1,27 +1,18 @@
 "use client";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { NationalityFlag } from "@/components/nationality-flag";
 import { NotificationButton } from "@/components/notification-button";
 import { getTranslation } from "@/lib/i18n";
-import { LogOut, Settings, User, GraduationCap } from "lucide-react";
+import { LogOut, GraduationCap } from "lucide-react";
 
 interface UserType {
   id: string;
   name: string;
   email: string;
   role: "student" | "professor" | "college" | "admin" | "super_admin";
-  studentId?: string;
+  nycu_id?: string;
   nationality?: string;
 }
 
@@ -64,7 +55,7 @@ export function Header({
   const roleBadge = getRoleBadge(user.role);
 
   return (
-    <header className="academic-header backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 academic-header backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-6">
@@ -97,7 +88,7 @@ export function Header({
             <div className="hidden md:block border-l border-nycu-blue-200 pl-6">
               <h1 className="font-semibold text-lg text-nycu-navy-800">
                 {locale === "zh"
-                  ? "獎學金申請與簽核作業管理系統"
+                  ? "獎學金申請與簽核系統"
                   : "NYCU Admissions Scholarship System"}
               </h1>
               <p className="text-sm text-nycu-navy-600">
@@ -127,7 +118,7 @@ export function Header({
             )}
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-4">
             {/* Language Switcher - only for students */}
             {showLanguageSwitcher && (
               <LanguageSwitcher
@@ -139,69 +130,43 @@ export function Header({
             {/* Notifications */}
             <NotificationButton locale={locale} />
 
-            {/* User Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="relative h-10 w-10 rounded-full"
-                >
-                  <Avatar className="h-10 w-10 border-2 border-nycu-blue-200">
-                    <AvatarImage src="/placeholder-user.jpg" alt={user.name} />
-                    <AvatarFallback className="bg-nycu-blue-50 text-nycu-blue-700 font-semibold">
-                      {user.name.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-64" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <p className="text-sm font-semibold leading-none">
-                        {user.name}
-                      </p>
-                      <Badge variant={roleBadge.variant} className="text-xs">
-                        {roleBadge.label}
-                      </Badge>
-                    </div>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {user.email}
-                    </p>
-                    {user.studentId && (
-                      <p className="text-xs leading-none text-muted-foreground">
-                        {user.role === "student" && locale === "en"
-                          ? "Student ID"
-                          : "學號"}
-                        : {user.studentId}
-                      </p>
-                    )}
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  <span>
-                    {user.role === "student" ? t("nav.profile") : "個人資料"}
+            {/* User Info Display */}
+            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/50 border border-gray-200">
+              {/* Nationality Flag */}
+              {user.nationality && (
+                <NationalityFlag
+                  countryCode={user.nationality}
+                  locale={locale}
+                  showLabel={false}
+                />
+              )}
+
+              {/* User Info Text */}
+              <div className="hidden md:flex flex-col px-2">
+                <span className="text-sm font-semibold text-gray-900">
+                  {user.name}
+                </span>
+                {user.nycu_id && (
+                  <span className="text-xs text-gray-500">
+                    {user.nycu_id}
                   </span>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>
-                    {user.role === "student" && locale === "en"
-                      ? "Settings"
-                      : "設定"}
-                  </span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-red-600" onClick={onLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>
-                    {user.role === "student" ? t("nav.logout") : "登出"}
-                  </span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                )}
+              </div>
+              {/* Logout Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onLogout}
+                className="gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  {user.role === "student" ? t("nav.logout") : "登出"}
+                </span>
+              </Button>
+            </div>
+
+
           </div>
         </div>
       </div>

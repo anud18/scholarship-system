@@ -87,7 +87,7 @@ async def test_generate_issue_body_includes_summary_and_ranking(monkeypatch):
 
     ranking = SimpleNamespace(id=1, ranking_name="NSTC Ranking", sub_type_code="NSTC")
 
-    application = SimpleNamespace(student_data={"cname": "Alice", "stdNo": "S123"})
+    application = SimpleNamespace(student_data={"std_cname": "Alice", "std_stdcode": "S123"})
     ranking_item = SimpleNamespace(
         rank_position=1,
         application=application,

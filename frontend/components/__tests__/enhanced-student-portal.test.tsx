@@ -45,17 +45,22 @@ const mockApplication = {
 };
 
 describe("EnhancedStudentPortal", () => {
-  const defaultApplicationsHook = {
+  const createApplicationsHook = (
+    overrides: Partial<ReturnType<typeof useApplications>> = {}
+  ) => ({
     applications: [],
     isLoading: false,
     error: null,
     fetchApplications: jest.fn(),
     createApplication: jest.fn(),
     submitApplication: jest.fn(),
+    saveApplicationDraft: jest.fn(),
     withdrawApplication: jest.fn(),
-    updateApplication: jest.fn(),
     uploadDocument: jest.fn(),
-  };
+    updateApplication: jest.fn(),
+    deleteApplication: jest.fn(),
+    ...overrides,
+  });
 
   const mockScholarshipData = [
     {
@@ -102,7 +107,7 @@ describe("EnhancedStudentPortal", () => {
       error: null,
     });
 
-    mockUseApplications.mockReturnValue(defaultApplicationsHook);
+    mockUseApplications.mockReturnValue(createApplicationsHook());
 
     // Mock fetch to return scholarship data
     (global.fetch as jest.Mock).mockResolvedValue({
@@ -152,22 +157,16 @@ describe("EnhancedStudentPortal", () => {
       render(<EnhancedStudentPortal user={mockUser} locale="en" />);
     });
 
-    // Wait for data to load
-    await waitFor(() => {
-      expect(screen.getByText("No application records")).toBeInTheDocument();
-    });
-    expect(
-      screen.getByText(
-        "Click 'New Application' to start your scholarship application"
-      )
-    ).toBeInTheDocument();
+    const newApplicationTab = await screen.findByText("New Application");
+    expect(newApplicationTab).toHaveAttribute("data-state", "active");
+    const myApplicationsTab = await screen.findByText("My Applications");
+    expect(myApplicationsTab).toHaveAttribute("data-state", "inactive");
   });
 
   it("should display applications when they exist", async () => {
-    mockUseApplications.mockReturnValue({
-      ...defaultApplicationsHook,
-      applications: [mockApplication],
-    });
+    mockUseApplications.mockReturnValue(
+      createApplicationsHook({ applications: [mockApplication] })
+    );
 
     await act(async () => {
       render(<EnhancedStudentPortal user={mockUser} locale="en" />);
@@ -181,10 +180,9 @@ describe("EnhancedStudentPortal", () => {
   });
 
   it("should show loading state", async () => {
-    mockUseApplications.mockReturnValue({
-      ...defaultApplicationsHook,
-      isLoading: true,
-    });
+    mockUseApplications.mockReturnValue(
+      createApplicationsHook({ isLoading: true })
+    );
 
     await act(async () => {
       render(<EnhancedStudentPortal user={mockUser} locale="en" />);
@@ -198,7 +196,7 @@ describe("EnhancedStudentPortal", () => {
     });
 
     // Applications section should show loading spinner (Loader2 component)
-    const applicationTab = screen.getByText("Application Records");
+    const applicationTab = screen.getByText("My Applications");
     await userEvent.setup().click(applicationTab);
 
     // Should show loading spinner in applications section
@@ -208,16 +206,19 @@ describe("EnhancedStudentPortal", () => {
 
   it("should show error state", async () => {
     const errorMessage = "Failed to fetch applications";
-    mockUseApplications.mockReturnValue({
-      ...defaultApplicationsHook,
-      error: errorMessage,
-    });
+    const user = userEvent.setup();
+    mockUseApplications.mockReturnValue(
+      createApplicationsHook({ error: errorMessage })
+    );
 
     await act(async () => {
       render(<EnhancedStudentPortal user={mockUser} locale="en" />);
     });
 
-    expect(screen.getByText(errorMessage)).toBeInTheDocument();
+    await user.click(await screen.findByText("My Applications"));
+    await waitFor(() => {
+      expect(screen.getByText(errorMessage)).toBeInTheDocument();
+    });
   });
 
   it("should allow switching to new application tab", async () => {
@@ -272,10 +273,9 @@ describe("EnhancedStudentPortal", () => {
   });
 
   it("should show Chinese text when locale is zh", async () => {
-    mockUseApplications.mockReturnValue({
-      ...defaultApplicationsHook,
-      applications: [mockApplication],
-    });
+    mockUseApplications.mockReturnValue(
+      createApplicationsHook({ applications: [mockApplication] })
+    );
 
     render(<EnhancedStudentPortal user={mockUser} locale="zh" />);
 
@@ -294,11 +294,12 @@ describe("EnhancedStudentPortal", () => {
       status: "withdrawn",
     });
 
-    mockUseApplications.mockReturnValue({
-      ...defaultApplicationsHook,
-      applications: [{ ...mockApplication, status: "under_review" as const }],
-      withdrawApplication: withdrawApplicationMock,
-    });
+    mockUseApplications.mockReturnValue(
+      createApplicationsHook({
+        applications: [{ ...mockApplication, status: "under_review" as const }],
+        withdrawApplication: withdrawApplicationMock,
+      })
+    );
 
     render(<EnhancedStudentPortal user={mockUser} locale="en" />);
 
@@ -321,10 +322,9 @@ describe("EnhancedStudentPortal", () => {
   });
 
   it("should show progress timeline for applications", async () => {
-    mockUseApplications.mockReturnValue({
-      ...defaultApplicationsHook,
-      applications: [mockApplication],
-    });
+    mockUseApplications.mockReturnValue(
+      createApplicationsHook({ applications: [mockApplication] })
+    );
 
     render(<EnhancedStudentPortal user={mockUser} locale="en" />);
 
@@ -344,10 +344,9 @@ describe("EnhancedStudentPortal", () => {
       status: "approved" as const,
     };
 
-    mockUseApplications.mockReturnValue({
-      ...defaultApplicationsHook,
-      applications: [approvedApplication],
-    });
+    mockUseApplications.mockReturnValue(
+      createApplicationsHook({ applications: [approvedApplication] })
+    );
 
     render(<EnhancedStudentPortal user={mockUser} locale="en" />);
 

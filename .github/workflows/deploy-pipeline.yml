@@ -163,119 +163,56 @@ jobs:
           mkdir -p ~/scholarship-staging
           cd ~/scholarship-staging
 
-      - name: Create docker-compose.staging.yml
-        env:
-          BACKEND_IMAGE: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }}
-          FRONTEND_IMAGE: ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-frontend:${{ needs.pre-deployment.outputs.version }}
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-          DATABASE_URL_SYNC: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
-          REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
-          SECRET_KEY: ${{ secrets.STAGING_SECRET_KEY }}
-          CORS_ORIGINS: ${{ secrets.STAGING_CORS_ORIGINS }}
-          MINIO_ENDPOINT: ${{ secrets.STAGING_MINIO_ENDPOINT }}
-          MINIO_ACCESS_KEY: ${{ secrets.STAGING_MINIO_ACCESS_KEY }}
-          MINIO_SECRET_KEY: ${{ secrets.STAGING_MINIO_SECRET_KEY }}
-          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+      - name: Prepare deployment files
         run: |
-          cat > ~/scholarship-staging/docker-compose.yml << EOF
-          version: '3.8'
-
-          services:
-            backend:
-              image: ${BACKEND_IMAGE}
-              container_name: scholarship_staging_backend
-              environment:
-                - DATABASE_URL=${DATABASE_URL}
-                - DATABASE_URL_SYNC=${DATABASE_URL_SYNC}
-                - REDIS_URL=${REDIS_URL}
-                - SECRET_KEY=${SECRET_KEY}
-                - APP_ENV=staging
-                - DEBUG=false
-                - CORS_ORIGINS=${CORS_ORIGINS}
-                - MINIO_ENDPOINT=${MINIO_ENDPOINT}
-                - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-                - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-                - MINIO_BUCKET_NAME=scholarship-staging
-                - MINIO_SECURE=true
-              ports:
-                - "8000:8000"
-              restart: unless-stopped
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-                interval: 30s
-                timeout: 10s
-                retries: 3
-                start_period: 40s
-              networks:
-                - staging_network
-
-            frontend:
-              image: ${FRONTEND_IMAGE}
-              container_name: scholarship_staging_frontend
-              environment:
-                - NEXT_PUBLIC_API_URL=${STAGING_API_URL}
-                - NEXT_PUBLIC_ENVIRONMENT=staging
-                - NODE_ENV=production
-              ports:
-                - "3000:3000"
-              restart: unless-stopped
-              depends_on:
-                - backend
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-                interval: 30s
-                timeout: 10s
-                retries: 3
-                start_period: 40s
-              networks:
-                - staging_network
-
-          networks:
-            staging_network:
-              driver: bridge
-          EOF
+          cp docker-compose.staging.yml ~/scholarship-staging/docker-compose.yml
+          if [ -d nginx ]; then
+            cp -r nginx ~/scholarship-staging/
+            echo "Nginx config copied"
+          fi
+          cd ~/scholarship-staging
+          echo "Deployment files prepared"
 
       - name: Stop old containers
         run: |
           cd ~/scholarship-staging
           docker compose down || true
 
-      - name: Run database migrations
+      - name: Start new containers
         env:
-          DATABASE_URL_SYNC: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
-          APP_ENV: staging
-        run: |
-          echo "Running Alembic migrations..."
-          docker run --rm \
-            -e DATABASE_URL_SYNC="${DATABASE_URL_SYNC}" \
-            -e APP_ENV="${APP_ENV}" \
-            ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }} \
-            alembic upgrade head
-
-      - name: Seed database (if needed)
-        env:
+          TAG: ${{ needs.pre-deployment.outputs.version }}
           DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
           DATABASE_URL_SYNC: ${{ secrets.STAGING_DATABASE_URL_SYNC }}
-          APP_ENV: staging
-          ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
-        run: |
-          echo "Seeding staging data..."
-          docker run --rm \
-            -e DATABASE_URL="${DATABASE_URL}" \
-            -e DATABASE_URL_SYNC="${DATABASE_URL_SYNC}" \
-            -e APP_ENV="${APP_ENV}" \
-            -e ADMIN_EMAIL="${ADMIN_EMAIL}" \
-            ${{ env.REGISTRY }}/${{ github.actor }}/scholarship-system-backend:${{ needs.pre-deployment.outputs.version }} \
-            python -m app.seed || echo "Seed completed with warnings"
-
-      - name: Start new containers
+          SECRET_KEY: ${{ secrets.STAGING_SECRET_KEY }}
+          CORS_ORIGINS: ${{ secrets.STAGING_CORS_ORIGINS }}
+          MINIO_ENDPOINT: ${{ secrets.STAGING_MINIO_ENDPOINT }}
+          MINIO_ACCESS_KEY: ${{ secrets.STAGING_MINIO_ACCESS_KEY }}
+          MINIO_SECRET_KEY: ${{ secrets.STAGING_MINIO_SECRET_KEY }}
+          MINIO_BUCKET: ${{ secrets.STAGING_MINIO_BUCKET }}
+          FRONTEND_URL: ${{ secrets.STAGING_API_URL }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}
+          NEXT_PUBLIC_NYCU_PORTAL_URL: ${{ secrets.NEXT_PUBLIC_NYCU_PORTAL_URL }}
+          STUDENT_API_BASE_URL: ${{ secrets.STUDENT_API_BASE_URL }}
+          STUDENT_API_ACCOUNT: ${{ secrets.STUDENT_API_ACCOUNT }}
+          STUDENT_API_HMAC_KEY: ${{ secrets.STUDENT_API_HMAC_KEY }}
+          SUPER_ADMIN_NYCU_ID: ${{ secrets.SUPER_ADMIN_NYCU_ID }}
         run: |
           cd ~/scholarship-staging
           docker compose up -d
 
-          # Wait for services to be healthy
-          echo "Waiting for services to be ready..."
-          sleep 30
+          # Wait for backend to be ready
+          echo "Waiting for backend to start..."
+          sleep 15
+
+      - name: Run database migrations
+        run: |
+          echo "Running Alembic migrations..."
+          docker exec scholarship_backend_staging alembic upgrade head
+
+      # - name: Seed database (if needed)
+      #   run: |
+      #     echo "Seeding staging data..."
+      #     docker exec scholarship_backend_staging python -m app.seed || echo "Seed completed with warnings"
 
       - name: Health check
         run: |
@@ -326,8 +263,30 @@ jobs:
 
       - name: Cleanup old images
         run: |
-          echo "Cleaning up old Docker images..."
-          docker image prune -af --filter "until=24h" || true
+          echo "Cleaning up old Docker images (keeping latest 3 versions)..."
+
+          # Cleanup old backend images (sorted by creation time, newest first)
+          docker images ghcr.io/${{ github.actor }}/scholarship-system-backend \
+            --format "{{.CreatedAt}}\t{{.Repository}}:{{.Tag}}" | \
+            sort -r | \
+            grep -v latest | \
+            tail -n +4 | \
+            awk '{print $2}' | \
+            xargs -r docker rmi -f || true
+
+          # Cleanup old frontend images (sorted by creation time, newest first)
+          docker images ghcr.io/${{ github.actor }}/scholarship-system-frontend \
+            --format "{{.CreatedAt}}\t{{.Repository}}:{{.Tag}}" | \
+            sort -r | \
+            grep -v latest | \
+            tail -n +4 | \
+            awk '{print $2}' | \
+            xargs -r docker rmi -f || true
+
+          # Cleanup dangling images
+          docker image prune -f || true
+
+          echo "✅ Image cleanup completed"
 
       - name: Deployment summary
         run: |

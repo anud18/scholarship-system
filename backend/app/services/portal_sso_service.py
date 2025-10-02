@@ -190,8 +190,13 @@ class PortalSSOService:
         # Verify actual student status using Student API (don't rely on Portal's dept)
         is_student, student_data = await self._verify_student_status(nycu_id)
 
+        # Check if user should be granted super admin role
+        if nycu_id == settings.super_admin_nycu_id:
+            user_role = UserRole.super_admin
+            mapped_user_type = UserType.employee
+            logger.info(f"User {nycu_id} granted super_admin role via SUPER_ADMIN_NYCU_ID")
         # Determine actual user type and role based on Student API verification
-        if is_student:
+        elif is_student:
             user_type = "student"
             user_role = UserRole.student
             mapped_user_type = UserType.student

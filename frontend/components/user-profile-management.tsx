@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -523,33 +523,27 @@ export default function UserProfileManagement() {
     profile.profile?.profile_completion_percentage || 0;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">
-            {t("profile_management.title")}
-          </h1>
-          <p className="text-gray-600 mt-2">
-            {t("profile_management.subtitle")}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={loadHistory}
-          className="flex items-center gap-2"
-        >
-          <History className="w-4 h-4" />
-          {t("profile_management.history")}
-        </Button>
-      </div>
-
+    <div className="space-y-4">
       {/* Profile Completion Progress */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle className="w-5 h-5" />
-            {t("profile_management.completion")}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5" />
+                {t("profile_management.completion")}
+              </CardTitle>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadHistory}
+              className="flex items-center gap-2"
+            >
+              <History className="w-4 h-4" />
+              {t("profile_management.history")}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -569,25 +563,29 @@ export default function UserProfileManagement() {
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
-        className="space-y-6"
+        className="space-y-4"
       >
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">
+            <User className="h-4 w-4 mr-2" />
             {t("profile_management.tabs.overview")}
           </TabsTrigger>
           <TabsTrigger value="basic">
+            <School className="h-4 w-4 mr-2" />
             {t("profile_management.tabs.basic")}
           </TabsTrigger>
           <TabsTrigger value="bank">
+            <CreditCard className="h-4 w-4 mr-2" />
             {t("profile_management.tabs.bank")}
           </TabsTrigger>
           <TabsTrigger value="advisor">
+            <Mail className="h-4 w-4 mr-2" />
             {t("profile_management.tabs.advisor")}
           </TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview" className="space-y-4">
           <div className="grid md:grid-cols-2 gap-6">
             {/* Basic Info Summary */}
             <Card>
@@ -700,7 +698,7 @@ export default function UserProfileManagement() {
         </TabsContent>
 
         {/* Basic Info Tab */}
-        <TabsContent value="basic" className="space-y-6">
+        <TabsContent value="basic" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>
@@ -773,7 +771,7 @@ export default function UserProfileManagement() {
                     <div className="space-y-2">
                       <Label>{t("profile_management.degree")}</Label>
                       <Input
-                        value={profile.student_info.student?.std_degree || ""}
+                        value={profile.student_info?.std_degree || ""}
                         disabled
                         readOnly
                       />
@@ -782,7 +780,7 @@ export default function UserProfileManagement() {
                       <Label>{t("profile_management.enrollment_status")}</Label>
                       <Input
                         value={
-                          profile.student_info.student?.std_studingstatus || ""
+                          profile.student_info?.std_studingstatus || ""
                         }
                         disabled
                         readOnly
@@ -792,7 +790,7 @@ export default function UserProfileManagement() {
                       <Label>{t("profile_management.enrollment_year")}</Label>
                       <Input
                         value={
-                          profile.student_info.student?.std_enrollyear || ""
+                          profile.student_info?.std_enrollyear || ""
                         }
                         disabled
                         readOnly
@@ -802,7 +800,7 @@ export default function UserProfileManagement() {
                       <Label>{t("profile_management.semester_count")}</Label>
                       <Input
                         value={
-                          profile.student_info.student?.std_termcount || ""
+                          profile.student_info?.std_termcount || ""
                         }
                         disabled
                         readOnly
@@ -816,13 +814,29 @@ export default function UserProfileManagement() {
         </TabsContent>
 
         {/* Bank Info Tab */}
-        <TabsContent value="bank" className="space-y-6">
+        <TabsContent value="bank" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                {t("profile_management.bank_account_info")}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  {t("profile_management.bank_account_info")}
+                </CardTitle>
+                <Button
+                  onClick={() => handleSave("bank")}
+                  disabled={saving}
+                  size="sm"
+                >
+                  {saving ? (
+                    t("profile_management.saving")
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      {t("profile_management.save_bank_info")}
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Bank validation errors display */}
@@ -905,7 +919,29 @@ export default function UserProfileManagement() {
               {/* Bank Document Upload */}
               <div className="space-y-4">
                 <div className="space-y-4">
-                  <Label>{t("profile_management.bank_document")}</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>{t("profile_management.bank_document")}</Label>
+                    {/* Upload Button - only show when files are selected */}
+                    {bankDocumentFiles.length > 0 && (
+                      <Button
+                        onClick={handleBankDocumentUpload}
+                        disabled={uploadingBankDoc}
+                        size="sm"
+                      >
+                        {uploadingBankDoc ? (
+                          <>
+                            <Upload className="w-4 h-4 mr-2 animate-pulse" />
+                            {t("profile_management.uploading")}
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-2" />
+                            {t("profile_management.upload_bank_document")}
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
 
                   {/* Display current uploaded document */}
                   {profile.profile?.bank_document_photo_url && (
@@ -945,38 +981,15 @@ export default function UserProfileManagement() {
                   )}
 
                   {/* File Upload Component */}
-                  <div className="space-y-4">
-                    <FileUpload
-                      onFilesChange={handleBankDocumentFilesChange}
-                      acceptedTypes={[".jpg", ".jpeg", ".png", ".webp", ".pdf"]}
-                      maxSize={10 * 1024 * 1024} // 10MB
-                      maxFiles={1}
-                      initialFiles={bankDocumentFiles}
-                      fileType="bank_document"
-                      locale="zh"
-                    />
-
-                    {/* Upload Button - only show when files are selected */}
-                    {bankDocumentFiles.length > 0 && (
-                      <Button
-                        onClick={handleBankDocumentUpload}
-                        disabled={uploadingBankDoc}
-                        className="w-full"
-                      >
-                        {uploadingBankDoc ? (
-                          <>
-                            <Upload className="w-4 h-4 mr-2 animate-pulse" />
-                            {t("profile_management.uploading")}
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4 mr-2" />
-                            {t("profile_management.upload_bank_document")}
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
+                  <FileUpload
+                    onFilesChange={handleBankDocumentFilesChange}
+                    acceptedTypes={[".jpg", ".jpeg", ".png", ".webp", ".pdf"]}
+                    maxSize={10 * 1024 * 1024} // 10MB
+                    maxFiles={1}
+                    initialFiles={bankDocumentFiles}
+                    fileType="bank_document"
+                    locale="zh"
+                  />
 
                   <div className="text-xs text-muted-foreground">
                     <p>{t("profile_management.file_formats")}</p>
@@ -985,33 +998,34 @@ export default function UserProfileManagement() {
                   </div>
                 </div>
               </div>
-
-              <Button
-                onClick={() => handleSave("bank")}
-                disabled={saving}
-                className="w-full"
-              >
-                {saving ? (
-                  t("profile_management.saving")
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    {t("profile_management.save_bank_info")}
-                  </>
-                )}
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Advisor Info Tab */}
-        <TabsContent value="advisor" className="space-y-6">
+        <TabsContent value="advisor" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <School className="w-5 h-5" />
-                {t("profile_management.advisor_info")}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <School className="w-5 h-5" />
+                  {t("profile_management.advisor_info")}
+                </CardTitle>
+                <Button
+                  onClick={() => handleSave("advisor")}
+                  disabled={saving}
+                  size="sm"
+                >
+                  {saving ? (
+                    t("profile_management.saving")
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      {t("profile_management.save_advisor_info")}
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Advisor validation errors display */}
@@ -1114,21 +1128,6 @@ export default function UserProfileManagement() {
                   />
                 </div>
               </div>
-
-              <Button
-                onClick={() => handleSave("advisor")}
-                disabled={saving}
-                className="w-full"
-              >
-                {saving ? (
-                  t("profile_management.saving")
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    {t("profile_management.save_advisor_info")}
-                  </>
-                )}
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>

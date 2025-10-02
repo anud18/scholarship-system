@@ -151,10 +151,14 @@ class GitHubIntegrationService:
 
                 for item in ranking_items:
                     student_name = (
-                        item.application.student_data.get("cname", "N/A") if item.application.student_data else "N/A"
+                        item.application.student_data.get("std_cname", "N/A")
+                        if item.application.student_data
+                        else "N/A"
                     )
                     student_id = (
-                        item.application.student_data.get("stdNo", "N/A") if item.application.student_data else "N/A"
+                        item.application.student_data.get("std_stdcode", "N/A")
+                        if item.application.student_data
+                        else "N/A"
                     )
                     score = f"{item.total_score:.2f}" if item.total_score else "N/A"
                     status_emoji = "✅" if item.is_allocated else "❌"
@@ -294,10 +298,10 @@ class GitHubIntegrationService:
 
             for item in ranking_items:
                 student_name = (
-                    item.application.student_data.get("cname", "N/A") if item.application.student_data else "N/A"
+                    item.application.student_data.get("std_cname", "N/A") if item.application.student_data else "N/A"
                 )
                 student_id = (
-                    item.application.student_data.get("stdNo", "N/A") if item.application.student_data else "N/A"
+                    item.application.student_data.get("std_stdcode", "N/A") if item.application.student_data else "N/A"
                 )
                 score = f"{item.total_score:.2f}" if item.total_score else "N/A"
                 review_status = item.college_review.review_status if item.college_review else "N/A"
@@ -370,8 +374,8 @@ def generate_distribution_csv_content(ranking_items: List[CollegeRankingItem]) -
     csv_lines.append("Rank,Student Name,Student ID,Score,Allocated,Status,Allocation Reason")
 
     for item in sorted(ranking_items, key=lambda x: x.rank_position):
-        student_name = item.application.student_data.get("cname", "N/A") if item.application.student_data else "N/A"
-        student_id = item.application.student_data.get("stdNo", "N/A") if item.application.student_data else "N/A"
+        student_name = item.application.student_data.get("std_cname", "N/A") if item.application.student_data else "N/A"
+        student_id = item.application.student_data.get("std_stdcode", "N/A") if item.application.student_data else "N/A"
         score = f"{item.total_score:.2f}" if item.total_score else "N/A"
         allocated = "Yes" if item.is_allocated else "No"
         status = item.status

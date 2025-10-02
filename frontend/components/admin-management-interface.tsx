@@ -4096,7 +4096,7 @@ export function AdminManagementInterface({
                                     <p className="mt-1">
                                       國立陽明交通大學教務處
                                     </p>
-                                    <p>獎學金申請與簽核作業管理系統</p>
+                                    <p>獎學金申請與簽核系統</p>
                                   </div>
                                 </div>
                               </div>

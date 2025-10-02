@@ -8,7 +8,7 @@ export const translations = {
   zh: {
     // 系統標題
     system: {
-      title: "獎學金申請與簽核作業管理系統",
+      title: "獎學金申請與簽核系統",
       subtitle: "NYCU Admissions Scholarship System",
       name: "NYCU Admissions Scholarship System",
     },
@@ -68,7 +68,7 @@ export const translations = {
       basic_readonly_title: "基本資料 (從 API 取得，無法修改)",
       basic_readonly_notice: "以下資料來自校務系統，如需修改請聯繫相關單位。",
       name: "姓名",
-      id_number: "學號/員工編號",
+      id_number: "學號",
       email: "Email",
       user_type: "身份類別",
       status: "狀態",
@@ -84,7 +84,7 @@ export const translations = {
       // Bank info section
       bank_account_info: "銀行帳戶資訊",
       bank_code: "銀行代碼",
-      bank_code_placeholder: "例：808",
+      bank_code_placeholder: "例：700",
       account_number: "帳戶號碼",
       account_number_placeholder: "請輸入完整帳戶號碼",
       bank_document: "銀行帳戶證明文件",
@@ -309,7 +309,7 @@ export const translations = {
     // System Title
     system: {
       title: "NYCU Admissions Scholarship System",
-      subtitle: "獎學金申請與簽核作業管理系統",
+      subtitle: "獎學金申請與簽核系統",
       name: "NYCU Admissions Scholarship System",
     },
 

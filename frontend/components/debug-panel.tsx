@@ -40,13 +40,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   const { user, token } = useAuth();
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Only show in test/development mode
+  // Only show when explicitly enabled via environment variable or in test mode
   const shouldShow =
     isTestMode ||
-    process.env.NODE_ENV === "development" ||
-    (typeof window !== "undefined" &&
-      (window.location.hostname === "140.113.7.148" ||
-        window.location.hostname === "localhost"));
+    process.env.NEXT_PUBLIC_ENABLE_DEBUG_PANEL === "true" ||
+    process.env.NODE_ENV === "development";
 
   // Handle modal focus management and escape key
   useEffect(() => {
@@ -179,6 +177,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
       const response = await apiClient.users.getStudentInfo();
       if (response.success && response.data) {
         console.log("🔍 Live student data fetched:", response.data);
+        console.log("🔍 Semesters data:", response.data.semesters);
         setStudentData({
           source: "api_live",
           api_endpoint: "/users/student-info",
@@ -737,8 +736,42 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                 {expandedSections.has("student") && (
                   <div className="p-4 bg-gray-50">
                     {studentData ? (
-                      <div className="font-mono text-xs overflow-x-auto">
-                        {renderValue(studentData)}
+                      <div className="space-y-4">
+                        {/* Basic Student Info */}
+                        <div>
+                          <div className="font-semibold text-sm mb-2">基本資料</div>
+                          <div className="font-mono text-xs overflow-x-auto bg-white p-2 rounded">
+                            {renderValue(studentData.student || studentData)}
+                          </div>
+                        </div>
+
+                        {/* Debug: Show what's in studentData */}
+                        <div className="text-xs text-gray-500 bg-yellow-50 p-2 rounded">
+                          Debug: semesters exists: {String(!!studentData.semesters)} |
+                          length: {studentData.semesters?.length || 0} |
+                          keys: {Object.keys(studentData).join(', ')}
+                        </div>
+
+                        {/* Semester Data */}
+                        {studentData.semesters && studentData.semesters.length > 0 && (
+                          <div>
+                            <div className="font-semibold text-sm mb-2">
+                              學期資料 ({studentData.semesters.length} 筆)
+                            </div>
+                            <div className="space-y-2">
+                              {studentData.semesters.map((semester: any, index: number) => (
+                                <div key={index} className="bg-white p-3 rounded border border-gray-200">
+                                  <div className="font-semibold text-xs mb-2 text-blue-600">
+                                    {semester.academic_year || semester.trm_year} 學年 第 {semester.term || semester.trm_term} 學期
+                                  </div>
+                                  <div className="font-mono text-xs overflow-x-auto">
+                                    {renderValue(semester)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-2">

@@ -65,6 +65,7 @@ interface DashboardApplication {
   id: number;
   student_name?: string;
   student_no?: string;
+  student_email?: string;
   status: string;
   status_name?: string;
   submitted_at?: string;
@@ -838,40 +839,11 @@ export function AdminScholarshipDashboard({
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="space-y-1">
-                        {getBankVerificationStatus(app)}
-                        {!app.meta_data?.bank_verification_status &&
-                          ["submitted", "under_review", "approved"].includes(
-                            app.status
-                          ) && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleBankVerification(app.id)}
-                              disabled={bankVerificationLoading[app.id]}
-                              className="text-xs h-6 px-2"
-                            >
-                              {bankVerificationLoading[app.id] ? (
-                                <>
-                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                  驗證中
-                                </>
-                              ) : (
-                                <>
-                                  <CreditCard className="h-3 w-3 mr-1" />
-                                  驗證
-                                </>
-                              )}
-                            </Button>
-                          )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">
+                      <div className="font-medium whitespace-nowrap">
                         {app.student_name || "未知"}
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {app.user?.email || "N/A"}
+                      <div className="text-sm text-gray-500 whitespace-nowrap">
+                        {app.student_email || app.user?.email || "N/A"}
                       </div>
                     </TableCell>
                     <TableCell>{app.student_no || "N/A"}</TableCell>
@@ -1055,7 +1027,7 @@ export function AdminScholarshipDashboard({
                         </div>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       <Badge
                         variant={
                           app.status === "approved"
@@ -1069,6 +1041,35 @@ export function AdminScholarshipDashboard({
                       >
                         {app.status_name || app.status}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {getBankVerificationStatus(app)}
+                        {!app.meta_data?.bank_verification_status &&
+                          ["submitted", "under_review", "approved"].includes(
+                            app.status
+                          ) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleBankVerification(app.id)}
+                              disabled={bankVerificationLoading[app.id]}
+                              className="text-xs h-6 px-2"
+                            >
+                              {bankVerificationLoading[app.id] ? (
+                                <>
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                  驗證中
+                                </>
+                              ) : (
+                                <>
+                                  <CreditCard className="h-3 w-3 mr-1" />
+                                  驗證
+                                </>
+                              )}
+                            </Button>
+                          )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {app.submitted_at

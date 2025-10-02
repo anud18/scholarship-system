@@ -93,6 +93,9 @@ class ScholarshipType(Base):
     # 白名單設定
     whitelist_enabled = Column(Boolean, default=False)  # 是否啟用白名單
 
+    # 申請條款文件
+    terms_document_url = Column(String(500), nullable=True)  # 申請條款文件 URL
+
     # 狀態與設定
     status = Column(String(20), default=ScholarshipStatus.ACTIVE.value)
 

@@ -199,6 +199,8 @@ class ScholarshipService:
                     # Eligibility info
                     "whitelist_enabled": scholarship_type.whitelist_enabled,
                     "whitelist_student_ids": config.whitelist_student_ids or {},
+                    # Terms document
+                    "terms_document_url": scholarship_type.terms_document_url,
                     # System data
                     "created_at": scholarship_type.created_at,
                     "config_version": config.version,

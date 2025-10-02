@@ -95,6 +95,8 @@ services:
       STUDENT_API_HMAC_KEY: ${STUDENT_API_HMAC_KEY}
       STUDENT_API_TIMEOUT: ${STUDENT_API_TIMEOUT:-10.0}
       STUDENT_API_ENCODE_TYPE: ${STUDENT_API_ENCODE_TYPE:-UTF-8}
+      # Super Admin Configuration
+      SUPER_ADMIN_NYCU_ID: ${SUPER_ADMIN_NYCU_ID:-super_admin}
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend:/app
@@ -126,6 +128,8 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://${HOST_IP:-host.docker.internal}:8000
       NODE_ENV: production
+      # Debug Panel Control
+      NEXT_PUBLIC_ENABLE_DEBUG_PANEL: "false"
     depends_on:
       backend:
         condition: service_healthy

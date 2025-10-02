@@ -704,8 +704,8 @@ class ApplicationService:
         student_name = None
         student_no = None
         if application.student_data:
-            student_name = application.student_data.get("cname")
-            student_no = application.student_data.get("stdNo")
+            student_name = application.student_data.get("std_cname")
+            student_no = application.student_data.get("std_stdcode")
 
         # Get user information as fallback
         if not student_name or not student_no:
@@ -2466,7 +2466,9 @@ class ApplicationService:
                         "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
                         "application_id": application.id,
                         "app_id": application.app_id,
-                        "student_name": application.student_data.get("name") if application.student_data else "Unknown",
+                        "student_name": application.student_data.get("std_cname")
+                        if application.student_data
+                        else "Unknown",
                         "scholarship_name": application.scholarship_name,
                         "assigned_by": assigned_by.name,
                     },
