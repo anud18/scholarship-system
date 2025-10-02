@@ -2457,6 +2457,95 @@ async def get_student_term_info(
         return JSONResponse(status_code=500, content={"code": 500, "msg": "Internal server error", "data": []})
 
 
+# Alias endpoints for backward compatibility with backend requests
+@app.post("/ScholarshipStudent")
+async def get_student_basic_info_alias(
+    request: StudentBasicRequest,
+    request_obj: Request,
+    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
+    content_type: str = Header(..., alias="content-type"),
+    encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
+):
+    """
+    Alias endpoint for /getsoaascholarshipstudent
+    Accepts both qrySoaaScholarshipStudent and QrySchlStudent actions
+    """
+    try:
+        request_body = await request_obj.body()
+        request_json = request_body.decode("utf-8")
+
+        if not verify_hmac_signature(authorization, request_json, content_type, encode_type):
+            return JSONResponse(
+                status_code=401, content={"code": 401, "msg": "HMAC signature verification failed", "data": []}
+            )
+
+        # Accept multiple action formats
+        if request.action not in ["qrySoaaScholarshipStudent", "QrySchlStudent"]:
+            return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid action", "data": []})
+
+        if request.account != "scholarship":
+            return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid account", "data": []})
+
+        # Get student data from in-memory store
+        student_data = SAMPLE_STUDENTS.get(request.stdcode)
+
+        if not student_data:
+            return JSONResponse(status_code=404, content={"code": 404, "msg": "Student not found", "data": []})
+
+        return {"code": 200, "msg": "success", "data": [student_data]}
+
+    except Exception as e:
+        logger.error(f"Error in get_student_basic_info_alias: {str(e)}")
+        return JSONResponse(status_code=500, content={"code": 500, "msg": "Internal server error", "data": []})
+
+
+@app.post("/ScholarshipStudentTerm")
+async def get_student_term_info_alias(
+    request: StudentTermRequest,
+    request_obj: Request,
+    authorization: str = Header(..., description="HMAC-SHA256 authorization header"),
+    content_type: str = Header(..., alias="content-type"),
+    encode_type: Optional[str] = Header(None, alias="ENCODE_TYPE"),
+):
+    """
+    Alias endpoint for /getsoaascholarshipstudentterm
+    Accepts both qrySoaaScholarshipStudentTerm and QrySchlStudentTerm actions
+    """
+    try:
+        request_body = await request_obj.body()
+        request_json = request_body.decode("utf-8")
+
+        if not verify_hmac_signature(authorization, request_json, content_type, encode_type):
+            return JSONResponse(
+                status_code=401, content={"code": 401, "msg": "HMAC signature verification failed", "data": []}
+            )
+
+        # Accept multiple action formats
+        if request.action not in ["qrySoaaScholarshipStudentTerm", "QrySchlStudentTerm"]:
+            return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid action", "data": []})
+
+        if request.account != "scholarship":
+            return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid account", "data": []})
+
+        # Get student term data from in-memory store
+        student_terms = SAMPLE_TERMS.get(request.stdcode, [])
+
+        # Filter by year and term if specified
+        filtered_terms = []
+        for term in student_terms:
+            if term["trm_year"] == request.trmyear and term["trm_term"] == request.trmterm:
+                filtered_terms.append(term)
+
+        if not filtered_terms:
+            return JSONResponse(status_code=404, content={"code": 404, "msg": "Term data not found", "data": []})
+
+        return {"code": 200, "msg": "success", "data": filtered_terms}
+
+    except Exception as e:
+        logger.error(f"Error in get_student_term_info_alias: {str(e)}")
+        return JSONResponse(status_code=500, content={"code": 500, "msg": "Internal server error", "data": []})
+
+
 if __name__ == "__main__":
     import uvicorn
 
