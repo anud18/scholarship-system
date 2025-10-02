@@ -312,6 +312,22 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
     activePeriodsOnly,
   ]);
 
+  // 自動選擇當前學期（僅在初次載入且沒有預設選擇時）
+  useEffect(() => {
+    if (combinations.length > 0 && !selectedCombination && onCombinationChange) {
+      // 找到標記為當前的學期
+      const currentPeriod = combinations.find(c => c.is_current);
+      if (currentPeriod) {
+        // 自動選擇當前學期
+        onCombinationChange(
+          currentPeriod.value,
+          currentPeriod.academic_year,
+          currentPeriod.semester
+        );
+      }
+    }
+  }, [combinations, selectedCombination]);
+
   // 處理學年變更
   const handleAcademicYearChange = (value: string) => {
     const year = parseInt(value);

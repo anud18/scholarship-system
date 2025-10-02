@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProgressTimeline } from "@/components/progress-timeline";
 import SemesterSelector from "@/components/semester-selector";
@@ -29,6 +30,7 @@ import {
   GraduationCap,
   UserCheck,
   Filter,
+  RefreshCw,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { User } from "@/types/user";
@@ -665,26 +667,41 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
               value={scholarship.code}
               className="space-y-4"
             >
-              {/* 學期選擇器 - 簡化版 */}
-              <div className="flex items-center gap-2 mb-4">
-                <Filter className="h-4 w-4 text-nycu-navy-600" />
-                <span className="text-sm text-nycu-navy-700">時間篩選：</span>
-                <SemesterSelector
-                  mode="combined"
-                  scholarshipCode={scholarship.code}
-                  selectedCombination={selectedCombination}
-                  onCombinationChange={handleSemesterChange}
-                  compact
-                />
-                {selectedCombination && (
-                  <button
-                    onClick={resetFilter}
-                    className="ml-2 text-xs text-nycu-blue-600 hover:text-nycu-blue-700 underline"
-                  >
-                    重置
-                  </button>
-                )}
-              </div>
+              {/* 學期選擇器 */}
+              <Card className="bg-gradient-to-r from-nycu-blue-50 to-nycu-teal-50 border-nycu-blue-200">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                        <Filter className="h-5 w-5 text-nycu-blue-600" />
+                        時間篩選
+                      </CardTitle>
+                      <CardDescription className="text-sm text-nycu-navy-600 mt-1">
+                        選擇要查看的學年學期時間軸
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <SemesterSelector
+                        mode="combined"
+                        scholarshipCode={scholarship.code}
+                        selectedCombination={selectedCombination}
+                        onCombinationChange={handleSemesterChange}
+                      />
+                      {selectedCombination && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={resetFilter}
+                          className="text-nycu-navy-600 hover:text-nycu-navy-800"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          清除篩選
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+              </Card>
 
               {/* 獎學金基本信息 */}
               <div className="flex items-center justify-between p-4 bg-nycu-blue-50 rounded-lg">
