@@ -10,6 +10,7 @@ const nextConfig = {
     unoptimized: true,
   },
   output: 'standalone',
+  transpilePackages: ['lucide-react'],
 }
 
 export default nextConfig
