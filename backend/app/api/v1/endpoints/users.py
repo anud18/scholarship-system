@@ -127,7 +127,7 @@ async def update_my_profile(
 # ==================== 管理員專用API ====================
 
 
-@router.get("/")
+@router.get("")
 async def get_all_users(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
@@ -219,7 +219,7 @@ async def get_user_by_id(
     }
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_user(
     user_data: UserCreate,
     current_user: User = Depends(require_admin),

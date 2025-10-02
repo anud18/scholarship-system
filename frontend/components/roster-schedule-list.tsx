@@ -67,7 +67,7 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
       if (search) params.search = search
       if (statusFilter !== "all") params.status = statusFilter
 
-      const response = await apiClient.request("/roster-schedules/", { params })
+      const response = await apiClient.request("/roster-schedules", { params })
       const data = response.data || response
 
       if (data.items) {

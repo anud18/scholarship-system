@@ -41,7 +41,7 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
 
   const fetchScholarshipConfigurations = async () => {
     try {
-      const response = await apiClient.request("/scholarship-configurations/configurations/")
+      const response = await apiClient.request("/scholarship-configurations/configurations")
       // apiClient already extracts response.data, so response.data is the actual array
       const configs = Array.isArray(response.data) ? response.data : (response.data?.data || [])
       setScholarshipConfigs(configs)
@@ -93,7 +93,7 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
         scholarship_configuration_id: parseInt(formData.scholarship_configuration_id),
       }
 
-      await apiClient.request("/roster-schedules/", {
+      await apiClient.request("/roster-schedules", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

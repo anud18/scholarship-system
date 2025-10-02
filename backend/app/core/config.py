@@ -179,6 +179,10 @@ class Settings(BaseSettings):
         """Only allow bypassing time restrictions in test environments"""
         import os
 
+        # Convert string to boolean properly
+        if isinstance(v, str):
+            v = v.lower() in ("true", "1", "yes", "on")
+
         if v and not (os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING") == "true"):
             raise ValueError("Time restrictions bypass only allowed in test environments")
         return bool(v)

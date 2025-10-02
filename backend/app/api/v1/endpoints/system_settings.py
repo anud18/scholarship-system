@@ -19,7 +19,7 @@ from app.services.config_management_service import ConfigurationService
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("")
 async def get_all_configurations(
     category: Optional[ConfigCategory] = None,
     include_sensitive: bool = False,
@@ -130,7 +130,7 @@ async def get_configuration(
         )
 
 
-@router.post("/", response_model=SystemSettingResponse)
+@router.post("", response_model=SystemSettingResponse)
 async def create_configuration(
     configuration: SystemSettingCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
@@ -267,7 +267,7 @@ async def validate_configuration(
         )
 
 
-@router.get("/categories/")
+@router.get("/categories")
 async def get_configuration_categories(current_user: User = Depends(require_admin)):
     """
     獲取所有配置類別
@@ -282,7 +282,7 @@ async def get_configuration_categories(current_user: User = Depends(require_admi
     }
 
 
-@router.get("/data-types/")
+@router.get("/data-types")
 async def get_configuration_data_types(current_user: User = Depends(require_admin)):
     """
     獲取所有配置數據類型

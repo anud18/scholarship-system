@@ -83,7 +83,7 @@ export const scholarshipConfigApi = {
     }
 
     const queryString = queryParams.toString();
-    const url = `/api/v1/scholarship-configurations/${queryString ? `?${queryString}` : ""}`;
+    const url = `/api/v1/scholarship-configurations${queryString ? `?${queryString}` : ""}`;
     return apiCall(url);
   },
 
@@ -125,7 +125,7 @@ export const scholarshipConfigApi = {
   createConfiguration: async (
     config: Partial<ScholarshipConfiguration>
   ): Promise<ApiResponse<ScholarshipConfiguration>> => {
-    return apiCall("/api/v1/scholarship-configurations/", {
+    return apiCall("/api/v1/scholarship-configurations", {
       method: "POST",
       body: JSON.stringify(config),
     });

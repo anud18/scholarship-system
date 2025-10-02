@@ -85,7 +85,6 @@ services:
   frontend:
     image: ghcr.io/jotpalch/scholarship-system-frontend:${TAG:-latest}
     container_name: scholarship_frontend_staging
-    command: npm start
     expose:
       - "3000"
     environment:

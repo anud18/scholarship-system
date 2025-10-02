@@ -64,7 +64,7 @@ export function EditScheduleDialog({
 
   const fetchScholarshipConfigurations = async () => {
     try {
-      const response = await fetch("/api/v1/scholarship-configurations/")
+      const response = await fetch("/api/v1/scholarship-configurations")
       const data = await response.json()
       setScholarshipConfigs(data.configurations || [])
     } catch (error) {

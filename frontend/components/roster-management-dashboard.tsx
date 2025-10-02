@@ -40,11 +40,11 @@ export function RosterManagementDashboard() {
       setLoading(true)
 
       // Fetch schedule stats
-      const scheduleResponse = await apiClient.request("/roster-schedules/")
+      const scheduleResponse = await apiClient.request("/roster-schedules")
       const scheduleData = scheduleResponse.data || scheduleResponse
 
       // Fetch roster stats
-      const rosterResponse = await apiClient.request("/payment-rosters/")
+      const rosterResponse = await apiClient.request("/payment-rosters")
       const rosterData = rosterResponse.data || rosterResponse
 
       // Fetch scheduler status

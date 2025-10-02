@@ -2459,7 +2459,7 @@ class ApiClient {
 
       const queryString = queryParams.toString();
       return this.request(
-        `/scholarship-configurations/configurations/${queryString ? `?${queryString}` : ""}`
+        `/scholarship-configurations/configurations${queryString ? `?${queryString}` : ""}`
       );
     },
     getScholarshipConfiguration: async (
@@ -2470,7 +2470,7 @@ class ApiClient {
     createScholarshipConfiguration: async (
       configData: ScholarshipConfigurationFormData
     ): Promise<ApiResponse<{ id: number; config_code: string }>> => {
-      return this.request("/scholarship-configurations/configurations/", {
+      return this.request("/scholarship-configurations/configurations", {
         method: "POST",
         body: JSON.stringify(configData),
       });
@@ -3313,11 +3313,11 @@ class ApiClient {
     },
 
     getCategories: async (): Promise<ApiResponse<string[]>> => {
-      return this.request("/system-settings/categories/");
+      return this.request("/system-settings/categories");
     },
 
     getDataTypes: async (): Promise<ApiResponse<string[]>> => {
-      return this.request("/system-settings/data-types/");
+      return this.request("/system-settings/data-types");
     },
 
     getAuditLogs: async (

@@ -708,7 +708,7 @@ async def get_quota_overview(
 # CRUD Endpoints for ScholarshipConfiguration Management
 
 
-@router.post("/configurations/", response_model=ApiResponse)
+@router.post("/configurations", response_model=ApiResponse)
 async def create_scholarship_configuration(
     config_data: Dict[str, Any] = Body(...),
     current_user: User = Depends(require_admin),
@@ -1140,7 +1140,7 @@ async def duplicate_scholarship_configuration(
         )
 
 
-@router.get("/configurations/", response_model=ApiResponse)
+@router.get("/configurations", response_model=ApiResponse)
 async def list_scholarship_configurations(
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),

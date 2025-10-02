@@ -63,7 +63,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
       if (search) params.set("search", search)
       if (statusFilter !== "all") params.set("status", statusFilter)
 
-      const response = await apiClient.request("/payment-rosters/", { params: Object.fromEntries(params) })
+      const response = await apiClient.request("/payment-rosters", { params: Object.fromEntries(params) })
       const data = response.data || response
 
       if (data.items) {
