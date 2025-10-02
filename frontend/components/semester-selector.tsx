@@ -407,22 +407,19 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const placeholderText = isYearlyMode ? "選擇學年" : "選擇學年學期";
 
   return (
-    <div className={cn("flex items-center space-x-4", className)}>
-      <div className="flex items-center space-x-2">
-        <Calendar className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm">{labelText}</span>
-        <Select
-          value={selectedCombination}
-          onValueChange={handleCombinationChange}
+    <div className={cn("flex items-center justify-end", className)}>
+      <Select
+        value={selectedCombination}
+        onValueChange={handleCombinationChange}
+      >
+        <SelectTrigger
+          className={cn(
+            "h-8 min-w-[140px]",
+            isYearlyMode ? "w-[140px]" : "w-[180px]"
+          )}
         >
-          <SelectTrigger
-            className={cn(
-              "min-w-[160px]",
-              isYearlyMode ? "w-[160px]" : "w-[220px]"
-            )}
-          >
-            <SelectValue placeholder={placeholderText} />
-          </SelectTrigger>
+          <SelectValue placeholder={placeholderText} />
+        </SelectTrigger>
           <SelectContent>
             {combinations.map(combination => (
               <SelectItem key={combination.value} value={combination.value}>
@@ -443,26 +440,7 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
-
-        {/* 顯示獎學金名稱和制度資訊 */}
-        {scholarshipName && (
-          <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-            <span>•</span>
-            <span>{scholarshipName}</span>
-            <span
-              className={cn(
-                "px-2 py-1 rounded text-xs",
-                isYearlyMode
-                  ? "bg-green-100 text-green-800"
-                  : "bg-blue-100 text-blue-800"
-              )}
-            >
-              {isYearlyMode ? "學年制" : "學期制"}
-            </span>
-          </div>
-        )}
-      </div>
+      </Select>
     </div>
   );
 };
