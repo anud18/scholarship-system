@@ -102,7 +102,7 @@ export function Header({
               </h1>
               <p className="text-sm text-nycu-navy-600">
                 {locale === "zh"
-                  ? "Scholarship Application and Approval Management"
+                  ? "NYCU Admissions Scholarship System"
                   : "Admissions Scholarship Management"}
               </p>
             </div>
