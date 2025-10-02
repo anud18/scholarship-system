@@ -98,12 +98,12 @@ export function Header({
               <h1 className="font-semibold text-lg text-nycu-navy-800">
                 {locale === "zh"
                   ? "獎學金申請與簽核作業管理系統"
-                  : "Scholarship Management System"}
+                  : "NYCU Admissions Scholarship System"}
               </h1>
               <p className="text-sm text-nycu-navy-600">
                 {locale === "zh"
                   ? "Scholarship Application and Approval Management"
-                  : "SAMS"}
+                  : "Admissions Scholarship Management"}
               </p>
             </div>
 

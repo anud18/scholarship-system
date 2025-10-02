@@ -9,8 +9,8 @@ export const translations = {
     // 系統標題
     system: {
       title: "獎學金申請與簽核作業管理系統",
-      subtitle: "Scholarship Application and Approval Management System",
-      name: "SAMS",
+      subtitle: "NYCU Admissions Scholarship System",
+      name: "NYCU Admissions Scholarship System",
     },
 
     // 導航
@@ -308,9 +308,9 @@ export const translations = {
   en: {
     // System Title
     system: {
-      title: "Scholarship Application and Approval Management System",
+      title: "NYCU Admissions Scholarship System",
       subtitle: "獎學金申請與簽核作業管理系統",
-      name: "SAMS",
+      name: "NYCU Admissions Scholarship System",
     },
 
     // Navigation

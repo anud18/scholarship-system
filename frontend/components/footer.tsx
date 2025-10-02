@@ -35,10 +35,10 @@ export function Footer({ locale = "zh" }: FooterProps) {
                   <p className="text-nycu-navy-600 text-sm">
                     {locale === "zh"
                       ? "獎學金申請與簽核作業管理系統"
-                      : "Scholarship Application and Approval Management System"}
+                      : "NYCU Admissions Scholarship System"}
                   </p>
                   <p className="text-nycu-navy-500 text-xs font-medium">
-                    {locale === "zh" ? "版本 v1.0.0" : "Version v1.0.0"} | SAMS
+                    {locale === "zh" ? "版本 v1.0.0" : "Version v1.0.0"}
                   </p>
                 </div>
               </div>
