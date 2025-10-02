@@ -94,16 +94,18 @@ class StudentService:
 
                 if response.status_code == 200:
                     result = response.json()
-                    if result.get("code") == 200 and result.get("data"):
+                    # API returns code as string, need to check both string and int
+                    code = result.get("code")
+                    if (code == 200 or code == "200") and result.get("data"):
                         return result["data"][0]  # Return first student record
-                    elif result.get("code") == 404:
+                    elif code == 404 or code == "404":
                         logger.info(f"Student {student_code} not found in API")
                         return None
                     else:
                         logger.warning(
                             f"Student API returned unexpected response - "
-                            f"code: {result.get('code')}, msg: {result.get('msg')}, "
-                            f"student_code: {student_code}"
+                            f"code: {result.get('code')} (type: {type(code).__name__}), "
+                            f"msg: {result.get('msg')}, student_code: {student_code}"
                         )
                         return None
                 else:
@@ -166,13 +168,19 @@ class StudentService:
 
                 if response.status_code == 200:
                     result = response.json()
-                    if result.get("code") == 200 and result.get("data"):
+                    # API returns code as string, need to check both string and int
+                    code = result.get("code")
+                    if (code == 200 or code == "200") and result.get("data"):
                         return result["data"][0]  # Return first term record
-                    elif result.get("code") == 404:
+                    elif code == 404 or code == "404":
                         logger.info(f"Student term data not found for {student_code}")
                         return None
                     else:
-                        logger.warning(f"Student term API returned error: {result.get('msg')}")
+                        logger.warning(
+                            f"Student term API returned unexpected response - "
+                            f"code: {code} (type: {type(code).__name__}), "
+                            f"msg: {result.get('msg')}, student_code: {student_code}"
+                        )
                         return None
                 else:
                     logger.error(f"Student term API request failed: {response.status_code}")
