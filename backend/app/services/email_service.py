@@ -1,7 +1,9 @@
 import json
 import logging
+import re
 from datetime import datetime
 from email.message import EmailMessage
+from html import unescape
 from typing import List, Optional
 
 import aiosmtplib
@@ -54,14 +56,25 @@ class EmailService:
             self.from_addr = settings.email_from
             self.from_name = settings.email_from_name
 
+    @staticmethod
+    def _html_to_text(html_content: str) -> str:
+        """Convert HTML content into a simple plain-text representation"""
+        # Remove script/style blocks first to avoid leaking JS/CSS into the body
+        sanitized = re.sub(r"<(script|style)[^>]*>.*?</\\1>", "", html_content, flags=re.IGNORECASE | re.DOTALL)
+        # Strip remaining tags and collapse whitespace
+        sanitized = re.sub(r"<[^>]+>", " ", sanitized)
+        sanitized = re.sub(r"\s+", " ", sanitized)
+        return unescape(sanitized).strip()
+
     async def send_email(
         self,
         to: str | List[str],
         subject: str,
-        body: str,
+        body: Optional[str] = None,
         cc: Optional[List[str]] = None,
         bcc: Optional[List[str]] = None,
         db: Optional[AsyncSession] = None,
+        html_content: Optional[str] = None,
         **metadata,
     ):
         """
@@ -70,10 +83,11 @@ class EmailService:
         Args:
             to: Recipient email(s)
             subject: Email subject
-            body: Email body
+            body: Plain-text email body (optional if html_content is provided)
             cc: CC recipients
             bcc: BCC recipients
             db: Database session for logging
+            html_content: HTML version of the email body
             **metadata: Additional metadata for logging (template_key, application_id, etc.)
         """
         # Load configuration before sending (picks up any changes from database)
@@ -81,12 +95,18 @@ class EmailService:
             self.db = db
         await self._load_config()
 
+        if body is None and html_content is None:
+            raise ValueError("Either body or html_content must be provided when sending an email")
+
         if isinstance(to, str):
             to = [to]
 
         primary_recipient = to[0] if to else ""
         status = EmailStatus.sent
         error_message = None
+        email_size = None
+        plain_body = body or (self._html_to_text(html_content) if html_content else "")
+        history_body = html_content or body or ""
 
         try:
             msg = EmailMessage()
@@ -101,7 +121,9 @@ class EmailService:
                 msg["Cc"] = ", ".join(cc)
             if bcc:
                 msg["Bcc"] = ", ".join(bcc)
-            msg.set_content(body)
+            msg.set_content(plain_body)
+            if html_content:
+                msg.add_alternative(html_content, subtype="html")
 
             # Calculate email size
             email_size = len(msg.as_string().encode("utf-8"))
@@ -115,12 +137,12 @@ class EmailService:
                 start_tls=True,
             )
 
-            logger.info(f"Email sent successfully to {primary_recipient}")
+            logger.info("Email sent successfully to %s", primary_recipient)
 
         except Exception as e:
             status = EmailStatus.failed
             error_message = str(e)
-            logger.error(f"Failed to send email to {primary_recipient}: {e}")
+            logger.error("Failed to send email to %s: %s", primary_recipient, e)
             # Re-raise the exception so callers can handle it
             raise
 
@@ -134,14 +156,14 @@ class EmailService:
                         cc_emails=cc,
                         bcc_emails=bcc,
                         subject=subject,
-                        body=body,
+                        body=history_body,
                         status=status,
                         error_message=error_message,
                         email_size_bytes=email_size if status == EmailStatus.sent else None,
                         **metadata,
                     )
                 except Exception as log_error:
-                    logger.error(f"Failed to log email history: {log_error}")
+                    logger.error("Failed to log email history: %s", log_error)
 
     async def _log_email_history(
         self,
@@ -181,7 +203,7 @@ class EmailService:
             logger.debug(f"Email history logged for {recipient_email}")
 
         except Exception as e:
-            logger.error(f"Failed to log email history: {e}")
+            logger.error("Failed to log email history: %s", e)
             await db.rollback()
 
     async def send_with_template(

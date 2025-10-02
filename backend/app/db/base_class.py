@@ -10,5 +10,5 @@ class Base(DeclarativeBase):
 
     # Generate __tablename__ automatically
     @declared_attr.directive
-    def __tablename__(cls) -> str:
+    def __tablename__(cls) -> str:  # pylint: disable=no-self-argument
         return cls.__name__.lower()

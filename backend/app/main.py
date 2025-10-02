@@ -12,12 +12,16 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Import routers
 from app.api.v1.api import api_router
 from app.core.config import settings
+from app.core.database_health import check_database_health
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
+from app.db.session import async_engine, sync_engine
 
 # Import scheduler
 from app.services.roster_scheduler_service import init_scheduler, shutdown_scheduler
@@ -55,32 +59,33 @@ if settings.log_format == "json":
     handler.setFormatter(JsonFormatter())
     root_logger.addHandler(handler)
 
+LOGGER = logging.getLogger(__name__)
+
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage application lifespan events"""
+async def lifespan(_app: FastAPI):
+    """Manage application lifespan events"""  # pylint: disable=unused-argument
     # Startup
-    logger = logging.getLogger(__name__)
     try:
-        logger.info("Starting application...")
+        LOGGER.info("Starting application...")
 
         # Initialize the roster scheduler
         await init_scheduler()
-        logger.info("Roster scheduler initialized")
+        LOGGER.info("Roster scheduler initialized")
 
         yield
 
-    except Exception as e:
-        logger.error(f"Error during application startup: {e}")
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        LOGGER.exception("Error during application startup: %s", exc)
         raise
     finally:
         # Shutdown
-        logger.info("Shutting down application...")
+        LOGGER.info("Shutting down application...")
         try:
             await shutdown_scheduler()
-            logger.info("Roster scheduler shut down")
-        except Exception as e:
-            logger.error(f"Error during scheduler shutdown: {e}")
+            LOGGER.info("Roster scheduler shut down")
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            LOGGER.exception("Error during scheduler shutdown: %s", exc)
 
 
 app = FastAPI(
@@ -158,9 +163,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     }
 
     try:
-        validation_logger.error(f"Validation error - Path: {request.url.path}, Method: {request.method}")
-        validation_logger.error(f"Validation error - Headers (sanitized): {sanitized_headers}")
-        validation_logger.error(f"Validation error - Field errors: {[error['loc'] for error in exc.errors()]}")
+        validation_logger.error(
+            "Validation error - Path: %s, Method: %s",
+            request.url.path,
+            request.method,
+        )
+        validation_logger.error(
+            "Validation error - Headers (sanitized): %s",
+            sanitized_headers,
+        )
+        validation_logger.error(
+            "Validation error - Field errors: %s",
+            [error["loc"] for error in exc.errors()],
+        )
     except Exception as log_error:
         # Fallback logging if logger fails
         print(f"Validation error (logger failed) - Path: {request.url.path}, Method: {request.method}")
@@ -179,7 +194,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 @app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
+async def general_exception_handler(request: Request, exc: Exception):  # pylint: disable=broad-exception-caught
     """Handle unexpected exceptions"""
     # Get logger for this handler
     exception_logger = logging.getLogger(__name__)
@@ -187,16 +202,14 @@ async def general_exception_handler(request: Request, exc: Exception):
     # Log the exception with full details
     trace_id = getattr(request.state, "trace_id", "unknown")
     exception_logger.error(
-        f"Unhandled exception - Trace ID: {trace_id}, "
-        f"Path: {request.url.path}, "
-        f"Method: {request.method}, "
-        f"Exception: {type(exc).__name__}: {str(exc)}",
+        "Unhandled exception - Trace ID: %s, Path: %s, Method: %s, Exception: %s: %s",
+        trace_id,
+        request.url.path,
+        request.method,
+        type(exc).__name__,
+        exc,
         exc_info=True,
     )
-
-    # Check if it's a database-related exception
-    from sqlalchemy.exc import OperationalError
-    from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
     if isinstance(exc, (SQLAlchemyTimeoutError, OperationalError)):
         return JSONResponse(
@@ -222,8 +235,6 @@ async def general_exception_handler(request: Request, exc: Exception):
 @app.get("/health")
 async def health_check():
     """Comprehensive health check endpoint including database status"""
-    from app.core.database_health import check_database_health
-
     try:
         # Check database health
         db_health = await check_database_health()
@@ -243,14 +254,16 @@ async def health_check():
                 "cached_statement_error": db_health.get("cached_statement_error", False),
             },
         }
-    except Exception as e:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         # Get logger instance for this function
         health_logger = logging.getLogger(__name__)
         try:
-            health_logger.error(f"Health check failed: {e}")
+            health_logger.error("Health check failed: %s", exc)
         except Exception:
             # Fallback logging if logger fails
-            print(f"Health check failed (logger error): {e}")
+            print(
+                f"Health check failed (logger error): {exc}",
+            )
         return {
             "success": False,
             "status": "unhealthy",
@@ -265,8 +278,6 @@ async def health_check():
 @app.get("/debug/pool-status")
 async def get_pool_status():
     """Get current database connection pool status (for debugging)"""
-    from app.db.session import async_engine, sync_engine
-
     async_pool = async_engine.pool
     sync_pool = sync_engine.pool
 

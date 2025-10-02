@@ -36,13 +36,13 @@ class ScholarshipNotificationService:
             result = await self.db.execute(stmt)
             user = result.scalar_one_or_none()
             if not user:
-                logger.error(f"User not found for application {application.id}")
+                logger.error("User not found for application %s", application.id)
                 return False
 
             # Get student data from snapshot or external API
             student_data = application.student_data
             if not student_data:
-                logger.error(f"Student data not found for application {application.id}")
+                logger.error("Student data not found for application %s", application.id)
                 return False
 
             student_name = student_data.get("std_cname", "N/A")
@@ -100,21 +100,26 @@ class ScholarshipNotificationService:
             """
 
             # Send email
-            success = await self.email_service.send_email(
-                to_email=user.email, subject=subject, html_content=html_content
+            await self.email_service.send_email(
+                to=user.email,
+                subject=subject,
+                html_content=html_content,
+                db=self.db,
             )
 
-            if success:
-                logger.info(
-                    f"Application submission notification sent to {user.email} for application {application.app_id}"
-                )
-            else:
-                logger.error(f"Failed to send submission notification for application {application.app_id}")
+            logger.info(
+                "Application submission notification sent to %s for application %s",
+                user.email,
+                application.app_id,
+            )
+            return True
 
-            return success
-
-        except Exception as e:
-            logger.error(f"Error sending application submission notification: {str(e)}")
+        except Exception as exc:
+            logger.exception(
+                "Error sending application submission notification for application %s: %s",
+                application.app_id,
+                exc,
+            )
             return False
 
     async def send_status_change_notification(self, application: Application, old_status: str, new_status: str) -> bool:
@@ -124,12 +129,13 @@ class ScholarshipNotificationService:
             result = await self.db.execute(stmt)
             user = result.scalar_one_or_none()
             if not user:
+                logger.error("User record missing for application %s", application.id)
                 return False
 
             # Get student data from snapshot
             student_data = application.student_data
             if not student_data:
-                logger.error(f"Student data not found for application {application.id}")
+                logger.error("Student data not found for application %s", application.id)
                 return False
 
             student_name = student_data.get("std_cname", "N/A")
@@ -199,17 +205,27 @@ class ScholarshipNotificationService:
             </div>
             """
 
-            success = await self.email_service.send_email(
-                to_email=user.email, subject=subject, html_content=html_content
+            await self.email_service.send_email(
+                to=user.email,
+                subject=subject,
+                html_content=html_content,
+                db=self.db,
             )
 
             logger.info(
-                f"Status change notification sent for application {application.app_id}: {old_status} -> {new_status}"
+                "Status change notification sent for application %s: %s -> %s",
+                application.app_id,
+                old_status,
+                new_status,
             )
-            return success
+            return True
 
-        except Exception as e:
-            logger.error(f"Error sending status change notification: {str(e)}")
+        except Exception as exc:
+            logger.exception(
+                "Error sending status change notification for application %s: %s",
+                application.app_id,
+                exc,
+            )
             return False
 
     async def send_deadline_reminder_notifications(self, days_before: int = 7) -> Dict[str, int]:
@@ -242,12 +258,17 @@ class ScholarshipNotificationService:
                     result = await self.db.execute(stmt)
                     user = result.scalar_one_or_none()
                     if not user:
+                        logger.error("Deadline reminder skipped: user not found for application %s", application.id)
                         failed_count += 1
                         continue
 
                     # Get student data from snapshot
                     student_data = application.student_data
                     if not student_data:
+                        logger.error(
+                            "Deadline reminder skipped: student data missing for application %s",
+                            application.id,
+                        )
                         failed_count += 1
                         continue
 
@@ -283,20 +304,28 @@ class ScholarshipNotificationService:
                     </div>
                     """
 
-                    success = await self.email_service.send_email(
-                        to_email=user.email, subject=subject, html_content=html_content
+                    await self.email_service.send_email(
+                        to=user.email,
+                        subject=subject,
+                        html_content=html_content,
+                        db=self.db,
                     )
 
-                    if success:
-                        sent_count += 1
-                    else:
-                        failed_count += 1
+                    sent_count += 1
 
-                except Exception as e:
-                    logger.error(f"Error sending deadline reminder for application {application.id}: {str(e)}")
+                except Exception as exc:
+                    logger.exception(
+                        "Error sending deadline reminder for application %s: %s",
+                        application.id,
+                        exc,
+                    )
                     failed_count += 1
 
-            logger.info(f"Deadline reminders sent: {sent_count} successful, {failed_count} failed")
+            logger.info(
+                "Deadline reminders sent: %s successful, %s failed",
+                sent_count,
+                failed_count,
+            )
 
             return {
                 "sent": sent_count,
@@ -304,8 +333,8 @@ class ScholarshipNotificationService:
                 "total_applications": len(applications),
             }
 
-        except Exception as e:
-            logger.error(f"Error in deadline reminder batch process: {str(e)}")
+        except Exception as exc:
+            logger.exception("Error in deadline reminder batch process: %s", exc)
             return {"sent": 0, "failed": 0, "total_applications": 0}
 
     async def send_professor_review_request(self, application: Application, professor_user: User) -> bool:
@@ -314,7 +343,7 @@ class ScholarshipNotificationService:
             # Get student data from snapshot
             student_data = application.student_data
             if not student_data:
-                logger.error(f"Student data not found for application {application.id}")
+                logger.error("Student data not found for application %s", application.id)
                 return False
 
             student_name = student_data.get("std_cname", "N/A")
@@ -355,17 +384,26 @@ class ScholarshipNotificationService:
             </div>
             """
 
-            success = await self.email_service.send_email(
-                to_email=professor_user.email,
+            await self.email_service.send_email(
+                to=professor_user.email,
                 subject=subject,
                 html_content=html_content,
+                db=self.db,
             )
 
-            logger.info(f"Professor review request sent to {professor_user.email} for application {application.app_id}")
-            return success
+            logger.info(
+                "Professor review request sent to %s for application %s",
+                professor_user.email,
+                application.app_id,
+            )
+            return True
 
-        except Exception as e:
-            logger.error(f"Error sending professor review request: {str(e)}")
+        except Exception as exc:
+            logger.exception(
+                "Error sending professor review request for application %s: %s",
+                application.app_id,
+                exc,
+            )
             return False
 
     async def send_batch_processing_notification(self, admin_email: str, processing_results: Dict[str, Any]) -> bool:
@@ -398,13 +436,16 @@ class ScholarshipNotificationService:
             </div>
             """
 
-            success = await self.email_service.send_email(
-                to_email=admin_email, subject=subject, html_content=html_content
+            await self.email_service.send_email(
+                to=admin_email,
+                subject=subject,
+                html_content=html_content,
+                db=self.db,
             )
 
-            logger.info(f"Batch processing notification sent to {admin_email}")
-            return success
+            logger.info("Batch processing notification sent to %s", admin_email)
+            return True
 
-        except Exception as e:
-            logger.error(f"Error sending batch processing notification: {str(e)}")
+        except Exception as exc:
+            logger.exception("Error sending batch processing notification to %s: %s", admin_email, exc)
             return False

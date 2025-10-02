@@ -12,8 +12,9 @@ import { GraduationCap, ExternalLink } from "lucide-react";
 
 export function SSOLoginPage() {
   const handleSSOLogin = () => {
-    // Redirect to backend SSO endpoint
-    window.location.href = `${process.env.NEXT_PUBLIC_NYCU_PORTAL_URL}/#/redirect/scholarship`;
+    // Redirect to NYCU Portal for SSO authentication
+    const portalUrl = process.env.NEXT_PUBLIC_NYCU_PORTAL_URL || 'https://portal.test.nycu.edu.tw';
+    window.location.href = `${portalUrl}/#/redirect/scholarship`;
   };
 
   return (
