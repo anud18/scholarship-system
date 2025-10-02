@@ -120,23 +120,29 @@ describe("Application Helpers", () => {
       const draftApp = { ...mockApplication, status: "draft" };
       const timeline = getApplicationTimeline(draftApp, "zh");
 
-      expect(timeline).toHaveLength(4);
+      expect(timeline).toHaveLength(8);
       expect(timeline[0].title).toBe("提交申請");
       expect(timeline[0].status).toBe("current");
       expect(timeline[1].status).toBe("pending");
       expect(timeline[2].status).toBe("pending");
       expect(timeline[3].status).toBe("pending");
+      expect(timeline[4].status).toBe("pending");
+      expect(timeline[5].status).toBe("pending");
+      expect(timeline[6].status).toBe("pending");
+      expect(timeline[7].status).toBe("pending");
     });
 
     it("should return correct timeline for submitted status in English", () => {
       const submittedApp = { ...mockApplication, status: "submitted" };
       const timeline = getApplicationTimeline(submittedApp, "en");
 
-      expect(timeline).toHaveLength(4);
+      expect(timeline).toHaveLength(8);
       expect(timeline[0].title).toBe("Submit Application");
       expect(timeline[0].status).toBe("completed");
-      expect(timeline[1].title).toBe("Initial Review");
+      expect(timeline[1].title).toBe("Waiting for Professor Review");
       expect(timeline[1].status).toBe("current");
+      expect(timeline[2].title).toBe("Professor Reviewing");
+      expect(timeline[2].status).toBe("pending");
     });
 
     it("should return correct timeline for approved status", () => {
@@ -147,15 +153,24 @@ describe("Application Helpers", () => {
       expect(timeline[1].status).toBe("completed");
       expect(timeline[2].status).toBe("completed");
       expect(timeline[3].status).toBe("completed");
+      expect(timeline[4].status).toBe("completed");
+      expect(timeline[5].status).toBe("completed");
+      expect(timeline[6].status).toBe("completed");
+      expect(timeline[7].status).toBe("completed");
     });
 
     it("should return correct timeline for rejected status", () => {
       const rejectedApp = { ...mockApplication, status: "rejected" };
       const timeline = getApplicationTimeline(rejectedApp, "zh");
 
-      expect(timeline[1].status).toBe("rejected");
-      expect(timeline[2].status).toBe("rejected");
-      expect(timeline[3].status).toBe("rejected");
+      expect(timeline[0].status).toBe("completed");
+      expect(timeline[1].status).toBe("completed");
+      expect(timeline[2].status).toBe("completed");
+      expect(timeline[3].status).toBe("completed");
+      expect(timeline[4].status).toBe("completed");
+      expect(timeline[5].status).toBe("completed");
+      expect(timeline[6].status).toBe("completed");
+      expect(timeline[7].status).toBe("rejected");
     });
   });
 

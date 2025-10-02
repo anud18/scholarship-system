@@ -33,6 +33,121 @@ export const formatDate = (
   return date.toLocaleDateString(locale === "zh" ? "zh-TW" : "en-US");
 };
 
+// Workflow status groupings for timeline rendering
+const WAIT_PROFESSOR_CURRENT_STATUSES = new Set<string>([
+  "submitted",
+  "pending_review",
+]);
+
+const WAIT_PROFESSOR_COMPLETED_STATUSES = new Set<string>([
+  "pending_recommendation",
+  "professor_review_pending",
+  "professor_reviewed",
+  "recommended",
+  "college_review_pending",
+  "college_reviewed",
+  "under_review",
+  "approved",
+  "rejected",
+  "returned",
+  "withdrawn",
+  "cancelled",
+  "pending",
+  "completed",
+]);
+
+const PROFESSOR_REVIEW_CURRENT_STATUSES = new Set<string>([
+  "pending_recommendation",
+  "professor_review_pending",
+]);
+
+const PROFESSOR_REVIEW_COMPLETED_STATUSES = new Set<string>([
+  "professor_reviewed",
+  "recommended",
+  "college_review_pending",
+  "college_reviewed",
+  "under_review",
+  "approved",
+  "rejected",
+  "returned",
+  "withdrawn",
+  "cancelled",
+  "pending",
+  "completed",
+]);
+
+const PROFESSOR_REVIEW_SUBMITTED_STATUSES = new Set<string>([
+  "professor_reviewed",
+  "recommended",
+  "college_review_pending",
+  "college_reviewed",
+  "under_review",
+  "approved",
+  "rejected",
+  "returned",
+  "withdrawn",
+  "cancelled",
+  "pending",
+  "completed",
+]);
+
+const WAIT_COLLEGE_CURRENT_STATUSES = new Set<string>([
+  "professor_reviewed",
+  "recommended",
+  "college_review_pending",
+]);
+
+const WAIT_COLLEGE_COMPLETED_STATUSES = new Set<string>([
+  "college_reviewed",
+  "under_review",
+  "approved",
+  "rejected",
+  "returned",
+  "withdrawn",
+  "cancelled",
+  "pending",
+  "completed",
+]);
+
+const COLLEGE_REVIEW_CURRENT_STATUSES = new Set<string>([
+  "college_review_pending",
+  "under_review",
+]);
+
+const COLLEGE_REVIEW_COMPLETED_STATUSES = new Set<string>([
+  "college_reviewed",
+  "approved",
+  "rejected",
+  "returned",
+  "withdrawn",
+  "cancelled",
+  "pending",
+  "completed",
+]);
+
+const COLLEGE_SUBMITTED_COMPLETED_STATUSES = new Set<string>([
+  "college_reviewed",
+  "approved",
+  "rejected",
+  "returned",
+  "withdrawn",
+  "cancelled",
+  "pending",
+  "completed",
+]);
+
+const FINAL_DECISION_COMPLETED_STATUSES = new Set<string>([
+  "approved",
+  "completed",
+]);
+
+const FINAL_DECISION_REJECTED_STATUSES = new Set<string>([
+  "rejected",
+  "returned",
+  "withdrawn",
+  "cancelled",
+]);
+
 // 獲取申請時間軸
 export const getApplicationTimeline = (
   application: any,
@@ -42,13 +157,13 @@ export const getApplicationTimeline = (
 
   // 獲取教授審核資訊
   const professorReview = application.professor_reviews?.[0];
-  const hasProfessorReview = professorReview && professorReview.reviewed_at;
+  const hasProfessorReview = Boolean(professorReview?.reviewed_at);
 
   // 獲取學院審核資訊
   const collegeReview = application.application_reviews?.find(
-    (r: any) => r.review_stage === 'college_review'
+    (r: any) => r.review_stage === "college_review"
   );
-  const hasCollegeReview = collegeReview && collegeReview.reviewed_at;
+  const hasCollegeReview = Boolean(collegeReview?.reviewed_at);
 
   // 教授姓名
   const professorName = application.professor?.name || application.professor?.nycu_id;
@@ -71,15 +186,18 @@ export const getApplicationTimeline = (
     // 2. 等待教授審核
     {
       id: "wait_professor",
-      title: locale === "zh"
-        ? `等待教授審核${professorName ? ` (${professorName})` : ""}`
-        : `Waiting for Professor Review${professorName ? ` (${professorName})` : ""}`,
+      title:
+        locale === "zh"
+          ? `等待教授審核${professorName ? ` (${professorName})` : ""}`
+          : `Waiting for Professor Review${professorName ? ` (${professorName})` : ""}`,
       status:
         status === "draft"
           ? "pending"
-          : status === "submitted"
+          : WAIT_PROFESSOR_CURRENT_STATUSES.has(status)
             ? "current"
-            : "completed",
+            : WAIT_PROFESSOR_COMPLETED_STATUSES.has(status)
+              ? "completed"
+              : "pending",
       date: "",
     },
 
@@ -88,13 +206,11 @@ export const getApplicationTimeline = (
       id: "professor_reviewing",
       title: locale === "zh" ? "教授審核中" : "Professor Reviewing",
       status:
-        status === "draft" || status === "submitted"
-          ? "pending"
-          : status === "professor_review" || status === "pending_recommendation"
-            ? "current"
-            : hasProfessorReview
-              ? "completed"
-              : "pending",
+        PROFESSOR_REVIEW_CURRENT_STATUSES.has(status)
+          ? "current"
+          : hasProfessorReview || PROFESSOR_REVIEW_COMPLETED_STATUSES.has(status)
+            ? "completed"
+            : "pending",
       date: "",
     },
 
@@ -103,11 +219,9 @@ export const getApplicationTimeline = (
       id: "professor_submitted",
       title: locale === "zh" ? "教授已送出審核" : "Professor Review Submitted",
       status:
-        hasProfessorReview
+        hasProfessorReview || PROFESSOR_REVIEW_SUBMITTED_STATUSES.has(status)
           ? "completed"
-          : status === "recommended" || status === "under_review" || status === "approved"
-            ? "completed"
-            : "pending",
+          : "pending",
       date: hasProfessorReview ? formatDate(professorReview.reviewed_at, locale) : "",
     },
 
@@ -116,11 +230,11 @@ export const getApplicationTimeline = (
       id: "wait_college",
       title: locale === "zh" ? "等待學院審核" : "Waiting for College Review",
       status:
-        status === "draft" || status === "submitted" || status === "professor_review" || status === "pending_recommendation"
-          ? "pending"
-          : status === "recommended"
-            ? "current"
-            : "completed",
+        WAIT_COLLEGE_CURRENT_STATUSES.has(status)
+          ? "current"
+          : WAIT_COLLEGE_COMPLETED_STATUSES.has(status)
+            ? "completed"
+            : "pending",
       date: "",
     },
 
@@ -129,9 +243,9 @@ export const getApplicationTimeline = (
       id: "college_reviewing",
       title: locale === "zh" ? "學院審核中" : "College Reviewing",
       status:
-        status === "under_review"
+        COLLEGE_REVIEW_CURRENT_STATUSES.has(status)
           ? "current"
-          : hasCollegeReview || status === "approved" || status === "rejected"
+          : hasCollegeReview || COLLEGE_REVIEW_COMPLETED_STATUSES.has(status)
             ? "completed"
             : "pending",
       date: "",
@@ -142,7 +256,7 @@ export const getApplicationTimeline = (
       id: "college_submitted",
       title: locale === "zh" ? "學院已送出審核" : "College Review Submitted",
       status:
-        hasCollegeReview || status === "approved" || status === "rejected"
+        hasCollegeReview || COLLEGE_SUBMITTED_COMPLETED_STATUSES.has(status)
           ? "completed"
           : "pending",
       date: hasCollegeReview ? formatDate(collegeReview.reviewed_at, locale) : "",
@@ -153,15 +267,15 @@ export const getApplicationTimeline = (
       id: "final_decision",
       title: locale === "zh" ? "最終核定" : "Final Decision",
       status:
-        status === "approved"
+        FINAL_DECISION_COMPLETED_STATUSES.has(status)
           ? "completed"
-          : status === "rejected"
+          : FINAL_DECISION_REJECTED_STATUSES.has(status)
             ? "rejected"
             : "pending",
       date:
-        status === "approved"
+        FINAL_DECISION_COMPLETED_STATUSES.has(status)
           ? formatDate(application.approved_at, locale)
-          : status === "rejected"
+          : FINAL_DECISION_REJECTED_STATUSES.has(status)
             ? formatDate(application.reviewed_at, locale)
             : "",
     },

@@ -76,6 +76,16 @@ describe("EnhancedStudentPortal", () => {
       },
       eligibility: "GPA ≥ 3.5",
       is_active: true,
+      eligible_sub_types: [
+        {
+          id: 1,
+          value: "general",
+          label: "一般申請",
+          label_en: "General Application",
+        },
+      ],
+      passed: [],
+      errors: [],
     },
   ];
 
@@ -121,7 +131,7 @@ describe("EnhancedStudentPortal", () => {
         screen.getByText("Academic Excellence Scholarship")
       ).toBeInTheDocument();
     });
-    expect(screen.getByText("NT$ 50,000")).toBeInTheDocument();
+    expect(screen.getByText("Eligible")).toBeInTheDocument();
     expect(screen.getByText("Eligibility")).toBeInTheDocument();
   });
 
@@ -323,7 +333,9 @@ describe("EnhancedStudentPortal", () => {
       expect(screen.getByText("Review Progress")).toBeInTheDocument();
     });
     expect(screen.getByText("Submit Application")).toBeInTheDocument();
-    expect(screen.getByText("Initial Review")).toBeInTheDocument();
+    expect(
+      screen.getByText("Waiting for Professor Review")
+    ).toBeInTheDocument();
   });
 
   it("should handle different application statuses", async () => {
