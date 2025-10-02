@@ -195,7 +195,7 @@ describe("API Client", () => {
       await apiClient.applications.getMyApplications();
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0];
-      expect(fetchCall[0]).toContain("/applications/");
+      expect(fetchCall[0]).toContain("/applications");
     });
 
     it("should update application", async () => {

@@ -1622,7 +1622,7 @@ class ApiClient {
       applicationData: ApplicationCreate,
       isDraft: boolean = false
     ): Promise<ApiResponse<Application>> => {
-      const url = isDraft ? "/applications/?is_draft=true" : "/applications/";
+      const url = isDraft ? "/applications?is_draft=true" : "/applications";
       return this.request(url, {
         method: "POST",
         body: JSON.stringify(applicationData),
