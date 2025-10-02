@@ -199,7 +199,8 @@ export function EnhancedStudentPortal({
         setActiveTab("applications");
       }
     }
-  }, [applications, applicationsLoading, applicationsError, activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applications, applicationsLoading, applicationsError]);
 
   // Debug authentication status
   useEffect(() => {
