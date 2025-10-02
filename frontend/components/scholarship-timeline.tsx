@@ -13,6 +13,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProgressTimeline } from "@/components/progress-timeline";
 import SemesterSelector from "@/components/semester-selector";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Calendar,
   Clock,
   CheckCircle,
@@ -658,42 +665,24 @@ export function ScholarshipTimeline({ user }: ScholarshipTimelineProps) {
               value={scholarship.code}
               className="space-y-4"
             >
-              {/* 學期選擇器 - 根據該獎學金的申請週期顯示 */}
-              <div className="p-4 bg-nycu-blue-50 rounded-lg">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                  <div className="flex items-center gap-2 text-sm font-medium text-nycu-navy-700">
-                    <Filter className="h-4 w-4" />
-                    時間篩選：
-                  </div>
-                  <SemesterSelector
-                    mode="combined"
-                    scholarshipCode={scholarship.code}
-                    selectedCombination={selectedCombination}
-                    onCombinationChange={handleSemesterChange}
-                    className="flex-1"
-                  />
-
-                  {selectedCombination && (
-                    <button
-                      onClick={resetFilter}
-                      className="px-3 py-1 text-xs bg-nycu-blue-100 hover:bg-nycu-blue-200 text-nycu-navy-700 rounded transition-colors"
-                    >
-                      重置
-                    </button>
-                  )}
-                </div>
-
+              {/* 學期選擇器 - 簡化版 */}
+              <div className="flex items-center gap-2 mb-4">
+                <Filter className="h-4 w-4 text-nycu-navy-600" />
+                <span className="text-sm text-nycu-navy-700">時間篩選：</span>
+                <SemesterSelector
+                  mode="combined"
+                  scholarshipCode={scholarship.code}
+                  selectedCombination={selectedCombination}
+                  onCombinationChange={handleSemesterChange}
+                  compact
+                />
                 {selectedCombination && (
-                  <div className="mt-3 text-sm text-nycu-navy-600">
-                    <strong>當前篩選：</strong> {currentAcademicYear}學年
-                    {scholarship.applicationCycle === "semester" &&
-                    currentSemester &&
-                    currentSemester !== "null"
-                      ? currentSemester === "first"
-                        ? "度 第一學期"
-                        : "度 第二學期"
-                      : "度"}
-                  </div>
+                  <button
+                    onClick={resetFilter}
+                    className="ml-2 text-xs text-nycu-blue-600 hover:text-nycu-blue-700 underline"
+                  >
+                    重置
+                  </button>
                 )}
               </div>
 

@@ -130,7 +130,7 @@ export function ProgressTimeline({
                       "flex h-10 w-10 items-center justify-center rounded-full border-2 z-10 bg-white shadow-md transition-all duration-300",
                       colors.bg,
                       colors.icon,
-                      step.status === "current" && "animate-pulse ring-4 ring-blue-100"
+                      step.status === "current" && "ring-4 ring-blue-100"
                     )}
                   >
                     {getStepIcon(step.status)}
@@ -207,7 +207,7 @@ export function ProgressTimeline({
                     "flex h-10 w-10 items-center justify-center rounded-full border-2 shadow-md transition-all duration-300",
                     colors.bg,
                     colors.icon,
-                    step.status === "current" && "animate-pulse ring-4 ring-blue-100"
+                    step.status === "current" && "ring-4 ring-blue-100"
                   )}
                 >
                   {getStepIcon(step.status)}
