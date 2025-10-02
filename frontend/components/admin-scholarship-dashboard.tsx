@@ -1388,34 +1388,6 @@ export function AdminScholarshipDashboard({
         </Button>
       </div>
 
-      {/* Permission Status */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-3 w-3 bg-blue-500 rounded-full"></div>
-              <div>
-                <h3 className="font-semibold text-blue-900">權限狀態</h3>
-                <p className="text-sm text-blue-700">
-                  {user.role === "super_admin"
-                    ? "可管理所有獎學金類型"
-                    : user.role === "admin"
-                      ? "可管理指定權限的獎學金類型"
-                      : user.role === "college"
-                        ? "可管理指定權限的獎學金類型"
-                        : user.role === "professor"
-                          ? "可查看指導學生的申請案件"
-                          : "無管理權限"}
-                </p>
-              </div>
-            </div>
-            <Badge variant="outline" className="text-blue-700 border-blue-300">
-              {scholarshipTypes.length} 個獎學金類型
-            </Badge>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* 獎學金類型標籤頁 */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList
@@ -1436,45 +1408,41 @@ export function AdminScholarshipDashboard({
             {/* 學期選擇器 */}
             <Card className="bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-                  <Calendar className="h-5 w-5 text-green-600" />
-                  學期篩選
-                </CardTitle>
-                <CardDescription className="text-sm text-gray-600">
-                  選擇要查看的學年學期，可以篩選對應時期的申請案件
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
                 <div className="flex items-center justify-between">
-                  <SemesterSelector
-                    mode="combined"
-                    scholarshipCode={type}
-                    showStatistics={false}
-                    selectedAcademicYear={selectedAcademicYear}
-                    selectedSemester={selectedSemester}
-                    selectedCombination={selectedCombination}
-                    onAcademicYearChange={handleAcademicYearChange}
-                    onSemesterChange={handleSemesterChange}
-                    onCombinationChange={handleCombinationChange}
-                    className="flex-1"
-                  />
-                  {(selectedAcademicYear ||
-                    selectedSemester ||
-                    selectedCombination) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedAcademicYear(undefined);
-                        setSelectedSemester(undefined);
-                        setSelectedCombination(undefined);
-                      }}
-                      className="ml-4 text-gray-600 hover:text-gray-800"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      清除篩選
-                    </Button>
-                  )}
+                  <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                    <Calendar className="h-5 w-5 text-green-600" />
+                    學期篩選
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <SemesterSelector
+                      mode="combined"
+                      scholarshipCode={type}
+                      showStatistics={false}
+                      selectedAcademicYear={selectedAcademicYear}
+                      selectedSemester={selectedSemester}
+                      selectedCombination={selectedCombination}
+                      onAcademicYearChange={handleAcademicYearChange}
+                      onSemesterChange={handleSemesterChange}
+                      onCombinationChange={handleCombinationChange}
+                    />
+                    {(selectedAcademicYear ||
+                      selectedSemester ||
+                      selectedCombination) && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedAcademicYear(undefined);
+                          setSelectedSemester(undefined);
+                          setSelectedCombination(undefined);
+                        }}
+                        className="text-gray-600 hover:text-gray-800"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        清除篩選
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {/* 顯示當前篩選狀態 */}
@@ -1495,7 +1463,7 @@ export function AdminScholarshipDashboard({
                     </div>
                   </div>
                 )}
-              </CardContent>
+              </CardHeader>
             </Card>
 
             {renderSubTypeTabs(getApplicationsByType(type))}
