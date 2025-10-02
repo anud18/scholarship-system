@@ -380,19 +380,15 @@ class EligibilityService:
                 # Rule passed - add to passed list
                 details["passed"].append(rule_detail)
             else:
-                if rule.is_hard_rule:
-                    # Hard rules are mandatory - add to errors
-                    message = rule.message or f"不符合規則: {rule.rule_name}"
-                    failure_reasons.append(message)
-                    details["errors"].append(rule_detail)
-                elif rule.is_warning:
+                if rule.is_warning:
                     # Warning rules don't prevent eligibility but are shown as warnings
                     details["warnings"].append(rule_detail)
                     logger.warning(f"Warning rule failed for student: {rule.rule_name}")
                 else:
-                    # Soft rules don't prevent eligibility - allow display but prevent application
+                    # Both hard rules and soft rules prevent eligibility
+                    message = rule.message or f"不符合規則: {rule.rule_name}"
+                    failure_reasons.append(message)
                     details["errors"].append(rule_detail)
-                    # Don't add to failure_reasons - allow scholarship to be shown
 
         # Check if scholarship has subtypes and if student is eligible for at least one
         # For subtypes: even soft rule failures should prevent subtype eligibility
