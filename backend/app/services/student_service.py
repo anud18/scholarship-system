@@ -100,7 +100,11 @@ class StudentService:
                         logger.info(f"Student {student_code} not found in API")
                         return None
                     else:
-                        logger.warning(f"Student API returned error: {result.get('msg')}")
+                        logger.warning(
+                            f"Student API returned unexpected response - "
+                            f"code: {result.get('code')}, msg: {result.get('msg')}, "
+                            f"student_code: {student_code}"
+                        )
                         return None
                 else:
                     logger.error(f"Student API request failed: {response.status_code}")

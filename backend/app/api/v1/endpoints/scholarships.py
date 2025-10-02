@@ -182,7 +182,11 @@ async def get_scholarship_eligibility(
     if not student:
         raise HTTPException(
             status_code=404,
-            detail=f"Student profile not found for user {current_user.nycu_id}",
+            detail={
+                "message": "無法取得學生資料，請稍後再試或聯繫系統管理員",
+                "error_code": "STUDENT_DATA_NOT_FOUND",
+                "nycu_id": current_user.nycu_id,
+            },
         )
 
     scholarship_service = ScholarshipService(db)
