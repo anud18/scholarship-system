@@ -241,7 +241,7 @@ class UserProfileService:
 
                 # Upload to MinIO using put_object directly
                 minio_service.client.put_object(
-                    bucket_name=minio_service.bucket_name,
+                    bucket_name=minio_service.default_bucket,
                     object_name=object_name,
                     data=file_buffer,
                     length=len(image_data),
