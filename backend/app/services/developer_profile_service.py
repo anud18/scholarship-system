@@ -58,7 +58,7 @@ class DeveloperProfileService:
             name=profile.name,
             email=email,
             user_type=UserType.student if profile.role == UserRole.student else UserType.employee,
-            status=EmployeeStatus.在學 if profile.role == UserRole.student else EmployeeStatus.在職,
+            status=EmployeeStatus.student if profile.role == UserRole.student else EmployeeStatus.active,
             dept_code="5802",  # Default department code
             dept_name="校務資訊組",  # Default department name
             role=profile.role,

@@ -41,10 +41,16 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Only show when explicitly enabled via environment variable or in test mode
+  const isTestEnvironment = () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    return apiUrl.includes("test") || apiUrl.includes("staging") || apiUrl.includes("localhost") || apiUrl.includes("140.113.7.148");
+  };
+
   const shouldShow =
     isTestMode ||
     process.env.NEXT_PUBLIC_ENABLE_DEBUG_PANEL === "true" ||
-    process.env.NODE_ENV === "development";
+    process.env.NODE_ENV === "development" ||
+    isTestEnvironment();
 
   // Handle modal focus management and escape key
   useEffect(() => {
