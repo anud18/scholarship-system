@@ -40,9 +40,23 @@ export const getApplicationTimeline = (
 ): TimelineStep[] => {
   const status = application.status as string;
 
+  // 獲取教授審核資訊
+  const professorReview = application.professor_reviews?.[0];
+  const hasProfessorReview = professorReview && professorReview.reviewed_at;
+
+  // 獲取學院審核資訊
+  const collegeReview = application.application_reviews?.find(
+    (r: any) => r.review_stage === 'college_review'
+  );
+  const hasCollegeReview = collegeReview && collegeReview.reviewed_at;
+
+  // 教授姓名
+  const professorName = application.professor?.name || application.professor?.nycu_id;
+
   const steps: TimelineStep[] = [
+    // 1. 提交申請
     {
-      id: "1",
+      id: "submit",
       title: locale === "zh" ? "提交申請" : "Submit Application",
       status: status === "draft" ? "current" : "completed",
       date:
@@ -53,49 +67,91 @@ export const getApplicationTimeline = (
               locale
             ),
     },
+
+    // 2. 等待教授審核
     {
-      id: "2",
-      title: locale === "zh" ? "初步審核" : "Initial Review",
+      id: "wait_professor",
+      title: locale === "zh"
+        ? `等待教授審核${professorName ? ` (${professorName})` : ""}`
+        : `Waiting for Professor Review${professorName ? ` (${professorName})` : ""}`,
       status:
         status === "draft"
           ? "pending"
-          : status === "submitted" || status === "pending_recommendation"
+          : status === "submitted"
             ? "current"
-            : status === "rejected"
-              ? "rejected"
-              : "completed",
-      date:
-        status === "draft" ||
-        status === "submitted" ||
-        status === "pending_recommendation"
-          ? ""
-          : formatDate(application.reviewed_at, locale),
+            : "completed",
+      date: "",
     },
+
+    // 3. 教授審核中
     {
-      id: "3",
-      title: locale === "zh" ? "委員會審核" : "Committee Review",
+      id: "professor_reviewing",
+      title: locale === "zh" ? "教授審核中" : "Professor Reviewing",
       status:
-        status === "draft" ||
-        status === "submitted" ||
-        status === "pending_recommendation"
+        status === "draft" || status === "submitted"
           ? "pending"
-          : status === "under_review" || status === "recommended"
+          : status === "professor_review" || status === "pending_recommendation"
             ? "current"
-            : status === "rejected"
-              ? "rejected"
-              : "completed",
-      date:
-        status === "draft" ||
-        status === "submitted" ||
-        status === "pending_recommendation" ||
-        status === "under_review" ||
-        status === "recommended"
-          ? ""
-          : formatDate(application.reviewed_at, locale),
+            : hasProfessorReview
+              ? "completed"
+              : "pending",
+      date: "",
     },
+
+    // 4. 教授已送出審核
     {
-      id: "4",
-      title: locale === "zh" ? "核定結果" : "Final Decision",
+      id: "professor_submitted",
+      title: locale === "zh" ? "教授已送出審核" : "Professor Review Submitted",
+      status:
+        hasProfessorReview
+          ? "completed"
+          : status === "recommended" || status === "under_review" || status === "approved"
+            ? "completed"
+            : "pending",
+      date: hasProfessorReview ? formatDate(professorReview.reviewed_at, locale) : "",
+    },
+
+    // 5. 等待學院審核
+    {
+      id: "wait_college",
+      title: locale === "zh" ? "等待學院審核" : "Waiting for College Review",
+      status:
+        status === "draft" || status === "submitted" || status === "professor_review" || status === "pending_recommendation"
+          ? "pending"
+          : status === "recommended"
+            ? "current"
+            : "completed",
+      date: "",
+    },
+
+    // 6. 學院審核中
+    {
+      id: "college_reviewing",
+      title: locale === "zh" ? "學院審核中" : "College Reviewing",
+      status:
+        status === "under_review"
+          ? "current"
+          : hasCollegeReview || status === "approved" || status === "rejected"
+            ? "completed"
+            : "pending",
+      date: "",
+    },
+
+    // 7. 學院已送出審核
+    {
+      id: "college_submitted",
+      title: locale === "zh" ? "學院已送出審核" : "College Review Submitted",
+      status:
+        hasCollegeReview || status === "approved" || status === "rejected"
+          ? "completed"
+          : "pending",
+      date: hasCollegeReview ? formatDate(collegeReview.reviewed_at, locale) : "",
+    },
+
+    // 8. 最終核定
+    {
+      id: "final_decision",
+      title: locale === "zh" ? "最終核定" : "Final Decision",
       status:
         status === "approved"
           ? "completed"
@@ -110,6 +166,7 @@ export const getApplicationTimeline = (
             : "",
     },
   ];
+
   return steps;
 };
 

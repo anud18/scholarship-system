@@ -1,7 +1,10 @@
 "use client";
 
-import { CheckCircle, Clock, Circle, AlertCircle } from "lucide-react";
+import { CheckCircle, Clock, Circle, AlertCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface TimelineStep {
   id: string;
@@ -10,6 +13,13 @@ interface TimelineStep {
   status: "completed" | "current" | "pending" | "rejected";
   date?: string;
   estimatedDate?: string;
+  stepNumber?: number;
+  totalSteps?: number;
+  reviewer?: {
+    name: string;
+    avatar?: string;
+  };
+  timeElapsed?: string;
 }
 
 interface ProgressTimelineProps {
@@ -27,49 +37,75 @@ export function ProgressTimeline({
   isLoading = false,
   showProgress = true,
 }: ProgressTimelineProps) {
+  // Calculate overall progress
+  const completedSteps = steps.filter(s => s.status === "completed").length;
+  const totalSteps = steps.length;
+  const progressPercentage = Math.round((completedSteps / totalSteps) * 100);
+  const currentStepIndex = steps.findIndex(s => s.status === "current");
+
   const getStepIcon = (status: TimelineStep["status"]) => {
     switch (status) {
       case "completed":
-        return <CheckCircle className="h-6 w-6 text-green-600" />;
+        return <CheckCircle className="h-5 w-5" />;
       case "current":
-        return <Clock className="h-6 w-6 text-yellow-600" />;
+        return <Clock className="h-5 w-5" />;
       case "rejected":
-        return <AlertCircle className="h-6 w-6 text-red-600" />;
+        return <AlertCircle className="h-5 w-5" />;
       default:
-        return <Circle className="h-6 w-6 text-gray-400" />;
+        return <Circle className="h-5 w-5" />;
     }
   };
 
   const getStepColor = (status: TimelineStep["status"]) => {
     switch (status) {
       case "completed":
-        return "border-green-600 bg-green-50";
+        return {
+          bg: "bg-emerald-50 border-emerald-200",
+          text: "text-emerald-700",
+          icon: "text-emerald-600",
+          line: "bg-emerald-500",
+        };
       case "current":
-        return "border-yellow-500 bg-yellow-50";
+        return {
+          bg: "bg-blue-50 border-blue-200",
+          text: "text-blue-700",
+          icon: "text-blue-600",
+          line: "bg-blue-500",
+        };
       case "rejected":
-        return "border-red-600 bg-red-50";
+        return {
+          bg: "bg-rose-50 border-rose-200",
+          text: "text-rose-700",
+          icon: "text-rose-600",
+          line: "bg-rose-500",
+        };
       default:
-        return "border-gray-300 bg-gray-50";
+        return {
+          bg: "bg-gray-50 border-gray-200",
+          text: "text-gray-500",
+          icon: "text-gray-400",
+          line: "bg-gray-300",
+        };
     }
   };
 
-  const getLineColor = (
-    currentStatus: TimelineStep["status"],
-    nextStatus?: TimelineStep["status"]
-  ) => {
-    if (currentStatus === "completed") {
-      return "bg-green-600";
-    }
-    if (currentStatus === "current") {
-      return "bg-yellow-500";
-    }
-    return "bg-gray-300";
-  };
-
-  // 水平顯示模式 - 改進版本
+  // 水平顯示模式 - 現代卡片設計
   if (orientation === "horizontal") {
     return (
-      <div className={cn("relative", className)}>
+      <div className={cn("space-y-6", className)}>
+        {/* Overall Progress Indicator */}
+        {showProgress && (
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700">審核進度</span>
+              <span className="text-sm font-semibold text-blue-600">
+                {currentStepIndex >= 0 ? currentStepIndex + 1 : completedSteps}/{totalSteps} ({progressPercentage}%)
+              </span>
+            </div>
+            <Progress value={progressPercentage} className="h-2" />
+          </div>
+        )}
+
         {/* 載入狀態 */}
         {isLoading && (
           <div className="flex items-center justify-center py-8">
@@ -78,156 +114,172 @@ export function ProgressTimeline({
           </div>
         )}
 
-        {/* 圓圈和連接線容器 */}
-        <div className="flex items-center justify-between mb-6">
-          {steps.map((step, index) => (
-            <div key={step.id} className="flex items-center flex-1">
-              {/* 節點圓圈 */}
-              <div
-                className={cn(
-                  "flex h-12 w-12 items-center justify-center rounded-full border-2 z-10 bg-white shadow-lg transition-all duration-200 hover:scale-110 cursor-pointer",
-                  getStepColor(step.status)
-                )}
-              >
-                {getStepIcon(step.status)}
-              </div>
+        {/* Timeline Steps */}
+        <div className="flex items-center justify-between">
+          {steps.map((step, index) => {
+            const colors = getStepColor(step.status);
+            const isLast = index === steps.length - 1;
 
-              {/* 連接線 - 所有步驟都有連接線 */}
-              <div
-                className={cn(
-                  "flex-1 h-0.5 mx-4 transition-colors duration-200",
-                  getLineColor(step.status, steps[index + 1]?.status)
-                )}
-              />
-            </div>
-          ))}
-        </div>
+            return (
+              <div key={step.id} className="flex items-center flex-1">
+                {/* Step Node with Card */}
+                <div className="flex flex-col items-center">
+                  {/* Icon Circle */}
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-full border-2 z-10 bg-white shadow-md transition-all duration-300",
+                      colors.bg,
+                      colors.icon,
+                      step.status === "current" && "animate-pulse ring-4 ring-blue-100"
+                    )}
+                  >
+                    {getStepIcon(step.status)}
+                  </div>
 
-        {/* 文字容器 - 使用 flex 佈局確保對齊圓圈中心 */}
-        <div className="flex justify-between">
-          {steps.map((step, index) => (
-            <div key={`text-${step.id}`} className="flex-1 text-center px-2">
-              {/* 標題 */}
-              <h4
-                className={cn(
-                  "text-sm font-medium leading-tight mb-2 transition-colors duration-200",
-                  {
-                    "text-green-800": step.status === "completed",
-                    "text-yellow-800": step.status === "current",
-                    "text-red-800": step.status === "rejected",
-                    "text-gray-600": step.status === "pending",
-                  }
-                )}
-              >
-                {step.title}
-              </h4>
-
-              {/* 日期 - 只顯示日期，不顯示時間 */}
-              {step.date && (
-                <div
-                  className={cn(
-                    "text-xs font-mono transition-colors duration-200",
-                    {
-                      "text-green-600": step.status === "completed",
-                      "text-yellow-600": step.status === "current",
-                      "text-red-600": step.status === "rejected",
-                      "text-gray-500": step.status === "pending",
-                    }
-                  )}
-                >
-                  {step.date}
+                  {/* Step Info */}
+                  <div className="mt-3 text-center min-w-[120px] max-w-[140px]">
+                    <div className="text-xs font-semibold text-gray-400 mb-1">
+                      {index + 1}/{totalSteps}
+                    </div>
+                    <h4 className={cn("text-sm font-medium mb-1", colors.text)}>
+                      {step.title}
+                    </h4>
+                    {step.date && (
+                      <div className={cn("text-xs", colors.text)}>
+                        {step.date}
+                      </div>
+                    )}
+                    {step.reviewer && (
+                      <div className="flex items-center justify-center gap-1 mt-2">
+                        <Avatar className="h-5 w-5">
+                          <AvatarFallback className="text-xs">
+                            {step.reviewer.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs text-gray-600">{step.reviewer.name}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-              {!step.date &&
-                step.estimatedDate &&
-                step.status === "pending" && (
-                  <div className="text-xs text-gray-500 font-mono transition-colors duration-200">
-                    預計 {step.estimatedDate}
+
+                {/* Connecting Line */}
+                {!isLast && (
+                  <div className="flex-1 h-0.5 mx-2 relative">
+                    <div className={cn("absolute inset-0 transition-all duration-300", colors.line)} />
                   </div>
                 )}
-
-              {/* 描述 */}
-              {step.description && (
-                <div className="text-xs text-gray-500 mt-1 leading-tight transition-colors duration-200">
-                  {step.description}
-                </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
   }
 
-  // 垂直顯示模式（原有邏輯）
+  // 垂直顯示模式 - 卡片式設計
   return (
-    <div className={cn("space-y-0", className)}>
-      {steps.map((step, index) => (
-        <div key={step.id} className="relative">
-          <div className="flex items-start">
-            {/* 節點圓圈 */}
-            <div
-              className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-full border-2",
-                getStepColor(step.status)
-              )}
-            >
-              {getStepIcon(step.status)}
-            </div>
+    <div className={cn("space-y-4", className)}>
+      {/* Overall Progress Indicator */}
+      {showProgress && (
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-medium text-gray-700">審核進度</span>
+            <span className="text-sm font-semibold text-blue-600">
+              {currentStepIndex >= 0 ? currentStepIndex + 1 : completedSteps}/{totalSteps} ({progressPercentage}%)
+            </span>
+          </div>
+          <Progress value={progressPercentage} className="h-2" />
+        </div>
+      )}
 
-            {/* 內容區域 */}
-            <div className="ml-4 flex-1 pb-8">
-              <div className="flex items-center justify-between">
-                <h4
-                  className={cn("text-sm font-medium", {
-                    "text-green-800": step.status === "completed",
-                    "text-yellow-800": step.status === "current",
-                    "text-red-800": step.status === "rejected",
-                    "text-gray-600": step.status === "pending",
-                  })}
-                >
-                  {step.title}
-                </h4>
-                <div className="text-xs text-muted-foreground">
-                  {step.date && (
-                    <span
-                      className={cn({
-                        "text-green-600": step.status === "completed",
-                        "text-yellow-600": step.status === "current",
-                        "text-red-600": step.status === "rejected",
-                      })}
-                    >
-                      {step.date}
-                    </span>
+      {/* Timeline Steps */}
+      {steps.map((step, index) => {
+        const colors = getStepColor(step.status);
+        const isLast = index === steps.length - 1;
+
+        return (
+          <div key={step.id} className="relative">
+            <div className="flex items-start gap-4">
+              {/* Timeline Node */}
+              <div className="flex flex-col items-center">
+                <div
+                  className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-full border-2 shadow-md transition-all duration-300",
+                    colors.bg,
+                    colors.icon,
+                    step.status === "current" && "animate-pulse ring-4 ring-blue-100"
                   )}
-                  {!step.date &&
-                    step.estimatedDate &&
-                    step.status === "pending" && (
-                      <span className="text-gray-500">
-                        預計 {step.estimatedDate}
-                      </span>
-                    )}
+                >
+                  {getStepIcon(step.status)}
                 </div>
+
+                {/* Connecting Line */}
+                {!isLast && (
+                  <div className={cn("w-0.5 h-full min-h-[60px] mt-2 transition-all duration-300", colors.line)} />
+                )}
               </div>
-              {step.description && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {step.description}
-                </p>
-              )}
+
+              {/* Content Card */}
+              <Card className={cn("flex-1 transition-all duration-300 hover:shadow-lg", colors.bg)}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold text-gray-400">
+                          {index + 1}/{totalSteps}
+                        </span>
+                        <h4 className={cn("text-base font-semibold", colors.text)}>
+                          {step.title}
+                        </h4>
+                      </div>
+
+                      {step.description && (
+                        <p className="text-sm text-gray-600 mt-1">
+                          {step.description}
+                        </p>
+                      )}
+                    </div>
+
+                    {step.date && (
+                      <div className={cn("text-xs font-medium whitespace-nowrap ml-4", colors.text)}>
+                        {step.date}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Reviewer Info */}
+                  {step.reviewer && (
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                      <Avatar className="h-6 w-6">
+                        <AvatarFallback className="text-xs bg-blue-100 text-blue-700">
+                          {step.reviewer.name.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-xs text-gray-600">
+                        審核人：{step.reviewer.name}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Estimated Date for Pending */}
+                  {!step.date && step.estimatedDate && step.status === "pending" && (
+                    <div className="text-xs text-gray-500 mt-2">
+                      預計完成：{step.estimatedDate}
+                    </div>
+                  )}
+
+                  {/* Time Elapsed */}
+                  {step.timeElapsed && step.status === "current" && (
+                    <div className="text-xs text-blue-600 mt-2 font-medium">
+                      已耗時：{step.timeElapsed}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </div>
-
-          {/* 連接線 */}
-          {index < steps.length - 1 && (
-            <div
-              className={cn(
-                "absolute left-5 top-10 h-8 w-0.5 -translate-x-0.5",
-                getLineColor(step.status, steps[index + 1]?.status)
-              )}
-            />
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

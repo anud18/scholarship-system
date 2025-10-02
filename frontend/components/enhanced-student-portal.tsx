@@ -1149,43 +1149,34 @@ export function EnhancedStudentPortal({
                 : "bg-gray-50/50 border-gray-100 hover:bg-gray-50/80 transition-colors"
             )}
           >
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-4">
               {/* Title and Status Badge */}
-              <div className="flex items-start justify-between">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-xl">
                     {locale === "zh"
                       ? scholarship.name
                       : scholarship.name_en || scholarship.name}
                   </CardTitle>
-                  {isEligible ? (
-                    <Badge
-                      variant="outline"
-                      className="bg-emerald-50 text-emerald-600 border-emerald-100"
-                    >
-                      <Check className="h-3 w-3 mr-1" />
-                      {t("messages.eligible")}
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className="bg-amber-50 text-amber-600 border-amber-100"
-                    >
-                      <AlertTriangle className="h-3 w-3 mr-1" />
-                      {t("messages.not_eligible")}
-                    </Badge>
-                  )}
                 </div>
-                <Badge variant="outline" className="text-lg px-3 py-1 bg-white">
-                  {scholarship.amount} {scholarship.currency}
-                </Badge>
+                {isEligible ? (
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-50 text-emerald-600 border-emerald-100 text-base px-4 py-1"
+                  >
+                    <Check className="h-4 w-4 mr-1.5" />
+                    {t("messages.eligible")}
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="bg-amber-50 text-amber-600 border-amber-100 text-base px-4 py-1"
+                  >
+                    <AlertTriangle className="h-4 w-4 mr-1.5" />
+                    {t("messages.not_eligible")}
+                  </Badge>
+                )}
               </div>
-
-              <CardDescription className="text-sm pb-3">
-                {locale === "zh"
-                  ? scholarship.description
-                  : scholarship.description_en || scholarship.description}
-              </CardDescription>
 
               {/* Eligible Programs Section - only show if student is eligible */}
               {isEligible &&
@@ -1234,86 +1225,84 @@ export function EnhancedStudentPortal({
                         </p>
                       </div>
                     </div>
-                    <div className="p-3 space-y-3">
-                      {/* Basic eligibility tags - show passed and errors together */}
-                      <div className="flex flex-wrap gap-1">
-                        {/* Passed rules (common) */}
-                        {scholarship.passed
-                          ?.filter(rule => !rule.sub_type)
-                          .map(rule => (
-                            <Badge
-                              key={rule.rule_id}
-                              variant="outline"
-                              className="bg-emerald-50 text-emerald-600 border-emerald-100"
-                            >
-                              {getTranslation(
-                                locale,
-                                `eligibility_tags.${rule.tag}`
-                              )}
-                            </Badge>
-                          ))}
-                        {/* Error rules (common) - show in same row */}
-                        {scholarship.errors
-                          ?.filter(rule => !rule.sub_type)
-                          .map(rule => (
-                            <Badge
-                              key={rule.rule_id}
-                              variant="outline"
-                              className="bg-rose-50 text-rose-600 border-rose-100"
-                            >
-                              <AlertTriangle className="h-3 w-3 mr-1" />
-                              {getTranslation(
-                                locale,
-                                `eligibility_tags.${rule.tag}`
-                              )}
-                            </Badge>
-                          ))}
-                      </div>
+                    <div className="p-3 space-y-4">
+                      {/* Get common rules */}
+                      {(() => {
+                        const commonPassedRules = scholarship.passed?.filter(rule => !rule.sub_type) || [];
+                        const commonErrorRules = scholarship.errors?.filter(rule => !rule.sub_type) || [];
 
-                      {/* Sub-type specific rules */}
-                      {["nstc", "moe_1w", "moe_2w"].map(subType => {
-                        const passedRulesForType = scholarship.passed?.filter(
-                          rule => rule.sub_type === subType
-                        );
-                        const errorRulesForType = scholarship.errors?.filter(
-                          rule => rule.sub_type === subType
-                        );
+                        // Sub-type specific sections with common rules appended
+                        return scholarship.eligible_sub_types?.map((subTypeInfo) => {
+                          const subType = subTypeInfo.value;
+                          if (!subType || subType === "general") return null;
 
-                        // Only show subtype section if there are any rules for it
-                        if (
-                          !passedRulesForType?.length &&
-                          !errorRulesForType?.length
-                        )
-                          return null;
+                          const passedRulesForType = scholarship.passed?.filter(
+                            rule => rule.sub_type === subType
+                          ) || [];
+                          const errorRulesForType = scholarship.errors?.filter(
+                            rule => rule.sub_type === subType
+                          ) || [];
 
-                        return (
-                          <div
-                            key={subType}
-                            className="pl-2 border-l-2 border-gray-200"
-                          >
-                            <p className="text-sm text-gray-600 mb-1">
-                              {getTranslation(locale, `rule_types.${subType}`)}:
+                          // Combine common rules with subtype-specific rules
+                          const allPassedRules = [...commonPassedRules, ...passedRulesForType];
+                          const allErrorRules = [...commonErrorRules, ...errorRulesForType];
+
+                          // Only show subtype section if there are any rules for it
+                          if (allPassedRules.length === 0 && allErrorRules.length === 0)
+                            return null;
+
+                          return (
+                            <div key={subType}>
+                              <p className="text-sm font-medium text-gray-800 mb-2">
+                                {locale === "zh" ? subTypeInfo.label : subTypeInfo.label_en || subTypeInfo.label}
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {/* Passed rules (common + subtype-specific) */}
+                                {allPassedRules.map(rule => (
+                                  <Badge
+                                    key={rule.rule_id}
+                                    variant="outline"
+                                    className="bg-emerald-50 text-emerald-600 border-emerald-100"
+                                  >
+                                    {getTranslation(
+                                      locale,
+                                      `eligibility_tags.${rule.tag}`
+                                    )}
+                                  </Badge>
+                                ))}
+                                {/* Error rules (common + subtype-specific) */}
+                                {allErrorRules.map(rule => (
+                                  <Badge
+                                    key={rule.rule_id}
+                                    variant="outline"
+                                    className="bg-rose-50 text-rose-600 border-rose-100"
+                                  >
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    {getTranslation(
+                                      locale,
+                                      `eligibility_tags.${rule.tag}`
+                                    )}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+
+                      {/* Warnings - keep at the end */}
+                      {scholarship.warnings &&
+                        scholarship.warnings.length > 0 && (
+                          <div>
+                            <p className="text-sm font-medium text-amber-700 mb-2">
+                              {locale === "zh" ? "注意事項" : "Warnings"}
                             </p>
                             <div className="flex flex-wrap gap-1">
-                              {/* Passed rules for this subtype */}
-                              {passedRulesForType?.map(rule => (
+                              {scholarship.warnings?.map(rule => (
                                 <Badge
                                   key={rule.rule_id}
                                   variant="outline"
-                                  className="bg-emerald-50 text-emerald-600 border-emerald-100"
-                                >
-                                  {getTranslation(
-                                    locale,
-                                    `eligibility_tags.${rule.tag}`
-                                  )}
-                                </Badge>
-                              ))}
-                              {/* Error rules for this subtype */}
-                              {errorRulesForType?.map(rule => (
-                                <Badge
-                                  key={rule.rule_id}
-                                  variant="outline"
-                                  className="bg-rose-50 text-rose-600 border-rose-100"
+                                  className="bg-amber-50 text-amber-600 border-amber-100"
                                 >
                                   <AlertTriangle className="h-3 w-3 mr-1" />
                                   {getTranslation(
@@ -1323,27 +1312,6 @@ export function EnhancedStudentPortal({
                                 </Badge>
                               ))}
                             </div>
-                          </div>
-                        );
-                      })}
-
-                      {/* Warnings - keep at the end */}
-                      {scholarship.warnings &&
-                        scholarship.warnings.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {scholarship.warnings?.map(rule => (
-                              <Badge
-                                key={rule.rule_id}
-                                variant="outline"
-                                className="bg-amber-50 text-amber-600 border-amber-100"
-                              >
-                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                {getTranslation(
-                                  locale,
-                                  `eligibility_tags.${rule.tag}`
-                                )}
-                              </Badge>
-                            ))}
                           </div>
                         )}
                     </div>

@@ -1587,7 +1587,7 @@ class ApiClient {
       status?: string
     ): Promise<ApiResponse<Application[]>> => {
       const params = status ? `?status=${encodeURIComponent(status)}` : "";
-      return this.request(`/applications/${params}`);
+      return this.request(`/applications${params}`);
     },
 
     getCollegeReview: async (
@@ -1722,7 +1722,7 @@ class ApiClient {
     saveApplicationDraft: async (
       applicationData: ApplicationCreate
     ): Promise<ApiResponse<Application>> => {
-      const response = await this.request("/applications/?is_draft=true", {
+      const response = await this.request("/applications?is_draft=true", {
         method: "POST",
         body: JSON.stringify(applicationData),
       });
