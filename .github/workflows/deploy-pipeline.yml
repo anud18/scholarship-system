@@ -315,7 +315,7 @@ jobs:
           echo "Running integration tests against staging..."
 
           # Test authentication
-          curl -f http://localhost:8000/api/v1/auth/health || exit 1
+          curl -f http://localhost:8000/health || exit 1
 
           # Test main endpoints
           curl -f http://localhost:8000/api/v1/scholarships || exit 1
