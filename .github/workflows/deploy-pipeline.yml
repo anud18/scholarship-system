@@ -272,7 +272,7 @@ jobs:
             sort -r | \
             grep -v latest | \
             tail -n +4 | \
-            awk '{print $2}' | \
+            awk -F '\\t' '$2 != "" && $2 !~ /<none>/{print $2}' | \
             xargs -r docker rmi -f || true
 
           # Cleanup old frontend images (sorted by creation time, newest first)
@@ -281,7 +281,7 @@ jobs:
             sort -r | \
             grep -v latest | \
             tail -n +4 | \
-            awk '{print $2}' | \
+            awk -F '\\t' '$2 != "" && $2 !~ /<none>/{print $2}' | \
             xargs -r docker rmi -f || true
 
           # Cleanup dangling images

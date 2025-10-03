@@ -14,8 +14,14 @@ export const metadata: Metadata = {
   robots: "noindex, nofollow", // 系統內部使用
   generator: "v0.dev",
   icons: {
-    icon: [{ url: "/nycu-favicon.svg", type: "image/svg+xml" }],
-    shortcut: [{ url: "/nycu-favicon.svg", type: "image/svg+xml" }],
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/nycu-favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/nycu-favicon.svg", type: "image/svg+xml" },
+    ],
   },
 };
 
@@ -32,7 +38,8 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" className="scroll-smooth">
       <head>
-        <link rel="icon" href="/nycu-favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+        <link rel="alternate icon" href="/nycu-favicon.svg" type="image/svg+xml" />
         <meta name="theme-color" content="#1e40af" />
       </head>
       <body className="antialiased">
