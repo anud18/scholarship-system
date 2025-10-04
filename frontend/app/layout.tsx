@@ -13,6 +13,7 @@ export const metadata: Metadata = {
   authors: [{ name: "國立陽明交通大學教務處" }],
   robots: "noindex, nofollow", // 系統內部使用
   generator: "v0.dev",
+  themeColor: "#1e40af",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },
@@ -37,9 +38,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-TW" className="scroll-smooth">
-      <head>
-        <meta name="theme-color" content="#1e40af" />
-      </head>
       <body className="antialiased">
         <AuthProvider>
           <NotificationProvider>
