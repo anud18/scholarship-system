@@ -4,6 +4,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from email.utils import formataddr
 from html import unescape
 from typing import List, Optional
 
@@ -309,7 +310,7 @@ class EmailService:
             msg = EmailMessage()
             # Use from_name if available
             if self.from_name:
-                msg["From"] = f"{self.from_name} <{self.from_addr}>"
+                msg["From"] = formataddr((self.from_name, self.from_addr))
             else:
                 msg["From"] = self.from_addr
             msg["To"] = ", ".join(to)
