@@ -343,3 +343,80 @@ class ScholarshipConfigurationValidation(BaseModel):
                 "suggestions": ["建議增加配額或調整分配策略"],
             }
         }
+
+
+# Whitelist Management Schemas
+
+
+class WhitelistStudentInfo(BaseModel):
+    """申請白名單學生資訊"""
+
+    student_id: Optional[int] = Field(None, description="學生ID（如已註冊）")
+    nycu_id: str = Field(..., description="學號")
+    name: Optional[str] = Field(None, description="姓名（如已註冊）")
+    sub_type: str = Field(..., description="子獎學金類型")
+    note: Optional[str] = Field(None, description="備註")
+    is_registered: bool = Field(default=False, description="是否已註冊")
+
+    class Config:
+        from_attributes = True
+
+
+class WhitelistBatchAddRequest(BaseModel):
+    """批量新增白名單請求"""
+
+    students: List[Dict[str, Any]] = Field(..., description="學生列表 [{'nycu_id': '0856001', 'sub_type': 'nstc'}, ...]")
+
+    @validator("students")
+    def validate_students(cls, v):
+        if not v:
+            raise ValueError("學生列表不能為空")
+        for student in v:
+            if "nycu_id" not in student or "sub_type" not in student:
+                raise ValueError("每個學生必須包含 nycu_id 和 sub_type")
+        return v
+
+
+class WhitelistBatchRemoveRequest(BaseModel):
+    """批量移除白名單請求"""
+
+    nycu_ids: List[str] = Field(..., description="學號列表 ['0856001', '0856002', ...]")
+    sub_type: Optional[str] = Field(None, description="子獎學金類型，若為 None 則從所有子類型中移除")
+
+    @validator("nycu_ids")
+    def validate_nycu_ids(cls, v):
+        if not v:
+            raise ValueError("學號列表不能為空")
+        return v
+
+
+class WhitelistResponse(BaseModel):
+    """白名單響應"""
+
+    sub_type: str = Field(..., description="子獎學金類型")
+    students: List[WhitelistStudentInfo] = Field(..., description="白名單學生列表")
+    total: int = Field(..., description="總人數")
+
+
+class WhitelistImportResult(BaseModel):
+    """白名單匯入結果"""
+
+    success_count: int = Field(..., description="成功匯入數量")
+    error_count: int = Field(..., description="錯誤數量")
+    errors: List[Dict[str, str]] = Field(
+        default=[], description="錯誤詳情 [{'row': '2', 'nycu_id': '0856001', 'error': '學號不存在'}]"
+    )
+    warnings: List[str] = Field(default=[], description="警告訊息")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success_count": 45,
+                "error_count": 3,
+                "errors": [
+                    {"row": "2", "nycu_id": "0856999", "error": "學號不存在"},
+                    {"row": "5", "nycu_id": "0856888", "error": "子獎學金類型無效: invalid_type"},
+                ],
+                "warnings": ["第 10 行學號重複，已跳過"],
+            }
+        }

@@ -2,15 +2,20 @@
 Application field configuration API endpoints
 """
 
+import io
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.security import get_current_user, require_admin
+from app.models.application_field import ApplicationDocument
 from app.models.user import User
 from app.schemas.application_field import (
     ApplicationDocumentCreate,
@@ -237,3 +242,207 @@ async def save_scholarship_form_config(
         message=f"Form configuration saved for {scholarship_type}",
         data=config,
     )
+
+
+# Example file management endpoints
+@router.post("/documents/{document_id}/upload-example", response_model=ApiResponse[dict])
+async def upload_document_example(
+    document_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload example file for an application document
+
+    Args:
+        document_id: Application document ID
+        file: Example file to upload
+        current_user: Current authenticated admin user
+        db: Database session
+
+    Returns:
+        ApiResponse with uploaded file object name
+    """
+    # Validate filename security
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="檔案名稱不得為空")
+
+    # Check for path traversal attempts
+    if ".." in file.filename or "/" in file.filename or "\\" in file.filename:
+        raise HTTPException(status_code=400, detail="無效的檔案名稱：包含路徑字元")
+
+    # Validate filename characters - block dangerous characters while allowing Unicode (including Chinese)
+    dangerous_chars = ["|", "<", ">", ":", '"', "?", "*"]
+    if any(char in file.filename for char in dangerous_chars):
+        raise HTTPException(status_code=400, detail="檔案名稱包含無效字元")
+
+    # Get document from database
+    stmt = select(ApplicationDocument).where(ApplicationDocument.id == document_id)
+    result = await db.execute(stmt)
+    document = result.scalar_one_or_none()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Application document not found")
+
+    try:
+        from app.services.minio_service import minio_service
+
+        # Generate object name with timestamp
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        file_extension = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "pdf"
+        object_name = f"examples/document_{document_id}_{timestamp}.{file_extension}"
+
+        # Read file content
+        file_content = await file.read()
+
+        # Upload to MinIO
+        minio_service.client.put_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=object_name,
+            data=io.BytesIO(file_content),
+            length=len(file_content),
+            content_type=file.content_type or "application/octet-stream",
+        )
+
+        # Delete old example file if exists
+        if document.example_file_url:
+            try:
+                minio_service.client.remove_object(
+                    bucket_name=minio_service.default_bucket,
+                    object_name=document.example_file_url,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to delete old example file: {str(e)}")
+
+        # Update database with new object name
+        document.example_file_url = object_name
+        document.updated_by = current_user.id
+        await db.commit()
+
+        return ApiResponse(
+            success=True,
+            message="範例文件上傳成功",
+            data={"example_file_url": object_name},
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to upload example file: {str(e)}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"範例文件上傳失敗: {str(e)}")
+
+
+@router.get("/documents/{document_id}/example")
+async def get_document_example(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get example file for an application document and proxy download from MinIO
+
+    Args:
+        document_id: Application document ID
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        Streaming response with file content
+    """
+    # Get document from database
+    stmt = select(ApplicationDocument).where(ApplicationDocument.id == document_id)
+    result = await db.execute(stmt)
+    document = result.scalar_one_or_none()
+
+    if not document or not document.example_file_url:
+        raise HTTPException(status_code=404, detail="範例文件不存在")
+
+    try:
+        from app.services.minio_service import minio_service
+
+        # Download from MinIO
+        response = minio_service.client.get_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=document.example_file_url,
+        )
+
+        file_content = response.read()
+
+        # Determine content type based on file extension
+        file_extension = document.example_file_url.rsplit(".", 1)[-1].lower()
+        content_type_map = {
+            "pdf": "application/pdf",
+            "doc": "application/msword",
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "png": "image/png",
+        }
+        content_type = content_type_map.get(file_extension, "application/octet-stream")
+
+        # Return as streaming response
+        return StreamingResponse(
+            io.BytesIO(file_content),
+            media_type=content_type,
+            headers={
+                "Content-Disposition": f"inline; filename*=UTF-8''{document.document_name}_example.{file_extension}"
+            },
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get example file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"範例文件讀取失敗: {str(e)}")
+
+
+@router.delete("/documents/{document_id}/example", response_model=ApiResponse[bool])
+async def delete_document_example(
+    document_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete example file for an application document
+
+    Args:
+        document_id: Application document ID
+        current_user: Current authenticated admin user
+        db: Database session
+
+    Returns:
+        ApiResponse with success status
+    """
+    # Get document from database
+    stmt = select(ApplicationDocument).where(ApplicationDocument.id == document_id)
+    result = await db.execute(stmt)
+    document = result.scalar_one_or_none()
+
+    if not document:
+        raise HTTPException(status_code=404, detail="Application document not found")
+
+    if not document.example_file_url:
+        raise HTTPException(status_code=404, detail="範例文件不存在")
+
+    try:
+        from app.services.minio_service import minio_service
+
+        # Delete from MinIO
+        minio_service.client.remove_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=document.example_file_url,
+        )
+
+        # Clear database field
+        document.example_file_url = None
+        document.updated_by = current_user.id
+        await db.commit()
+
+        return ApiResponse(
+            success=True,
+            message="範例文件刪除成功",
+            data=True,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to delete example file: {str(e)}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"範例文件刪除失敗: {str(e)}")

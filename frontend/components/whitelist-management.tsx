@@ -1,3 +1,14 @@
+/**
+ * @deprecated This component uses mock data and is not integrated with the API.
+ *
+ * TODO: Replace with WhitelistManagementDialog or update to use real API.
+ * The new WhitelistManagementDialog component in whitelist-management-dialog.tsx
+ * provides full API integration with Excel import/export functionality.
+ *
+ * Current usage: admin-scholarship-management-interface.tsx
+ * Migration needed: Convert to use configuration-based whitelist management
+ */
+
 "use client";
 
 import { useState } from "react";

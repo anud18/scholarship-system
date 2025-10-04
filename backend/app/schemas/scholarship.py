@@ -150,6 +150,15 @@ class ScholarshipTypeResponse(ScholarshipTypeBase):
         from_attributes = True
 
 
+class WhitelistToggleRequest(BaseModel):
+    """白名單開關更新請求"""
+
+    enabled: bool = Field(..., description="是否啟用白名單")
+
+    class Config:
+        json_schema_extra = {"example": {"enabled": True}}
+
+
 class ScholarshipRuleBase(BaseModel):
     rule_name: str = Field(..., min_length=1, max_length=100, description="Rule name")
     rule_type: str = Field(..., min_length=1, max_length=50, description="Rule type")
@@ -242,6 +251,8 @@ class RuleMessage(BaseModel):
     priority: int = 0
     is_warning: bool = False
     is_hard_rule: bool = False
+    status: Optional[str] = None  # data_unavailable | validation_failed
+    system_message: Optional[str] = None  # System error message for data unavailability
 
 
 class SubTypeOption(BaseModel):

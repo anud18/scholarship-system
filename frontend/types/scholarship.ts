@@ -38,6 +38,12 @@ export interface ScholarshipType {
   updatedAt?: string;
   subScholarships?: ScholarshipType[];
   parentScholarship?: ScholarshipType;
+  // Eligibility details (for eligible scholarships API response)
+  configuration_id?: number;
+  eligible_sub_types?: Array<{value: string; label: string; label_en?: string}>;
+  passed?: RuleMessage[];
+  warnings?: RuleMessage[];
+  errors?: RuleMessage[];
 }
 
 export interface CombinedScholarshipCreate {
@@ -72,4 +78,19 @@ export interface ScholarshipApplication {
   personalStatement: string;
   researchProposal?: string;
   supportingDocuments?: number[];
+}
+
+export interface RuleMessage {
+  rule_id: number | string;
+  rule_name: string;
+  rule_type: string;
+  tag?: string;
+  message: string;
+  message_en?: string;
+  sub_type?: string;
+  priority?: number;
+  is_warning?: boolean;
+  is_hard_rule?: boolean;
+  status?: 'data_unavailable' | 'validation_failed';
+  system_message?: string;
 }

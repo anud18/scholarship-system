@@ -6,7 +6,6 @@ import base64
 import io
 import logging
 import os
-import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
@@ -323,8 +322,9 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="無效的檔案名稱")
 
-    # Additional validation: ensure filename only contains allowed characters
-    if not re.match(r"^[a-zA-Z0-9_\-\.]+$", filename):
+    # Additional validation: block dangerous characters while allowing Unicode (including Chinese)
+    dangerous_chars = ["|", "<", ">", ":", '"', "?", "*"]
+    if any(char in filename for char in dangerous_chars):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="檔案名稱包含無效字元")
 
     try:

@@ -3,6 +3,7 @@
 import { AdminConfigurationManagement } from "@/components/admin-configuration-management";
 import { AdminRuleManagement } from "@/components/admin-rule-management";
 import { EmailHistoryTable } from "@/components/email-history-table";
+import { EmailTestModePanel } from "@/components/email-test-mode-panel";
 import { QuotaManagement } from "@/components/quota-management";
 import { ScheduledEmailsTable } from "@/components/scheduled-emails-table";
 import { ScholarshipWorkflowMermaid } from "@/components/ScholarshipWorkflowMermaid";
@@ -747,7 +748,7 @@ export function AdminManagementInterface({
 
   // 系統公告相關函數
   // 獲取歷史申請資料
-  const fetchHistoricalApplications = async () => {
+  const fetchHistoricalApplications = useCallback(async () => {
     // 檢查用戶認證狀態
     if (!user || (user.role !== "admin" && user.role !== "super_admin")) {
       setHistoricalApplicationsError("用戶未認證或不具有管理員權限");
@@ -772,18 +773,6 @@ export function AdminManagementInterface({
         const applications = response.data.items || [];
         setHistoricalApplications(applications);
 
-        // 按獎學金類型分組
-        const groups: Record<string, HistoricalApplication[]> = {};
-        applications.forEach(app => {
-          const scholarshipType =
-            app.scholarship_name || app.scholarship_type_code || "未知類型";
-          if (!groups[scholarshipType]) {
-            groups[scholarshipType] = [];
-          }
-          groups[scholarshipType].push(app);
-        });
-        setHistoricalApplicationsGroups(groups);
-
         setHistoricalApplicationsPagination({
           page: response.data.page,
           size: response.data.size,
@@ -795,13 +784,14 @@ export function AdminManagementInterface({
         const errorMsg = response.message || "獲取歷史申請失敗";
         setHistoricalApplicationsError(errorMsg);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("獲取歷史申請資料失敗:", error);
-      setHistoricalApplicationsError("網路錯誤或伺服器未回應");
+      const errorMsg = error?.message || error?.response?.data?.message || "網路錯誤或伺服器未回應";
+      setHistoricalApplicationsError(errorMsg);
     } finally {
       setLoadingHistoricalApplications(false);
     }
-  };
+  }, [historicalApplicationsFilters, activeHistoricalTab, user]);
 
   const fetchAnnouncements = async () => {
     // 檢查用戶認證狀態
@@ -1015,7 +1005,7 @@ export function AdminManagementInterface({
   }, [scholarshipEmailTab]);
 
   // 獲取所有歷史申請以建立 tab 列表
-  const fetchAllHistoricalApplicationsForTabs = async () => {
+  const fetchAllHistoricalApplicationsForTabs = useCallback(async () => {
     if (!user || (user.role !== "admin" && user.role !== "super_admin")) {
       return;
     }
@@ -1071,7 +1061,7 @@ export function AdminManagementInterface({
     } catch (error) {
       console.error("獲取歷史申請 tab 資料失敗:", error);
     }
-  };
+  }, [user, activeHistoricalTab]);
 
   // 歷史申請資料載入
   useEffect(() => {
@@ -1079,14 +1069,14 @@ export function AdminManagementInterface({
     if (user && (user.role === "admin" || user.role === "super_admin")) {
       fetchHistoricalApplications();
     }
-  }, [historicalApplicationsFilters, user, activeHistoricalTab]);
+  }, [fetchHistoricalApplications, user]);
 
   // 初始載入時獲取所有歷史申請以建立 tab
   useEffect(() => {
     if (user && (user.role === "admin" || user.role === "super_admin")) {
       fetchAllHistoricalApplicationsForTabs();
     }
-  }, [user]);
+  }, [fetchAllHistoricalApplicationsForTabs, user]);
 
   // 載入系統公告
   useEffect(() => {
@@ -1758,6 +1748,13 @@ export function AdminManagementInterface({
     }
   };
 
+  // Update scholarship type when child component modifies it
+  const handleScholarshipTypeUpdate = (id: number, updates: Partial<any>) => {
+    setScholarshipTypes(prev =>
+      prev.map(type => (type.id === id ? { ...type, ...updates } : type))
+    );
+  };
+
   // 根據獎學金 tab 和篩選條件過濾規則
   const getFilteredRules = () => {
     let filtered = [...scholarshipRules];
@@ -2154,7 +2151,10 @@ export function AdminManagementInterface({
               </CardContent>
             </Card>
           ) : (
-            <AdminConfigurationManagement scholarshipTypes={scholarshipTypes} />
+            <AdminConfigurationManagement
+              scholarshipTypes={scholarshipTypes}
+              onScholarshipTypeUpdate={handleScholarshipTypeUpdate}
+            />
           )}
         </TabsContent>
 
@@ -2606,7 +2606,10 @@ export function AdminManagementInterface({
                   >
                     <span>全部申請</span>
                     <Badge variant="secondary" className="text-xs">
-                      {historicalApplications.length}
+                      {Object.values(historicalApplicationsGroups).reduce(
+                        (total, apps) => total + apps.length,
+                        0
+                      )}
                     </Badge>
                   </TabsTrigger>
                   {Object.keys(historicalApplicationsGroups).map(
@@ -3606,10 +3609,11 @@ export function AdminManagementInterface({
                 value={emailManagementTab}
                 onValueChange={setEmailManagementTab}
               >
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="templates">郵件模板</TabsTrigger>
                   <TabsTrigger value="history">歷史記錄</TabsTrigger>
                   <TabsTrigger value="scheduled">排程郵件</TabsTrigger>
+                  <TabsTrigger value="test-mode">測試模式</TabsTrigger>
                 </TabsList>
 
                 {/* 郵件模板管理 */}
@@ -4125,6 +4129,11 @@ export function AdminManagementInterface({
                 {/* 排程郵件管理 */}
                 <TabsContent value="scheduled" className="mt-6">
                   <ScheduledEmailsTable currentUserRole={user.role} />
+                </TabsContent>
+
+                {/* 測試模式 */}
+                <TabsContent value="test-mode" className="mt-6">
+                  <EmailTestModePanel />
                 </TabsContent>
               </Tabs>
             </CardContent>

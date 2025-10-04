@@ -232,13 +232,13 @@ export interface SystemConfiguration {
     | "INTEGRATIONS";
   data_type: "string" | "integer" | "float" | "boolean" | "json";
   is_sensitive: boolean;
+  is_readonly: boolean;
   description?: string;
   validation_regex?: string;
-  is_active: boolean;
+  default_value?: string;
+  last_modified_by?: number;
   created_at: string;
   updated_at?: string;
-  created_by?: number;
-  updated_by?: number;
 }
 
 export interface SystemConfigurationCreate {
@@ -460,6 +460,7 @@ export interface ScholarshipType {
   application_end_date?: string;
   sub_type_selection_mode?: "single" | "multiple" | "hierarchical";
   terms_document_url?: string;
+  whitelist_enabled?: boolean;
   eligible_sub_types?: Array<{
     value: string | null;
     label: string;
@@ -1004,6 +1005,41 @@ export interface ScholarshipConfiguration {
   version: string;
   created_at: string;
   updated_at: string;
+}
+
+// Whitelist Management Interfaces
+export interface WhitelistStudentInfo {
+  student_id: number;
+  nycu_id: string;
+  name: string;
+  sub_type: string;
+  note?: string;
+}
+
+export interface WhitelistResponse {
+  sub_type: string;
+  students: WhitelistStudentInfo[];
+  total: number;
+}
+
+export interface WhitelistBatchAddRequest {
+  students: { nycu_id: string; sub_type: string }[];
+}
+
+export interface WhitelistBatchRemoveRequest {
+  student_ids: number[];
+  sub_type?: string;
+}
+
+export interface WhitelistImportResult {
+  success_count: number;
+  error_count: number;
+  errors: { row: string; nycu_id: string; error: string }[];
+  warnings: string[];
+}
+
+export interface WhitelistToggleRequest {
+  enabled: boolean;
 }
 
 export interface ScholarshipConfigurationFormData {
@@ -2419,6 +2455,8 @@ class ApiClient {
           category?: string;
           application_cycle?: string;
           status?: string;
+          whitelist_enabled?: boolean;
+          sub_type_list?: string[];
         }>
       >
     > => {
@@ -2735,6 +2773,44 @@ class ApiClient {
       this.request<boolean>(`/application-fields/documents/${documentId}`, {
         method: "DELETE",
       }),
+
+    // Example file management
+    uploadDocumentExample: async (documentId: number, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const token =
+        typeof window !== "undefined"
+          ? window.localStorage?.getItem("auth_token")
+          : null;
+
+      const response = await fetch(
+        `${this.baseURL}/api/v1/application-fields/documents/${documentId}/upload-example`,
+        {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to upload example file");
+      }
+
+      return response.json();
+    },
+
+    deleteDocumentExample: (documentId: number) =>
+      this.request<boolean>(
+        `/application-fields/documents/${documentId}/example`,
+        {
+          method: "DELETE",
+        }
+      ),
   };
 
   // User Profile management endpoints
@@ -2852,6 +2928,175 @@ class ApiClient {
       ): Promise<ApiResponse<ProfileHistory[]>> => {
         return this.request(`/user-profiles/admin/${userId}/history`);
       },
+    },
+  };
+
+  // Whitelist Management endpoints
+  whitelist = {
+    // Toggle scholarship whitelist feature
+    toggleScholarshipWhitelist: async (
+      scholarshipId: number,
+      enabled: boolean
+    ): Promise<ApiResponse<{ success: boolean }>> => {
+      return this.request(`/scholarships/${scholarshipId}/whitelist`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      });
+    },
+
+    // Get whitelist entries for a configuration
+    getConfigurationWhitelist: async (
+      configurationId: number,
+      params?: {
+        page?: number;
+        size?: number;
+        search?: string;
+      }
+    ): Promise<
+      ApiResponse<{
+        items: Array<{
+          id: number;
+          nycu_id: string;
+          student_name: string;
+          department: string;
+          added_at: string;
+          added_by: string;
+        }>;
+        total: number;
+        page: number;
+        size: number;
+        pages: number;
+      }>
+    > => {
+      const queryParams = new URLSearchParams();
+      if (params?.page) queryParams.append("page", params.page.toString());
+      if (params?.size) queryParams.append("size", params.size.toString());
+      if (params?.search) queryParams.append("search", params.search);
+
+      const queryString = queryParams.toString();
+      const url = `/scholarship-configurations/${configurationId}/whitelist${
+        queryString ? `?${queryString}` : ""
+      }`;
+
+      return this.request(url);
+    },
+
+    // Batch add students to whitelist
+    batchAddWhitelist: async (
+      configurationId: number,
+      request: { students: Array<{ nycu_id: string; sub_type: string }> }
+    ): Promise<
+      ApiResponse<{
+        success_count: number;
+        failed_items: Array<{
+          nycu_id: string;
+          reason: string;
+        }>;
+      }>
+    > => {
+      return this.request(
+        `/scholarship-configurations/${configurationId}/whitelist/batch`,
+        {
+          method: "POST",
+          body: JSON.stringify(request),
+        }
+      );
+    },
+
+    // Batch remove students from whitelist
+    batchRemoveWhitelist: async (
+      configurationId: number,
+      request: {
+        nycu_ids: string[];
+        sub_type?: string;
+      }
+    ): Promise<
+      ApiResponse<{
+        success_count: number;
+        failed_items: Array<{
+          id: number;
+          reason: string;
+        }>;
+      }>
+    > => {
+      return this.request(
+        `/scholarship-configurations/${configurationId}/whitelist/batch`,
+        {
+          method: "DELETE",
+          body: JSON.stringify(request),
+        }
+      );
+    },
+
+    // Import whitelist from Excel
+    importWhitelistExcel: async (
+      configurationId: number,
+      file: File
+    ): Promise<
+      ApiResponse<{
+        success_count: number;
+        failed_items: Array<{
+          row: number;
+          nycu_id: string;
+          reason: string;
+        }>;
+      }>
+    > => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      return this.request(
+        `/scholarship-configurations/${configurationId}/whitelist/import`,
+        {
+          method: "POST",
+          body: formData,
+          headers: {
+            // Let browser set Content-Type with boundary for FormData
+          },
+        }
+      );
+    },
+
+    // Export whitelist to Excel
+    exportWhitelistExcel: async (
+      configurationId: number
+    ): Promise<Blob> => {
+      const response = await fetch(
+        `${this.baseURL}/scholarship-configurations/${configurationId}/whitelist/export`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${this.getToken()}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "匯出白名單失敗");
+      }
+
+      return response.blob();
+    },
+
+    // Download whitelist import template
+    downloadTemplate: async (configurationId: number): Promise<Blob> => {
+      const response = await fetch(
+        `${this.baseURL}/scholarship-configurations/${configurationId}/whitelist/template`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${this.getToken()}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "下載範本失敗");
+      }
+
+      return response.blob();
     },
   };
 
@@ -3143,6 +3388,94 @@ class ApiClient {
       }>
     > => {
       return this.request("/email-management/statuses");
+    },
+
+    // ========== Email Test Mode Methods ==========
+
+    // Get test mode status
+    getTestModeStatus: async (): Promise<
+      ApiResponse<{
+        enabled: boolean;
+        redirect_emails: string[];
+        expires_at: string | null;
+        enabled_by?: number;
+        enabled_at?: string;
+      }>
+    > => {
+      return this.request("/email-management/test-mode/status");
+    },
+
+    // Enable test mode
+    enableTestMode: async (params: {
+      redirect_emails: string | string[];
+      duration_hours?: number;
+    }): Promise<
+      ApiResponse<{
+        enabled: boolean;
+        redirect_emails: string[];
+        expires_at: string;
+        enabled_by: number;
+        enabled_at: string;
+      }>
+    > => {
+      // Convert array to comma-separated string, or use as-is if already string
+      const emailsStr = Array.isArray(params.redirect_emails)
+        ? params.redirect_emails.join(",")
+        : params.redirect_emails;
+
+      const queryParams = new URLSearchParams({
+        redirect_emails: emailsStr,
+        duration_hours: (params.duration_hours || 24).toString(),
+      });
+      return this.request(
+        `/email-management/test-mode/enable?${queryParams.toString()}`,
+        {
+          method: "POST",
+        }
+      );
+    },
+
+    // Disable test mode
+    disableTestMode: async (): Promise<
+      ApiResponse<{
+        enabled: boolean;
+        redirect_emails: string[];
+        expires_at: null;
+        disabled_by: number;
+        disabled_at: string;
+      }>
+    > => {
+      return this.request("/email-management/test-mode/disable", {
+        method: "POST",
+      });
+    },
+
+    // Get test mode audit logs
+    getTestModeAuditLogs: async (params?: {
+      limit?: number;
+      event_type?: string;
+    }): Promise<
+      ApiResponse<{
+        items: Array<{
+          id: number;
+          event_type: string;
+          timestamp: string;
+          user_id: number | null;
+          config_before: any;
+          config_after: any;
+          original_recipient: string | null;
+          actual_recipient: string | null;
+          email_subject: string | null;
+          session_id: string | null;
+          ip_address: string | null;
+        }>;
+        total: number;
+      }>
+    > => {
+      return this.request("/email-management/test-mode/audit", {
+        method: "GET",
+        params,
+      });
     },
   };
 

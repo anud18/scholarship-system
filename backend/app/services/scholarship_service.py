@@ -121,18 +121,31 @@ class ScholarshipService:
                                 logger.warning(
                                     f"Could not fetch term data for student {student_code}, AY{academic_year_str}, semester {semester_str}"
                                 )
-                                # Continue with basic data if term data unavailable
-                                student_data_cache["student_term"][cache_key] = student_data
-                                current_student_data = student_data
+                                # Mark term data as not found (student has no data for this term)
+                                current_student_data = {
+                                    **student_data,
+                                    "_term_data_status": "not_found",
+                                    "_term_error_message": f"查無 {academic_year_str} 學年第 {semester_str} 學期的學期資料",
+                                }
+                                student_data_cache["student_term"][cache_key] = current_student_data
                         except Exception as e:
                             logger.warning(f"Student term API unavailable, continuing with basic data: {e}")
-                            # Fall back to basic data when API is unavailable
-                            student_data_cache["student_term"][cache_key] = student_data
-                            current_student_data = student_data
+                            # Mark term data as API error (system issue)
+                            current_student_data = {
+                                **student_data,
+                                "_term_data_status": "api_error",
+                                "_term_error_message": f"學期資料 API 暫時無法使用: {str(e)}",
+                            }
+                            student_data_cache["student_term"][cache_key] = current_student_data
                     else:
                         logger.error("Student code not found in student data")
-                        student_data_cache["student_term"][cache_key] = student_data
-                        current_student_data = student_data
+                        # Mark term data as unavailable due to missing student code
+                        current_student_data = {
+                            **student_data,
+                            "_term_data_status": "missing_student_code",
+                            "_term_error_message": "缺少學號資料，無法查詢學期資料",
+                        }
+                        student_data_cache["student_term"][cache_key] = current_student_data
                 else:
                     # Use cached term data
                     current_student_data = student_data_cache["student_term"][cache_key]

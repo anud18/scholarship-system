@@ -13,7 +13,7 @@ from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
-from app.schemas.scholarship import EligibleScholarshipResponse, ScholarshipTypeResponse
+from app.schemas.scholarship import EligibleScholarshipResponse, ScholarshipTypeResponse, WhitelistToggleRequest
 
 router = APIRouter()
 
@@ -29,40 +29,50 @@ async def get_all_scholarships(
     result = await db.execute(stmt)
     scholarships = result.scalars().all()
 
+    # 使用篩選參數或預設值
+    display_academic_year = academic_year if academic_year is not None else 113  # 預設 113 學年
+    display_semester = semester if semester is not None else "first"  # 預設第一學期
+
+    # Convert semester string to enum for configuration lookup
+    semester_enum = None
+    if display_semester == "first":
+        semester_enum = Semester.first
+    elif display_semester == "second":
+        semester_enum = Semester.second
+
+    # Batch load all configurations to avoid N+1 query
+    # Get scholarship IDs for batch query
+    scholarship_ids = [s.id for s in scholarships]
+
+    # Build configuration query with all conditions
+    config_conditions = [
+        ScholarshipConfiguration.scholarship_type_id.in_(scholarship_ids),
+        ScholarshipConfiguration.academic_year == display_academic_year,
+        ScholarshipConfiguration.is_active.is_(True),
+    ]
+
+    # Load configurations for both yearly (semester=None) and semester-specific
+    config_stmt = select(ScholarshipConfiguration).where(*config_conditions)
+    config_result = await db.execute(config_stmt)
+    all_configs = config_result.scalars().all()
+
+    # Create mapping of (scholarship_id, is_yearly) -> configuration
+    config_map = {}
+    for config in all_configs:
+        # Store config by (scholarship_type_id, semester) key
+        key = (config.scholarship_type_id, config.semester)
+        config_map[key] = config
+
     # Convert to dictionary format for timeline component
     scholarship_list = []
     for scholarship in scholarships:
-        # 使用篩選參數或預設值
-        display_academic_year = academic_year if academic_year is not None else 113  # 預設 113 學年
-        display_semester = semester if semester is not None else "first"  # 預設第一學期
-
-        # Convert semester string to enum for configuration lookup
-        semester_enum = None
-        if display_semester == "first":
-            semester_enum = Semester.first
-        elif display_semester == "second":
-            semester_enum = Semester.second
-
-        # Get active configuration for this scholarship and academic year
-        # For yearly scholarships, look for configurations with semester = None
-        # For semester scholarships, look for configurations with the specific semester
-        config_conditions = [
-            ScholarshipConfiguration.scholarship_type_id == scholarship.id,
-            ScholarshipConfiguration.academic_year == display_academic_year,
-            ScholarshipConfiguration.is_active.is_(True),
-        ]
-
-        # Add semester condition based on scholarship's application cycle
+        # Determine which config to use based on application cycle
         if scholarship.application_cycle and scholarship.application_cycle.value == "yearly":
-            # For yearly scholarships, look for configurations with semester = None
-            config_conditions.append(ScholarshipConfiguration.semester.is_(None))
+            # For yearly scholarships, use config with semester = None
+            config = config_map.get((scholarship.id, None))
         else:
-            # For semester scholarships, look for configurations with the specific semester
-            config_conditions.append(ScholarshipConfiguration.semester == semester_enum)
-
-        config_stmt = select(ScholarshipConfiguration).where(*config_conditions)
-        config_result = await db.execute(config_stmt)
-        config = config_result.scalar_one_or_none()
+            # For semester scholarships, use config with specific semester
+            config = config_map.get((scholarship.id, semester_enum))
 
         # Build scholarship dictionary with data from configuration or defaults
         scholarship_dict = {
@@ -93,6 +103,7 @@ async def get_all_scholarships(
         if config:
             scholarship_dict.update(
                 {
+                    "configuration_id": config.id,
                     "amount": config.amount,
                     "currency": config.currency,
                     "whitelist_student_ids": config.whitelist_student_ids or {},
@@ -338,7 +349,7 @@ async def reset_application_periods(current_user: User = Depends(require_admin),
 
 
 @router.post("/dev/toggle-whitelist/{scholarship_id}")
-async def toggle_scholarship_whitelist(
+async def dev_toggle_scholarship_whitelist(
     scholarship_id: int,
     enable: bool = True,
     current_user: User = Depends(require_admin),
@@ -420,8 +431,6 @@ async def upload_terms_document(
     Returns:
         ApiResponse with uploaded file URL
     """
-    import re
-
     # Validate filename security
     if not file.filename:
         raise HTTPException(status_code=400, detail="檔案名稱不得為空")
@@ -430,8 +439,9 @@ async def upload_terms_document(
     if ".." in file.filename or "/" in file.filename or "\\" in file.filename:
         raise HTTPException(status_code=400, detail="無效的檔案名稱：包含路徑字元")
 
-    # Validate filename characters (alphanumeric, underscore, hyphen, dot only)
-    if not re.match(r"^[a-zA-Z0-9_\-\.]+$", file.filename):
+    # Validate filename characters - block dangerous characters while allowing Unicode (including Chinese)
+    dangerous_chars = ["|", "<", ">", ":", '"', "?", "*"]
+    if any(char in file.filename for char in dangerous_chars):
         raise HTTPException(status_code=400, detail="檔案名稱包含無效字元")
 
     # Limit filename length
@@ -596,3 +606,107 @@ async def get_terms_document(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve terms document: {str(e)}")
+
+
+@router.patch("/{scholarship_id}/whitelist", response_model=ApiResponse[ScholarshipTypeResponse])
+async def toggle_scholarship_whitelist(
+    scholarship_id: int,
+    request: WhitelistToggleRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Toggle scholarship whitelist enable/disable
+
+    Args:
+        scholarship_id: Scholarship type ID
+        request: Whitelist toggle request with enabled flag
+        current_user: Current authenticated admin user
+        db: Database session
+
+    Returns:
+        Updated scholarship type with whitelist status
+    """
+    # Get scholarship type
+    stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
+    result = await db.execute(stmt)
+    scholarship = result.scalar_one_or_none()
+
+    if not scholarship:
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {scholarship_id} 的獎學金類型")
+
+    # Update whitelist_enabled
+    scholarship.whitelist_enabled = request.enabled
+    scholarship.updated_by = current_user.id
+
+    await db.commit()
+    await db.refresh(scholarship)
+
+    # Get active configuration for amount and other details
+    config_stmt = (
+        select(ScholarshipConfiguration)
+        .where(
+            ScholarshipConfiguration.scholarship_type_id == scholarship_id,
+            ScholarshipConfiguration.is_active.is_(True),
+        )
+        .order_by(
+            ScholarshipConfiguration.academic_year.desc(),
+            ScholarshipConfiguration.semester.desc(),
+        )
+        .limit(1)
+    )
+
+    config_result = await db.execute(config_stmt)
+    active_config = config_result.scalar_one_or_none()
+
+    # Convert to response format with proper enum serialization
+    response_data = {
+        "id": scholarship.id,
+        "code": scholarship.code,
+        "name": scholarship.name,
+        "name_en": scholarship.name_en,
+        "description": scholarship.description,
+        "description_en": scholarship.description_en,
+        "category": scholarship.category if hasattr(scholarship, "category") else None,
+        "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
+        "sub_type_list": scholarship.sub_type_list or [],
+        "amount": active_config.amount if active_config else 0,
+        "currency": active_config.currency if active_config else "TWD",
+        "whitelist_enabled": scholarship.whitelist_enabled,
+        "whitelist_student_ids": [
+            student_id
+            for subtype_list in (
+                active_config.whitelist_student_ids.values()
+                if active_config and active_config.whitelist_student_ids
+                else []
+            )
+            for student_id in subtype_list
+        ],
+        "application_start_date": active_config.application_start_date if active_config else None,
+        "application_end_date": active_config.application_end_date if active_config else None,
+        "review_deadline": active_config.review_deadline if active_config else None,
+        "professor_review_start": active_config.professor_review_start if active_config else None,
+        "professor_review_end": active_config.professor_review_end if active_config else None,
+        "college_review_start": active_config.college_review_start if active_config else None,
+        "college_review_end": active_config.college_review_end if active_config else None,
+        "sub_type_selection_mode": scholarship.sub_type_selection_mode.value
+        if scholarship.sub_type_selection_mode
+        else "single",
+        "status": scholarship.status if hasattr(scholarship, "status") else "active",
+        "requires_professor_recommendation": active_config.requires_professor_recommendation
+        if active_config
+        else False,
+        "requires_college_review": active_config.requires_college_review if active_config else False,
+        "review_workflow": scholarship.review_workflow if hasattr(scholarship, "review_workflow") else None,
+        "auto_approval_rules": scholarship.auto_approval_rules if hasattr(scholarship, "auto_approval_rules") else None,
+        "created_at": scholarship.created_at,
+        "updated_at": scholarship.updated_at,
+        "created_by": scholarship.created_by,
+        "updated_by": scholarship.updated_by,
+    }
+
+    return ApiResponse(
+        success=True,
+        message=f"白名單已{'啟用' if request.enabled else '停用'}",
+        data=ScholarshipTypeResponse(**response_data),
+    )

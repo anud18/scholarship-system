@@ -269,6 +269,6 @@ MIME_TYPE_MAPPING = {
 # Development scholarship settings
 DEV_SCHOLARSHIP_SETTINGS = {
     "ALWAYS_OPEN_APPLICATION": False,  # Respect real application periods
-    "BYPASS_WHITELIST": True,
+    "BYPASS_WHITELIST": False,  # Enforce whitelist checks
     "MOCK_APPLICATION_PERIOD": False,
 }

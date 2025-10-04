@@ -14,7 +14,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import AuthorizationError, BusinessLogicError, ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
 from app.models.application import Application, ApplicationStatus, ProfessorReview, ProfessorReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
@@ -175,45 +175,32 @@ class ApplicationService:
         if eligible_types and student_type not in eligible_types:
             raise ValidationError(f"Student type {student_type} is not eligible for this scholarship")
 
-        # Check whitelist eligibility using user ID instead of student ID
-        # Since students are now external, whitelist should use user IDs
-        user_id = application_data.user_id if hasattr(application_data, "user_id") else None
-        if user_id and scholarship.whitelist_enabled:
-            # Check if user is in whitelist (whitelist now contains user IDs)
-            if not scholarship.is_user_in_whitelist(user_id):
+        # Check whitelist eligibility
+        # NOTE: This method is deprecated and no longer used in create_application
+        # Whitelist checking is now handled by EligibilityService
+        # This code is kept for backward compatibility with tests
+        nycu_id = student_data.get("std_stdcode", "")
+        if scholarship.whitelist_enabled and nycu_id:
+            # Get configuration to check whitelist (using first available config)
+            stmt = (
+                select(ScholarshipConfiguration)
+                .where(
+                    ScholarshipConfiguration.scholarship_type_id == scholarship.id,
+                    ScholarshipConfiguration.is_active == True,
+                )
+                .limit(1)
+            )
+            result = await self.db.execute(stmt)
+            config = result.scalar_one_or_none()
+
+            if config and not config.is_student_in_whitelist(nycu_id):
                 raise ValidationError("您不在此獎學金的白名單內，僅限預先核准的學生申請")
 
         # All validation requirements (ranking, term count, etc.) are now handled by scholarship rules
         # No hardcoded validation logic needed here
 
-        # Check for existing active applications
-        # In the new design, we need to get user ID differently
-        # Get scholarship type ID for the query
-        stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
-        result = await self.db.execute(stmt)
-        scholarship = result.scalar_one_or_none()
-
-        if not scholarship:
-            raise NotFoundError("Scholarship type", scholarship_type)
-
-        # Check for existing applications (using user_id since student_id removed)
-        stmt = select(Application).where(
-            and_(
-                Application.user_id == user_id,
-                Application.scholarship_type_id == scholarship.id,
-                Application.status.in_(
-                    [
-                        ApplicationStatus.submitted.value,
-                        ApplicationStatus.under_review.value,
-                        ApplicationStatus.pending_recommendation.value,
-                        ApplicationStatus.recommended.value,
-                    ]
-                ),
-            )
-        )
-        result = await self.db.execute(stmt)
-        if result.scalar_one_or_none():
-            raise ConflictError("You already have an active application for this scholarship")
+        # Note: Check for existing applications is now handled at the API endpoint level
+        # where user_id is available from the authenticated user context
 
     async def _get_user_and_student_data(self, user_id: int, student_code: str) -> Tuple[User, Dict[str, Any]]:
         """Get user and fetch student data from external API"""
@@ -607,8 +594,12 @@ class ApplicationService:
             "recent_applications": recent_applications_response,
         }
 
-    async def get_application_by_id(self, application_id: int, current_user: User):
-        """Get application by ID with proper access control"""
+    async def _get_application_model(self, application_id: int, current_user: User) -> Application | None:
+        """Internal method to get raw Application model with access control
+
+        Use this for operations that need to modify the application.
+        For read-only operations that need the response format, use get_application_by_id instead.
+        """
         stmt = (
             select(Application)
             .options(
@@ -633,8 +624,6 @@ class ApplicationService:
             if application.user_id != current_user.id:
                 return None
         elif current_user.role == UserRole.professor:
-            # Check if professor is assigned to this application
-            # This avoids lazy loading professor_relationships which causes greenlet errors
             if application.professor_id != current_user.id:
                 return None
         elif current_user.role in [
@@ -642,9 +631,18 @@ class ApplicationService:
             UserRole.admin,
             UserRole.super_admin,
         ]:
-            # College, Admin, and Super Admin can access any application
             pass
         else:
+            return None
+
+        return application
+
+    async def get_application_by_id(self, application_id: int, current_user: User):
+        """Get application by ID with proper access control and formatted response"""
+        # Use internal method to get the application model
+        application = await self._get_application_model(application_id, current_user)
+
+        if not application:
             return None
 
         # 整合文件資訊到 submitted_form_data.documents
@@ -767,8 +765,8 @@ class ApplicationService:
     ) -> Application:
         """更新申請資料"""
 
-        # 取得申請
-        application = await self.get_application_by_id(application_id, current_user)
+        # 取得申請 (use internal method to get the model for modification)
+        application = await self._get_application_model(application_id, current_user)
         if not application:
             raise NotFoundError(f"Application {application_id} not found")
 
@@ -841,8 +839,8 @@ class ApplicationService:
             refresh_from_api: 是否重新從外部API獲取基本學生資料
         """
 
-        # 取得申請
-        application = await self.get_application_by_id(application_id, current_user)
+        # 取得申請 (use internal method to get the model for modification)
+        application = await self._get_application_model(application_id, current_user)
         if not application:
             raise NotFoundError(f"Application {application_id} not found")
 

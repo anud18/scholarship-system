@@ -103,6 +103,9 @@ class ApplicationDocument(Base):
     upload_instructions = Column(Text)  # 上傳說明
     upload_instructions_en = Column(Text)  # 英文上傳說明
 
+    # Example file
+    example_file_url = Column(String(500))  # 範例文件的 MinIO object name
+
     # Validation settings
     validation_rules = Column(JSON)  # 驗證規則 (OCR檢查、內容驗證等)
 

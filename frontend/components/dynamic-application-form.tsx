@@ -647,6 +647,32 @@ export function DynamicApplicationForm({
             {document.max_file_count}
           </p>
           {instructions && <p className="text-blue-600">{instructions}</p>}
+
+          {/* Example File Preview Button */}
+          {document.example_file_url && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                const token = localStorage.getItem("auth_token");
+                const previewUrl = `/api/v1/preview-document-example?documentId=${document.id}&token=${token}`;
+
+                // Create and trigger download/preview
+                const link = window.document.createElement('a');
+                link.href = previewUrl;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.click();
+              }}
+              className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium mt-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              {locale === "zh" ? "查看範例文件" : "View Example"}
+            </button>
+          )}
         </div>
       </div>
     );

@@ -603,7 +603,9 @@ class ScholarshipConfiguration(Base):
     amount = Column(Integer, nullable=False)  # 獎學金金額（整數）
     currency = Column(String(10), default="TWD")
 
-    whitelist_student_ids = Column(JSON, default={})  # 白名單學生ID列表，依子獎學金區分 {"general": [1, 2, 3]}
+    whitelist_student_ids = Column(
+        JSON, default={}
+    )  # 白名單學號列表，依子獎學金區分 {"general": ["0856001", "0856002"], "nstc": ["0856003"]}
 
     # 申請時間 (從 ScholarshipType 移至此處)
     # 續領申請期間（優先處理）
@@ -970,8 +972,16 @@ class ScholarshipConfiguration(Base):
 
         return None
 
-    def is_student_in_whitelist(self, student_id: int, sub_type: str = None) -> bool:
-        """Check if student is in whitelist for specific sub-scholarship type"""
+    def is_student_in_whitelist(self, nycu_id: str, sub_type: str = None) -> bool:
+        """Check if student is in whitelist for specific sub-scholarship type
+
+        Args:
+            nycu_id: 學號 (e.g., "0856001")
+            sub_type: 子獎學金類型 (e.g., "general", "nstc")
+
+        Returns:
+            bool: True if student is in whitelist or whitelist is disabled
+        """
         # 如果未啟用白名單，則不限制申請（返回True表示通過檢查）
         if not hasattr(self.scholarship_type, "whitelist_enabled") or not self.scholarship_type.whitelist_enabled:
             return True  # 未啟用白名單時，所有學生都可申請
@@ -983,27 +993,40 @@ class ScholarshipConfiguration(Base):
         # 如果未指定子類型，檢查是否在任何子類型的白名單中
         if sub_type is None:
             for sub_list in self.whitelist_student_ids.values():
-                if student_id in sub_list:
+                if nycu_id in sub_list:
                     return True
             return False
 
         # 檢查學生是否在特定子類型的白名單中
         sub_whitelist = self.whitelist_student_ids.get(sub_type, [])
-        return student_id in sub_whitelist
+        return nycu_id in sub_whitelist
 
-    def add_student_to_whitelist(self, student_id: int, sub_type: str) -> None:
-        """Add student to whitelist for specific sub-scholarship type"""
+    def add_student_to_whitelist(self, nycu_id: str, sub_type: str) -> None:
+        """Add student to whitelist for specific sub-scholarship type
+
+        Args:
+            nycu_id: 學號 (e.g., "0856001")
+            sub_type: 子獎學金類型 (e.g., "general", "nstc")
+        """
         if not self.whitelist_student_ids:
             self.whitelist_student_ids = {}
 
         if sub_type not in self.whitelist_student_ids:
             self.whitelist_student_ids[sub_type] = []
 
-        if student_id not in self.whitelist_student_ids[sub_type]:
-            self.whitelist_student_ids[sub_type].append(student_id)
+        if nycu_id not in self.whitelist_student_ids[sub_type]:
+            self.whitelist_student_ids[sub_type].append(nycu_id)
 
-    def remove_student_from_whitelist(self, student_id: int, sub_type: str = None) -> bool:
-        """Remove student from whitelist. If sub_type is None, remove from all sub-types"""
+    def remove_student_from_whitelist(self, nycu_id: str, sub_type: str = None) -> bool:
+        """Remove student from whitelist. If sub_type is None, remove from all sub-types
+
+        Args:
+            nycu_id: 學號 (e.g., "0856001")
+            sub_type: 子獎學金類型，None 表示從所有子類型移除
+
+        Returns:
+            bool: True if student was removed, False otherwise
+        """
         if not self.whitelist_student_ids:
             return False
 
@@ -1011,23 +1034,31 @@ class ScholarshipConfiguration(Base):
         if sub_type is None:
             # Remove from all sub-types
             for sub_list in self.whitelist_student_ids.values():
-                if student_id in sub_list:
-                    sub_list.remove(student_id)
+                if nycu_id in sub_list:
+                    sub_list.remove(nycu_id)
                     removed = True
         else:
             # Remove from specific sub-type
-            if sub_type in self.whitelist_student_ids and student_id in self.whitelist_student_ids[sub_type]:
-                self.whitelist_student_ids[sub_type].remove(student_id)
+            if sub_type in self.whitelist_student_ids and nycu_id in self.whitelist_student_ids[sub_type]:
+                self.whitelist_student_ids[sub_type].remove(nycu_id)
                 removed = True
 
         return removed
 
-    def get_whitelist_for_subtype(self, sub_type: str) -> List[int]:
-        """Get whitelist student IDs for specific sub-scholarship type"""
+    def get_whitelist_for_subtype(self, sub_type: str) -> List[str]:
+        """Get whitelist student nycu_ids for specific sub-scholarship type
+
+        Returns:
+            List[str]: List of nycu_ids (e.g., ["0856001", "0856002"])
+        """
         return self.whitelist_student_ids.get(sub_type, [])
 
-    def get_all_whitelisted_students(self) -> Dict[str, List[int]]:
-        """Get all whitelisted students organized by sub-type"""
+    def get_all_whitelisted_students(self) -> Dict[str, List[str]]:
+        """Get all whitelisted students organized by sub-type
+
+        Returns:
+            Dict[str, List[str]]: {"general": ["0856001"], "nstc": ["0856002"]}
+        """
         return dict(self.whitelist_student_ids) if self.whitelist_student_ids else {}
 
     def get_application_timeline(self) -> Dict[str, Dict[str, datetime]]:

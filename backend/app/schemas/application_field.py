@@ -95,6 +95,7 @@ class ApplicationDocumentBase(BaseModel):
     is_active: bool = Field(default=True, description="Is document active")
     upload_instructions: Optional[str] = Field(None, description="Upload instructions")
     upload_instructions_en: Optional[str] = Field(None, description="Upload instructions (English)")
+    example_file_url: Optional[str] = Field(None, description="Example file MinIO object name")
     validation_rules: Optional[Dict[str, Any]] = Field(None, description="Validation rules")
 
 
@@ -119,6 +120,7 @@ class ApplicationDocumentUpdate(BaseModel):
     is_active: Optional[bool] = None
     upload_instructions: Optional[str] = None
     upload_instructions_en: Optional[str] = None
+    example_file_url: Optional[str] = None
     validation_rules: Optional[Dict[str, Any]] = None
 
 

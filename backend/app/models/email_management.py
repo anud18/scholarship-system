@@ -6,6 +6,7 @@ import enum
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -207,3 +208,85 @@ class ScheduledEmail(Base):
     def cancel(self):
         """Cancel the scheduled email"""
         self.status = ScheduleStatus.cancelled
+
+
+class EmailTestModeAudit(Base):
+    """Email test mode audit log for tracking test mode state changes and email interceptions"""
+
+    __tablename__ = "email_test_mode_audit"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Event information
+    event_type = Column(String(50), nullable=False, index=True)
+    # Event types: 'enabled', 'disabled', 'expired', 'email_intercepted', 'config_updated'
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    # User who triggered the event
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    # Configuration snapshots (for state change events)
+    config_before = Column(JSONB, nullable=True)
+    config_after = Column(JSONB, nullable=True)
+
+    # Email interception details (for email_intercepted events)
+    original_recipient = Column(String(255), nullable=True)
+    actual_recipient = Column(String(255), nullable=True)
+    email_subject = Column(Text, nullable=True)
+    session_id = Column(String(100), nullable=True, index=True)
+
+    # Request metadata
+    ip_address = Column(INET, nullable=True)
+    user_agent = Column(Text, nullable=True)
+
+    # Relationships
+    user = relationship("User", backref="email_test_mode_audits")
+
+    def __repr__(self):
+        return f"<EmailTestModeAudit(id={self.id}, event_type={self.event_type}, timestamp={self.timestamp})>"
+
+    @classmethod
+    def log_enabled(cls, user_id: int, config_after: dict, ip_address: str = None, user_agent: str = None):
+        """Create audit log for test mode enabled event"""
+        return cls(
+            event_type="enabled",
+            user_id=user_id,
+            config_after=config_after,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    @classmethod
+    def log_disabled(cls, user_id: int, config_before: dict, ip_address: str = None, user_agent: str = None):
+        """Create audit log for test mode disabled event"""
+        return cls(
+            event_type="disabled",
+            user_id=user_id,
+            config_before=config_before,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+    @classmethod
+    def log_email_intercepted(
+        cls,
+        original_recipient: str,
+        actual_recipient: str,
+        email_subject: str,
+        session_id: str,
+        user_id: int = None,
+    ):
+        """Create audit log for email interception event"""
+        return cls(
+            event_type="email_intercepted",
+            user_id=user_id,
+            original_recipient=original_recipient,
+            actual_recipient=actual_recipient,
+            email_subject=email_subject,
+            session_id=session_id,
+        )
+
+    @classmethod
+    def log_expired(cls, config_before: dict):
+        """Create audit log for test mode auto-expiration event"""
+        return cls(event_type="expired", config_before=config_before)

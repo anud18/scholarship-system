@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import {
   Plus,
   Edit,
@@ -56,14 +57,18 @@ import apiClient, {
   ScholarshipConfiguration,
   ScholarshipConfigurationFormData,
 } from "@/lib/api";
+import { WhitelistManagementDialog } from "./whitelist-management-dialog";
+import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
 const api = apiClient;
 
 interface AdminConfigurationManagementProps {
   scholarshipTypes: ScholarshipType[];
+  onScholarshipTypeUpdate?: (id: number, updates: Partial<ScholarshipType>) => void;
 }
 
 export function AdminConfigurationManagement({
   scholarshipTypes,
+  onScholarshipTypeUpdate,
 }: AdminConfigurationManagementProps) {
   // State for configurations and UI
   const [configurations, setConfigurations] = useState<
@@ -93,6 +98,7 @@ export function AdminConfigurationManagement({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   const [showCodeTableDialog, setShowCodeTableDialog] = useState(false);
+  const [showWhitelistDialog, setShowWhitelistDialog] = useState(false);
   const [selectedConfig, setSelectedConfig] =
     useState<ScholarshipConfiguration | null>(null);
 
@@ -240,8 +246,17 @@ export function AdminConfigurationManagement({
   const handleCreateConfig = async () => {
     try {
       setFormLoading(true);
+
+      // 根據 quota_management_mode 自動推導 has_quota_limit 和 has_college_quota
+      const quotaMode = formData.quota_management_mode || "none";
+      const processedData = {
+        ...formData,
+        has_quota_limit: quotaMode !== "none",
+        has_college_quota: quotaMode === "college_based" || quotaMode === "matrix_based",
+      };
+
       const response = await api.admin.createScholarshipConfiguration(
-        formData as ScholarshipConfigurationFormData
+        processedData as ScholarshipConfigurationFormData
       );
       if (response.success) {
         setShowCreateDialog(false);
@@ -265,9 +280,18 @@ export function AdminConfigurationManagement({
 
     try {
       setFormLoading(true);
+
+      // 根據 quota_management_mode 自動推導 has_quota_limit 和 has_college_quota
+      const quotaMode = formData.quota_management_mode || "none";
+      const processedData = {
+        ...formData,
+        has_quota_limit: quotaMode !== "none",
+        has_college_quota: quotaMode === "college_based" || quotaMode === "matrix_based",
+      };
+
       const response = await api.admin.updateScholarshipConfiguration(
         selectedConfig.id,
-        formData
+        processedData
       );
       if (response.success) {
         setShowEditDialog(false);
@@ -345,6 +369,29 @@ export function AdminConfigurationManagement({
     }
   };
 
+  const handleToggleWhitelist = async (enabled: boolean) => {
+    if (!selectedScholarshipType) return;
+
+    try {
+      const response = await api.whitelist.toggleScholarshipWhitelist(
+        selectedScholarshipType.id,
+        enabled
+      );
+      if (response.success) {
+        // Update local state
+        setSelectedScholarshipType(prev =>
+          prev ? { ...prev, whitelist_enabled: enabled } : prev
+        );
+        // Update parent component's scholarshipTypes state
+        onScholarshipTypeUpdate?.(selectedScholarshipType.id, { whitelist_enabled: enabled });
+        showSuccessToast(`申請白名單已${enabled ? "啟用" : "停用"}`);
+      }
+    } catch (error: any) {
+      const errorMessage = error.message || "切換申請白名單狀態失敗";
+      showErrorToast("操作失敗: " + errorMessage);
+    }
+  };
+
   const handleCreateConfiguration = () => {
     if (!selectedScholarshipType) return;
     setFormData({
@@ -364,9 +411,23 @@ export function AdminConfigurationManagement({
     setShowCreateDialog(true);
   };
 
-  const openViewDialog = (config: ScholarshipConfiguration) => {
-    setSelectedConfig(config);
-    setShowViewDialog(true);
+  const openViewDialog = async (config: ScholarshipConfiguration) => {
+    try {
+      // Refetch the latest configuration to ensure quotas and other data are up-to-date
+      const response = await api.admin.getScholarshipConfiguration(config.id);
+      if (response.success && response.data) {
+        setSelectedConfig(response.data);
+        setShowViewDialog(true);
+      } else {
+        showErrorToast("無法載入配置詳情");
+      }
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.detail ||
+        "載入配置詳情失敗";
+      showErrorToast(errorMessage);
+    }
   };
 
   const openEditDialog = (config: ScholarshipConfiguration) => {
@@ -729,7 +790,15 @@ export function AdminConfigurationManagement({
 
       {/* View Configuration Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh]">
+        <DialogContent
+          className="max-w-3xl max-h-[90vh]"
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+              e.preventDefault();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>配置詳細資訊</DialogTitle>
             <DialogDescription>{selectedConfig?.config_name}</DialogDescription>
@@ -1149,14 +1218,8 @@ export function AdminConfigurationManagement({
                       配額管理模式：
                     </span>
                     <span className="ml-2 font-medium">
-                      {selectedConfig?.quota_management_mode === "none" &&
-                        "無配額管理"}
-                      {selectedConfig?.quota_management_mode === "simple" &&
-                        "簡單配額"}
-                      {selectedConfig?.quota_management_mode === "matrix" &&
-                        "矩陣配額"}
-                      {selectedConfig?.quota_management_mode ===
-                        "hierarchical" && "階層配額"}
+                      {selectedConfig?.quota_management_mode &&
+                        getQuotaManagementModeLabel(selectedConfig.quota_management_mode as QuotaManagementMode)}
                     </span>
                   </div>
                   <div>
@@ -1191,7 +1254,7 @@ export function AdminConfigurationManagement({
                   0 && (
                   <>
                     <div>
-                      <h3 className="text-sm font-medium mb-3">白名單設定</h3>
+                      <h3 className="text-sm font-medium mb-3">申請白名單設定</h3>
                       <div className="space-y-2">
                         {Object.entries(
                           selectedConfig.whitelist_student_ids
@@ -1275,7 +1338,15 @@ export function AdminConfigurationManagement({
 
       {/* Create Configuration Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh]">
+        <DialogContent
+          className="max-w-2xl max-h-[90vh]"
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+              e.preventDefault();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>新增獎學金配置</DialogTitle>
             <DialogDescription>
@@ -1436,64 +1507,31 @@ export function AdminConfigurationManagement({
               <div className="space-y-4">
                 <h4 className="font-medium">配額管理設定</h4>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="has_quota_limit"
-                      checked={formData.has_quota_limit || false}
-                      onChange={e =>
-                        setFormData(prev => ({
-                          ...prev,
-                          has_quota_limit: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4"
-                    />
-                    <Label htmlFor="has_quota_limit">啟用配額限制</Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="has_college_quota"
-                      checked={formData.has_college_quota || false}
-                      onChange={e =>
-                        setFormData(prev => ({
-                          ...prev,
-                          has_college_quota: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4"
-                    />
-                    <Label htmlFor="has_college_quota">啟用學院配額</Label>
-                  </div>
+                <div>
+                  <Label htmlFor="quota_management_mode">配額管理模式</Label>
+                  <Select
+                    value={formData.quota_management_mode || "none"}
+                    onValueChange={value =>
+                      setFormData(prev => ({
+                        ...prev,
+                        quota_management_mode: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="選擇配額管理模式" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">無配額管理</SelectItem>
+                      <SelectItem value="simple">簡單配額</SelectItem>
+                      <SelectItem value="college_based">學院配額</SelectItem>
+                      <SelectItem value="matrix_based">矩陣配額</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="quota_management_mode">配額管理模式</Label>
-                    <Select
-                      value={formData.quota_management_mode || "none"}
-                      onValueChange={value =>
-                        setFormData(prev => ({
-                          ...prev,
-                          quota_management_mode: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="選擇配額管理模式" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">無配額管理</SelectItem>
-                        <SelectItem value="simple">簡單配額</SelectItem>
-                        <SelectItem value="matrix">矩陣配額</SelectItem>
-                        <SelectItem value="hierarchical">階層配額</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
+                {/* 根據配額模式顯示相應欄位 */}
+                {formData.quota_management_mode === "simple" && (
                   <div>
                     <Label htmlFor="total_quota">總配額數量</Label>
                     <Input
@@ -1508,36 +1546,41 @@ export function AdminConfigurationManagement({
                         }))
                       }
                       placeholder="例：100"
-                      disabled={!formData.has_quota_limit}
                     />
                   </div>
-                </div>
+                )}
 
-                <div>
-                  <Label htmlFor="quotas">配額設定 (JSON 格式)</Label>
-                  <div className="mt-1 mb-2 text-sm text-muted-foreground">
-                    <p>
-                      矩陣格式範例：
-                      {`{"nstc": {"C": 5, "E": 4, "I": 3}, "moe_1w": {"M": 6, "S": 5, "O": 4}}`}
-                    </p>
-                    <p>簡單格式範例：{`{"nstc": 10, "moe_1w": 30}`}</p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowCodeTableDialog(true)}
-                      className="mt-1 text-blue-600 hover:text-blue-700"
-                    >
-                      <Info className="h-3 w-3 mr-1" />
-                      查看學院代碼表
-                    </Button>
-                  </div>
-                  <Textarea
-                    id="quotas"
-                    value={
-                      typeof formData.quotas === "object"
-                        ? JSON.stringify(formData.quotas, null, 2)
-                        : formData.quotas || ""
-                    }
+                {(formData.quota_management_mode === "college_based" ||
+                  formData.quota_management_mode === "matrix_based") && (
+                  <div>
+                    <Label htmlFor="quotas">配額設定 (JSON 格式)</Label>
+                    <div className="mt-1 mb-2 text-sm text-muted-foreground">
+                      {formData.quota_management_mode === "matrix_based" && (
+                        <p>
+                          矩陣格式範例：
+                          {`{"nstc": {"C": 5, "E": 4, "I": 3}, "moe_1w": {"M": 6, "S": 5, "O": 4}}`}
+                        </p>
+                      )}
+                      {formData.quota_management_mode === "college_based" && (
+                        <p>學院格式範例：{`{"C": 10, "E": 15, "I": 8}`}</p>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowCodeTableDialog(true)}
+                        className="mt-1 text-blue-600 hover:text-blue-700"
+                      >
+                        <Info className="h-3 w-3 mr-1" />
+                        查看學院代碼表
+                      </Button>
+                    </div>
+                    <Textarea
+                      id="quotas"
+                      value={
+                        typeof formData.quotas === "object"
+                          ? JSON.stringify(formData.quotas, null, 2)
+                          : formData.quotas || ""
+                      }
                     onChange={e => {
                       try {
                         const parsed = e.target.value
@@ -1554,15 +1597,42 @@ export function AdminConfigurationManagement({
                     }}
                     placeholder='{"sub_type": {"college": quota_number}}'
                     className="min-h-[100px] font-mono text-sm"
-                    disabled={
-                      !formData.has_quota_limit && !formData.has_college_quota
-                    }
                   />
+                </div>
+                )}
+
+                {/* 申請白名單功能控制 */}
+                <div className="space-y-3">
+                  <Label>申請白名單功能</Label>
+                  <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">申請白名單功能</span>
+                      <Badge variant={selectedScholarshipType?.whitelist_enabled ? "default" : "outline"} className="text-xs">
+                        {selectedScholarshipType?.whitelist_enabled ? "已啟用" : "未啟用"}
+                      </Badge>
+                    </div>
+                    <Switch
+                      checked={selectedScholarshipType?.whitelist_enabled || false}
+                      onCheckedChange={handleToggleWhitelist}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    啟用後，只有申請白名單中的學生才能申請此獎學金
+                  </p>
+                  {selectedScholarshipType?.whitelist_enabled && selectedConfig && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowWhitelistDialog(true)}
+                    >
+                      管理申請白名單學生
+                    </Button>
+                  )}
                 </div>
 
                 <div>
                   <Label htmlFor="whitelist_student_ids">
-                    白名單學生設定 (JSON 格式)
+                    申請白名單學生設定 (JSON 格式) - 進階選項
                   </Label>
                   <div className="mt-1 mb-2 text-sm text-muted-foreground">
                     <p>
@@ -1737,7 +1807,15 @@ export function AdminConfigurationManagement({
 
       {/* Edit Configuration Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh]">
+        <DialogContent
+          className="max-w-2xl max-h-[90vh]"
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+              e.preventDefault();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>編輯獎學金配置</DialogTitle>
             <DialogDescription>修改選定配置的設定</DialogDescription>
@@ -1845,66 +1923,33 @@ export function AdminConfigurationManagement({
               <div className="space-y-4">
                 <h4 className="font-medium">配額管理設定</h4>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="edit_has_quota_limit"
-                      checked={formData.has_quota_limit || false}
-                      onChange={e =>
-                        setFormData(prev => ({
-                          ...prev,
-                          has_quota_limit: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4"
-                    />
-                    <Label htmlFor="edit_has_quota_limit">啟用配額限制</Label>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="edit_has_college_quota"
-                      checked={formData.has_college_quota || false}
-                      onChange={e =>
-                        setFormData(prev => ({
-                          ...prev,
-                          has_college_quota: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4"
-                    />
-                    <Label htmlFor="edit_has_college_quota">啟用學院配額</Label>
-                  </div>
+                <div>
+                  <Label htmlFor="edit_quota_management_mode">
+                    配額管理模式
+                  </Label>
+                  <Select
+                    value={formData.quota_management_mode || "none"}
+                    onValueChange={value =>
+                      setFormData(prev => ({
+                        ...prev,
+                        quota_management_mode: value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="選擇配額管理模式" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">無配額管理</SelectItem>
+                      <SelectItem value="simple">簡單配額</SelectItem>
+                      <SelectItem value="college_based">學院配額</SelectItem>
+                      <SelectItem value="matrix_based">矩陣配額</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="edit_quota_management_mode">
-                      配額管理模式
-                    </Label>
-                    <Select
-                      value={formData.quota_management_mode || "none"}
-                      onValueChange={value =>
-                        setFormData(prev => ({
-                          ...prev,
-                          quota_management_mode: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="選擇配額管理模式" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">無配額管理</SelectItem>
-                        <SelectItem value="simple">簡單配額</SelectItem>
-                        <SelectItem value="matrix">矩陣配額</SelectItem>
-                        <SelectItem value="hierarchical">階層配額</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
+                {/* 根據配額模式顯示相應欄位 */}
+                {formData.quota_management_mode === "simple" && (
                   <div>
                     <Label htmlFor="edit_total_quota">總配額數量</Label>
                     <Input
@@ -1919,61 +1964,93 @@ export function AdminConfigurationManagement({
                         }))
                       }
                       placeholder="例：100"
-                      disabled={!formData.has_quota_limit}
                     />
                   </div>
-                </div>
+                )}
 
-                <div>
-                  <Label htmlFor="edit_quotas">配額設定 (JSON 格式)</Label>
-                  <div className="mt-1 mb-2 text-sm text-muted-foreground">
-                    <p>
-                      矩陣格式範例：
-                      {`{"nstc": {"C": 5, "E": 4, "I": 3}, "moe_1w": {"M": 6, "S": 5, "O": 4}}`}
-                    </p>
-                    <p>簡單格式範例：{`{"nstc": 10, "moe_1w": 30}`}</p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowCodeTableDialog(true)}
-                      className="mt-1 text-blue-600 hover:text-blue-700"
-                    >
-                      <Info className="h-3 w-3 mr-1" />
-                      查看學院代碼表
-                    </Button>
-                  </div>
-                  <Textarea
-                    id="edit_quotas"
-                    value={
-                      typeof formData.quotas === "object"
-                        ? JSON.stringify(formData.quotas, null, 2)
-                        : formData.quotas || ""
-                    }
-                    onChange={e => {
-                      try {
-                        const parsed = e.target.value
-                          ? JSON.parse(e.target.value)
-                          : {};
-                        setFormData(prev => ({ ...prev, quotas: parsed }));
-                      } catch {
-                        // 如果 JSON 無效，保持字串狀態讓使用者繼續編輯
-                        setFormData(prev => ({
-                          ...prev,
-                          quotas: e.target.value,
-                        }));
+                {(formData.quota_management_mode === "college_based" ||
+                  formData.quota_management_mode === "matrix_based") && (
+                  <div>
+                    <Label htmlFor="edit_quotas">配額設定 (JSON 格式)</Label>
+                    <div className="mt-1 mb-2 text-sm text-muted-foreground">
+                      {formData.quota_management_mode === "matrix_based" && (
+                        <p>
+                          矩陣格式範例：
+                          {`{"nstc": {"C": 5, "E": 4, "I": 3}, "moe_1w": {"M": 6, "S": 5, "O": 4}}`}
+                        </p>
+                      )}
+                      {formData.quota_management_mode === "college_based" && (
+                        <p>學院格式範例：{`{"C": 10, "E": 15, "I": 8}`}</p>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowCodeTableDialog(true)}
+                        className="mt-1 text-blue-600 hover:text-blue-700"
+                      >
+                        <Info className="h-3 w-3 mr-1" />
+                        查看學院代碼表
+                      </Button>
+                    </div>
+                    <Textarea
+                      id="edit_quotas"
+                      value={
+                        typeof formData.quotas === "object"
+                          ? JSON.stringify(formData.quotas, null, 2)
+                          : formData.quotas || ""
                       }
-                    }}
-                    placeholder='{"sub_type": {"college": quota_number}}'
-                    className="min-h-[100px] font-mono text-sm"
-                    disabled={
-                      !formData.has_quota_limit && !formData.has_college_quota
-                    }
-                  />
+                      onChange={e => {
+                        try {
+                          const parsed = e.target.value
+                            ? JSON.parse(e.target.value)
+                            : {};
+                          setFormData(prev => ({ ...prev, quotas: parsed }));
+                        } catch {
+                          // 如果 JSON 無效，保持字串狀態讓使用者繼續編輯
+                          setFormData(prev => ({
+                            ...prev,
+                            quotas: e.target.value,
+                          }));
+                        }
+                      }}
+                      placeholder='{"sub_type": {"college": quota_number}}'
+                      className="min-h-[100px] font-mono text-sm"
+                    />
+                  </div>
+                )}
+
+                {/* 申請白名單功能控制 */}
+                <div className="space-y-3">
+                  <Label>申請白名單功能</Label>
+                  <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">申請白名單功能</span>
+                      <Badge variant={selectedScholarshipType?.whitelist_enabled ? "default" : "outline"} className="text-xs">
+                        {selectedScholarshipType?.whitelist_enabled ? "已啟用" : "未啟用"}
+                      </Badge>
+                    </div>
+                    <Switch
+                      checked={selectedScholarshipType?.whitelist_enabled || false}
+                      onCheckedChange={handleToggleWhitelist}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    啟用後，只有申請白名單中的學生才能申請此獎學金
+                  </p>
+                  {selectedScholarshipType?.whitelist_enabled && selectedConfig && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowWhitelistDialog(true)}
+                    >
+                      管理申請白名單學生
+                    </Button>
+                  )}
                 </div>
 
                 <div>
                   <Label htmlFor="edit_whitelist_student_ids">
-                    白名單學生設定 (JSON 格式)
+                    申請白名單學生設定 (JSON 格式) - 進階選項
                   </Label>
                   <div className="mt-1 mb-2 text-sm text-muted-foreground">
                     <p>
@@ -2391,7 +2468,14 @@ export function AdminConfigurationManagement({
 
       {/* Duplicate Configuration Dialog */}
       <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
-        <DialogContent>
+        <DialogContent
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+              e.preventDefault();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>複製獎學金配置</DialogTitle>
             <DialogDescription>複製現有配置到新的學年度/學期</DialogDescription>
@@ -2515,7 +2599,15 @@ export function AdminConfigurationManagement({
 
       {/* Academy Code Lookup Table Dialog */}
       <Dialog open={showCodeTableDialog} onOpenChange={setShowCodeTableDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent
+          className="max-w-2xl"
+          onInteractOutside={(e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+              e.preventDefault();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>學院代碼對照表</DialogTitle>
             <DialogDescription>
@@ -2565,6 +2657,20 @@ export function AdminConfigurationManagement({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Whitelist Management Dialog */}
+      {selectedConfig && selectedScholarshipType && (
+        <WhitelistManagementDialog
+          isOpen={showWhitelistDialog}
+          onClose={() => setShowWhitelistDialog(false)}
+          configuration={selectedConfig}
+          subTypes={
+            selectedScholarshipType.sub_type_list?.length > 0
+              ? selectedScholarshipType.sub_type_list
+              : ["general"]
+          }
+        />
+      )}
 
       {/* Toast Notification */}
       {toast && (

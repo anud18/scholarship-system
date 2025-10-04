@@ -59,7 +59,22 @@ def build_config(**overrides):
         "semester": None,
     }
     base.update(overrides)
-    return SimpleNamespace(**base)
+    return ConfigNamespace(**base)
+
+
+class ConfigNamespace(SimpleNamespace):
+    """Test helper namespace that provides whitelist helper method"""
+
+    def is_student_in_whitelist(self, nycu_id: str) -> bool:
+        if not nycu_id:
+            return False
+        if isinstance(self.whitelist_student_ids, dict):
+            return self.whitelist_student_ids.get(nycu_id, False)
+        if isinstance(self.whitelist_student_ids, set):
+            return nycu_id in self.whitelist_student_ids
+        if isinstance(self.whitelist_student_ids, list):
+            return nycu_id in self.whitelist_student_ids
+        return False
 
 
 def build_rule(**overrides):

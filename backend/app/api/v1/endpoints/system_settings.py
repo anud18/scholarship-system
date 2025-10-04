@@ -304,11 +304,53 @@ async def get_configuration_audit_logs(
     """
     獲取配置變更審計日誌
     """
-    config_service = ConfigurationService(db)
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.models.system_setting import ConfigurationAuditLog
 
     try:
-        audit_logs = await config_service.get_audit_logs(config_key, limit)
-        return audit_logs
+        # 查詢並加載用戶關聯
+        stmt = (
+            select(ConfigurationAuditLog)
+            .options(selectinload(ConfigurationAuditLog.changed_by_user))
+            .where(ConfigurationAuditLog.setting_key == config_key)
+            .order_by(ConfigurationAuditLog.changed_at.desc())
+            .limit(limit)
+        )
+
+        result = await db.execute(stmt)
+        audit_logs = result.scalars().all()
+
+        # 轉換為字典格式
+        audit_data = []
+        for log in audit_logs:
+            user_name = None
+            if log.changed_by_user:
+                user_name = log.changed_by_user.name or log.changed_by_user.nycu_id
+
+            audit_data.append(
+                {
+                    "id": log.id,
+                    "setting_key": log.setting_key,
+                    "action": log.action,
+                    "old_value": log.old_value,
+                    "new_value": log.new_value,
+                    "changed_by": log.changed_by,
+                    "user_name": user_name,
+                    "change_reason": log.change_reason,
+                    "changed_at": log.changed_at.isoformat() if log.changed_at else None,
+                }
+            )
+
+        # 返回標準 ApiResponse 格式
+        return {
+            "success": True,
+            "message": f"Retrieved {len(audit_data)} audit log entries",
+            "data": audit_data,
+            "errors": None,
+            "trace_id": None,
+        }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve audit logs: {str(e)}"

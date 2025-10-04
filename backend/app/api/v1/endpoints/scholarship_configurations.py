@@ -5,12 +5,13 @@ Clean, database-driven approach for dynamic scholarship configuration management
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import and_
 from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.security import require_admin, require_staff
@@ -22,6 +23,14 @@ from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import AdminScholarship, User
 from app.schemas.response import ApiResponse
+from app.schemas.scholarship_configuration import (
+    WhitelistBatchAddRequest,
+    WhitelistBatchRemoveRequest,
+    WhitelistImportResult,
+    WhitelistResponse,
+    WhitelistStudentInfo,
+)
+from app.services.whitelist_excel_service import whitelist_excel_service
 
 router = APIRouter()
 
@@ -839,6 +848,11 @@ async def get_scholarship_configuration(
             "amount": config.amount,
             "currency": config.currency,
             "whitelist_student_ids": config.whitelist_student_ids,
+            "has_quota_limit": config.has_quota_limit,
+            "has_college_quota": config.has_college_quota,
+            "quota_management_mode": config.quota_management_mode.value if config.quota_management_mode else "none",
+            "total_quota": config.total_quota,
+            "quotas": config.quotas,
             "renewal_application_start_date": config.renewal_application_start_date.isoformat()
             if config.renewal_application_start_date
             else None,
@@ -976,6 +990,33 @@ async def update_scholarship_configuration(
             config.effective_end_date = parse_date_field(config_data["effective_end_date"])
         if "version" in config_data:
             config.version = config_data["version"]
+
+        # Update quota management settings
+        if "quota_management_mode" in config_data:
+            from app.models.enums import QuotaManagementMode
+
+            mode_value = config_data["quota_management_mode"]
+            if mode_value:
+                # Find the enum by its value
+                mode_enum = None
+                for mode in QuotaManagementMode:
+                    if mode.value == mode_value:
+                        mode_enum = mode
+                        break
+                if mode_enum:
+                    config.quota_management_mode = mode_enum
+            else:
+                config.quota_management_mode = QuotaManagementMode.none
+
+        if "has_quota_limit" in config_data:
+            config.has_quota_limit = config_data["has_quota_limit"]
+        if "has_college_quota" in config_data:
+            config.has_college_quota = config_data["has_college_quota"]
+        if "total_quota" in config_data:
+            config.total_quota = config_data["total_quota"]
+        if "quotas" in config_data:
+            config.quotas = config_data["quotas"]
+            flag_modified(config, "quotas")
 
         config.updated_by = current_user.id
 
@@ -1209,6 +1250,11 @@ async def list_scholarship_configurations(
                 "amount": config.amount,
                 "currency": config.currency,
                 "whitelist_student_ids": config.whitelist_student_ids,
+                "has_quota_limit": config.has_quota_limit,
+                "has_college_quota": config.has_college_quota,
+                "quota_management_mode": config.quota_management_mode.value if config.quota_management_mode else "none",
+                "total_quota": config.total_quota,
+                "quotas": config.quotas,
                 "is_active": config.is_active,
                 "renewal_application_start_date": config.renewal_application_start_date.isoformat()
                 if config.renewal_application_start_date
@@ -1269,3 +1315,336 @@ async def list_scholarship_configurations(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list configurations: {str(e)}",
         )
+
+
+# Whitelist Management Endpoints
+
+
+@router.get("/{config_id}/whitelist", response_model=ApiResponse[List[WhitelistResponse]])
+async def get_configuration_whitelist(
+    config_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get whitelist for a specific scholarship configuration
+
+    Returns whitelist organized by sub-scholarship type with student details
+    """
+    # Get configuration
+    stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == config_id)
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+
+    # Get all whitelisted students organized by sub_type
+    whitelist_data = config.get_all_whitelisted_students()  # Returns Dict[str, List[str]] - nycu_ids
+
+    response_list = []
+    for sub_type, nycu_ids in whitelist_data.items():
+        if not nycu_ids:
+            response_list.append(WhitelistResponse(sub_type=sub_type, students=[], total=0))
+            continue
+
+        # Fetch user details for these nycu_ids
+        stmt = select(User).where(User.nycu_id.in_(nycu_ids))
+        result = await db.execute(stmt)
+        users = result.scalars().all()
+
+        # Create user lookup dictionary
+        user_dict = {user.nycu_id: user for user in users}
+
+        # Build student info list - 包含所有申請白名單學號（包括未註冊的）
+        students = []
+        for nycu_id in nycu_ids:
+            user = user_dict.get(nycu_id)
+            students.append(
+                WhitelistStudentInfo(
+                    student_id=user.id if user else None,
+                    nycu_id=nycu_id,
+                    name=user.name if user else None,
+                    sub_type=sub_type,
+                    note=None,
+                    is_registered=user is not None,
+                )
+            )
+
+        response_list.append(WhitelistResponse(sub_type=sub_type, students=students, total=len(students)))
+
+    return ApiResponse(success=True, message="成功取得白名單", data=response_list)
+
+
+@router.post("/{config_id}/whitelist/batch", response_model=ApiResponse[dict])
+async def batch_add_whitelist(
+    config_id: int,
+    request: WhitelistBatchAddRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Batch add students to whitelist
+
+    Request format:
+    {
+        "students": [
+            {"nycu_id": "0856001", "sub_type": "nstc"},
+            {"nycu_id": "0856002", "sub_type": "moe_1w"}
+        ]
+    }
+    """
+    # Get configuration with scholarship_type eagerly loaded
+    stmt = (
+        select(ScholarshipConfiguration)
+        .options(joinedload(ScholarshipConfiguration.scholarship_type))
+        .where(ScholarshipConfiguration.id == config_id)
+    )
+    result = await db.execute(stmt)
+    config = result.unique().scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+
+    added_count = 0
+    errors = []
+
+    for student_data in request.students:
+        nycu_id = student_data["nycu_id"]
+        sub_type = student_data["sub_type"]
+
+        # Validate sub_type exists in scholarship_type's sub_type_list
+        if config.scholarship_type.sub_type_list and sub_type not in config.scholarship_type.sub_type_list:
+            errors.append(f"學號 {nycu_id}: 子獎學金類型 {sub_type} 無效")
+            continue
+
+        # Add to whitelist using nycu_id (允許添加未註冊的學生)
+        config.add_student_to_whitelist(nycu_id, sub_type)
+        added_count += 1
+
+    # Mark the field as modified for JSON update
+    flag_modified(config, "whitelist_student_ids")
+    config.updated_by = current_user.id
+
+    await db.commit()
+
+    return ApiResponse(
+        success=True,
+        message=f"成功新增 {added_count} 位學生到白名單",
+        data={"added_count": added_count, "errors": errors},
+    )
+
+
+@router.delete("/{config_id}/whitelist/batch", response_model=ApiResponse[dict])
+async def batch_remove_whitelist(
+    config_id: int,
+    request: WhitelistBatchRemoveRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Batch remove students from whitelist
+
+    Request format:
+    {
+        "nycu_ids": ["0856001", "0856002"],
+        "sub_type": "nstc"  // Optional, if null removes from all sub-types
+    }
+    """
+    # Get configuration
+    stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == config_id)
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+
+    removed_count = 0
+
+    for nycu_id in request.nycu_ids:
+        removed = config.remove_student_from_whitelist(nycu_id, request.sub_type)
+        if removed:
+            removed_count += 1
+
+    # Mark the field as modified for JSON update
+    flag_modified(config, "whitelist_student_ids")
+    config.updated_by = current_user.id
+
+    await db.commit()
+
+    return ApiResponse(
+        success=True,
+        message=f"成功移除 {removed_count} 位學生",
+        data={"removed_count": removed_count},
+    )
+
+
+@router.post("/{config_id}/whitelist/import", response_model=ApiResponse[WhitelistImportResult])
+async def import_whitelist_excel(
+    config_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Import whitelist from Excel file
+
+    Expected Excel format:
+    | 學號 | 姓名 | 子獎學金類型 | 備註 |
+    """
+    # Validate file type
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="只支援 Excel 檔案格式 (.xlsx, .xls)")
+
+    # Get configuration
+    stmt = (
+        select(ScholarshipConfiguration)
+        .options(selectinload(ScholarshipConfiguration.scholarship_type))
+        .where(ScholarshipConfiguration.id == config_id)
+    )
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+
+    # Get valid sub_types
+    valid_sub_types = config.scholarship_type.sub_type_list or ["general"]
+
+    # Read and parse Excel
+    file_content = await file.read()
+    success_data, parse_errors = whitelist_excel_service.parse_import_excel(file_content, valid_sub_types)
+
+    # Process successful data
+    added_count = 0
+    import_errors = []
+
+    for student_data in success_data:
+        nycu_id = student_data["nycu_id"]
+        sub_type = student_data["sub_type"]
+
+        # Validate sub_type exists in scholarship_type's sub_type_list
+        if config.scholarship_type.sub_type_list and sub_type not in config.scholarship_type.sub_type_list:
+            import_errors.append({"row": "", "nycu_id": nycu_id, "error": f"子獎學金類型 {sub_type} 無效"})
+            continue
+
+        # Add to whitelist using nycu_id (允許添加未註冊的學生)
+        config.add_student_to_whitelist(nycu_id, sub_type)
+        added_count += 1
+
+    # Combine all errors
+    all_errors = parse_errors + import_errors
+
+    # Mark the field as modified for JSON update
+    if added_count > 0:
+        flag_modified(config, "whitelist_student_ids")
+        config.updated_by = current_user.id
+        await db.commit()
+
+    return ApiResponse(
+        success=True,
+        message=f"匯入完成：成功 {added_count} 筆，失敗 {len(all_errors)} 筆",
+        data=WhitelistImportResult(
+            success_count=added_count, error_count=len(all_errors), errors=all_errors, warnings=[]
+        ),
+    )
+
+
+@router.get("/{config_id}/whitelist/export")
+async def export_whitelist_excel(
+    config_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Export whitelist to Excel file
+    """
+    # Get configuration
+    stmt = (
+        select(ScholarshipConfiguration)
+        .options(selectinload(ScholarshipConfiguration.scholarship_type))
+        .where(ScholarshipConfiguration.id == config_id)
+    )
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+
+    # Get all whitelisted students with details
+    whitelist_data = config.get_all_whitelisted_students()  # Dict[str, List[str]]
+
+    # Fetch user details and organize data
+    export_data = {}
+    for sub_type, nycu_ids in whitelist_data.items():
+        if not nycu_ids:
+            export_data[sub_type] = []
+            continue
+
+        # Fetch registered users
+        stmt = select(User).where(User.nycu_id.in_(nycu_ids))
+        result = await db.execute(stmt)
+        users = result.scalars().all()
+        user_dict = {user.nycu_id: user for user in users}
+
+        # Include ALL nycu_ids (including unregistered students)
+        export_data[sub_type] = [
+            {
+                "nycu_id": nycu_id,
+                "name": user_dict[nycu_id].name if nycu_id in user_dict else "未註冊",
+                "note": "",
+            }
+            for nycu_id in nycu_ids
+        ]
+
+    # Generate Excel
+    scholarship_name = config.scholarship_type.name
+    excel_file = whitelist_excel_service.export_whitelist(export_data, scholarship_name)
+
+    # Return as downloadable file
+    filename = (
+        f"{scholarship_name}_申請白名單_{config.academic_year}_{config.semester.value if config.semester else 'annual'}.xlsx"
+    )
+
+    return StreamingResponse(
+        excel_file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )
+
+
+@router.get("/{config_id}/whitelist/template")
+async def download_whitelist_template(
+    config_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Download whitelist import template Excel file
+    """
+    # Get configuration
+    stmt = (
+        select(ScholarshipConfiguration)
+        .options(selectinload(ScholarshipConfiguration.scholarship_type))
+        .where(ScholarshipConfiguration.id == config_id)
+    )
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+
+    # Get valid sub_types
+    valid_sub_types = config.scholarship_type.sub_type_list or ["general"]
+
+    # Generate template
+    template_file = whitelist_excel_service.generate_template(valid_sub_types)
+
+    # Return as downloadable file
+    filename = f"白名單匯入模板_{config.scholarship_type.name}.xlsx"
+
+    return StreamingResponse(
+        template_file,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+    )

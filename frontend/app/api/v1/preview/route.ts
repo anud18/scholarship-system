@@ -103,6 +103,8 @@ export async function GET(request: NextRequest) {
       headers: {
         "Content-Type": finalContentType,
         "Content-Disposition": contentDisposition,
+        "Content-Length": fileBuffer.byteLength.toString(),
+        "Accept-Ranges": "bytes",
         "Cache-Control": "private, max-age=3600", // 1小時緩存
       },
     });

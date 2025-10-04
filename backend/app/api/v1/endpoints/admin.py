@@ -2274,6 +2274,8 @@ async def get_my_scholarships(current_user: User = Depends(require_admin), db: A
                 "category": scholarship.category,  # category is already a string, not an enum
                 "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else None,
                 "status": scholarship.status,  # status is also a string, not an enum in this model
+                "whitelist_enabled": scholarship.whitelist_enabled,  # 申請白名單開關狀態
+                "sub_type_list": scholarship.sub_type_list or [],  # 子獎學金類型列表
             }
         )
 

@@ -2434,7 +2434,7 @@ async def get_student_term_info(
             )
 
         # Validate request parameters
-        validation_error = validate_request_params(request.account, request.action, "qrySoaaScholarshipStudentTerm")
+        validation_error = validate_request_params(request.account, request.action, "qrySoaaScholarshipStudent")
         if validation_error:
             return JSONResponse(status_code=400, content=validation_error)
 
@@ -2521,7 +2521,7 @@ async def get_student_term_info_alias(
             )
 
         # Accept multiple action formats
-        if request.action not in ["qrySoaaScholarshipStudentTerm", "QrySchlStudentTerm"]:
+        if request.action not in ["qrySoaaScholarshipStudent", "QrySchlStudentTerm"]:
             return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid action", "data": []})
 
         if request.account != "scholarship":

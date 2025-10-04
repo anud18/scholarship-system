@@ -80,12 +80,12 @@ class SystemSettingResponse(BaseModel):
     data_type: ConfigDataType
     description: Optional[str]
     is_sensitive: bool
+    is_readonly: bool
     validation_regex: Optional[str]
-    is_active: bool
+    default_value: Optional[str]
+    last_modified_by: Optional[int]
     created_at: datetime
     updated_at: Optional[datetime]
-    created_by: Optional[int]
-    updated_by: Optional[int]
 
     class Config:
         orm_mode = True

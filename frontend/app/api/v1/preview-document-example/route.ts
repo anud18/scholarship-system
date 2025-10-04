@@ -3,24 +3,25 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const scholarshipType = searchParams.get("scholarshipType");
+    const documentId = searchParams.get("documentId");
 
-    // Get token from Authorization header or cookie (for iframe/img requests)
+    // Get token from query params, Authorization header, or cookie
+    const queryToken = searchParams.get("token");
     const authHeader = request.headers.get("authorization");
-    const cookieToken = request.cookies.get("access_token")?.value;
-    const token = authHeader?.replace("Bearer ", "") || cookieToken;
+    const cookieToken = request.cookies.get("access_token")?.value || request.cookies.get("auth_token")?.value;
+    const token = queryToken || authHeader?.replace("Bearer ", "") || cookieToken;
 
-    if (!scholarshipType) {
+    if (!documentId) {
       return NextResponse.json(
-        { error: "Scholarship type is required" },
+        { error: "Document ID is required" },
         { status: 400 }
       );
     }
 
-    // Validate scholarshipType to prevent SSRF attacks
-    if (!scholarshipType.match(/^[a-zA-Z0-9_-]+$/)) {
+    // Validate documentId to prevent injection attacks
+    if (!documentId.match(/^\d+$/)) {
       return NextResponse.json(
-        { error: "Invalid scholarship type format" },
+        { error: "Invalid document ID format" },
         { status: 400 }
       );
     }
@@ -64,10 +65,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Construct URL with validated components only
-    const backendUrl = new URL(`/api/v1/scholarships/${scholarshipType}/terms`, baseUrl).toString();
+    const backendUrl = new URL(`/api/v1/application-fields/documents/${documentId}/example`, baseUrl).toString();
 
-    console.log("Terms preview API called:", {
-      scholarshipType,
+    console.log("Document example preview API called:", {
+      documentId,
       backendUrl,
     });
 
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
         response.statusText
       );
       return NextResponse.json(
-        { error: "Failed to fetch terms document" },
+        { error: "Failed to fetch document example" },
         { status: response.status }
       );
     }
@@ -111,9 +112,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Terms preview error:", error);
+    console.error("Document example preview error:", error);
     return NextResponse.json(
-      { error: "Failed to preview terms document" },
+      { error: "Failed to preview document example" },
       { status: 500 }
     );
   }

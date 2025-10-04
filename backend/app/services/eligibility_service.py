@@ -95,16 +95,10 @@ class EligibilityService:
 
         # Check whitelist if enabled (unless bypassed in dev mode)
         if config.scholarship_type.whitelist_enabled and not self._should_bypass_whitelist():
-            student_id = student_data.get("std_stdcode", "")
-            whitelist_ids = config.whitelist_student_ids or {}
-
-            # Check if student is in whitelist
-            if isinstance(whitelist_ids, dict):
-                if student_id not in whitelist_ids:
-                    reasons.append("未在白名單中")
-            elif isinstance(whitelist_ids, list):
-                if student_id not in whitelist_ids:
-                    reasons.append("未在白名單中")
+            nycu_id = student_data.get("std_stdcode", "")
+            # Use config's is_student_in_whitelist method which handles sub_type logic
+            if not config.is_student_in_whitelist(nycu_id):
+                reasons.append("未在白名單中")
 
         # Category eligibility is now handled by scholarship rules
         # No hardcoded category checking needed
@@ -187,16 +181,10 @@ class EligibilityService:
 
         # Check whitelist if enabled (unless bypassed in dev mode)
         if config.scholarship_type.whitelist_enabled and not self._should_bypass_whitelist():
-            student_id = student_data.get("std_stdcode", "")
-            whitelist_ids = config.whitelist_student_ids or {}
-
-            # Check if student is in whitelist
-            if isinstance(whitelist_ids, dict):
-                if student_id not in whitelist_ids:
-                    reasons.append("未在白名單中")
-            elif isinstance(whitelist_ids, list):
-                if student_id not in whitelist_ids:
-                    reasons.append("未在白名單中")
+            nycu_id = student_data.get("std_stdcode", "")
+            # Use config's is_student_in_whitelist method which handles sub_type logic
+            if not config.is_student_in_whitelist(nycu_id):
+                reasons.append("未在白名單中")
 
         # Check scholarship rules with detailed breakdown
         (
@@ -272,11 +260,12 @@ class EligibilityService:
 
                 # For subtype rules, both hard rules and critical soft rules should prevent eligibility
                 # Warning rules don't count as critical rules
+                # None (data unavailable) is treated similar to failed for hard rules
                 if not rule.is_warning:
-                    if not rule_passed:
+                    if rule_passed is False or (rule_passed is None and rule.is_hard_rule):
                         subtype_eligibility[rule.sub_type] = False
 
-            if not rule_passed:
+            if rule_passed is False:
                 if rule.is_hard_rule:
                     # Hard rules are mandatory - prevent showing scholarship
                     message = rule.message or f"不符合規則: {rule.rule_name}"
@@ -287,6 +276,13 @@ class EligibilityService:
                 else:
                     # Soft rules don't prevent eligibility - allow display but prevent application
                     pass  # Don't add to failure_reasons, allow scholarship to be shown
+            elif rule_passed is None:
+                # Cannot verify due to data unavailability
+                if rule.is_hard_rule:
+                    # Hard rules that cannot be verified prevent eligibility
+                    error_message = student_data.get("_term_error_message", "學期資料暫時無法取得")
+                    failure_reasons.append(f"系統提示：{error_message}，無法驗證 {rule.rule_name}")
+                logger.info(f"Rule '{rule.rule_name}' cannot be verified in _check_scholarship_rules")
 
         # Check if scholarship has subtypes and if student is eligible for at least one
         # For subtypes: even soft rule failures should prevent subtype eligibility
@@ -371,20 +367,34 @@ class EligibilityService:
 
                 # For subtype rules, both hard rules and critical soft rules should prevent eligibility
                 # Warning rules don't count as critical rules
+                # None (data unavailable) is treated similar to failed for hard rules
                 if not rule.is_warning:
-                    if not rule_passed:
+                    if rule_passed is False or (rule_passed is None and rule.is_hard_rule):
                         subtype_eligibility[rule.sub_type] = False
                         subtype_critical_rules[rule.sub_type].append(rule.rule_name)
 
-            if rule_passed:
+            if rule_passed is True:
                 # Rule passed - add to passed list
                 details["passed"].append(rule_detail)
-            else:
+            elif rule_passed is None:
+                # Cannot verify due to data unavailability
+                error_message = student_data.get("_term_error_message", "學期資料暫時無法取得")
+                rule_detail_with_status = {
+                    **rule_detail,
+                    "status": "data_unavailable",
+                    "system_message": error_message,
+                }
+                details["errors"].append(rule_detail_with_status)
+                if rule.is_hard_rule:
+                    # Hard rules that cannot be verified prevent eligibility
+                    failure_reasons.append(f"系統提示：{error_message}，無法驗證 {rule.rule_name}")
+                logger.info(f"Rule '{rule.rule_name}' cannot be verified: {error_message}")
+            else:  # rule_passed is False
                 if rule.is_hard_rule:
                     # Hard rules are mandatory - hide scholarship completely
                     message = rule.message or f"不符合規則: {rule.rule_name}"
                     failure_reasons.append(message)
-                    details["errors"].append(rule_detail)
+                    details["errors"].append({**rule_detail, "status": "validation_failed"})
                 elif rule.is_warning:
                     # Warning rules don't prevent eligibility but are shown as warnings
                     details["warnings"].append(rule_detail)
@@ -392,7 +402,7 @@ class EligibilityService:
                 else:
                     # Soft rules - show scholarship card with error tags so students can see why they failed
                     # Don't add to failure_reasons - allow scholarship to be shown with errors
-                    details["errors"].append(rule_detail)
+                    details["errors"].append({**rule_detail, "status": "validation_failed"})
 
         # Check if scholarship has subtypes and if student is eligible for at least one
         # For subtypes: even soft rule failures should prevent subtype eligibility
@@ -553,12 +563,30 @@ class EligibilityService:
             "application_id": existing_application.id,
         }
 
-    def _evaluate_rule(self, student_data: Dict[str, Any], rule: ScholarshipRule) -> bool:
-        """Evaluate a single rule against student data"""
+    def _evaluate_rule(self, student_data: Dict[str, Any], rule: ScholarshipRule) -> Optional[bool]:
+        """Evaluate a single rule against student data
+
+        Returns:
+            True: Rule passed
+            False: Rule failed
+            None: Cannot verify (data unavailable)
+        """
+
+        # Check if term data is required but unavailable
+        if rule.rule_type == "student_term":
+            term_status = student_data.get("_term_data_status")
+            if term_status in ["not_found", "api_error", "missing_student_code"]:
+                logger.info(f"Cannot verify term rule '{rule.rule_name}': {term_status}")
+                return None  # Cannot verify due to data unavailability
 
         # Get the value from student data
         field_value = self._get_nested_field_value(student_data, rule.condition_field)
         expected_value = rule.expected_value
+
+        # Check if field value is missing and this is a term-related rule
+        if (field_value == "" or field_value is None) and rule.rule_type == "student_term":
+            logger.info(f"Term rule '{rule.rule_name}' field '{rule.condition_field}' is missing in data")
+            return None  # Data missing, cannot verify
 
         # Handle different operators
         try:

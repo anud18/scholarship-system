@@ -5,7 +5,7 @@ Roster Scheduler Service
 
 import logging
 from contextlib import asynccontextmanager
-from datetime import timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED
@@ -13,10 +13,12 @@ from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.jobstores.redis import RedisJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from croniter import croniter
+from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.session import get_db_session
 from app.models.payment_roster import RosterCycle, RosterTriggerType
+from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
 from app.services.roster_service import RosterService
 
 logger = logging.getLogger(__name__)
@@ -82,14 +84,15 @@ class RosterSchedulerService:
         """載入啟用中的排程"""
         try:
             async with get_db_session() as db:
-                # 查詢所有啟用中的排程
-                active_schedules = await db.execute("SELECT * FROM roster_schedules WHERE status = 'active'")
-                schedules = active_schedules.fetchall()
+                result = await db.execute(
+                    select(RosterSchedule).where(RosterSchedule.status == RosterScheduleStatus.ACTIVE)
+                )
+                schedules = result.scalars().all()
 
-                for schedule_row in schedules:
-                    await self._add_schedule_job(schedule_row)
+                for schedule in schedules:
+                    await self._add_schedule_job(schedule.to_dict())
 
-                logger.info(f"Loaded {len(schedules)} active schedules")
+                logger.info("Loaded %s active schedules", len(schedules))
 
         except Exception as e:
             logger.error(f"Failed to load active schedules: {e}")
@@ -185,50 +188,38 @@ class RosterSchedulerService:
 
     async def _update_schedule_execution_start(self, db, schedule_id: int):
         """更新排程開始執行"""
-        await db.execute(
-            """
-            UPDATE roster_schedules
-            SET last_run_at = NOW(),
-                next_run_at = NULL
-            WHERE id = %s
-            """,
-            (schedule_id,),
-        )
+        schedule = await db.get(RosterSchedule, schedule_id)
+        if not schedule:
+            logger.warning("Schedule %s not found when marking execution start", schedule_id)
+            return
+
+        schedule.last_run_at = datetime.now(timezone.utc)
+        schedule.next_run_at = None
         await db.commit()
 
     async def _update_schedule_execution_result(
         self, db, schedule_id: int, success: bool, error_message: Optional[str]
     ):
         """更新排程執行結果"""
+        schedule = await db.get(RosterSchedule, schedule_id)
+        if not schedule:
+            logger.warning("Schedule %s not found when updating execution result", schedule_id)
+            return
+
+        schedule.total_runs = (schedule.total_runs or 0) + 1
+
         if success:
-            await db.execute(
-                """
-                UPDATE roster_schedules
-                SET successful_runs = COALESCE(successful_runs, 0) + 1,
-                    total_runs = COALESCE(total_runs, 0) + 1,
-                    last_run_result = 'success',
-                    last_error_message = NULL,
-                    status = CASE
-                        WHEN status = 'error' THEN 'active'::rosterschedulestatus
-                        ELSE status
-                    END
-                WHERE id = %s
-                """,
-                (schedule_id,),
-            )
+            schedule.successful_runs = (schedule.successful_runs or 0) + 1
+            schedule.last_run_result = "success"
+            schedule.last_error_message = None
+            if schedule.status == RosterScheduleStatus.ERROR:
+                schedule.status = RosterScheduleStatus.ACTIVE
         else:
-            await db.execute(
-                """
-                UPDATE roster_schedules
-                SET failed_runs = COALESCE(failed_runs, 0) + 1,
-                    total_runs = COALESCE(total_runs, 0) + 1,
-                    last_run_result = 'failed',
-                    last_error_message = %s,
-                    status = 'error'::rosterschedulestatus
-                WHERE id = %s
-                """,
-                (error_message, schedule_id),
-            )
+            schedule.failed_runs = (schedule.failed_runs or 0) + 1
+            schedule.last_run_result = "failed"
+            schedule.last_error_message = error_message
+            schedule.status = RosterScheduleStatus.ERROR
+
         await db.commit()
 
     async def _create_roster_from_schedule(self, schedule: Dict) -> Dict:
@@ -283,9 +274,9 @@ class RosterSchedulerService:
 
     async def _get_schedule_by_id(self, db, schedule_id: int) -> Optional[Dict]:
         """根據ID取得排程"""
-        result = await db.execute("SELECT * FROM roster_schedules WHERE id = %s", (schedule_id,))
-        row = result.fetchone()
-        return dict(row) if row else None
+        result = await db.execute(select(RosterSchedule).where(RosterSchedule.id == schedule_id))
+        schedule = result.scalar_one_or_none()
+        return schedule.to_dict() if schedule else None
 
     async def add_schedule(self, schedule_data: Dict) -> bool:
         """添加新排程"""

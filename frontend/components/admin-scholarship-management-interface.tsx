@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -15,6 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -37,6 +40,9 @@ import {
   CheckCircle,
   Upload,
   Eye,
+  Search,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import { WhitelistManagement } from "@/components/whitelist-management";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -52,7 +58,9 @@ import type {
   ApplicationFieldUpdate,
   ApplicationDocumentCreate,
   ApplicationDocumentUpdate,
+  WhitelistResponse,
 } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 type ScholarshipType = "undergraduate_freshman" | "direct_phd" | "phd";
 
@@ -65,6 +73,8 @@ export function AdminScholarshipManagementInterface({
   type,
   className,
 }: AdminScholarshipManagementInterfaceProps) {
+  const { toast } = useToast();
+
   // State for form configuration
   const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(
     null
@@ -94,6 +104,15 @@ export function AdminScholarshipManagementInterface({
     type: string;
   } | null>(null);
 
+  // Example file upload and preview
+  const [uploadingExampleDocId, setUploadingExampleDocId] = useState<number | null>(null);
+  const [showExamplePreview, setShowExamplePreview] = useState(false);
+  const [examplePreviewFile, setExamplePreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+
   // Form states
   const [fieldFormOpen, setFieldFormOpen] = useState(false);
   const [documentFormOpen, setDocumentFormOpen] = useState(false);
@@ -102,6 +121,21 @@ export function AdminScholarshipManagementInterface({
   );
   const [editingDocument, setEditingDocument] =
     useState<ApplicationDocument | null>(null);
+
+  // Scholarship type data for whitelist
+  const [scholarshipTypeData, setScholarshipTypeData] = useState<any | null>(null);
+  const [activeConfigId, setActiveConfigId] = useState<number | null>(null);
+
+  // Whitelist management states
+  const [whitelist, setWhitelist] = useState<WhitelistResponse[]>([]);
+  const [loadingWhitelist, setLoadingWhitelist] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedWhitelistTab, setSelectedWhitelistTab] = useState<string>("all");
+  const [selectedStudents, setSelectedStudents] = useState<Set<number>>(new Set());
+  const [newStudentNycuId, setNewStudentNycuId] = useState("");
+  const [newStudentSubType, setNewStudentSubType] = useState("");
+  const [addingStudent, setAddingStudent] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-hide success message
   useEffect(() => {
@@ -117,6 +151,7 @@ export function AdminScholarshipManagementInterface({
   // Load form configuration on component mount
   useEffect(() => {
     loadFormConfig();
+    loadScholarshipData();
   }, [type]);
 
   const loadFormConfig = async () => {
@@ -144,6 +179,60 @@ export function AdminScholarshipManagementInterface({
       setError("載入表單配置時發生錯誤，請稍後再試");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadScholarshipData = async () => {
+    try {
+      setLoadingWhitelist(true);
+      const response = await api.scholarships.getAll();
+      if (response.success && response.data) {
+        // Find scholarship matching the type prop by code
+        const scholarship = response.data.find((s: any) => s.code === type);
+        if (scholarship) {
+          setScholarshipTypeData(scholarship);
+          const configId = scholarship.configuration_id;
+          setActiveConfigId(configId);
+
+          // Initialize sub_type for new student form
+          if (scholarship.sub_type_list && scholarship.sub_type_list.length > 0) {
+            setNewStudentSubType(scholarship.sub_type_list[0].value || scholarship.sub_type_list[0]);
+          }
+
+          // Load whitelist if configuration exists
+          if (configId && scholarship.whitelist_enabled) {
+            await loadWhitelist(configId);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load scholarship data:", err);
+      toast({
+        title: "載入失敗",
+        description: "無法載入獎學金資料",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingWhitelist(false);
+    }
+  };
+
+  const loadWhitelist = async (configId: number) => {
+    try {
+      setLoadingWhitelist(true);
+      const response = await api.whitelist.getConfigurationWhitelist(configId);
+      if (response.success && response.data) {
+        setWhitelist(response.data);
+      }
+    } catch (err: any) {
+      console.error("Failed to load whitelist:", err);
+      toast({
+        title: "載入失敗",
+        description: err.message || "無法載入白名單",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingWhitelist(false);
     }
   };
 
@@ -441,6 +530,266 @@ export function AdminScholarshipManagementInterface({
       setError("刪除文件要求失敗，請稍後再試");
     }
   };
+
+  // Example file handlers
+  const handleUploadExample = async (
+    documentId: number,
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingExampleDocId(documentId);
+      setError(null);
+      setSuccessMessage(null);
+
+      const response = await api.applicationFields.uploadDocumentExample(
+        documentId,
+        file
+      );
+
+      if (response.success) {
+        // Update the document in state with new example_file_url
+        setDocumentRequirements(prev =>
+          prev.map(doc =>
+            doc.id === documentId
+              ? { ...doc, example_file_url: response.data.example_file_url }
+              : doc
+          )
+        );
+        setSuccessMessage("範例文件上傳成功");
+      } else {
+        setError(response.message || "範例文件上傳失敗");
+      }
+    } catch (err: any) {
+      console.error("Failed to upload example:", err);
+      setError(err.message || "範例文件上傳失敗，請稍後再試");
+    } finally {
+      setUploadingExampleDocId(null);
+      // Reset file input
+      event.target.value = "";
+    }
+  };
+
+  const handlePreviewExample = (documentId: number, documentName: string) => {
+    const token =
+      typeof window !== "undefined"
+        ? window.localStorage?.getItem("auth_token")
+        : null;
+
+    const previewUrl = `/api/v1/preview-document-example?documentId=${documentId}&token=${token}`;
+
+    setExamplePreviewFile({
+      url: previewUrl,
+      filename: `${documentName}_範例`,
+      type: "application/pdf",
+    });
+    setShowExamplePreview(true);
+  };
+
+  const handleCloseExamplePreview = () => {
+    setShowExamplePreview(false);
+    setExamplePreviewFile(null);
+  };
+
+  const handleDeleteExample = async (documentId: number) => {
+    if (!confirm("確定要刪除此範例文件嗎？")) return;
+
+    try {
+      const response = await api.applicationFields.deleteDocumentExample(
+        documentId
+      );
+
+      if (response.success) {
+        // Update the document in state to remove example_file_url
+        setDocumentRequirements(prev =>
+          prev.map(doc =>
+            doc.id === documentId ? { ...doc, example_file_url: null } : doc
+          )
+        );
+        setSuccessMessage("範例文件刪除成功");
+      } else {
+        setError(response.message || "範例文件刪除失敗");
+      }
+    } catch (err) {
+      console.error("Failed to delete example:", err);
+      setError("範例文件刪除失敗，請稍後再試");
+    }
+  };
+
+  // Whitelist operation functions
+  const handleAddStudent = async () => {
+    if (!newStudentNycuId.trim() || !newStudentSubType || !activeConfigId) {
+      toast({
+        title: "輸入錯誤",
+        description: "請填寫學號和選擇子獎學金類型",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAddingStudent(true);
+    try {
+      const response = await api.whitelist.batchAddWhitelist(activeConfigId, {
+        students: [{ nycu_id: newStudentNycuId.trim(), sub_type: newStudentSubType }],
+      });
+
+      if (response.success) {
+        toast({
+          title: "新增成功",
+          description: `已將學號 ${newStudentNycuId} 加入白名單`,
+        });
+        setNewStudentNycuId("");
+        if (activeConfigId) {
+          await loadWhitelist(activeConfigId);
+        }
+      } else if (response.data?.errors && response.data.errors.length > 0) {
+        toast({
+          title: "新增失敗",
+          description: response.data.errors[0],
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "新增失敗",
+        description: error.message || "無法新增學生到白名單",
+        variant: "destructive",
+      });
+    } finally {
+      setAddingStudent(false);
+    }
+  };
+
+  const handleDeleteStudents = async (studentIds: number[]) => {
+    if (studentIds.length === 0 || !activeConfigId) return;
+
+    try {
+      const response = await api.whitelist.batchRemoveWhitelist(activeConfigId, {
+        student_ids: studentIds,
+      });
+
+      if (response.success) {
+        toast({
+          title: "刪除成功",
+          description: `已移除 ${studentIds.length} 位學生`,
+        });
+        setSelectedStudents(new Set());
+        await loadWhitelist(activeConfigId);
+      }
+    } catch (error: any) {
+      toast({
+        title: "刪除失敗",
+        description: error.message || "無法刪除學生",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeConfigId) return;
+
+    setLoadingWhitelist(true);
+    try {
+      const response = await api.whitelist.importWhitelistExcel(activeConfigId, file);
+
+      if (response.success && response.data) {
+        const result = response.data;
+        toast({
+          title: "匯入完成",
+          description: `成功: ${result.success_count} 筆，失敗: ${result.error_count} 筆`,
+          variant: result.error_count > 0 ? "destructive" : "default",
+        });
+
+        if (result.errors.length > 0) {
+          console.error("Import errors:", result.errors);
+        }
+
+        await loadWhitelist(activeConfigId);
+      }
+    } catch (error: any) {
+      toast({
+        title: "匯入失敗",
+        description: error.message || "無法匯入 Excel 檔案",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingWhitelist(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!activeConfigId || !scholarshipTypeData) return;
+
+    try {
+      const blob = await api.whitelist.exportWhitelistExcel(activeConfigId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${formConfig?.title || scholarshipTypeData.name}_白名單_${scholarshipTypeData.academic_year}_${scholarshipTypeData.semester || "annual"}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "匯出成功",
+        description: "白名單已下載為 Excel 檔案",
+      });
+    } catch (error: any) {
+      toast({
+        title: "匯出失敗",
+        description: error.message || "無法匯出白名單",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    if (!activeConfigId) return;
+
+    try {
+      const blob = await api.whitelist.downloadTemplate(activeConfigId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `白名單匯入模板_${formConfig?.title || scholarshipTypeData?.name}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "下載成功",
+        description: "匯入模板已下載",
+      });
+    } catch (error: any) {
+      toast({
+        title: "下載失敗",
+        description: error.message || "無法下載模板",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Filter whitelist students
+  const filteredWhitelist = whitelist.map(item => ({
+    ...item,
+    students: item.students.filter(
+      student =>
+        (selectedWhitelistTab === "all" || item.sub_type === selectedWhitelistTab) &&
+        (searchQuery === "" ||
+          student.nycu_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (student.name?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false))
+    ),
+  })).filter(item => item.students.length > 0);
+
+  const allStudents = whitelist.flatMap(item => item.students);
+  const totalCount = allStudents.length;
+
+  // Get sub-types from scholarship data
+  const subTypes = scholarshipTypeData?.sub_type_list || [];
 
   if (isLoading) {
     return (
@@ -1089,6 +1438,68 @@ export function AdminScholarshipManagementInterface({
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
+                            {/* Upload Example Button */}
+                            <div className="relative">
+                              <input
+                                type="file"
+                                id={`upload-example-${doc.id}`}
+                                className="hidden"
+                                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                onChange={(e) => handleUploadExample(doc.id, e)}
+                                disabled={uploadingExampleDocId === doc.id}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  document
+                                    .getElementById(`upload-example-${doc.id}`)
+                                    ?.click()
+                                }
+                                disabled={uploadingExampleDocId === doc.id}
+                                className="text-green-600 hover:text-green-700"
+                                title="上傳範例"
+                              >
+                                {uploadingExampleDocId === doc.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Upload className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+
+                            {/* Preview Example Button */}
+                            {doc.example_file_url && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  handlePreviewExample(
+                                    doc.id,
+                                    doc.document_name
+                                  )
+                                }
+                                className="text-purple-600 hover:text-purple-700"
+                                title="預覽範例"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
+
+                            {/* Delete Example Button */}
+                            {doc.example_file_url && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteExample(doc.id)}
+                                className="text-orange-600 hover:text-orange-700"
+                                title="刪除範例"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+
+                            {/* Edit Document Button */}
                             <Button
                               variant="outline"
                               size="sm"
@@ -1097,15 +1508,19 @@ export function AdminScholarshipManagementInterface({
                                 setDocumentFormOpen(true);
                               }}
                               className="text-blue-600 hover:text-blue-700"
+                              title="編輯文件"
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
+
+                            {/* Delete Document Button */}
                             {doc.id > 0 && (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleDeleteDocument(doc.id)}
                                 className="text-red-600 hover:text-red-700"
+                                title="刪除文件"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -1123,7 +1538,14 @@ export function AdminScholarshipManagementInterface({
 
         {/* Whitelist Tab */}
         <TabsContent value="whitelist" className="space-y-4">
-          {!formConfig?.hasWhitelist ? (
+          {loadingWhitelist && !scholarshipTypeData ? (
+            <Card className="border-2 border-gray-100 shadow-sm">
+              <CardContent className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
+                <span>載入白名單資料中...</span>
+              </CardContent>
+            </Card>
+          ) : !scholarshipTypeData?.whitelist_enabled ? (
             <Card className="border-2 border-gray-100 shadow-sm">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
@@ -1133,15 +1555,186 @@ export function AdminScholarshipManagementInterface({
                   白名單功能未啟用
                 </h3>
                 <p className="text-sm text-gray-600 text-center max-w-md">
-                  此獎學金類型目前未啟用白名單功能。若需使用白名單功能，請聯絡系統管理員進行配置。
+                  此獎學金類型目前未啟用白名單功能。若需使用白名單功能，請至配置管理頁面啟用。
                 </p>
               </CardContent>
             </Card>
           ) : (
-            <WhitelistManagement
-              scholarshipType={type}
-              title={`${formConfig.title}白名單管理`}
-            />
+            <Card className="border-2 border-gray-100 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <UserCheck className="h-5 w-5" />
+                  白名單管理
+                </CardTitle>
+                <CardDescription>
+                  管理可申請 {formConfig?.title} 的學生名單
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handleDownloadTemplate}>
+                    <FileSpreadsheet className="h-4 w-4 mr-1" />
+                    下載模板
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="h-4 w-4 mr-1" />
+                    匯入 Excel
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleExportExcel}>
+                    <Download className="h-4 w-4 mr-1" />
+                    匯出 Excel
+                  </Button>
+                  <div className="flex-1" />
+                  <Badge variant="secondary">總計: {totalCount} 人</Badge>
+                </div>
+
+                <Separator />
+
+                {/* Add Student Form */}
+                <div className="border rounded-lg p-4 bg-muted/30">
+                  <h4 className="text-sm font-medium mb-3">新增學生</h4>
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="請輸入學號"
+                        value={newStudentNycuId}
+                        onChange={e => setNewStudentNycuId(e.target.value)}
+                        onKeyPress={e => e.key === "Enter" && handleAddStudent()}
+                      />
+                    </div>
+                    {subTypes.length > 0 && (
+                      <Select value={newStudentSubType} onValueChange={setNewStudentSubType}>
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subTypes.map((type: any) => (
+                            <SelectItem key={type.value || type} value={type.value || type}>
+                              {type.label || type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Button onClick={handleAddStudent} disabled={addingStudent}>
+                      {addingStudent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                      新增
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Search and Filter */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="搜尋學號或姓名..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  {selectedStudents.size > 0 && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDeleteStudents(Array.from(selectedStudents))}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      刪除選中 ({selectedStudents.size})
+                    </Button>
+                  )}
+                </div>
+
+                {/* Tabs by Sub-Type */}
+                <Tabs value={selectedWhitelistTab} onValueChange={setSelectedWhitelistTab}>
+                  <TabsList>
+                    <TabsTrigger value="all">全部</TabsTrigger>
+                    {whitelist.map(item => (
+                      <TabsTrigger key={item.sub_type} value={item.sub_type}>
+                        {item.sub_type} ({item.total})
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+
+                  {/* Student Table */}
+                  <ScrollArea className="h-[400px] border rounded-md mt-4">
+                    {loadingWhitelist ? (
+                      <div className="flex items-center justify-center h-full">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : filteredWhitelist.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                        <AlertCircle className="h-12 w-12 mb-2" />
+                        <p>目前沒有白名單學生</p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-12">
+                              <input
+                                type="checkbox"
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    const allIds = new Set(filteredWhitelist.flatMap(item => item.students.map(s => s.student_id)));
+                                    setSelectedStudents(allIds);
+                                  } else {
+                                    setSelectedStudents(new Set());
+                                  }
+                                }}
+                              />
+                            </TableHead>
+                            <TableHead>學號</TableHead>
+                            <TableHead>姓名</TableHead>
+                            <TableHead>子獎學金類型</TableHead>
+                            <TableHead className="text-right">操作</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredWhitelist.flatMap(item =>
+                            item.students.map(student => (
+                              <TableRow key={student.student_id}>
+                                <TableCell>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedStudents.has(student.student_id)}
+                                    onChange={e => {
+                                      const newSet = new Set(selectedStudents);
+                                      if (e.target.checked) {
+                                        newSet.add(student.student_id);
+                                      } else {
+                                        newSet.delete(student.student_id);
+                                      }
+                                      setSelectedStudents(newSet);
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell className="font-mono">{student.nycu_id}</TableCell>
+                                <TableCell>{student.name}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">{student.sub_type}</Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteStudents([student.student_id])}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </ScrollArea>
+                </Tabs>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
       </Tabs>
@@ -1178,6 +1771,23 @@ export function AdminScholarshipManagementInterface({
         onClose={handleCloseTermsPreview}
         file={termsPreviewFile}
         locale="zh"
+      />
+
+      {/* Example Document Preview Dialog */}
+      <FilePreviewDialog
+        isOpen={showExamplePreview}
+        onClose={handleCloseExamplePreview}
+        file={examplePreviewFile}
+        locale="zh"
+      />
+
+      {/* Hidden file input for Excel import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="hidden"
+        onChange={handleImportExcel}
       />
     </div>
   );

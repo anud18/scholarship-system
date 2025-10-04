@@ -516,12 +516,17 @@ export async function GET(request: NextRequest) {
   const fileBuffer = await response.arrayBuffer();
   const contentType = response.headers.get("content-type") || "application/pdf";
 
-  // Return file to frontend
+  // IMPORTANT: Preserve Content-Disposition from backend (includes filename with Chinese support)
+  const contentDisposition = response.headers.get("content-disposition") || "inline";
+
+  // Return file to frontend with complete headers for browser PDF viewer
   return new NextResponse(fileBuffer, {
     status: 200,
     headers: {
       "Content-Type": contentType,
-      "Content-Disposition": "inline",
+      "Content-Disposition": contentDisposition,  // ✅ Keep backend's filename info
+      "Content-Length": fileBuffer.byteLength.toString(),  // ✅ Required for proper rendering
+      "Accept-Ranges": "bytes",  // ✅ Support range requests
       "Cache-Control": "private, max-age=3600", // 1 hour cache
     },
   });
@@ -637,6 +642,125 @@ file_extension = file.filename.lower().split(".")[-1]
 if f".{file_extension}" not in ALLOWED_EXTENSIONS:
     raise HTTPException(status_code=400, detail="Invalid file type")
 ```
+
+### HTTP Headers Best Practices for File Preview
+
+**CRITICAL**: Proper HTTP headers are essential for browser PDF viewers to work correctly. Missing or incomplete headers can cause various issues including "password protected" errors on unprotected PDFs.
+
+#### Required Headers for PDF/Document Preview
+
+When proxying files through Next.js API routes, you **MUST** preserve and include these headers:
+
+1. **Content-Type**
+   ```typescript
+   "Content-Type": "application/pdf"  // Or appropriate MIME type
+   ```
+   - Tells browser how to interpret the file
+   - Must match actual file type
+
+2. **Content-Disposition** (CRITICAL for Chinese filenames)
+   ```typescript
+   // ✅ CORRECT - Preserve from backend
+   const contentDisposition = response.headers.get("content-disposition") || "inline";
+
+   // Backend sets: "inline; filename*=UTF-8''文件名.pdf"
+   // Next.js MUST preserve this complete header
+   ```
+   - `inline` = display in browser (vs `attachment` = force download)
+   - `filename*=UTF-8''...` = RFC 5987 encoding for Unicode filenames
+   - **DO NOT** override with just `"inline"` - this loses filename information
+
+3. **Content-Length**
+   ```typescript
+   "Content-Length": fileBuffer.byteLength.toString()
+   ```
+   - Browser needs file size for proper rendering
+   - Some PDF viewers require this for initialization
+   - Missing this can cause "password protected" or loading errors
+
+4. **Accept-Ranges**
+   ```typescript
+   "Accept-Ranges": "bytes"
+   ```
+   - Enables partial content requests
+   - Required by some browser PDF viewers
+   - Improves loading performance for large files
+
+#### Common Issues and Solutions
+
+**Problem**: PDF shows "password protected" error but file has no password
+- **Cause**: Missing `Content-Length` or incomplete `Content-Disposition` header
+- **Solution**: Include all required headers as shown above
+
+**Problem**: Chinese filenames display as garbled text or get lost
+- **Cause**: Overriding backend's `Content-Disposition` with simple `"inline"`
+- **Solution**: Preserve complete header from backend response
+
+**Problem**: PDF downloads instead of displaying inline
+- **Cause**: Missing `inline` in `Content-Disposition` or wrong `Content-Type`
+- **Solution**: Ensure `Content-Disposition: inline` and correct `Content-Type`
+
+#### Implementation Checklist for Next.js Proxy Routes
+
+```typescript
+// ✅ COMPLETE implementation
+export async function GET(request: NextRequest) {
+  // ... fetch from backend ...
+
+  const fileBuffer = await response.arrayBuffer();
+
+  // Get headers from backend response
+  const contentType = response.headers.get("content-type") || "application/pdf";
+  const contentDisposition = response.headers.get("content-disposition") || "inline";
+
+  return new NextResponse(fileBuffer, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,                           // ✅ File type
+      "Content-Disposition": contentDisposition,             // ✅ Preserve from backend
+      "Content-Length": fileBuffer.byteLength.toString(),    // ✅ File size
+      "Accept-Ranges": "bytes",                              // ✅ Range support
+      "Cache-Control": "private, max-age=3600",              // ✅ Caching
+    },
+  });
+}
+
+// ❌ INCOMPLETE - Will cause issues
+return new NextResponse(fileBuffer, {
+  headers: {
+    "Content-Type": contentType,
+    "Content-Disposition": "inline",  // ❌ Loses filename from backend
+    // ❌ Missing Content-Length
+    // ❌ Missing Accept-Ranges
+  },
+});
+```
+
+#### Backend Header Requirements
+
+Backend endpoints MUST set proper headers that Next.js will preserve:
+
+```python
+# FastAPI/StreamingResponse
+return StreamingResponse(
+    io.BytesIO(file_content),
+    media_type="application/pdf",
+    headers={
+        "Content-Disposition": f"inline; filename*=UTF-8''{filename}.pdf"
+    }
+)
+```
+
+#### Testing Preview Functionality
+
+When implementing or modifying file preview:
+
+1. **Test with Chinese filenames** - Verify filename displays correctly
+2. **Test in iframe** - Used by FilePreviewDialog component
+3. **Test in new tab** - Direct browser navigation
+4. **Test different browsers** - Chrome, Firefox, Safari have different PDF viewers
+5. **Check browser console** - Look for MIME type or loading errors
+6. **Verify download works** - Alternative to preview should always function
 
 ## Code Quality Standards
 

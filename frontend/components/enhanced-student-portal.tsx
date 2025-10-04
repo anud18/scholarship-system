@@ -34,6 +34,7 @@ import {
   Trash2,
   Save,
   AlertTriangle,
+  AlertCircle,
   Info,
   FileText,
   Calendar,
@@ -1289,19 +1290,30 @@ export function EnhancedStudentPortal({
                                   </Badge>
                                 ))}
                                 {/* Error rules */}
-                                {commonErrorRules.map(rule => (
-                                  <Badge
-                                    key={rule.rule_id}
-                                    variant="outline"
-                                    className="bg-rose-50 text-rose-600 border-rose-100"
-                                  >
-                                    <AlertTriangle className="h-3 w-3 mr-1" />
-                                    {getTranslation(
-                                      locale,
-                                      `eligibility_tags.${rule.tag}`
-                                    )}
-                                  </Badge>
-                                ))}
+                                {commonErrorRules.map(rule => {
+                                  // Determine color and icon based on status
+                                  const isDataUnavailable = rule.status === 'data_unavailable';
+                                  const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
+                                  const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
+                                  const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
+                                  const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
+                                  const displayMessage = rule.system_message || rule.message;
+
+                                  return (
+                                    <Badge
+                                      key={rule.rule_id}
+                                      variant="outline"
+                                      className={`${bgColor} ${textColor} ${borderColor}`}
+                                      title={displayMessage} // tooltip
+                                    >
+                                      <Icon className="h-3 w-3 mr-1" />
+                                      {getTranslation(
+                                        locale,
+                                        `eligibility_tags.${rule.tag}`
+                                      )}
+                                    </Badge>
+                                  );
+                                })}
                               </div>
                             </div>
                           );
@@ -1347,19 +1359,30 @@ export function EnhancedStudentPortal({
                                   </Badge>
                                 ))}
                                 {/* Error rules (common + subtype-specific) */}
-                                {allErrorRules.map(rule => (
-                                  <Badge
-                                    key={rule.rule_id}
-                                    variant="outline"
-                                    className="bg-rose-50 text-rose-600 border-rose-100"
-                                  >
-                                    <AlertTriangle className="h-3 w-3 mr-1" />
-                                    {getTranslation(
-                                      locale,
-                                      `eligibility_tags.${rule.tag}`
-                                    )}
-                                  </Badge>
-                                ))}
+                                {allErrorRules.map(rule => {
+                                  // Determine color and icon based on status
+                                  const isDataUnavailable = rule.status === 'data_unavailable';
+                                  const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
+                                  const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
+                                  const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
+                                  const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
+                                  const displayMessage = rule.system_message || rule.message;
+
+                                  return (
+                                    <Badge
+                                      key={rule.rule_id}
+                                      variant="outline"
+                                      className={`${bgColor} ${textColor} ${borderColor}`}
+                                      title={displayMessage} // tooltip
+                                    >
+                                      <Icon className="h-3 w-3 mr-1" />
+                                      {getTranslation(
+                                        locale,
+                                        `eligibility_tags.${rule.tag}`
+                                      )}
+                                    </Badge>
+                                  );
+                                })}
                               </div>
                             </div>
                           );
