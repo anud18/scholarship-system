@@ -221,3 +221,24 @@ class EmailSummaryStats(BaseModel):
     scheduled_awaiting_approval: int = 0
     by_category: Dict[str, int] = {}
     by_scholarship_type: Dict[str, int] = {}
+
+
+class SendTestEmailRequest(BaseModel):
+    """Schema for sending test email"""
+
+    template_key: str = Field(..., description="郵件模板鍵名")
+    recipient_email: str = Field(..., description="測試收件人信箱")
+    test_data: Dict[str, Any] = Field(default_factory=dict, description="測試數據（用於模板變數替換）")
+    subject_override: Optional[str] = Field(None, description="覆蓋主旨（可選）")
+    body_override: Optional[str] = Field(None, description="覆蓋內容（可選）")
+
+
+class SendTestEmailResponse(BaseModel):
+    """Schema for test email response"""
+
+    success: bool
+    message: str
+    email_id: Optional[int] = None
+    rendered_subject: Optional[str] = None
+    rendered_body: Optional[str] = None
+    error: Optional[str] = None

@@ -22,6 +22,8 @@ from app.schemas.email_management import (
     ScheduledEmailListResponse,
     ScheduledEmailRead,
     ScheduledEmailUpdate,
+    SendTestEmailRequest,
+    SendTestEmailResponse,
 )
 from app.services.config_management_service import ConfigurationService
 from app.services.email_management_service import EmailManagementService
@@ -532,3 +534,154 @@ async def cleanup_old_audit_logs(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to cleanup audit logs: {str(e)}")
+
+
+# ========== Manual Test Email Endpoints ==========
+
+
+@router.post("/send-test", response_model=ApiResponse[SendTestEmailResponse])
+async def send_test_email(
+    *,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+    request: SendTestEmailRequest,
+):
+    """
+    手動發送測試郵件
+
+    Args:
+        request: 測試郵件請求，包含模板鍵名、收件人和測試數據
+
+    Returns:
+        測試郵件發送結果，包含渲染後的主旨和內容
+    """
+    try:
+        from app.services.email_service import EmailService
+        from app.services.system_setting_service import EmailTemplateService
+
+        # Get email template
+        template = await EmailTemplateService.get_template(db, request.template_key)
+        if not template:
+            raise HTTPException(status_code=404, detail=f"郵件模板 '{request.template_key}' 不存在，請檢查模板鍵名是否正確")
+
+        # Render subject and body with test data
+        try:
+            rendered_subject = (
+                request.subject_override
+                if request.subject_override
+                else template.subject_template.format(**request.test_data)
+            )
+            rendered_body = (
+                request.body_override if request.body_override else template.body_template.format(**request.test_data)
+            )
+        except KeyError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"模板變數缺失：{str(e)}。請確保 test_data 包含所有必需的變數",
+            )
+
+        # Initialize email service with database session
+        email_service = EmailService(db)
+
+        # Send test email with metadata
+        metadata = {
+            "email_category": EmailCategory.system,
+            "sent_by_user_id": current_user.id,
+            "sent_by_system": False,
+            "template_key": request.template_key,
+        }
+
+        # Add [TEST] prefix to subject
+        test_subject = f"[測試郵件] {rendered_subject}"
+
+        await email_service.send_email(
+            to=request.recipient_email,
+            subject=test_subject,
+            body=rendered_body,
+            db=db,
+            **metadata,
+        )
+
+        # Get the last email history entry to return ID
+        from app.models.email_management import EmailHistory
+
+        result = await db.execute(
+            select(EmailHistory)
+            .where(EmailHistory.sent_by_user_id == current_user.id)
+            .order_by(EmailHistory.sent_at.desc())
+            .limit(1)
+        )
+        last_email = result.scalar_one_or_none()
+
+        response_data = SendTestEmailResponse(
+            success=True,
+            message=f"測試郵件已成功發送至 {request.recipient_email}",
+            email_id=last_email.id if last_email else None,
+            rendered_subject=test_subject,
+            rendered_body=rendered_body,
+        )
+
+        return ApiResponse(
+            success=True,
+            message="測試郵件發送成功",
+            data=response_data,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+
+        logging.error(f"Failed to send test email: {str(e)}", exc_info=True)
+
+        response_data = SendTestEmailResponse(
+            success=False,
+            message="測試郵件發送失敗",
+            error=str(e),
+        )
+
+        return ApiResponse(
+            success=False,
+            message=f"測試郵件發送失敗: {str(e)}",
+            data=response_data,
+        )
+
+
+@router.get("/templates")
+async def get_email_templates(
+    *,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    獲取所有郵件模板列表
+
+    Returns:
+        郵件模板列表，包含 key、subject_template 和 sending_type
+    """
+    try:
+        from app.models.system_setting import EmailTemplate
+
+        result = await db.execute(select(EmailTemplate).order_by(EmailTemplate.key))
+        templates = result.scalars().all()
+
+        template_list = []
+        for template in templates:
+            template_list.append(
+                {
+                    "key": template.key,
+                    "subject_template": template.subject_template,
+                    "body_template": template.body_template,
+                    "sending_type": template.sending_type.value if template.sending_type else "single",
+                    "requires_approval": template.requires_approval,
+                }
+            )
+
+        return ApiResponse(
+            success=True,
+            message=f"成功獲取 {len(template_list)} 個郵件模板",
+            data=template_list,
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"獲取郵件模板失敗: {str(e)}")
