@@ -20,27 +20,36 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add allow_empty column to system_settings table"""
-    # Add allow_empty column with default value False
-    op.add_column("system_settings", sa.Column("allow_empty", sa.Boolean(), nullable=False, server_default="false"))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = {col["name"] for col in inspector.get_columns("system_settings")}
 
-    # For string type configurations, set allow_empty to true by default
-    op.execute(
-        """
-        UPDATE system_settings
-        SET allow_empty = true
-        WHERE data_type = 'string' AND is_sensitive = false
-    """
-    )
+    if "allow_empty" not in columns:
+        op.add_column(
+            "system_settings",
+            sa.Column("allow_empty", sa.Boolean(), nullable=False, server_default="false"),
+        )
+        columns.add("allow_empty")
 
-    # For sensitive configurations (API keys, SMTP credentials), allow empty to disable features
-    # This includes: gemini_api_key, smtp_user, smtp_password, etc.
-    op.execute(
+    if "allow_empty" in columns:
+        # For string type configurations, set allow_empty to true by default
+        op.execute(
+            """
+            UPDATE system_settings
+            SET allow_empty = true
+            WHERE data_type = 'string' AND is_sensitive = false
         """
-        UPDATE system_settings
-        SET allow_empty = true
-        WHERE is_sensitive = true
-    """
-    )
+        )
+
+        # For sensitive configurations (API keys, SMTP credentials), allow empty to disable features
+        # This includes: gemini_api_key, smtp_user, smtp_password, etc.
+        op.execute(
+            """
+            UPDATE system_settings
+            SET allow_empty = true
+            WHERE is_sensitive = true
+        """
+        )
 
 
 def downgrade() -> None:

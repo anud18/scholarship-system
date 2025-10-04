@@ -290,3 +290,58 @@ class EmailTestModeAudit(Base):
     def log_expired(cls, config_before: dict):
         """Create audit log for test mode auto-expiration event"""
         return cls(event_type="expired", config_before=config_before)
+
+
+class TriggerEvent(enum.Enum):
+    """Email automation trigger events"""
+
+    application_submitted = "application_submitted"  # 申請提交時
+    professor_review_submitted = "professor_review_submitted"  # 教授審核提交時
+    college_review_submitted = "college_review_submitted"  # 學院審核提交時
+    final_result_decided = "final_result_decided"  # 最終結果決定時
+    supplement_requested = "supplement_requested"  # 要求補件時
+    deadline_approaching = "deadline_approaching"  # 截止日期接近時
+
+
+class EmailAutomationRule(Base):
+    """Email automation rules for triggering automated emails"""
+
+    __tablename__ = "email_automation_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Rule identification
+    name = Column(String(200), nullable=False)  # 規則名稱（顯示用）
+    description = Column(Text)  # 規則說明
+
+    # Trigger configuration
+    trigger_event = Column(
+        Enum(TriggerEvent, values_callable=lambda obj: [e.value for e in obj]), nullable=False, index=True
+    )
+
+    # Email template reference
+    template_key = Column(String(100), ForeignKey("email_templates.key"), nullable=False)
+
+    # Timing configuration
+    delay_hours = Column(Integer, default=0, nullable=False)  # 延遲發送時數（0 = 立即發送）
+
+    # Recipient filtering
+    condition_query = Column(Text)  # SQL 查詢條件（用於篩選收件者）
+
+    # Status
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+
+    # Metadata
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Relationships
+    template = relationship("EmailTemplate", backref="automation_rules")
+    created_by = relationship("User", foreign_keys=[created_by_user_id], backref="created_automation_rules")
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_automation_rules_trigger_active", "trigger_event", "is_active"),
+        Index("idx_automation_rules_template", "template_key"),
+    )

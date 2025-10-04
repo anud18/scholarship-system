@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     applications,
     auth,
     college_review,
+    email_automation,
     email_management,
     files,
     notifications,
@@ -56,6 +57,7 @@ api_router.include_router(scholarship_rules.router, prefix="/scholarship-rules",
 api_router.include_router(professor.router, prefix="/professor", tags=["Professor Review"])
 api_router.include_router(college_review.router, prefix="/college", tags=["College Review"])
 api_router.include_router(email_management.router, prefix="/email-management", tags=["Email Management"])
+api_router.include_router(email_automation.router, prefix="/email-automation", tags=["Email Automation"])
 api_router.include_router(nycu_employee.router, prefix="/nycu-employee", tags=["NYCU Employee"])
 api_router.include_router(payment_rosters.router, prefix="/payment-rosters", tags=["Payment Rosters"])
 api_router.include_router(roster_schedules.router, prefix="/roster-schedules", tags=["Roster Schedules"])

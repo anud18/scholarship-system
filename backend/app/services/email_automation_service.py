@@ -6,34 +6,14 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.email_management import EmailCategory
+from app.models.email_management import EmailAutomationRule, EmailCategory, TriggerEvent
 from app.services.email_service import EmailService
 from app.services.system_setting_service import EmailTemplateService
 
 logger = logging.getLogger(__name__)
-
-
-class EmailAutomationRule:
-    """Represents an email automation rule"""
-
-    def __init__(
-        self,
-        id: int,
-        template_key: str,
-        trigger_event: str,
-        delay_hours: int = 0,
-        condition_query: str = None,
-        is_active: bool = True,
-    ):
-        self.id = id
-        self.template_key = template_key
-        self.trigger_event = trigger_event
-        self.delay_hours = delay_hours
-        self.condition_query = condition_query
-        self.is_active = is_active
 
 
 class EmailAutomationService:
@@ -44,30 +24,22 @@ class EmailAutomationService:
 
     async def get_automation_rules(self, db: AsyncSession, trigger_event: str) -> List[EmailAutomationRule]:
         """Get active automation rules for a specific trigger event"""
-        query = text(
-            """
-            SELECT id, template_key, trigger_event, delay_hours, condition_query, is_active
-            FROM email_automation_rules
-            WHERE trigger_event = :trigger_event AND is_active = true
-        """
-        )
-
-        result = await db.execute(query, {"trigger_event": trigger_event})
-        rules = []
-
-        for row in result:
-            rules.append(
-                EmailAutomationRule(
-                    id=row.id,
-                    template_key=row.template_key,
-                    trigger_event=row.trigger_event,
-                    delay_hours=row.delay_hours,
-                    condition_query=row.condition_query,
-                    is_active=row.is_active,
-                )
+        try:
+            # Use ORM query with enum value
+            stmt = (
+                select(EmailAutomationRule)
+                .where(EmailAutomationRule.trigger_event == TriggerEvent(trigger_event))
+                .where(EmailAutomationRule.is_active == True)
             )
 
-        return rules
+            result = await db.execute(stmt)
+            rules = result.scalars().all()
+
+            return list(rules)
+
+        except Exception as e:
+            logger.error(f"Error fetching automation rules for trigger '{trigger_event}': {e}")
+            return []
 
     async def process_trigger(self, db: AsyncSession, trigger_event: str, context: Dict[str, Any]):
         """Process a trigger event and send appropriate automated emails"""

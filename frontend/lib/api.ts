@@ -3758,6 +3758,52 @@ class ApiClient {
       });
     },
   };
+
+  // Email Automation API
+  emailAutomation = {
+    getRules: async (params?: { is_active?: boolean; trigger_event?: string }): Promise<ApiResponse<any[]>> => {
+      const queryParams = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined) {
+            queryParams.append(key, value.toString());
+          }
+        });
+      }
+      const query = queryParams.toString();
+      return this.request(`/email-automation${query ? `?${query}` : ""}`);
+    },
+
+    createRule: async (ruleData: any): Promise<ApiResponse<any>> => {
+      return this.request("/email-automation", {
+        method: "POST",
+        body: JSON.stringify(ruleData),
+      });
+    },
+
+    updateRule: async (ruleId: number, ruleData: any): Promise<ApiResponse<any>> => {
+      return this.request(`/email-automation/${ruleId}`, {
+        method: "PUT",
+        body: JSON.stringify(ruleData),
+      });
+    },
+
+    deleteRule: async (ruleId: number): Promise<ApiResponse<void>> => {
+      return this.request(`/email-automation/${ruleId}`, {
+        method: "DELETE",
+      });
+    },
+
+    toggleRule: async (ruleId: number): Promise<ApiResponse<any>> => {
+      return this.request(`/email-automation/${ruleId}/toggle`, {
+        method: "PATCH",
+      });
+    },
+
+    getTriggerEvents: async (): Promise<ApiResponse<any[]>> => {
+      return this.request("/email-automation/trigger-events");
+    },
+  };
 }
 
 // Create and export a singleton instance
