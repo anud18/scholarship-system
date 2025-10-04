@@ -107,7 +107,17 @@ class ConfigurationService:
         if data_type == ConfigDataType.json:
             string_value = json.dumps(value) if value else ""
         elif data_type == ConfigDataType.boolean:
-            string_value = str(bool(value)).lower() if value else ""
+            # 正確處理字串形式的布林值
+            if isinstance(value, bool):
+                string_value = str(value).lower()
+            elif isinstance(value, str):
+                # 將字串轉為布林值（支援 "true", "false", "1", "0" 等）
+                bool_val = value.lower() in ("true", "1", "yes", "on")
+                string_value = str(bool_val).lower()
+            else:
+                # 其他類型轉為布林值
+                bool_val = bool(value) if value is not None else False
+                string_value = str(bool_val).lower()
         else:
             string_value = str(value) if value is not None else ""
 
