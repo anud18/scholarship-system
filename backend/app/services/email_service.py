@@ -338,13 +338,16 @@ class EmailService:
             # Calculate email size
             email_size = len(msg.as_string().encode("utf-8"))
 
+            # Get TLS configuration from database (default: False for plain SMTP like port 25)
+            use_tls = await dynamic_config.get_bool("smtp_use_tls", self.db, False)
+
             await aiosmtplib.send(
                 msg,
                 hostname=self.host,
                 port=self.port,
-                username=self.username,
-                password=self.password,
-                start_tls=True,
+                username=self.username if self.username else None,
+                password=self.password if self.password else None,
+                start_tls=use_tls,
             )
 
             logger.info("Email sent successfully to %s", primary_recipient)
@@ -405,9 +408,9 @@ class EmailService:
         This prevents audit logging failures from affecting the main email transaction.
         """
         # Create a new session for audit logging to avoid transaction interference
-        from app.db.session import async_session_maker
+        from app.db.session import AsyncSessionLocal
 
-        async with async_session_maker() as audit_db:
+        async with AsyncSessionLocal() as audit_db:
             try:
                 history = EmailHistory(
                     recipient_email=recipient_email,

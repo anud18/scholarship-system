@@ -59,6 +59,14 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
             "is_sensitive": True,
         },
         {
+            "key": "smtp_use_tls",
+            "value": str(settings.smtp_use_tls).lower(),
+            "category": ConfigCategory.email,
+            "data_type": ConfigDataType.boolean,
+            "description": "啟用 SMTP TLS/STARTTLS 加密（預設：關閉，適用於 Port 25 純 SMTP）",
+            "is_sensitive": False,
+        },
+        {
             "key": "email_from",
             "value": settings.email_from,
             "category": ConfigCategory.email,

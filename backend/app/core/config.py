@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
+    smtp_use_tls: bool = False  # STARTTLS/TLS encryption (default: False for plain SMTP)
     email_from: str = "noreply@scholarshipapp.com"
     email_from_name: str = "Scholarship System"
 

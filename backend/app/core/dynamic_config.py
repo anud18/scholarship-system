@@ -29,6 +29,7 @@ class DynamicConfig:
         "smtp_port",
         "smtp_user",
         "smtp_password",
+        "smtp_use_tls",
         "email_from",
         "email_from_name",
         # OCR/Gemini API Settings
