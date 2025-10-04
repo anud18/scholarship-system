@@ -32,7 +32,8 @@ def upgrade() -> None:
     """
     )
 
-    # For sensitive configurations (API keys), allow empty to disable features
+    # For sensitive configurations (API keys, SMTP credentials), allow empty to disable features
+    # This includes: gemini_api_key, smtp_user, smtp_password, etc.
     op.execute(
         """
         UPDATE system_settings
