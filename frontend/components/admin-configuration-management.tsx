@@ -2665,8 +2665,8 @@ export function AdminConfigurationManagement({
           onClose={() => setShowWhitelistDialog(false)}
           configuration={selectedConfig}
           subTypes={
-            selectedScholarshipType.sub_type_list?.length > 0
-              ? selectedScholarshipType.sub_type_list
+            selectedScholarshipType.eligible_sub_types && selectedScholarshipType.eligible_sub_types.length > 0
+              ? selectedScholarshipType.eligible_sub_types.map(st => st.value || st).filter((v): v is string => typeof v === 'string')
               : ["general"]
           }
         />

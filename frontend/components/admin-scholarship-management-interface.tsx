@@ -131,7 +131,7 @@ export function AdminScholarshipManagementInterface({
   const [loadingWhitelist, setLoadingWhitelist] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedWhitelistTab, setSelectedWhitelistTab] = useState<string>("all");
-  const [selectedStudents, setSelectedStudents] = useState<Set<number>>(new Set());
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [newStudentNycuId, setNewStudentNycuId] = useState("");
   const [newStudentSubType, setNewStudentSubType] = useState("");
   const [addingStudent, setAddingStudent] = useState(false);
@@ -195,8 +195,8 @@ export function AdminScholarshipManagementInterface({
           setActiveConfigId(configId);
 
           // Initialize sub_type for new student form
-          if (scholarship.sub_type_list && scholarship.sub_type_list.length > 0) {
-            setNewStudentSubType(scholarship.sub_type_list[0].value || scholarship.sub_type_list[0]);
+          if (scholarship.eligible_sub_types && scholarship.eligible_sub_types.length > 0) {
+            setNewStudentSubType(scholarship.eligible_sub_types[0].value || scholarship.eligible_sub_types[0]);
           }
 
           // Load whitelist if configuration exists
@@ -644,10 +644,10 @@ export function AdminScholarshipManagementInterface({
         if (activeConfigId) {
           await loadWhitelist(activeConfigId);
         }
-      } else if (response.data?.errors && response.data.errors.length > 0) {
+      } else if (response.data?.failed_items && response.data.failed_items.length > 0) {
         toast({
           title: "新增失敗",
-          description: response.data.errors[0],
+          description: response.data.failed_items[0].reason,
           variant: "destructive",
         });
       }
@@ -662,18 +662,18 @@ export function AdminScholarshipManagementInterface({
     }
   };
 
-  const handleDeleteStudents = async (studentIds: number[]) => {
-    if (studentIds.length === 0 || !activeConfigId) return;
+  const handleDeleteStudents = async (nycuIds: string[]) => {
+    if (nycuIds.length === 0 || !activeConfigId) return;
 
     try {
       const response = await api.whitelist.batchRemoveWhitelist(activeConfigId, {
-        student_ids: studentIds,
+        nycu_ids: nycuIds,
       });
 
       if (response.success) {
         toast({
           title: "刪除成功",
-          description: `已移除 ${studentIds.length} 位學生`,
+          description: `已移除 ${nycuIds.length} 位學生`,
         });
         setSelectedStudents(new Set());
         await loadWhitelist(activeConfigId);
@@ -699,12 +699,12 @@ export function AdminScholarshipManagementInterface({
         const result = response.data;
         toast({
           title: "匯入完成",
-          description: `成功: ${result.success_count} 筆，失敗: ${result.error_count} 筆`,
-          variant: result.error_count > 0 ? "destructive" : "default",
+          description: `成功: ${result.success_count} 筆，失敗: ${result.failed_items.length} 筆`,
+          variant: result.failed_items.length > 0 ? "destructive" : "default",
         });
 
-        if (result.errors.length > 0) {
-          console.error("Import errors:", result.errors);
+        if (result.failed_items.length > 0) {
+          console.error("Import errors:", result.failed_items);
         }
 
         await loadWhitelist(activeConfigId);
@@ -789,7 +789,7 @@ export function AdminScholarshipManagementInterface({
   const totalCount = allStudents.length;
 
   // Get sub-types from scholarship data
-  const subTypes = scholarshipTypeData?.sub_type_list || [];
+  const subTypes = scholarshipTypeData?.eligible_sub_types || [];
 
   if (isLoading) {
     return (
@@ -1678,7 +1678,7 @@ export function AdminScholarshipManagementInterface({
                                 type="checkbox"
                                 onChange={e => {
                                   if (e.target.checked) {
-                                    const allIds = new Set(filteredWhitelist.flatMap(item => item.students.map(s => s.student_id)));
+                                    const allIds = new Set(filteredWhitelist.flatMap(item => item.students.map(s => s.nycu_id)));
                                     setSelectedStudents(allIds);
                                   } else {
                                     setSelectedStudents(new Set());
@@ -1699,13 +1699,13 @@ export function AdminScholarshipManagementInterface({
                                 <TableCell>
                                   <input
                                     type="checkbox"
-                                    checked={selectedStudents.has(student.student_id)}
+                                    checked={selectedStudents.has(student.nycu_id)}
                                     onChange={e => {
                                       const newSet = new Set(selectedStudents);
                                       if (e.target.checked) {
-                                        newSet.add(student.student_id);
+                                        newSet.add(student.nycu_id);
                                       } else {
-                                        newSet.delete(student.student_id);
+                                        newSet.delete(student.nycu_id);
                                       }
                                       setSelectedStudents(newSet);
                                     }}
@@ -1720,7 +1720,7 @@ export function AdminScholarshipManagementInterface({
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleDeleteStudents([student.student_id])}
+                                    onClick={() => handleDeleteStudents([student.nycu_id])}
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>

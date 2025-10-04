@@ -1009,11 +1009,12 @@ export interface ScholarshipConfiguration {
 
 // Whitelist Management Interfaces
 export interface WhitelistStudentInfo {
-  student_id: number;
+  student_id: number | null;
   nycu_id: string;
-  name: string;
+  name: string | null;
   sub_type: string;
-  note?: string;
+  note?: string | null;
+  is_registered?: boolean;
 }
 
 export interface WhitelistResponse {
@@ -1027,7 +1028,7 @@ export interface WhitelistBatchAddRequest {
 }
 
 export interface WhitelistBatchRemoveRequest {
-  student_ids: number[];
+  nycu_ids: string[];
   sub_type?: string;
 }
 
@@ -2952,22 +2953,7 @@ class ApiClient {
         size?: number;
         search?: string;
       }
-    ): Promise<
-      ApiResponse<{
-        items: Array<{
-          id: number;
-          nycu_id: string;
-          student_name: string;
-          department: string;
-          added_at: string;
-          added_by: string;
-        }>;
-        total: number;
-        page: number;
-        size: number;
-        pages: number;
-      }>
-    > => {
+    ): Promise<ApiResponse<WhitelistResponse[]>> => {
       const queryParams = new URLSearchParams();
       if (params?.page) queryParams.append("page", params.page.toString());
       if (params?.size) queryParams.append("size", params.size.toString());

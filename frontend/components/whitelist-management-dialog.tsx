@@ -117,10 +117,10 @@ export function WhitelistManagementDialog({
         });
         setNewStudentNycuId("");
         await loadWhitelist();
-      } else if (response.data?.errors && response.data.errors.length > 0) {
+      } else if (response.data?.failed_items && response.data.failed_items.length > 0) {
         toast({
           title: "新增失敗",
-          description: response.data.errors[0],
+          description: response.data.failed_items[0].reason,
           variant: "destructive",
         });
       }
@@ -175,12 +175,12 @@ export function WhitelistManagementDialog({
         const result = response.data;
         toast({
           title: "匯入完成",
-          description: `成功: ${result.success_count} 筆，失敗: ${result.error_count} 筆`,
-          variant: result.error_count > 0 ? "destructive" : "default",
+          description: `成功: ${result.success_count} 筆，失敗: ${result.failed_items.length} 筆`,
+          variant: result.failed_items.length > 0 ? "destructive" : "default",
         });
 
-        if (result.errors.length > 0) {
-          console.error("Import errors:", result.errors);
+        if (result.failed_items.length > 0) {
+          console.error("Import errors:", result.failed_items);
         }
 
         await loadWhitelist();
