@@ -419,12 +419,14 @@ class EmailService:
                     subject=subject,
                     body=body,
                     template_key=metadata.get("template_key"),
-                    email_category=metadata.get("email_category"),
+                    # Convert Enum to string value for PostgreSQL
+                    email_category=metadata.get("email_category").value if metadata.get("email_category") else None,
                     application_id=metadata.get("application_id"),
                     scholarship_type_id=metadata.get("scholarship_type_id"),
                     sent_by_user_id=metadata.get("sent_by_user_id"),
                     sent_by_system=metadata.get("sent_by_system", True),
-                    status=status,
+                    # Convert EmailStatus enum to string value
+                    status=status.value if isinstance(status, EmailStatus) else status,
                     error_message=error_message,
                     email_size_bytes=email_size_bytes,
                     retry_count=metadata.get("retry_count", 0),
