@@ -38,8 +38,6 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" className="scroll-smooth">
       <head>
-        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-        <link rel="alternate icon" href="/nycu-favicon.svg" type="image/svg+xml" />
         <meta name="theme-color" content="#1e40af" />
       </head>
       <body className="antialiased">
