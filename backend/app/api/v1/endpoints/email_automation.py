@@ -14,7 +14,7 @@ from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.email_management import EmailAutomationRule, TriggerEvent
 from app.models.user import User
-from app.schemas.api_response import ApiResponse
+from app.schemas.response import ApiResponse
 
 logger = logging.getLogger(__name__)
 

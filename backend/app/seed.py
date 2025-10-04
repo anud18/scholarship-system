@@ -563,6 +563,7 @@ async def seed_development():
             # 5. Scholarship configurations, rules, sub-types, and email templates
             print("\n🎓 Initializing scholarship configurations, rules, and templates...")
             from app.db.seed_scholarship_configs import (
+                seed_email_automation_rules,
                 seed_email_templates,
                 seed_scholarship_configurations,
                 seed_scholarship_rules,
@@ -573,6 +574,7 @@ async def seed_development():
             await seed_scholarship_rules(session)
             await seed_scholarship_sub_type_configs(session)
             await seed_email_templates(session)
+            await seed_email_automation_rules(session)
 
             # 6. System settings initialization
             print("\n⚙️ Initializing system settings...")

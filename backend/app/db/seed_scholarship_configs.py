@@ -914,6 +914,58 @@ async def seed_email_templates(session: AsyncSession) -> None:
     print(f"  📊 Inserted: {len(default_templates)} email templates")
 
 
+async def seed_email_automation_rules(session: AsyncSession) -> None:
+    """Initialize default email automation rules"""
+    from app.models.email_management import EmailAutomationRule, TriggerEvent
+
+    logger.info("Initializing email automation rules...")
+    print("  🤖 Initializing email automation rules...")
+
+    # Check if automation rules already exist
+    result = await session.execute(select(EmailAutomationRule))
+    existing_rules = result.scalars().all()
+
+    if existing_rules:
+        print(f"  ✓ Email automation rules already initialized ({len(existing_rules)} found)")
+        return
+
+    # Define initial automation rules (disabled by default, admin must activate)
+    initial_rules = [
+        {
+            "name": "申請提交確認郵件",
+            "description": "當學生提交申請時，自動發送確認郵件給申請者",
+            "trigger_event": TriggerEvent.application_submitted,
+            "template_key": "application_submitted_student",
+            "delay_hours": 0,
+            "is_active": False,
+        },
+        {
+            "name": "教授審核通知",
+            "description": "當申請提交後，通知指導教授有新申請待審核",
+            "trigger_event": TriggerEvent.application_submitted,
+            "template_key": "professor_review_notification",
+            "delay_hours": 0,
+            "is_active": False,
+        },
+        {
+            "name": "學院審核通知",
+            "description": "當教授審核完成後，通知學院有新案件待審核",
+            "trigger_event": TriggerEvent.professor_review_submitted,
+            "template_key": "college_review_notification",
+            "delay_hours": 0,
+            "is_active": False,
+        },
+    ]
+
+    for rule_data in initial_rules:
+        rule = EmailAutomationRule(**rule_data)
+        session.add(rule)
+
+    await session.commit()
+    logger.info("Email automation rules initialized successfully!")
+    print(f"  📊 Inserted: {len(initial_rules)} email automation rules (disabled by default)")
+
+
 async def init_all_scholarship_configs() -> None:
     """Initialize all scholarship configurations - standalone execution function"""
 

@@ -81,42 +81,7 @@ def upgrade() -> None:
         )
         op.create_index("idx_automation_rules_template", "email_automation_rules", ["template_key"], unique=False)
 
-        # 插入初始自動化規則
-        # 注意：這些規則預設為停用狀態，需要管理員手動啟用
-        op.execute(
-            """
-            INSERT INTO email_automation_rules
-            (name, description, trigger_event, template_key, delay_hours, is_active)
-            VALUES
-            (
-                '申請提交確認郵件',
-                '當學生提交申請時，自動發送確認郵件給申請者',
-                'application_submitted',
-                'application_submitted_student',
-                0,
-                false
-            ),
-            (
-                '教授審核通知',
-                '當申請提交後，通知指導教授有新申請待審核',
-                'application_submitted',
-                'professor_review_notification',
-                0,
-                false
-            ),
-            (
-                '學院審核通知',
-                '當教授審核完成後，通知學院有新案件待審核',
-                'professor_review_submitted',
-                'college_review_notification',
-                0,
-                false
-            )
-            ON CONFLICT DO NOTHING
-        """
-        )
-
-        print("✅ Created email_automation_rules table with initial rules")
+        print("✅ Created email_automation_rules table")
     else:
         print("ℹ️  email_automation_rules table already exists")
 
