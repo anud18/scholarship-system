@@ -242,3 +242,20 @@ class SendTestEmailResponse(BaseModel):
     rendered_subject: Optional[str] = None
     rendered_body: Optional[str] = None
     error: Optional[str] = None
+
+
+class SimpleTestEmailRequest(BaseModel):
+    """Schema for sending simple test email without template"""
+
+    recipient_email: str = Field(..., description="Recipient email address")
+    subject: str = Field(..., description="Email subject")
+    body: str = Field(..., description="Email body (plain text or HTML)")
+
+
+class SimpleTestEmailResponse(BaseModel):
+    """Schema for simple test email response"""
+
+    success: bool
+    message: str
+    email_id: Optional[int] = None
+    error: Optional[str] = None

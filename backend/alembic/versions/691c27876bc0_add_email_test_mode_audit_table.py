@@ -14,6 +14,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import insert
 
 from alembic import op
 
@@ -29,6 +30,11 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     existing_tables = inspector.get_table_names()
+    columns = (
+        {col["name"] for col in inspector.get_columns("system_settings")}
+        if "system_settings" in existing_tables
+        else set()
+    )
 
     # 建立郵件測試模式稽核表
     if "email_test_mode_audit" not in existing_tables:
@@ -58,33 +64,49 @@ def upgrade() -> None:
         op.create_index("idx_email_test_audit_user", "email_test_mode_audit", ["user_id"], unique=False)
 
     # 新增郵件測試模式系統設定（使用 ON CONFLICT DO NOTHING 避免重複）
-    op.execute(
-        """
-        INSERT INTO system_settings (
-            key,
-            value,
-            category,
-            data_type,
-            is_sensitive,
-            is_readonly,
-            description,
-            created_at,
-            updated_at
+    if "system_settings" in existing_tables:
+        system_settings_columns = [
+            sa.column("key", sa.String()),
+            sa.column("value", sa.Text()),
+            sa.column("category", sa.String()),
+            sa.column("data_type", sa.String()),
+            sa.column("is_sensitive", sa.Boolean()),
+            sa.column("is_readonly", sa.Boolean()),
+        ]
+
+        if "allow_empty" in columns:
+            system_settings_columns.append(sa.column("allow_empty", sa.Boolean()))
+
+        system_settings_columns.extend(
+            [
+                sa.column("description", sa.Text()),
+                sa.column("created_at", sa.DateTime()),
+                sa.column("updated_at", sa.DateTime()),
+            ]
         )
-        VALUES (
-            'email_test_mode',
-            '{"enabled": false, "redirect_email": null, "expires_at": null}',
-            'email',
-            'json',
-            false,
-            false,
-            '郵件測試模式配置：重定向所有外發郵件至測試信箱，用於生產環境安全測試',
-            NOW(),
-            NOW()
+
+        system_settings = sa.table("system_settings", *system_settings_columns)
+
+        values = {
+            "key": "email_test_mode",
+            "value": '{"enabled": false, "redirect_email": null, "expires_at": null}',
+            "category": "email",
+            "data_type": "json",
+            "is_sensitive": False,
+            "is_readonly": False,
+            "description": "郵件測試模式配置：重定向所有外發郵件至測試信箱，用於生產環境安全測試",
+            "created_at": sa.func.now(),
+            "updated_at": sa.func.now(),
+        }
+
+        if "allow_empty" in columns:
+            values["allow_empty"] = False
+
+        insert_stmt = (
+            insert(system_settings).values(**values).on_conflict_do_nothing(index_elements=[system_settings.c.key])
         )
-        ON CONFLICT (key) DO NOTHING
-    """
-    )
+
+        op.execute(insert_stmt)
 
 
 def downgrade() -> None:

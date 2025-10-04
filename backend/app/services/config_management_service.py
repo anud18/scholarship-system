@@ -66,12 +66,12 @@ class ConfigurationService:
         """Get the decrypted value of a configuration setting"""
         value = setting.value
 
-        # Decrypt if sensitive
-        if setting.is_sensitive:
+        # Decrypt if sensitive AND not empty (empty values are stored unencrypted)
+        if setting.is_sensitive and value:  # Only decrypt non-empty sensitive values
             try:
                 value = self.encryption.decrypt_value(value)
             except Exception:
-                # If decryption fails, return as-is (might be unencrypted legacy value)
+                # If decryption fails, return as-is (might be unencrypted legacy value or empty)
                 pass
 
         # Convert to appropriate type
@@ -121,10 +121,11 @@ class ConfigurationService:
             if validation_regex and not re.match(validation_regex, string_value):
                 raise ValueError(f"Value does not match validation pattern: {validation_regex}")
 
-        # Encrypt if sensitive
+        # Encrypt if sensitive (but NOT if empty when allow_empty=True)
         stored_value = string_value
-        if is_sensitive:
+        if is_sensitive and string_value:  # Only encrypt non-empty sensitive values
             stored_value = self.encryption.encrypt_value(string_value)
+        # If empty string and allow_empty=True, store as-is (don't encrypt empty values)
 
         # Get existing setting
         existing = await self.get_configuration(key)

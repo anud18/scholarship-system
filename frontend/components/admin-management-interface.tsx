@@ -65,13 +65,11 @@ import {
   Plus,
   RefreshCw,
   Save,
-  Send,
   Settings,
   Trash2,
   Upload,
   Users,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface User {
@@ -3598,23 +3596,13 @@ export function AdminManagementInterface({
         <TabsContent value="email" className="space-y-4">
           <Card className="academic-card border-nycu-blue-200">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-nycu-navy-800">
-                    <Mail className="h-5 w-5 text-nycu-blue-600" />
-                    郵件管理
-                  </CardTitle>
-                  <CardDescription>
-                    管理郵件模板、查看歷史記錄、管理排程郵件
-                  </CardDescription>
-                </div>
-                <Link href="/admin/email-management">
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <Send className="h-4 w-4" />
-                    進階郵件管理
-                  </Button>
-                </Link>
-              </div>
+              <CardTitle className="flex items-center gap-2 text-nycu-navy-800">
+                <Mail className="h-5 w-5 text-nycu-blue-600" />
+                郵件管理
+              </CardTitle>
+              <CardDescription>
+                管理郵件模板、查看歷史記錄、管理排程郵件
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Tabs

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle, Clock, Mail, RefreshCw, Shield } from "lucide-react";
+import { AlertCircle, CheckCircle, Clock, Mail, RefreshCw, Shield, ChevronDown, ChevronUp, Send } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 
 interface TestModeStatus {
@@ -43,6 +54,15 @@ interface AuditLog {
   ip_address: string | null;
 }
 
+interface EmailHistoryItem {
+  id: number;
+  recipient_email: string;
+  subject: string;
+  status: string;
+  sent_at: string;
+  error_message?: string;
+}
+
 export function EmailTestModePanel() {
   const { toast } = useToast();
   const [status, setStatus] = useState<TestModeStatus>({
@@ -58,6 +78,17 @@ export function EmailTestModePanel() {
   const [durationHours, setDurationHours] = useState(24);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [showAuditLogs, setShowAuditLogs] = useState(false);
+
+  // Email history state
+  const [emailHistory, setEmailHistory] = useState<EmailHistoryItem[]>([]);
+  const [showEmailHistory, setShowEmailHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Simple test email state
+  const [testEmailRecipient, setTestEmailRecipient] = useState("");
+  const [testEmailSubject, setTestEmailSubject] = useState("");
+  const [testEmailBody, setTestEmailBody] = useState("");
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
   useEffect(() => {
     loadStatus();
@@ -90,6 +121,70 @@ export function EmailTestModePanel() {
       }
     } catch (error) {
       console.error("Failed to load audit logs:", error);
+    }
+  };
+
+  const loadEmailHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const response = await api.emailManagement.getEmailHistory({ limit: 20 });
+      if (response.success && response.data) {
+        setEmailHistory(response.data.items);
+      }
+    } catch (error) {
+      console.error("Failed to load email history:", error);
+      toast({
+        variant: "destructive",
+        title: "載入失敗",
+        description: "無法載入郵件歷史紀錄",
+      });
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailRecipient || !testEmailSubject || !testEmailBody) {
+      toast({
+        variant: "destructive",
+        title: "驗證錯誤",
+        description: "請填寫所有欄位",
+      });
+      return;
+    }
+
+    try {
+      setSendingTestEmail(true);
+      const response = await api.emailManagement.sendSimpleTestEmail({
+        recipient_email: testEmailRecipient,
+        subject: testEmailSubject,
+        body: testEmailBody,
+      });
+
+      if (response.success) {
+        toast({
+          title: "發送成功",
+          description: `測試郵件已發送至 ${testEmailRecipient}`,
+        });
+        // Clear form
+        setTestEmailRecipient("");
+        setTestEmailSubject("");
+        setTestEmailBody("");
+        // Refresh email history
+        if (showEmailHistory) {
+          loadEmailHistory();
+        }
+      } else {
+        throw new Error(response.data?.error || "無法發送測試郵件");
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "發送失敗",
+        description: error.message || "無法發送測試郵件",
+      });
+    } finally {
+      setSendingTestEmail(false);
     }
   };
 
@@ -177,6 +272,19 @@ export function EmailTestModePanel() {
       config_updated: "配置更新",
     };
     return labels[eventType] || eventType;
+  };
+
+  const getStatusBadgeVariant = (status: string): "default" | "success" | "destructive" | "secondary" => {
+    switch (status.toLowerCase()) {
+      case "sent":
+        return "success";
+      case "failed":
+        return "destructive";
+      case "pending":
+        return "secondary";
+      default:
+        return "default";
+    }
   };
 
   return (
@@ -293,6 +401,149 @@ export function EmailTestModePanel() {
               variant="outline"
             >
               檢視稽核記錄
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Email History Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            郵件歷史紀錄
+          </CardTitle>
+          <CardDescription>
+            最近發送的郵件記錄（最近20封）
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Collapsible open={showEmailHistory} onOpenChange={setShowEmailHistory}>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full mb-4"
+                onClick={() => {
+                  if (!showEmailHistory) {
+                    loadEmailHistory();
+                  }
+                }}
+              >
+                {showEmailHistory ? (
+                  <>
+                    <ChevronUp className="h-4 w-4 mr-2" />
+                    隱藏歷史
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4 mr-2" />
+                    顯示歷史
+                  </>
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              {loadingHistory ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                  載入中...
+                </div>
+              ) : emailHistory.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">無郵件歷史記錄</p>
+              ) : (
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>收件人</TableHead>
+                        <TableHead>主旨</TableHead>
+                        <TableHead>狀態</TableHead>
+                        <TableHead>發送時間</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {emailHistory.map((email) => (
+                        <TableRow key={email.id}>
+                          <TableCell className="font-mono text-sm">{email.recipient_email}</TableCell>
+                          <TableCell className="max-w-xs truncate">{email.subject}</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusBadgeVariant(email.status)}>
+                              {email.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(email.sent_at).toLocaleString("zh-TW")}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+        </CardContent>
+      </Card>
+
+      {/* Simple Test Email Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Send className="h-5 w-5" />
+            發送測試郵件
+          </CardTitle>
+          <CardDescription>
+            發送簡單測試郵件（不使用模板）
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="test-recipient">收件人信箱</Label>
+              <Input
+                id="test-recipient"
+                type="email"
+                placeholder="收件人@example.com"
+                value={testEmailRecipient}
+                onChange={(e) => setTestEmailRecipient(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="test-subject">主旨</Label>
+              <Input
+                id="test-subject"
+                type="text"
+                placeholder="測試郵件主旨"
+                value={testEmailSubject}
+                onChange={(e) => setTestEmailSubject(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="test-body">內容</Label>
+              <Textarea
+                id="test-body"
+                placeholder="測試郵件內容..."
+                rows={6}
+                value={testEmailBody}
+                onChange={(e) => setTestEmailBody(e.target.value)}
+              />
+            </div>
+            <Button
+              onClick={handleSendTestEmail}
+              disabled={sendingTestEmail || !testEmailRecipient || !testEmailSubject || !testEmailBody}
+              className="w-full"
+            >
+              {sendingTestEmail ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  發送中...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  發送測試郵件
+                </>
+              )}
             </Button>
           </div>
         </CardContent>

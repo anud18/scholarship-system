@@ -40,10 +40,15 @@ async def get_all_configurations(
         # Convert to response models
         response_configs = []
         for config in configurations:
-            if include_sensitive:
-                value = config.value
+            # Display logic for values
+            if not config.value:  # Empty value
+                value = "(空值)" if config.allow_empty else ""
+            elif include_sensitive:
+                value = config.value  # Show actual value (may be encrypted if legacy data)
+            elif config.is_sensitive:
+                value = "***HIDDEN***"  # Hide sensitive non-empty values
             else:
-                value = config.value if not config.is_sensitive else "***HIDDEN***"
+                value = config.value
 
             response_configs.append(
                 {
@@ -95,11 +100,15 @@ async def get_configuration(
                 status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{config_key}' not found"
             )
 
-        # Convert to response model
-        if include_sensitive:
-            value = configuration.value
+        # Convert to response model with display logic
+        if not configuration.value:  # Empty value
+            value = "(空值)" if configuration.allow_empty else ""
+        elif include_sensitive:
+            value = configuration.value  # Show actual value (may be encrypted if legacy data)
+        elif configuration.is_sensitive:
+            value = "***HIDDEN***"  # Hide sensitive non-empty values
         else:
-            value = configuration.value if not configuration.is_sensitive else "***HIDDEN***"
+            value = configuration.value
 
         config_data = {
             "key": configuration.key,

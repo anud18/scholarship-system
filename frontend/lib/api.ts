@@ -3477,6 +3477,25 @@ class ApiClient {
         params,
       });
     },
+
+    // Send simple test email
+    sendSimpleTestEmail: async (params: {
+      recipient_email: string;
+      subject: string;
+      body: string;
+    }): Promise<
+      ApiResponse<{
+        success: boolean;
+        message: string;
+        email_id: number | null;
+        error?: string;
+      }>
+    > => {
+      return this.request("/email-management/send-simple-test", {
+        method: "POST",
+        body: JSON.stringify(params),
+      });
+    },
   };
 
   college = {

@@ -24,6 +24,8 @@ from app.schemas.email_management import (
     ScheduledEmailUpdate,
     SendTestEmailRequest,
     SendTestEmailResponse,
+    SimpleTestEmailRequest,
+    SimpleTestEmailResponse,
 )
 from app.services.config_management_service import ConfigurationService
 from app.services.email_management_service import EmailManagementService
@@ -643,6 +645,89 @@ async def send_test_email(
         return ApiResponse(
             success=False,
             message=f"測試郵件發送失敗: {str(e)}",
+            data=response_data,
+        )
+
+
+@router.post("/send-simple-test", response_model=ApiResponse[SimpleTestEmailResponse])
+async def send_simple_test_email(
+    *,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+    request: SimpleTestEmailRequest,
+):
+    """
+    Send simple test email without template
+
+    Args:
+        request: Simple test email request with recipient, subject, and body
+
+    Returns:
+        Test email send result
+    """
+    try:
+        from app.services.email_service import EmailService
+
+        # Initialize email service with database session
+        email_service = EmailService(db)
+
+        # Send test email with metadata
+        metadata = {
+            "email_category": EmailCategory.system,
+            "sent_by_user_id": current_user.id,
+            "sent_by_system": False,
+        }
+
+        # Add [TEST] prefix to subject
+        test_subject = f"[TEST] {request.subject}"
+
+        await email_service.send_email(
+            to=request.recipient_email,
+            subject=test_subject,
+            body=request.body,
+            db=db,
+            **metadata,
+        )
+
+        # Get the last email history entry to return ID
+        from app.models.email_management import EmailHistory
+
+        result = await db.execute(
+            select(EmailHistory)
+            .where(EmailHistory.sent_by_user_id == current_user.id)
+            .order_by(EmailHistory.sent_at.desc())
+            .limit(1)
+        )
+        last_email = result.scalar_one_or_none()
+
+        response_data = SimpleTestEmailResponse(
+            success=True,
+            message=f"Test email successfully sent to {request.recipient_email}",
+            email_id=last_email.id if last_email else None,
+        )
+
+        return ApiResponse(
+            success=True,
+            message="Test email sent successfully",
+            data=response_data,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+
+        logging.error(f"Failed to send simple test email: {str(e)}", exc_info=True)
+
+        response_data = SimpleTestEmailResponse(
+            success=False,
+            message="Failed to send test email",
+            error=str(e),
+        )
+
+        return ApiResponse(
+            success=False,
+            message=f"Failed to send test email: {str(e)}",
             data=response_data,
         )
 
