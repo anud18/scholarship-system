@@ -13,6 +13,7 @@ class SystemSettingBase(BaseModel):
     data_type: ConfigDataType = Field(..., description="數據類型")
     description: Optional[str] = Field(None, description="配置描述")
     is_sensitive: bool = Field(False, description="是否為敏感數據")
+    allow_empty: bool = Field(False, description="是否允許空值")
     validation_regex: Optional[str] = Field(None, description="驗證正則表達式")
 
     @validator("key")
@@ -55,6 +56,7 @@ class SystemSettingUpdate(BaseModel):
     data_type: Optional[ConfigDataType] = Field(None, description="數據類型")
     description: Optional[str] = Field(None, description="配置描述")
     is_sensitive: Optional[bool] = Field(None, description="是否為敏感數據")
+    allow_empty: Optional[bool] = Field(None, description="是否允許空值")
     validation_regex: Optional[str] = Field(None, description="驗證正則表達式")
 
     @validator("value")
@@ -81,6 +83,7 @@ class SystemSettingResponse(BaseModel):
     description: Optional[str]
     is_sensitive: bool
     is_readonly: bool
+    allow_empty: bool
     validation_regex: Optional[str]
     default_value: Optional[str]
     last_modified_by: Optional[int]

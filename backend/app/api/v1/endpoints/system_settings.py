@@ -54,6 +54,7 @@ async def get_all_configurations(
                     "description": config.description,
                     "is_sensitive": config.is_sensitive,
                     "is_readonly": config.is_readonly,
+                    "allow_empty": config.allow_empty,
                     "validation_regex": config.validation_regex,
                     "default_value": config.default_value,
                     "last_modified_by": config.last_modified_by,
@@ -108,6 +109,7 @@ async def get_configuration(
             "description": configuration.description,
             "is_sensitive": configuration.is_sensitive,
             "is_readonly": configuration.is_readonly,
+            "allow_empty": configuration.allow_empty,
             "validation_regex": configuration.validation_regex,
             "default_value": configuration.default_value,
             "last_modified_by": configuration.last_modified_by,
@@ -155,6 +157,7 @@ async def create_configuration(
             data_type=configuration.data_type,
             description=configuration.description,
             is_sensitive=configuration.is_sensitive,
+            allow_empty=configuration.allow_empty,
             validation_regex=configuration.validation_regex,
             user_id=current_user.id,
         )
@@ -196,6 +199,7 @@ async def update_configuration(
             is_sensitive=configuration.is_sensitive
             if configuration.is_sensitive is not None
             else existing.is_sensitive,
+            allow_empty=configuration.allow_empty if configuration.allow_empty is not None else existing.allow_empty,
             validation_regex=configuration.validation_regex
             if configuration.validation_regex is not None
             else existing.validation_regex,

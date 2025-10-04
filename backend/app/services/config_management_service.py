@@ -95,6 +95,7 @@ class ConfigurationService:
         data_type: ConfigDataType = ConfigDataType.string,
         is_sensitive: bool = False,
         is_readonly: bool = False,
+        allow_empty: bool = False,
         description: str = None,
         validation_regex: str = None,
         default_value: str = None,
@@ -104,15 +105,21 @@ class ConfigurationService:
 
         # Convert value to string
         if data_type == ConfigDataType.json:
-            string_value = json.dumps(value)
+            string_value = json.dumps(value) if value else ""
         elif data_type == ConfigDataType.boolean:
-            string_value = str(bool(value)).lower()
+            string_value = str(bool(value)).lower() if value else ""
         else:
-            string_value = str(value)
+            string_value = str(value) if value is not None else ""
 
-        # Validate if regex provided
-        if validation_regex and not re.match(validation_regex, string_value):
-            raise ValueError(f"Value does not match validation pattern: {validation_regex}")
+        # Check if empty value is allowed
+        if not string_value:  # Empty string
+            if not allow_empty:
+                raise ValueError("This configuration does not allow empty values. Set allow_empty=True to enable.")
+            # For empty values, skip validation and type conversion
+        else:
+            # Validate if regex provided (only for non-empty values)
+            if validation_regex and not re.match(validation_regex, string_value):
+                raise ValueError(f"Value does not match validation pattern: {validation_regex}")
 
         # Encrypt if sensitive
         stored_value = string_value
@@ -130,6 +137,7 @@ class ConfigurationService:
 
             # Update existing
             existing.value = stored_value
+            existing.allow_empty = allow_empty
             existing.last_modified_by = user_id
             existing.updated_at = datetime.utcnow()
             setting = existing
@@ -143,6 +151,7 @@ class ConfigurationService:
                 data_type=data_type,
                 is_sensitive=is_sensitive,
                 is_readonly=is_readonly,
+                allow_empty=allow_empty,
                 description=description,
                 validation_regex=validation_regex,
                 default_value=default_value,

@@ -50,6 +50,7 @@ class SystemSetting(Base):
     )
     is_sensitive = Column(Boolean, nullable=False, default=False)
     is_readonly = Column(Boolean, nullable=False, default=False)
+    allow_empty = Column(Boolean, nullable=False, default=False)
     description = Column(Text, nullable=True)
     validation_regex = Column(String(255), nullable=True)
     default_value = Column(Text, nullable=True)
