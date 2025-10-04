@@ -166,7 +166,7 @@ async def test_process_single_rule_no_recipients(monkeypatch):
 
     monkeypatch.setattr(service, "_get_recipients", fake_get_recipients)
 
-    rule = EmailAutomationRule(1, "application_submitted_student", "submit")
+    rule = EmailAutomationRule(id=1, template_key="application_submitted_student", trigger_event="submit")
 
     send_calls = []
 
@@ -202,7 +202,7 @@ async def test_process_single_rule_missing_template(monkeypatch):
 
     monkeypatch.setattr(service, "_send_automated_email", fake_send)
 
-    rule = EmailAutomationRule(2, "application_submitted_student", "submit")
+    rule = EmailAutomationRule(id=2, template_key="application_submitted_student", trigger_event="submit")
     db = StubAsyncSession()
 
     await service._process_single_rule(db, rule, {"application_id": 1})
@@ -239,8 +239,7 @@ async def test_process_single_rule_immediate_send(monkeypatch):
 
     monkeypatch.setattr(service, "_send_automated_email", fake_send)
 
-    rule = EmailAutomationRule(3, "result_notification_student", "submit")
-    rule.delay_hours = 0
+    rule = EmailAutomationRule(id=3, template_key="result_notification_student", trigger_event="submit", delay_hours=0)
 
     db = StubAsyncSession()
     base_context = {"application_id": 7, "context": "value"}
@@ -284,7 +283,9 @@ async def test_process_single_rule_schedules_when_delay_set(monkeypatch):
 
     monkeypatch.setattr(service, "_schedule_automated_email", fake_schedule)
 
-    rule = EmailAutomationRule(4, "application_submitted_student", "submit", delay_hours=3)
+    rule = EmailAutomationRule(
+        id=4, template_key="application_submitted_student", trigger_event="submit", delay_hours=3
+    )
 
     db = StubAsyncSession()
     context = {"application_id": 12}
