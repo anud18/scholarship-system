@@ -210,10 +210,10 @@ jobs:
           echo "Running Alembic migrations..."
           docker exec scholarship_backend_staging alembic upgrade head
 
-      # - name: Seed database (if needed)
-      #   run: |
-      #     echo "Seeding staging data..."
-      #     docker exec scholarship_backend_staging python -m app.seed || echo "Seed completed with warnings"
+      - name: Seed database (if needed)
+        run: |
+          echo "Seeding staging data..."
+          docker exec scholarship_backend_staging python -m app.seed || echo "Seed completed with warnings"
 
       - name: Health check
         run: |

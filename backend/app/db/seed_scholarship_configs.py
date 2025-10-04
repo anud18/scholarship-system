@@ -836,6 +836,26 @@ async def seed_email_templates(session: AsyncSession) -> None:
             "sending_type": SendingType.single,
             "recipient_options": [{"label": "管理員", "value": "admin"}],
         },
+        {
+            "key": "college_review_notification",
+            "subject_template": "學院審核通知 - {student_name} 的 {scholarship_name} 申請",
+            "body_template": """學院承辦人您好：
+
+{professor_name} 教授已完成對 {student_name}（學號：{student_id}）的 {scholarship_name} 申請審查。
+
+教授審查意見：{professor_recommendation}
+
+請進行學院審核，審核截止日期：{review_deadline}
+
+請至管理系統進行審核：{review_url}
+
+如有任何問題，請隨時聯繫我們。
+
+國立陽明交通大學
+獎學金管理系統""",
+            "sending_type": SendingType.single,
+            "recipient_options": [{"label": "學院承辦人", "value": "college"}],
+        },
         # Bulk sending type templates
         {
             "key": "scholarship_announcement",

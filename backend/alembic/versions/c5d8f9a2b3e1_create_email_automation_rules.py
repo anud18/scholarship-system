@@ -100,7 +100,7 @@ def upgrade() -> None:
                 '教授審核通知',
                 '當申請提交後，通知指導教授有新申請待審核',
                 'application_submitted',
-                'application_notify_professor',
+                'professor_review_notification',
                 0,
                 false
             ),
