@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { apiClient } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
 
 interface NotificationContextValue {
   unreadCount: number;
@@ -14,6 +15,7 @@ interface NotificationContextValue {
 const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
 
   // 獲取未讀通知數量
@@ -66,7 +68,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     window.dispatchEvent(new CustomEvent("notification-panel-open"));
   }, []);
 
-  // 初始載入時取得未讀數量
+  // 監聽用戶登入狀態，當用戶登入時自動刷新未讀通知數量
+  useEffect(() => {
+    if (user) {
+      // 用戶已登入，刷新未讀通知數量
+      refreshUnreadCount();
+    }
+  }, [user, refreshUnreadCount]);
+
+  // 初始載入時取得未讀數量（作為備用機制）
   useEffect(() => {
     refreshUnreadCount();
   }, [refreshUnreadCount]);
