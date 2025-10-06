@@ -6,8 +6,14 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Modal } from "./ui/modal";
-import { UserListResponse, UserCreate } from "@/lib/api";
+import { UserListResponse, UserCreate, apiClient } from "@/lib/api";
 import { Badge } from "./ui/badge";
+
+interface Academy {
+  id: number;
+  code: string;
+  name: string;
+}
 
 interface UserEditModalProps {
   isOpen: boolean;
@@ -42,10 +48,63 @@ export function UserEditModal({
 }: UserEditModalProps) {
   const isEditing = !!editingUser;
 
+  // 學院列表狀態
+  const [academies, setAcademies] = useState<Academy[]>([]);
+  const [loadingAcademies, setLoadingAcademies] = useState(false);
+
+  // 系所列表狀態（用於自動匹配學院）
+  const [departments, setDepartments] = useState<
+    Array<{
+      id: number;
+      code: string;
+      name: string;
+      academy_code: string | null;
+    }>
+  >([]);
+
   // 獎學金權限相關狀態
   const [selectedScholarshipIds, setSelectedScholarshipIds] = useState<
     number[]
   >([]);
+
+  // 獲取學院列表
+  React.useEffect(() => {
+    const fetchAcademies = async () => {
+      setLoadingAcademies(true);
+      try {
+        const response = await apiClient.referenceData.getAcademies();
+        if (response.success && response.data) {
+          setAcademies(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch academies:", error);
+      } finally {
+        setLoadingAcademies(false);
+      }
+    };
+
+    if (isOpen) {
+      fetchAcademies();
+    }
+  }, [isOpen]);
+
+  // 獲取系所列表（用於自動匹配學院）
+  React.useEffect(() => {
+    const fetchDepartments = async () => {
+      try {
+        const response = await apiClient.referenceData.getDepartments();
+        if (response.success && response.data) {
+          setDepartments(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch departments:", error);
+      }
+    };
+
+    if (isOpen) {
+      fetchDepartments();
+    }
+  }, [isOpen]);
 
   // 初始化已選擇的獎學金 ID
   React.useEffect(() => {
@@ -148,7 +207,30 @@ export function UserEditModal({
               <Label>角色 *</Label>
               <select
                 value={userForm.role}
-                onChange={e => onUserFormChange("role", e.target.value)}
+                onChange={(e) => {
+                  const newRole = e.target.value;
+                  const oldRole = userForm.role;
+
+                  onUserFormChange("role", newRole);
+
+                  // 從學院角色切換到其他角色 → 清空學院權限
+                  if (oldRole === "college" && newRole !== "college") {
+                    onUserFormChange("college_code", "");
+                  }
+
+                  // 切換到學院角色 → 自動匹配學院
+                  if (oldRole !== "college" && newRole === "college") {
+                    // 根據 dept_code 自動匹配 academy_code
+                    if (userForm.dept_code) {
+                      const dept = departments.find(
+                        (d) => d.code === userForm.dept_code
+                      );
+                      if (dept?.academy_code) {
+                        onUserFormChange("college_code", dept.academy_code);
+                      }
+                    }
+                  }
+                }}
                 className="w-full px-3 py-2 border border-nycu-blue-200 rounded-md"
               >
                 <option value="">請選擇角色</option>
@@ -187,6 +269,60 @@ export function UserEditModal({
               <p className="text-sm text-green-700">
                 超級管理員自動擁有所有獎學金的完整管理權限，無需額外設定。
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* 學院管理權限設置區域 - 只有 college 角色需要設定負責的學院 */}
+        {isEditing && userForm.role === "college" && (
+          <div className="border-t pt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                學院管理權限
+              </h3>
+            </div>
+
+            <div className="space-y-3 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-700">
+                  選擇負責的學院
+                </Label>
+                <select
+                  value={userForm.college_code || ""}
+                  onChange={(e) =>
+                    onUserFormChange("college_code", e.target.value)
+                  }
+                  className="w-full px-3 py-2 border border-indigo-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  disabled={loadingAcademies}
+                >
+                  <option value="">請選擇學院</option>
+                  {academies.map((academy) => (
+                    <option key={academy.id} value={academy.code}>
+                      {academy.name} ({academy.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-start gap-2 text-xs text-indigo-700 bg-indigo-100 px-3 py-2 rounded-md">
+                <div className="w-4 h-4 mt-0.5">
+                  <svg
+                    className="w-4 h-4"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+                <span>
+                  此學院權限決定可管理哪個學院的獎學金申請審核。使用者的單位資訊（從
+                  Portal 同步）與此學院權限可以不同。
+                </span>
+              </div>
             </div>
           </div>
         )}

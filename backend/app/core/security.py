@@ -132,6 +132,13 @@ def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def require_scholarship_manager(current_user: User = Depends(get_current_user)) -> User:
+    """Require admin, super admin, or college role for scholarship management"""
+    if not (current_user.is_admin() or current_user.is_super_admin() or current_user.is_college()):
+        raise AuthorizationError("Scholarship management access required")
+    return current_user
+
+
 def require_student(current_user: User = Depends(get_current_user)) -> User:
     """Require student role"""
     if not current_user.is_student():

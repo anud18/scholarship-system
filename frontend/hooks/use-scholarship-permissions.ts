@@ -37,8 +37,8 @@ export function useScholarshipPermissions() {
       return;
     }
 
-    // Only admin and super_admin roles can have scholarship permissions
-    if (!["admin", "super_admin"].includes(user.role)) {
+    // Only admin, super_admin, and college roles can have scholarship permissions
+    if (!["admin", "super_admin", "college"].includes(user.role)) {
       console.log(
         "useScholarshipPermissions: User role not eligible for permissions:",
         user.role

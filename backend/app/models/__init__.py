@@ -14,6 +14,7 @@ from app.models.application import (
 )
 from app.models.application_field import ApplicationDocument, ApplicationField, FieldType
 from app.models.audit_log import AuditAction, AuditLog
+from app.models.batch_import import BatchImport
 from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview, QuotaDistribution
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail, ScheduleStatus
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
@@ -84,6 +85,8 @@ __all__ = [
     "AuditLog",
     "AuditAction",
     "SystemSetting",
+    # Batch import models
+    "BatchImport",
     # User profile models
     "UserProfile",
     "UserProfileHistory",

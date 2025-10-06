@@ -84,11 +84,19 @@ async def get_academies(
 async def get_departments(
     session: AsyncSession = Depends(get_db),
 ) -> List[dict]:
-    """Get all department information"""
+    """Get all department information with academy mapping"""
     result = await session.execute(select(Department).order_by(Department.code))
     departments = result.scalars().all()
 
-    return [{"id": department.id, "code": department.code, "name": department.name} for department in departments]
+    return [
+        {
+            "id": department.id,
+            "code": department.code,
+            "name": department.name,
+            "academy_code": department.academy_code,
+        }
+        for department in departments
+    ]
 
 
 @router.get("/enroll-types")

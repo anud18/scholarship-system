@@ -35,3 +35,14 @@ class QuotaManagementMode(enum.Enum):
     simple = "simple"  # 簡單總配額
     college_based = "college_based"  # 學院分配配額
     matrix_based = "matrix_based"  # 矩陣配額管理 (子類型×學院)
+
+
+class BatchImportStatus(enum.Enum):
+    """Batch import status enum"""
+
+    pending = "pending"  # 待確認
+    processing = "processing"  # 處理中
+    completed = "completed"  # 完成
+    failed = "failed"  # 失敗
+    cancelled = "cancelled"  # 已取消
+    partial = "partial"  # 部分成功

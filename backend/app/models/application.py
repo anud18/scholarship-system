@@ -169,6 +169,12 @@ class Application(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # 批次匯入相關 (Batch Import)
+    imported_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # 匯入者
+    batch_import_id = Column(Integer, ForeignKey("batch_imports.id"), nullable=True)  # 批次匯入紀錄
+    import_source = Column(String(20), nullable=True, default="online")  # 'online' | 'batch_import'
+    document_status = Column(String(30), nullable=True, default="complete")  # 'complete' | 'pending_documents'
+
     # 其他資訊
     meta_data = Column(JSON)  # 額外的元資料
 
@@ -197,6 +203,10 @@ class Application(Base):
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
     professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
     # college_review = relationship("CollegeReview", back_populates="application", uselist=False, cascade="all, delete-orphan")  # Temporarily commented for testing
+
+    # Batch import relationships
+    imported_by = relationship("User", foreign_keys=[imported_by_id])
+    batch_import = relationship("BatchImport", back_populates="applications", foreign_keys=[batch_import_id])
 
     # 唯一約束：確保每個用戶在每個學年、學期、獎學金組合下只能有一個申請
     # Use user_id instead of student_id since students are now from external API

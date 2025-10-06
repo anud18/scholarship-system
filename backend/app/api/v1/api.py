@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     application_fields,
     applications,
     auth,
+    batch_import,
     college_review,
     email_automation,
     email_management,
@@ -56,6 +57,7 @@ api_router.include_router(user_profiles.router, prefix="/user-profiles", tags=["
 api_router.include_router(scholarship_rules.router, prefix="/scholarship-rules", tags=["Scholarship Rules"])
 api_router.include_router(professor.router, prefix="/professor", tags=["Professor Review"])
 api_router.include_router(college_review.router, prefix="/college", tags=["College Review"])
+api_router.include_router(batch_import.router, prefix="/college/batch-import", tags=["Batch Import"])
 api_router.include_router(email_management.router, prefix="/email-management", tags=["Email Management"])
 api_router.include_router(email_automation.router, prefix="/email-automation", tags=["Email Automation"])
 api_router.include_router(nycu_employee.router, prefix="/nycu-employee", tags=["NYCU Employee"])

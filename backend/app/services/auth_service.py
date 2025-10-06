@@ -50,7 +50,34 @@ class AuthService:
         await self.db.commit()
         await self.db.refresh(user)
 
+        # Auto-assign all active scholarships to college users
+        if user.role.value == "college":
+            await self._auto_assign_scholarships_to_college_user(user.id)
+
         return UserResponse.model_validate(user)
+
+    async def _auto_assign_scholarships_to_college_user(self, user_id: int) -> None:
+        """Auto-assign all active scholarships to a college user"""
+        from app.models.scholarship import ScholarshipType
+        from app.models.user import AdminScholarship
+
+        # Get all active scholarships
+        stmt = select(ScholarshipType).where(ScholarshipType.status == "active")
+        result = await self.db.execute(stmt)
+        active_scholarships = result.scalars().all()
+
+        # Create AdminScholarship records for each active scholarship
+        for scholarship in active_scholarships:
+            # Check if assignment already exists
+            check_stmt = select(AdminScholarship).where(
+                AdminScholarship.admin_id == user_id, AdminScholarship.scholarship_id == scholarship.id
+            )
+            check_result = await self.db.execute(check_stmt)
+            if not check_result.scalar_one_or_none():
+                admin_scholarship = AdminScholarship(admin_id=user_id, scholarship_id=scholarship.id)
+                self.db.add(admin_scholarship)
+
+        await self.db.commit()
 
     async def authenticate_user(self, login_data: UserLogin) -> User:
         """Authenticate user with nycu_id/email"""

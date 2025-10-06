@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
-from app.core.security import check_scholarship_permission, get_current_user, require_admin
+from app.core.security import check_scholarship_permission, get_current_user, require_admin, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
 from app.models.enums import Semester
@@ -2230,7 +2230,9 @@ async def get_all_scholarships_for_permissions(
 
 
 @router.get("/scholarships/my-scholarships", response_model=ApiResponse[List[Dict[str, Any]]])
-async def get_my_scholarships(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+async def get_my_scholarships(
+    current_user: User = Depends(require_scholarship_manager), db: AsyncSession = Depends(get_db)
+):
     """Get scholarships that the current user has permission to manage"""
 
     logger.info(f"get_my_scholarships called by user {current_user.id} role {current_user.role}")
@@ -2248,7 +2250,8 @@ async def get_my_scholarships(current_user: User = Depends(require_admin), db: A
         scholarships = result.scalars().all()
         logger.info(f"Found {len(scholarships)} active scholarships for super admin")
     else:
-        # Regular admins can only see assigned scholarships
+        # Regular admins and college users can only see assigned scholarships
+        logger.info(f"User is {current_user.role}, getting assigned scholarships")
         stmt = (
             select(ScholarshipType)
             .join(AdminScholarship, ScholarshipType.id == AdminScholarship.scholarship_id)
@@ -2261,6 +2264,7 @@ async def get_my_scholarships(current_user: User = Depends(require_admin), db: A
 
         result = await db.execute(stmt)
         scholarships = result.scalars().all()
+        logger.info(f"Found {len(scholarships)} assigned scholarships for user")
 
     # Convert to response format
     scholarship_list = []

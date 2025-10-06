@@ -58,6 +58,7 @@ class User(Base):
     status = Column(Enum(EmployeeStatus, values_callable=lambda obj: [e.value for e in obj]))  # 在學 / 畢業 / 在職 / 退休
     dept_code = Column(String(20))  # deptCode
     dept_name = Column(String(100))  # dept
+    college_code = Column(String(10), nullable=True)  # College code for college role users
     role = Column(
         Enum(UserRole, values_callable=lambda obj: [e.value for e in obj]), default=UserRole.student
     )  # 系統內部使用角色

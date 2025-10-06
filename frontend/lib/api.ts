@@ -554,6 +554,7 @@ export interface UserListResponse {
   status?: string;
   dept_code?: string;
   dept_name?: string;
+  college_code?: string; // 系統內學院管理權限
   role: string;
   comment?: string;
   created_at: string;
@@ -619,6 +620,7 @@ export interface UserCreate {
   status?: "在學" | "畢業" | "在職" | "退休";
   dept_code?: string;
   dept_name?: string;
+  college_code?: string; // 系統內學院管理權限
   role: "student" | "professor" | "college" | "admin" | "super_admin";
   comment?: string;
   raw_data?: {
@@ -3097,7 +3099,14 @@ class ApiClient {
 
     // Get all departments
     getDepartments: async (): Promise<
-      ApiResponse<Array<{ id: number; code: string; name: string }>>
+      ApiResponse<
+        Array<{
+          id: number;
+          code: string;
+          name: string;
+          academy_code: string | null;
+        }>
+      >
     > => {
       return this.request("/reference-data/departments");
     },
@@ -3121,6 +3130,43 @@ class ApiClient {
       }>
     > => {
       return this.request("/reference-data/all");
+    },
+
+    // Get scholarship periods based on application cycle
+    getScholarshipPeriods: async (params?: {
+      scholarship_id?: number;
+      scholarship_code?: string;
+      application_cycle?: string;
+    }): Promise<
+      ApiResponse<{
+        periods: Array<{
+          value: string;
+          academic_year: number;
+          semester: string | null;
+          label: string;
+          label_en: string;
+          is_current: boolean;
+          cycle: string;
+          sort_order: number;
+        }>;
+        cycle: string;
+        scholarship_name: string | null;
+        current_period: string;
+        total_periods: number;
+      }>
+    > => {
+      const queryParams = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined) {
+            queryParams.append(key, value.toString());
+          }
+        });
+      }
+      const query = queryParams.toString();
+      return this.request(
+        `/reference-data/scholarship-periods${query ? `?${query}` : ""}`
+      );
     },
   };
 
@@ -3680,7 +3726,7 @@ class ApiClient {
     verifyBankAccount: async (
       applicationId: number
     ): Promise<ApiResponse<BankVerificationResult>> => {
-      return this.request("/bank-verification", {
+      return this.request("/admin/bank-verification", {
         method: "POST",
         body: JSON.stringify({ application_id: applicationId }),
       });
@@ -3689,7 +3735,7 @@ class ApiClient {
     verifyBankAccountsBatch: async (
       applicationIds: number[]
     ): Promise<ApiResponse<BankVerificationBatchResult>> => {
-      return this.request("/bank-verification/batch", {
+      return this.request("/admin/bank-verification/batch", {
         method: "POST",
         body: JSON.stringify({ application_ids: applicationIds }),
       });
@@ -3789,6 +3835,165 @@ class ApiClient {
 
     getTriggerEvents: async (): Promise<ApiResponse<any[]>> => {
       return this.request("/email-automation/trigger-events");
+    },
+  };
+
+  // Batch Import endpoints (College role)
+  batchImport = {
+    uploadData: async (
+      file: File,
+      scholarshipType: string,
+      academicYear: number,
+      semester: string
+    ): Promise<
+      ApiResponse<{
+        batch_id: string;
+        file_name: string;
+        total_records: number;
+        preview_data: Array<Record<string, any>>;
+        validation_summary: {
+          valid_count: number;
+          invalid_count: number;
+          warnings: string[];
+          errors: Array<{
+            row: number;
+            field?: string;
+            message: string;
+          }>;
+        };
+      }>
+    > => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("scholarship_type", scholarshipType);
+      formData.append("academic_year", academicYear.toString());
+      formData.append("semester", semester);
+
+      return this.request("/college/batch-import/upload-data", {
+        method: "POST",
+        body: formData,
+        headers: {}, // Let browser set Content-Type for FormData
+      });
+    },
+
+    confirm: async (
+      batchId: string,
+      confirm: boolean = true
+    ): Promise<
+      ApiResponse<{
+        success_count: number;
+        failed_count: number;
+        errors: Array<{
+          row: number;
+          student_id: string;
+          error: string;
+        }>;
+        created_application_ids: number[];
+      }>
+    > => {
+      return this.request(`/college/batch-import/${batchId}/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ batch_id: batchId, confirm }),
+      });
+    },
+
+    getHistory: async (params?: {
+      skip?: number;
+      limit?: number;
+      status?: string;
+    }): Promise<
+      ApiResponse<{
+        items: Array<{
+          id: string;
+          file_name: string;
+          uploaded_by: number;
+          uploaded_at: string;
+          total_records: number;
+          success_count: number;
+          failed_count: number;
+          status: "pending" | "completed" | "failed";
+          scholarship_type: string;
+          academic_year: number;
+          semester: string;
+        }>;
+        total: number;
+      }>
+    > => {
+      const queryParams = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined) {
+            queryParams.append(key, value.toString());
+          }
+        });
+      }
+      const query = queryParams.toString();
+      return this.request(
+        `/college/batch-import/history${query ? `?${query}` : ""}`
+      );
+    },
+
+    getDetails: async (
+      batchId: string
+    ): Promise<
+      ApiResponse<{
+        id: string;
+        file_name: string;
+        uploaded_by: number;
+        uploaded_at: string;
+        total_records: number;
+        success_count: number;
+        failed_count: number;
+        status: "pending" | "completed" | "failed";
+        scholarship_type: string;
+        academic_year: number;
+        semester: string;
+        validation_summary: {
+          valid_count: number;
+          invalid_count: number;
+          warnings: string[];
+          errors: Array<{
+            row: number;
+            field?: string;
+            message: string;
+          }>;
+        };
+        preview_data: Array<Record<string, any>>;
+        processing_errors: Array<{
+          row: number;
+          student_id: string;
+          error: string;
+        }>;
+      }>
+    > => {
+      return this.request(`/college/batch-import/${batchId}/details`);
+    },
+
+    downloadTemplate: async (scholarshipType: string): Promise<void> => {
+      const token = localStorage.getItem("auth_token");
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/college/batch-import/template?scholarship_type=${encodeURIComponent(scholarshipType)}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to download template");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `batch_import_template_${scholarshipType}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     },
   };
 }

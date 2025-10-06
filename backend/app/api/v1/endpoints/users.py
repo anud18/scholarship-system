@@ -12,7 +12,7 @@ from sqlalchemy.sql.functions import count
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.user import EmployeeStatus, User, UserRole, UserType
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.user import BulkScholarshipAssignRequest, BulkScholarshipAssignResponse, UserCreate, UserUpdate
 from app.services.auth_service import AuthService
 
 router = APIRouter()
@@ -29,6 +29,7 @@ def convert_user_to_dict(user: User) -> dict:
         "status": user.status.value if user.status else None,
         "dept_code": user.dept_code,
         "dept_name": user.dept_name,
+        "college_code": user.college_code,
         "role": user.role.value if hasattr(user.role, "value") else str(user.role),
         "comment": user.comment,
         "created_at": user.created_at.isoformat(),
@@ -154,10 +155,13 @@ async def get_all_users(
     role: Optional[str] = Query(None, description="Filter by role"),
     roles: Optional[str] = Query(None, description="Filter by multiple roles (comma-separated)"),
     search: Optional[str] = Query(None, description="Search by name, email, or nycu_id"),
+    include_permissions: bool = Query(False, description="Include scholarship permissions"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all users with pagination (admin only)"""
+    from app.models.scholarship import ScholarshipType
+    from app.models.user import AdminScholarship
 
     # Base query
     stmt = select(User)
@@ -203,8 +207,31 @@ async def get_all_users(
     result = await db.execute(stmt)
     users = result.scalars().all()
 
-    # Convert to response format
-    user_list = [convert_user_to_dict(user) for user in users]
+    # Convert to response format and optionally include permissions
+    user_list = []
+    for user in users:
+        user_dict = convert_user_to_dict(user)
+
+        # Include scholarship permissions if requested
+        if include_permissions:
+            # Get user's scholarship permissions
+            perm_stmt = (
+                select(ScholarshipType)
+                .join(AdminScholarship, AdminScholarship.scholarship_id == ScholarshipType.id)
+                .where(AdminScholarship.admin_id == user.id)
+            )
+            perm_result = await db.execute(perm_stmt)
+            scholarships = perm_result.scalars().all()
+
+            user_dict["scholarships"] = [
+                {"id": s.id, "code": s.code, "name": s.name, "category": s.category} for s in scholarships
+            ]
+            user_dict["scholarship_count"] = len(scholarships)
+        else:
+            user_dict["scholarships"] = []
+            user_dict["scholarship_count"] = 0
+
+        user_list.append(user_dict)
 
     return {
         "success": True,
@@ -298,6 +325,128 @@ async def update_user(
         "message": "User updated successfully",
         "data": convert_user_to_dict(user),
     }
+
+
+@router.patch("/{user_id}/college")
+async def update_user_college(
+    user_id: int,
+    college_code: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update user's college code (super admin only)"""
+    # Only super admin can change college assignments
+    if current_user.role != UserRole.super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super admin can update college assignments",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.college_code = college_code
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "success": True,
+        "message": "College assignment updated successfully",
+        "data": convert_user_to_dict(user),
+    }
+
+
+@router.post("/{user_id}/scholarships/bulk", response_model=BulkScholarshipAssignResponse)
+async def bulk_assign_scholarships(
+    user_id: int,
+    request: BulkScholarshipAssignRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk assign/remove scholarships to/from user (super admin only)"""
+    from app.models.scholarship import ScholarshipType
+    from app.models.user import AdminScholarship
+
+    # Only super admin can manage scholarship permissions
+    if current_user.role != UserRole.super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super admin can manage scholarship permissions",
+        )
+
+    # Get user
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    assigned_count = 0
+    removed_count = 0
+
+    if request.operation == "set":
+        # Remove all existing assignments
+        delete_stmt = select(AdminScholarship).where(AdminScholarship.admin_id == user_id)
+        delete_result = await db.execute(delete_stmt)
+        existing_assignments = delete_result.scalars().all()
+
+        for assignment in existing_assignments:
+            await db.delete(assignment)
+            removed_count += 1
+
+        # Add new assignments
+        for scholarship_id in request.scholarship_ids:
+            # Verify scholarship exists
+            scholarship = await db.get(ScholarshipType, scholarship_id)
+            if not scholarship:
+                raise HTTPException(status_code=404, detail=f"Scholarship {scholarship_id} not found")
+
+            assignment = AdminScholarship(admin_id=user_id, scholarship_id=scholarship_id)
+            db.add(assignment)
+            assigned_count += 1
+
+    elif request.operation == "add":
+        # Add new assignments (skip duplicates)
+        for scholarship_id in request.scholarship_ids:
+            # Verify scholarship exists
+            scholarship = await db.get(ScholarshipType, scholarship_id)
+            if not scholarship:
+                raise HTTPException(status_code=404, detail=f"Scholarship {scholarship_id} not found")
+
+            # Check if already assigned
+            check_stmt = select(AdminScholarship).where(
+                AdminScholarship.admin_id == user_id, AdminScholarship.scholarship_id == scholarship_id
+            )
+            check_result = await db.execute(check_stmt)
+            if not check_result.scalar_one_or_none():
+                assignment = AdminScholarship(admin_id=user_id, scholarship_id=scholarship_id)
+                db.add(assignment)
+                assigned_count += 1
+
+    else:
+        raise HTTPException(status_code=400, detail="Invalid operation. Use 'set' or 'add'")
+
+    await db.commit()
+
+    # Get final scholarship list
+    final_stmt = (
+        select(ScholarshipType)
+        .join(AdminScholarship, AdminScholarship.scholarship_id == ScholarshipType.id)
+        .where(AdminScholarship.admin_id == user_id)
+    )
+    final_result = await db.execute(final_stmt)
+    scholarships = final_result.scalars().all()
+
+    return BulkScholarshipAssignResponse(
+        user_id=user_id,
+        assigned_count=assigned_count,
+        removed_count=removed_count,
+        total_scholarships=len(scholarships),
+        scholarships=[{"id": s.id, "code": s.code, "name": s.name, "category": s.category} for s in scholarships],
+    )
 
 
 @router.get("/stats/overview")

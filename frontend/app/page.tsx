@@ -24,6 +24,7 @@ import {
   GraduationCap,
   Loader2,
   FileSpreadsheet,
+  Upload,
 } from "lucide-react";
 import { EnhancedStudentPortal } from "@/components/enhanced-student-portal";
 import { AdminScholarshipDashboard } from "@/components/admin-scholarship-dashboard";
@@ -32,6 +33,7 @@ import { ProfessorReviewComponent } from "@/components/professor-review-componen
 import { CollegeDashboard } from "@/components/college-dashboard";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { RosterManagementDashboard } from "@/components/roster-management-dashboard";
+import { BatchImportPanel } from "@/components/batch-import-panel";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { useLanguagePreference } from "@/hooks/use-language-preference";
@@ -320,7 +322,7 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "college") {
       return (
-        <TabsList className="grid w-full grid-cols-1 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-2 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="main"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -328,13 +330,20 @@ export default function ScholarshipManagementSystem() {
             <GraduationCap className="h-4 w-4" />
             審核管理
           </TabsTrigger>
+          <TabsTrigger
+            value="batch-import"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <Upload className="h-4 w-4" />
+            批次匯入
+          </TabsTrigger>
         </TabsList>
       );
     }
 
     if (user.role === "super_admin") {
       return (
-        <TabsList className="grid w-full grid-cols-4 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-5 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="dashboard"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -348,6 +357,13 @@ export default function ScholarshipManagementSystem() {
           >
             <Users className="h-4 w-4" />
             審核管理
+          </TabsTrigger>
+          <TabsTrigger
+            value="batch-import"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <Upload className="h-4 w-4" />
+            批次匯入
           </TabsTrigger>
           <TabsTrigger
             value="roster"
@@ -516,6 +532,13 @@ export default function ScholarshipManagementSystem() {
               </>
             )}
           </TabsContent>
+
+          {/* 批次匯入 - college 和 super_admin 角色可見 */}
+          {(user.role === "college" || user.role === "super_admin") && (
+            <TabsContent value="batch-import" className="space-y-4">
+              <BatchImportPanel locale={locale} />
+            </TabsContent>
+          )}
 
           {/* 造冊管理 - 只有 admin 和 super_admin 可見 */}
           {(user.role === "admin" || user.role === "super_admin") && (

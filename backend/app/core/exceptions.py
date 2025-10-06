@@ -241,3 +241,64 @@ class StudentVerificationError(ScholarshipException):
 
 
 # FileStorageError is already defined above at line 91
+
+
+# Batch Import specific exceptions
+class BatchImportError(ScholarshipException):
+    """Base exception for batch import operations"""
+
+    def __init__(self, message: str, batch_id: Optional[int] = None, details: Optional[Dict] = None):
+        error_details = details or {}
+        if batch_id:
+            error_details["batch_id"] = batch_id
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="BATCH_IMPORT_ERROR",
+            details=error_details,
+        )
+
+
+class BatchImportParseError(BatchImportError):
+    """Raised when batch import file parsing fails"""
+
+    def __init__(self, message: str, file_name: Optional[str] = None):
+        details = {"file_name": file_name} if file_name else {}
+        super().__init__(message, details=details)
+
+
+class BatchImportValidationError(BatchImportError):
+    """Raised when batch import data validation fails"""
+
+    def __init__(
+        self,
+        message: str,
+        row_number: Optional[int] = None,
+        student_id: Optional[str] = None,
+        field: Optional[str] = None,
+    ):
+        details = {}
+        if row_number:
+            details["row_number"] = row_number
+        if student_id:
+            details["student_id"] = student_id
+        if field:
+            details["field"] = field
+        super().__init__(message, details=details)
+
+
+class BatchImportPermissionError(AuthorizationError):
+    """Raised when user lacks permission for batch import operation"""
+
+    def __init__(self, message: str, college_code: Optional[str] = None):
+        super().__init__(message)
+        if college_code:
+            self.details["college_code"] = college_code
+
+
+class BatchImportStatusError(BusinessLogicError):
+    """Raised when batch import status is invalid for the operation"""
+
+    def __init__(self, current_status: str, operation: str):
+        message = f"Cannot perform {operation} on batch import with status {current_status}"
+        super().__init__(message)

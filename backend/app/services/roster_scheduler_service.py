@@ -403,9 +403,44 @@ async def get_scheduler():
     yield roster_scheduler
 
 
+async def cleanup_expired_batch_data():
+    """
+    Clean up expired batch import data (scheduled job).
+    Runs daily to delete parsed_data older than 7 days.
+    """
+    from app.db.session import get_db_session
+    from app.services.batch_import_service import BatchImportService
+
+    try:
+        async with get_db_session() as db:
+            service = BatchImportService(db)
+            count = await service.cleanup_expired_data()
+            if count > 0:
+                logger.info(f"Cleaned up expired data from {count} batch imports")
+            else:
+                logger.debug("No expired batch import data to clean up")
+    except Exception as e:
+        logger.error(f"Failed to cleanup expired batch data: {e}")
+
+
 async def init_scheduler():
     """初始化排程器"""
     await roster_scheduler.start_scheduler()
+
+    # Add daily cleanup job for batch import data (runs at 2 AM daily)
+    try:
+        roster_scheduler.scheduler.add_job(
+            cleanup_expired_batch_data,
+            "cron",
+            hour=2,
+            minute=0,
+            id="batch_import_cleanup",
+            replace_existing=True,
+            name="Batch Import Data Cleanup",
+        )
+        logger.info("Added batch import cleanup job (runs daily at 2 AM)")
+    except Exception as e:
+        logger.error(f"Failed to add batch import cleanup job: {e}")
 
 
 async def shutdown_scheduler():

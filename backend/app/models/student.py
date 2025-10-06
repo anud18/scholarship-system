@@ -60,6 +60,10 @@ class Academy(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String(10), unique=True, nullable=False)
     name = Column(String(100), nullable=False)
+    name_en = Column(String(200), nullable=True)
+
+    # 關聯
+    departments = relationship("Department", back_populates="academy")
 
 
 class Department(Base):
@@ -70,6 +74,10 @@ class Department(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String(10), unique=True)
     name = Column(String(100), nullable=False)
+    academy_code = Column(String(10), ForeignKey("academies.code"), nullable=True, index=True)
+
+    # 關聯
+    academy = relationship("Academy", back_populates="departments")
 
 
 class EnrollType(Base):
