@@ -339,7 +339,7 @@ async def get_scholarship_periods(
     scholarship_code: Optional[str] = Query(None, description="Scholarship type code"),
     application_cycle: Optional[str] = Query(None, description="Application cycle filter (semester/yearly)"),
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> ApiResponse[dict]:
     """Get appropriate academic periods based on scholarship application cycle"""
     from datetime import datetime
 
@@ -413,15 +413,19 @@ async def get_scholarship_periods(
     # Sort periods (newest first)
     periods.sort(key=lambda x: x["sort_order"], reverse=True)
 
-    return {
-        "periods": periods,
-        "cycle": cycle,
-        "scholarship_name": scholarship_name,
-        "current_period": f"{taiwan_year}-{current_semester}"
-        if cycle == ApplicationCycle.semester.value
-        else f"{taiwan_year}",
-        "total_periods": len(periods),
-    }
+    return ApiResponse(
+        success=True,
+        message="Scholarship periods retrieved successfully",
+        data={
+            "periods": periods,
+            "cycle": cycle,
+            "scholarship_name": scholarship_name,
+            "current_period": f"{taiwan_year}-{current_semester}"
+            if cycle == ApplicationCycle.semester.value
+            else f"{taiwan_year}",
+            "total_periods": len(periods),
+        },
+    )
 
 
 @router.get("/scholarship-types-with-cycles")
