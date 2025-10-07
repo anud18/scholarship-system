@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import get_db
 from app.models.application import Application
 from app.models.enums import ApplicationCycle, Semester
-from app.models.scholarship import ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.student import Academy, Degree, Department, EnrollType, Identity, SchoolIdentity, StudyingStatus
 from app.schemas.common import ApiResponse
 
@@ -372,41 +372,52 @@ async def get_scholarship_periods(
 
     periods = []
 
-    if cycle == ApplicationCycle.yearly.value:
-        # 學年制：只顯示學年選項
-        for year_offset in range(-3, 3):
-            year = taiwan_year + year_offset
-            periods.append(
-                {
-                    "value": f"{year}",
-                    "academic_year": year,
-                    "semester": None,
-                    "label": f"{year}學年",
-                    "label_en": f"Academic Year {year + 1911}-{year + 1912}",
-                    "is_current": year == taiwan_year,
-                    "cycle": "yearly",
-                    "sort_order": year,
-                }
-            )
-    else:
-        # 學期制：顯示學年學期組合
-        for year_offset in range(-2, 3):
-            year = taiwan_year + year_offset
+    # Query actual configured periods from database
+    if scholarship:
+        # Get all active configurations for this scholarship type
+        config_stmt = select(ScholarshipConfiguration).where(
+            ScholarshipConfiguration.scholarship_type_id == scholarship.id,
+            ScholarshipConfiguration.is_active == True,
+        )
+        config_result = await session.execute(config_stmt)
+        active_configs = config_result.scalars().all()
 
-            for semester in [Semester.first.value, Semester.second.value]:
-                semester_label = "第一學期" if semester == Semester.first.value else "第二學期"
-                semester_label_en = "First Semester" if semester == Semester.first.value else "Second Semester"
+        # Generate periods from actual configurations
+        for config in active_configs:
+            year = config.academic_year
+            semester = config.semester
+
+            if cycle == ApplicationCycle.yearly.value:
+                # 學年制：只顯示學年選項
+                periods.append(
+                    {
+                        "value": f"{year}",
+                        "academic_year": year,
+                        "semester": None,
+                        "label": f"{year}學年",
+                        "label_en": f"Academic Year {year + 1911}-{year + 1912}",
+                        "is_current": year == taiwan_year,
+                        "cycle": "yearly",
+                        "sort_order": year,
+                    }
+                )
+            else:
+                # 學期制：顯示學年學期組合
+                # semester is Semester enum, compare directly and use .value for string representation
+                semester_label = "第一學期" if semester == Semester.first else "第二學期"
+                semester_label_en = "First Semester" if semester == Semester.first else "Second Semester"
+                semester_value = semester.value if semester else ""
 
                 periods.append(
                     {
-                        "value": f"{year}-{semester}",
+                        "value": f"{year}-{semester_value}",
                         "academic_year": year,
-                        "semester": semester,
+                        "semester": semester_value,
                         "label": f"{year}學年{semester_label}",
                         "label_en": f"Academic Year {year + 1911}-{year + 1912} {semester_label_en}",
-                        "is_current": year == taiwan_year and semester == current_semester,
+                        "is_current": year == taiwan_year and semester_value == current_semester,
                         "cycle": "semester",
-                        "sort_order": year * 10 + (1 if semester == Semester.first.value else 2),
+                        "sort_order": year * 10 + (1 if semester == Semester.first else 2),
                     }
                 )
 
