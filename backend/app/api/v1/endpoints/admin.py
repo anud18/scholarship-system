@@ -2220,6 +2220,9 @@ async def get_scholarship_rules(
         semester_enum = Semester.first if semester == "first" else Semester.second if semester == "second" else None
         if semester_enum:
             stmt = stmt.where(ScholarshipRule.semester == semester_enum)
+        # If semester is provided but not recognized, don't filter by semester
+    # Note: If semester parameter is not provided at all (for yearly scholarships),
+    # the query will return rules with any semester value including NULL
 
     if sub_type:
         stmt = stmt.where(ScholarshipRule.sub_type == sub_type)
@@ -2236,11 +2239,20 @@ async def get_scholarship_rules(
     if tag:
         stmt = stmt.where(ScholarshipRule.tag.icontains(tag))
 
+    # Log query parameters for debugging
+    logger.info(
+        f"[RULES] Querying scholarship rules - type_id={scholarship_type_id}, "
+        f"year={academic_year}, semester={semester}, is_template={is_template}, "
+        f"is_active={is_active}, sub_type={sub_type}, rule_type={rule_type}, tag={tag}"
+    )
+
     # Order by priority and created date
     stmt = stmt.order_by(ScholarshipRule.priority.desc(), ScholarshipRule.created_at.desc())
 
     result = await db.execute(stmt)
     rules = result.scalars().all()
+
+    logger.info(f"[RULES] Found {len(rules)} scholarship rules matching the criteria")
 
     # Convert to response format
     rule_responses = []

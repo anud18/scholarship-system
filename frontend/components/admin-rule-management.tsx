@@ -169,6 +169,7 @@ export function AdminRuleManagement({
         const params: any = {
           scholarship_type_id: scholarshipType.id,
           academic_year: year,
+          is_active: true, // Explicitly filter for active rules
         };
 
         // 只有學期制的獎學金才傳送 semester 參數
@@ -176,8 +177,12 @@ export function AdminRuleManagement({
           params.semester = semester;
         }
 
+        console.log("[RULES] Fetching rules with params:", params);
         const response = await api.admin.getScholarshipRules(params);
+        console.log("[RULES] API response:", response);
+
         if (response.success && response.data) {
+          console.log("[RULES] Setting rules:", response.data.length, "rules found");
           setRules(response.data);
         } else {
           throw new Error(response.message || "載入規則失敗");
