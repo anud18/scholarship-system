@@ -1208,4 +1208,104 @@ describe('Modular API Structure', () => {
       expect(fetchCall[0]).toBe('/api/v1/user-profiles/admin/incomplete');
     });
   });
+
+  describe('Email Management Module', () => {
+    it('should have emailManagement module', () => {
+      expect(api.emailManagement).toBeDefined();
+    });
+
+    it('should get email history', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Email history retrieved',
+          data: {
+            items: [],
+            total: 0,
+            skip: 0,
+            limit: 10
+          }
+        }),
+      });
+
+      const result = await api.emailManagement.getEmailHistory({ limit: 10, status: 'sent' });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toContain('/api/v1/email-management/history');
+    });
+
+    it('should approve scheduled email', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Email approved',
+          data: {}
+        }),
+      });
+
+      const result = await api.emailManagement.approveScheduledEmail(1, 'Looks good');
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/email-management/scheduled/1/approve');
+      expect(fetchCall[1].method).toBe('PATCH');
+    });
+
+    it('should get test mode status', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Test mode status retrieved',
+          data: {
+            enabled: false,
+            redirect_emails: [],
+            expires_at: null
+          }
+        }),
+      });
+
+      const result = await api.emailManagement.getTestModeStatus();
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/email-management/test-mode/status');
+    });
+
+    it('should enable test mode', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Test mode enabled',
+          data: {
+            enabled: true,
+            redirect_emails: ['test@example.com'],
+            expires_at: '2025-10-09T00:00:00Z',
+            enabled_by: 1,
+            enabled_at: '2025-10-08T00:00:00Z'
+          }
+        }),
+      });
+
+      const result = await api.emailManagement.enableTestMode({
+        redirect_emails: ['test@example.com'],
+        duration_hours: 24
+      });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toContain('/api/v1/email-management/test-mode/enable');
+      expect(fetchCall[0]).toContain('redirect_emails=test%40example.com'); // @ is URL-encoded to %40
+      expect(fetchCall[0]).toContain('duration_hours=24');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+  });
 });

@@ -30,6 +30,7 @@ import { createBatchImportApi } from './modules/batch-import';
 import { createReferenceDataApi } from './modules/reference-data';
 import { createApplicationFieldsApi } from './modules/application-fields';
 import { createUserProfilesApi } from './modules/user-profiles';
+import { createEmailManagementApi } from './modules/email-management';
 
 // Re-export types from main api.ts for now
 // TODO: Move these to a dedicated types.ts file
@@ -76,10 +77,10 @@ class ExtendedApiClient extends ApiClient {
   public referenceData: ReturnType<typeof createReferenceDataApi>;
   public applicationFields: ReturnType<typeof createApplicationFieldsApi>;
   public userProfiles: ReturnType<typeof createUserProfilesApi>;
+  public emailManagement: ReturnType<typeof createEmailManagementApi>;
 
   // TODO: Add other modules as they are migrated
   // public admin: ReturnType<typeof createAdminApi>;
-  // public emailManagement: ReturnType<typeof createEmailManagementApi>;
 
   constructor() {
     super();
@@ -102,10 +103,10 @@ class ExtendedApiClient extends ApiClient {
     this.referenceData = createReferenceDataApi(this);
     this.applicationFields = createApplicationFieldsApi(this);
     this.userProfiles = createUserProfilesApi(this);
+    this.emailManagement = createEmailManagementApi(this);
 
     // TODO: Initialize other modules as they are created
     // this.admin = createAdminApi(this);
-    // this.emailManagement = createEmailManagementApi(this);
   }
 }
 
