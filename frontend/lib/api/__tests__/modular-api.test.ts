@@ -590,4 +590,190 @@ describe('Modular API Structure', () => {
       expect(fetchCall[1].method).toBe('PUT');
     });
   });
+
+  describe('Professor Module', () => {
+    it('should have professor module', () => {
+      expect(api.professor).toBeDefined();
+    });
+
+    it('should get applications for review', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Applications retrieved',
+          data: { items: [], total: 0, page: 1, size: 10 }
+        }),
+      });
+
+      const result = await api.professor.getApplications('pending');
+
+      expect(result.data).toEqual([]);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/professor/applications?status_filter=pending');
+    });
+
+    it('should get professor stats', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Stats retrieved',
+          data: { pending_reviews: 5, completed_reviews: 10, overdue_reviews: 2 }
+        }),
+      });
+
+      const result = await api.professor.getStats();
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/professor/stats');
+    });
+
+    it('should submit professor review', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Review submitted', data: {} }),
+      });
+
+      const reviewData = {
+        recommendation: 'Approved',
+        items: [{ sub_type_code: 'A', is_recommended: true }]
+      };
+      const result = await api.professor.submitReview(1, reviewData);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/professor/applications/1/review');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+  });
+
+  describe('College Module', () => {
+    it('should have college module', () => {
+      expect(api.college).toBeDefined();
+    });
+
+    it('should get applications for college review', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Applications retrieved', data: [] }),
+      });
+
+      const result = await api.college.getApplicationsForReview('status=pending');
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/college/applications?status=pending');
+    });
+
+    it('should get college rankings', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Rankings retrieved', data: [] }),
+      });
+
+      const result = await api.college.getRankings(113, 'first');
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/college/rankings?academic_year=113&semester=first');
+    });
+
+    it('should create college ranking', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Ranking created', data: { id: 1 } }),
+      });
+
+      const rankingData = {
+        scholarship_type_id: 1,
+        sub_type_code: 'A',
+        academic_year: 113,
+        semester: 'first'
+      };
+      const result = await api.college.createRanking(rankingData);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/college/rankings');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+
+    it('should get college statistics', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Stats retrieved', data: {} }),
+      });
+
+      const result = await api.college.getStatistics(113, 'first');
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/college/statistics?academic_year=113&semester=first');
+    });
+  });
+
+  describe('Whitelist Module', () => {
+    it('should have whitelist module', () => {
+      expect(api.whitelist).toBeDefined();
+    });
+
+    it('should toggle scholarship whitelist', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Whitelist toggled', data: { success: true } }),
+      });
+
+      const result = await api.whitelist.toggleScholarshipWhitelist(1, true);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/scholarships/1/whitelist');
+      expect(fetchCall[1].method).toBe('PATCH');
+    });
+
+    it('should get configuration whitelist', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Whitelist retrieved', data: [] }),
+      });
+
+      const result = await api.whitelist.getConfigurationWhitelist(1, { page: 1, size: 10 });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/scholarship-configurations/1/whitelist?page=1&size=10');
+    });
+
+    it('should batch add to whitelist', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Students added',
+          data: { success_count: 2, failed_items: [] }
+        }),
+      });
+
+      const result = await api.whitelist.batchAddWhitelist(1, {
+        students: [{ nycu_id: '001', sub_type: 'A' }]
+      });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/scholarship-configurations/1/whitelist/batch');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+  });
 });

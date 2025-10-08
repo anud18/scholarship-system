@@ -19,6 +19,9 @@ import { createScholarshipsApi } from './modules/scholarships';
 import { createApplicationsApi } from './modules/applications';
 import { createNotificationsApi } from './modules/notifications';
 import { createQuotaApi } from './modules/quota';
+import { createProfessorApi } from './modules/professor';
+import { createCollegeApi } from './modules/college';
+import { createWhitelistApi } from './modules/whitelist';
 
 // Re-export types from main api.ts for now
 // TODO: Move these to a dedicated types.ts file
@@ -54,11 +57,13 @@ class ExtendedApiClient extends ApiClient {
   public applications: ReturnType<typeof createApplicationsApi>;
   public notifications: ReturnType<typeof createNotificationsApi>;
   public quota: ReturnType<typeof createQuotaApi>;
+  public professor: ReturnType<typeof createProfessorApi>;
+  public college: ReturnType<typeof createCollegeApi>;
+  public whitelist: ReturnType<typeof createWhitelistApi>;
 
   // TODO: Add other modules as they are migrated
   // public admin: ReturnType<typeof createAdminApi>;
-  // public professor: ReturnType<typeof createProfessorApi>;
-  // public college: ReturnType<typeof createCollegeApi>;
+  // public system: ReturnType<typeof createSystemApi>;
 
   constructor() {
     super();
@@ -70,11 +75,13 @@ class ExtendedApiClient extends ApiClient {
     this.applications = createApplicationsApi(this);
     this.notifications = createNotificationsApi(this);
     this.quota = createQuotaApi(this);
+    this.professor = createProfessorApi(this);
+    this.college = createCollegeApi(this);
+    this.whitelist = createWhitelistApi(this);
 
     // TODO: Initialize other modules as they are created
     // this.admin = createAdminApi(this);
-    // this.professor = createProfessorApi(this);
-    // this.college = createCollegeApi(this);
+    // this.system = createSystemApi(this);
   }
 }
 
