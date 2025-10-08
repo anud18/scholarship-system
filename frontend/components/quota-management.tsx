@@ -27,6 +27,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuotaData } from "@/hooks/use-quota-data";
 import apiClient from "@/lib/api";
 import { calculateUsagePercentage, quotaApi } from "@/services/api/quotaApi";
 import {
@@ -54,14 +55,22 @@ export function QuotaManagement() {
     []
   );
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
-  const [matrixData, setMatrixData] = useState<MatrixQuotaData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [hasPermission, setHasPermission] = useState(false);
   const [checkingPermission, setCheckingPermission] = useState(true);
   const [forceUpdateCounter, setForceUpdateCounter] = useState(0);
+
+  // Use SWR for quota data fetching with automatic refresh
+  const {
+    data: matrixData,
+    isLoading: loading,
+    isRefreshing: refreshing,
+    error: swrError,
+    refresh,
+  } = useQuotaData(selectedPeriod);
+
+  // Track last update time
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
   // Check permissions on mount
   useEffect(() => {
@@ -75,23 +84,22 @@ export function QuotaManagement() {
     }
   }, [hasPermission]);
 
-  // Fetch matrix data when period changes
+  // Update last update time when data changes
   useEffect(() => {
-    if (selectedPeriod) {
-      fetchMatrixQuotaData(selectedPeriod);
+    if (matrixData) {
+      setLastUpdate(new Date());
+      setForceUpdateCounter(prev => prev + 1);
     }
-  }, [selectedPeriod]);
+  }, [matrixData]);
 
-  // Auto-refresh every 30 seconds
+  // Sync SWR error with component error state
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (selectedPeriod && !refreshing) {
-        handleRefresh();
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [selectedPeriod, refreshing]);
+    if (swrError) {
+      setError(swrError instanceof Error ? swrError.message : "載入配額資料時發生錯誤");
+    } else if (matrixData) {
+      setError(null);
+    }
+  }, [swrError, matrixData]);
 
   const checkUserPermission = async () => {
     setCheckingPermission(true);
@@ -171,48 +179,23 @@ export function QuotaManagement() {
     }
   };
 
-  const fetchMatrixQuotaData = async (period: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await quotaApi.getMatrixQuotaStatus(period);
-      if (response.success && response.data) {
-        setMatrixData(response.data);
-        setLastUpdate(new Date());
-      } else {
-        throw new Error(response.message || "無法載入配額資料");
-      }
-    } catch (error) {
-      console.error("Error fetching matrix quota data:", error);
-      setError(
-        error instanceof Error ? error.message : "載入配額資料時發生錯誤"
-      );
-      toast({
-        title: "載入失敗",
-        description:
-          error instanceof Error ? error.message : "無法載入配額資料",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleRefresh = useCallback(async () => {
     if (!selectedPeriod || refreshing) return;
 
-    setRefreshing(true);
     try {
-      await fetchMatrixQuotaData(selectedPeriod);
+      await refresh();
       toast({
         title: "更新成功",
         description: "配額資料已更新",
       });
-    } finally {
-      setRefreshing(false);
+    } catch (error) {
+      toast({
+        title: "更新失敗",
+        description: error instanceof Error ? error.message : "無法更新配額資料",
+        variant: "destructive",
+      });
     }
-  }, [selectedPeriod, refreshing]);
+  }, [selectedPeriod, refreshing, refresh, toast]);
 
   const handleExport = async () => {
     if (!selectedPeriod) return;
@@ -242,14 +225,14 @@ export function QuotaManagement() {
     }
   };
 
-  const handleDataUpdate = (newData: MatrixQuotaData) => {
-    // Force a complete re-render by using a new object reference
-    setMatrixData({ ...newData });
+  const handleDataUpdate = (_newData: MatrixQuotaData) => {
+    // SWR will automatically update the data after the API call completes
+    // We just need to update the timestamp and force recalculation
     setLastUpdate(new Date());
-    setForceUpdateCounter(prev => prev + 1); // Force re-calculation of stats
+    setForceUpdateCounter(prev => prev + 1);
 
-    // Optional: Show brief success feedback for immediate visual confirmation
-    // This could be enhanced to show the specific change made
+    // Trigger SWR revalidation to sync with server
+    refresh();
   };
 
   // Calculate statistics
