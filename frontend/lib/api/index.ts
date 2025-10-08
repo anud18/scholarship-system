@@ -27,6 +27,9 @@ import { createBankVerificationApi } from './modules/bank-verification';
 import { createProfessorStudentApi } from './modules/professor-student';
 import { createEmailAutomationApi } from './modules/email-automation';
 import { createBatchImportApi } from './modules/batch-import';
+import { createReferenceDataApi } from './modules/reference-data';
+import { createApplicationFieldsApi } from './modules/application-fields';
+import { createUserProfilesApi } from './modules/user-profiles';
 
 // Re-export types from main api.ts for now
 // TODO: Move these to a dedicated types.ts file
@@ -70,9 +73,13 @@ class ExtendedApiClient extends ApiClient {
   public professorStudent: ReturnType<typeof createProfessorStudentApi>;
   public emailAutomation: ReturnType<typeof createEmailAutomationApi>;
   public batchImport: ReturnType<typeof createBatchImportApi>;
+  public referenceData: ReturnType<typeof createReferenceDataApi>;
+  public applicationFields: ReturnType<typeof createApplicationFieldsApi>;
+  public userProfiles: ReturnType<typeof createUserProfilesApi>;
 
   // TODO: Add other modules as they are migrated
   // public admin: ReturnType<typeof createAdminApi>;
+  // public emailManagement: ReturnType<typeof createEmailManagementApi>;
 
   constructor() {
     super();
@@ -92,9 +99,13 @@ class ExtendedApiClient extends ApiClient {
     this.professorStudent = createProfessorStudentApi(this);
     this.emailAutomation = createEmailAutomationApi(this);
     this.batchImport = createBatchImportApi(this);
+    this.referenceData = createReferenceDataApi(this);
+    this.applicationFields = createApplicationFieldsApi(this);
+    this.userProfiles = createUserProfilesApi(this);
 
     // TODO: Initialize other modules as they are created
     // this.admin = createAdminApi(this);
+    // this.emailManagement = createEmailManagementApi(this);
   }
 }
 

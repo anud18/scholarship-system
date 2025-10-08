@@ -983,4 +983,229 @@ describe('Modular API Structure', () => {
       expect(fetchCall[1].method).toBe('POST');
     });
   });
+
+  describe('Reference Data Module', () => {
+    it('should have referenceData module', () => {
+      expect(api.referenceData).toBeDefined();
+    });
+
+    it('should get all academies', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Academies retrieved',
+          data: [{ id: 1, code: 'CS', name: 'Computer Science' }]
+        }),
+      });
+
+      const result = await api.referenceData.getAcademies();
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/reference-data/academies');
+    });
+
+    it('should get all reference data', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Reference data retrieved',
+          data: {
+            academies: [],
+            departments: [],
+            degrees: [],
+            identities: [],
+            studying_statuses: [],
+            school_identities: [],
+            enroll_types: []
+          }
+        }),
+      });
+
+      const result = await api.referenceData.getAll();
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/reference-data/all');
+    });
+
+    it('should get scholarship periods', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Periods retrieved',
+          data: {
+            periods: [],
+            cycle: 'semester',
+            scholarship_name: 'Test',
+            current_period: '113-1',
+            total_periods: 2
+          }
+        }),
+      });
+
+      const result = await api.referenceData.getScholarshipPeriods({
+        scholarship_id: 1,
+        application_cycle: 'semester'
+      });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/reference-data/scholarship-periods?scholarship_id=1&application_cycle=semester');
+    });
+  });
+
+  describe('Application Fields Module', () => {
+    it('should have applicationFields module', () => {
+      expect(api.applicationFields).toBeDefined();
+    });
+
+    it('should get form config', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Form config retrieved',
+          data: { scholarship_type: 'test', fields: [], documents: [] }
+        }),
+      });
+
+      const result = await api.applicationFields.getFormConfig('test', false);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/application-fields/form-config/test?include_inactive=false');
+    });
+
+    it('should create field', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Field created',
+          data: {
+            id: 1,
+            scholarship_type: 'test',
+            field_name: 'custom_field',
+            field_label: 'Custom Field',
+            field_type: 'text',
+            required: false,
+            display_order: 1,
+            is_active: true
+          }
+        }),
+      });
+
+      const result = await api.applicationFields.createField({
+        scholarship_type: 'test',
+        field_name: 'custom_field',
+        field_label: 'Custom Field',
+        field_type: 'text',
+        required: false,
+        display_order: 1,
+        is_active: true
+      });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/application-fields/fields');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+
+    it('should get documents', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Documents retrieved',
+          data: []
+        }),
+      });
+
+      const result = await api.applicationFields.getDocuments('test');
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/application-fields/documents/test');
+    });
+  });
+
+  describe('User Profiles Module', () => {
+    it('should have userProfiles module', () => {
+      expect(api.userProfiles).toBeDefined();
+    });
+
+    it('should get my profile', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Profile retrieved',
+          data: {
+            user_id: 1,
+            nycu_id: 'test123',
+            full_name: 'Test User',
+            email: 'test@example.com'
+          }
+        }),
+      });
+
+      const result = await api.userProfiles.getMyProfile();
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/user-profiles/me');
+    });
+
+    it('should update bank info', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Bank info updated',
+          data: {}
+        }),
+      });
+
+      const result = await api.userProfiles.updateBankInfo({
+        bank_account: '1234567890',
+        bank_name: 'Test Bank',
+        bank_branch: 'Main Branch'
+      });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/user-profiles/me/bank-info');
+      expect(fetchCall[1].method).toBe('PUT');
+    });
+
+    it('should get incomplete profiles (admin)', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Incomplete profiles retrieved',
+          data: []
+        }),
+      });
+
+      const result = await api.userProfiles.admin.getIncompleteProfiles();
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/user-profiles/admin/incomplete');
+    });
+  });
 });

@@ -21,7 +21,7 @@ export function ConfigurationsPanel() {
   const fetchScholarshipTypes = async () => {
     setLoadingScholarshipTypes(true);
     try {
-      const response = await apiClient.admin.getScholarshipConfigurations();
+      const response = await apiClient.admin.getMyScholarships();
       if (response.success && response.data) {
         setScholarshipTypes(response.data);
       }
