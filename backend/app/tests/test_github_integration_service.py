@@ -80,8 +80,8 @@ async def test_generate_issue_body_includes_summary_and_ranking(monkeypatch):
             }
         },
         exceptions=["Capacity adjustment applied"],
-        scoring_weights={"gpa": 0.4},
-        distribution_rules={"min_gpa": 3.0},
+        scoring_weights={"ranking": 0.6},  # Changed from gpa to ranking
+        distribution_rules={},  # min_gpa removed - should be validated by ScholarshipRule system
         id=42,
     )
 
@@ -105,8 +105,8 @@ async def test_generate_issue_body_includes_summary_and_ranking(monkeypatch):
     assert "| nstc | 10 | 8 | 7 | 3 | 87.5% |" in body
     assert "| 1 | Alice | S123 | 95.00 | ✅ | Allocated |" in body
     assert "- Capacity adjustment applied" in body
-    assert "- gpa: 0.4" in body
-    assert "- min_gpa: 3.0" in body
+    assert "- ranking: 0.6" in body  # Changed from gpa
+    # min_gpa assertion removed - should be validated by ScholarshipRule system
 
 
 @pytest.mark.asyncio

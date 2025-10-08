@@ -552,7 +552,6 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
                 "code": stype.code,
                 "name": stype.name,
                 "name_en": stype.name_en or stype.name,
-                "category": stype.category,
                 "sub_types": stype.sub_type_list or [],
                 "has_quota_limit": latest_config.has_quota_limit if latest_config else False,
                 "has_college_quota": latest_config.has_college_quota if latest_config else False,
@@ -686,7 +685,6 @@ async def get_quota_overview(
                     "code": stype.code,
                     "name": stype.name,
                     "name_en": stype.name_en or stype.name,
-                    "category": stype.category,
                     "has_quota_limit": config.has_quota_limit,
                     "has_college_quota": config.has_college_quota,
                     "quota_management_mode": config.quota_management_mode.value

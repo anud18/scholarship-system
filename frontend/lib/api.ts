@@ -3,8 +3,6 @@
  * Follows backend camelCase endpoint naming conventions
  */
 
-import { ScholarshipCategory } from "@/types/scholarship";
-
 export interface ApiResponse<T> {
   success: boolean;
   message: string;
@@ -1604,7 +1602,6 @@ class ApiClient {
       name_en: string;
       description: string;
       description_en: string;
-      category: ScholarshipCategory;
       sub_scholarships: Array<{
         code: string;
         name: string;
@@ -3865,14 +3862,16 @@ class ApiClient {
     > => {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("scholarship_type", scholarshipType);
-      formData.append("academic_year", academicYear.toString());
-      formData.append("semester", semester);
 
       return this.request("/college/batch-import/upload-data", {
         method: "POST",
         body: formData,
         headers: {}, // Let browser set Content-Type for FormData
+        params: {
+          scholarship_type: scholarshipType,
+          academic_year: academicYear,
+          semester: semester,
+        },
       });
     },
 

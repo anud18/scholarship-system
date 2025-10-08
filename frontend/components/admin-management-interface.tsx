@@ -2,6 +2,7 @@
 
 import { AdminConfigurationManagement } from "@/components/admin-configuration-management";
 import { AdminRuleManagement } from "@/components/admin-rule-management";
+import { EmailAutomationManagement } from "@/components/email-automation-management";
 import { EmailHistoryTable } from "@/components/email-history-table";
 import { EmailTestModePanel } from "@/components/email-test-mode-panel";
 import { QuotaManagement } from "@/components/quota-management";
@@ -3198,8 +3199,9 @@ export function AdminManagementInterface({
                 value={emailManagementTab}
                 onValueChange={setEmailManagementTab}
               >
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                   <TabsTrigger value="templates">郵件模板</TabsTrigger>
+                  <TabsTrigger value="automation">自動化規則</TabsTrigger>
                   <TabsTrigger value="history">歷史記錄</TabsTrigger>
                   <TabsTrigger value="scheduled">排程郵件</TabsTrigger>
                   <TabsTrigger value="test-mode">測試模式</TabsTrigger>
@@ -3708,6 +3710,11 @@ export function AdminManagementInterface({
                       </CardContent>
                     </Card>
                   )}
+                </TabsContent>
+
+                {/* 郵件自動化規則 */}
+                <TabsContent value="automation" className="mt-6">
+                  <EmailAutomationManagement />
                 </TabsContent>
 
                 {/* 郵件歷史記錄 */}

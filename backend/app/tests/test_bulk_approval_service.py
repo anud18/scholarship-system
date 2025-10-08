@@ -194,16 +194,13 @@ class TestBulkApprovalServiceAutoApprove:
 
     async def test_auto_approve_with_custom_criteria(self, service, mock_applications):
         """Test auto-approval with custom criteria"""
-        mock_applications[0].gpa = 3.8
-        mock_applications[1].gpa = 3.5
-        mock_applications[2].gpa = 3.2
-
+        # GPA validation removed - should be handled by ScholarshipRule system
         mock_result = Mock()
         mock_result.scalars.return_value.all.return_value = mock_applications
         service.db.execute = AsyncMock(return_value=mock_result)
         service.db.commit = AsyncMock()
 
-        results = await service.auto_approve_by_criteria(approval_criteria={"min_gpa": 3.5})
+        results = await service.auto_approve_by_criteria(approval_criteria={})
 
         assert results["total_eligible"] <= 3
 
@@ -317,19 +314,13 @@ class TestBulkApprovalServiceCriteria:
     def mock_application(self):
         app = Mock(spec=Application)
         app.id = 1
-        app.gpa = 3.5
+        # GPA removed - should be validated by ScholarshipRule system
         app.class_ranking_percent = 15.0
         app.is_renewal = True
         app.priority_score = 85
         return app
 
-    def test_meets_approval_criteria_gpa(self, service, mock_application):
-        """Test GPA criteria check"""
-        criteria = {"min_gpa": 3.0}
-        assert service._meets_approval_criteria(mock_application, criteria)
-
-        criteria = {"min_gpa": 3.8}
-        assert not service._meets_approval_criteria(mock_application, criteria)
+    # test_meets_approval_criteria_gpa removed - GPA validation moved to ScholarshipRule system
 
     def test_meets_approval_criteria_ranking(self, service, mock_application):
         """Test ranking criteria check"""
@@ -357,16 +348,9 @@ class TestBulkApprovalServiceCriteria:
 
     def test_meets_approval_criteria_multiple(self, service, mock_application):
         """Test multiple criteria check"""
-        criteria = {"min_gpa": 3.0, "max_ranking": 20.0, "min_priority_score": 80}
+        # GPA removed from criteria - should be validated by ScholarshipRule system
+        criteria = {"max_ranking": 20.0, "min_priority_score": 80}
         assert service._meets_approval_criteria(mock_application, criteria)
 
-        criteria = {"min_gpa": 3.8, "max_ranking": 20.0}
+        criteria = {"max_ranking": 10.0}  # Lower than mock_application.class_ranking_percent
         assert not service._meets_approval_criteria(mock_application, criteria)
-
-    def test_meets_approval_criteria_error_handling(self, service, mock_application):
-        """Test criteria check with None values"""
-        mock_application.gpa = None
-        criteria = {"min_gpa": 3.0}
-
-        result = service._meets_approval_criteria(mock_application, criteria)
-        assert result

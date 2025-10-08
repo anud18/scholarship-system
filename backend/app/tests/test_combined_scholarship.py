@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.scholarship import ScholarshipCategory
 from app.services.scholarship_service import ScholarshipService
 
 if TYPE_CHECKING:
@@ -37,7 +36,6 @@ class TestCombinedScholarship:
             name_en="PhD Scholarship",
             description="國科會與教育部聯合博士生獎學金",
             description_en="Combined NSTC and MOE PhD Scholarship",
-            category=ScholarshipCategory.phd.value,
             sub_scholarships=[
                 {
                     "code": "test_nstc",
@@ -47,7 +45,7 @@ class TestCombinedScholarship:
                     "description_en": "Test NSTC scholarship",
                     "sub_type": "nstc",
                     "amount": 40000,
-                    "min_gpa": 3.7,
+                    # min_gpa removed - should be validated by ScholarshipRule system
                     "max_ranking_percent": 20,
                     "required_documents": ["transcript", "research_proposal"],
                     "application_start_date": datetime.now(timezone.utc),
@@ -60,7 +58,6 @@ class TestCombinedScholarship:
 
         assert scholarship is not None
         assert scholarship.is_combined is True
-        assert scholarship.category == ScholarshipCategory.phd.value
 
         # Verify sub-scholarships were created
         sub_scholarships = await service.get_scholarship_with_sub_types(scholarship.id)
@@ -80,7 +77,6 @@ class TestCombinedScholarship:
             name_en="Test Combined",
             description="Test",
             description_en="Test",
-            category=ScholarshipCategory.phd.value,
             sub_scholarships=[
                 {
                     "code": "test_sub1",
@@ -105,7 +101,6 @@ class TestCombinedScholarship:
             name_en="Eligible Combined",
             description="Test",
             description_en="Test",
-            category=ScholarshipCategory.phd.value,
             sub_scholarships=[
                 {
                     "code": "eligible_sub",

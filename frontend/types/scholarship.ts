@@ -1,10 +1,3 @@
-export enum ScholarshipCategory {
-  PHD = "phd",
-  UNDERGRADUATE = "undergraduate",
-  MASTER = "master",
-  SPECIAL = "special",
-}
-
 export enum ScholarshipSubType {
   NSTC = "nstc", // 國科會
   MOE = "moe", // 教育部
@@ -18,14 +11,13 @@ export interface ScholarshipType {
   nameEn?: string;
   description?: string;
   descriptionEn?: string;
-  category: ScholarshipCategory;
   subType: ScholarshipSubType;
   isCombined: boolean;
   parentScholarshipId?: number;
   amount: number;
   currency: string;
   eligibleStudentTypes?: string[];
-  minGpa?: number;
+  // minGpa removed - should be validated by ScholarshipRule system
   maxRankingPercent?: number;
   maxCompletedTerms?: number;
   requiredDocuments?: string[];
@@ -51,7 +43,6 @@ export interface CombinedScholarshipCreate {
   nameEn: string;
   description: string;
   descriptionEn: string;
-  category: ScholarshipCategory;
   applicationStartDate?: string;
   applicationEndDate?: string;
   subScholarships: SubScholarshipConfig[];
@@ -65,7 +56,7 @@ export interface SubScholarshipConfig {
   descriptionEn?: string;
   subType: ScholarshipSubType;
   amount: number;
-  minGpa?: number;
+  // minGpa removed - should be validated by ScholarshipRule system
   maxRankingPercent?: number;
   requiredDocuments?: string[];
   applicationStartDate?: string;

@@ -82,7 +82,6 @@ async def get_all_scholarships(
             "name_en": scholarship.name_en,
             "description": scholarship.description,
             "description_en": scholarship.description_en,
-            "category": scholarship.category,
             "sub_type_list": scholarship.sub_type_list or [],
             "sub_type_selection_mode": scholarship.sub_type_selection_mode.value
             if scholarship.sub_type_selection_mode
@@ -219,7 +218,6 @@ async def get_scholarship_eligibility(
             name=scholarship["name"],
             name_en=scholarship.get("name_en") or scholarship["name"],
             eligible_sub_types=sub_type_list,
-            category=scholarship["category"],
             academic_year=scholarship.get("academic_year"),
             semester=scholarship.get("semester"),
             application_cycle=scholarship.get("application_cycle", "semester"),
@@ -281,7 +279,6 @@ async def get_scholarship_detail(scholarship_id: int, db: AsyncSession = Depends
         "name_en": scholarship.name_en,
         "description": scholarship.description,
         "description_en": scholarship.description_en,
-        "category": scholarship.category if hasattr(scholarship, "category") else None,
         "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
         "sub_type_list": scholarship.sub_type_list or [],
         "amount": active_config.amount if active_config else 0,  # Get amount from active configuration
@@ -667,7 +664,6 @@ async def toggle_scholarship_whitelist(
         "name_en": scholarship.name_en,
         "description": scholarship.description,
         "description_en": scholarship.description_en,
-        "category": scholarship.category if hasattr(scholarship, "category") else None,
         "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
         "sub_type_list": scholarship.sub_type_list or [],
         "amount": active_config.amount if active_config else 0,

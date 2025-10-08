@@ -24,7 +24,7 @@ from app.models.user import EmployeeStatus, UserRole, UserType
 logger = logging.getLogger(__name__)
 
 # Advisory lock ID for this seed process
-SEED_LOCK_ID = 1234567890
+SEED_LOCK_ID = 20251001
 
 
 async def acquire_advisory_lock(session: AsyncSession) -> bool:
@@ -338,33 +338,35 @@ async def seed_professor_student_relationships(session: AsyncSession):
 
 async def seed_admin_user(session: AsyncSession):
     """
-    建立或更新第一個 admin 用戶（production 環境）
+    建立或更新第一個 super_admin 用戶（production 環境）
     使用環境變數 ADMIN_EMAIL
+    固定為 super_admin 角色
     """
     admin_email = os.getenv("ADMIN_EMAIL", "admin@nycu.edu.tw")
+    admin_nycu_id = admin_email.split("@")[0]
 
-    print(f"👤 Setting up admin user: {admin_email}")
+    print(f"👤 Setting up super admin user: {admin_email}")
 
-    # 使用 UPSERT
+    # 使用 UPSERT - 只在用戶不存在時才設定角色
     await session.execute(
         text(
             """
         INSERT INTO users (nycu_id, name, email, user_type, status, role, created_at, updated_at)
-        VALUES (:nycu_id, :name, :email, 'employee', '在職', 'admin', NOW(), NOW())
+        VALUES (:nycu_id, :name, :email, 'employee', '在職', 'super_admin', NOW(), NOW())
         ON CONFLICT (nycu_id) DO UPDATE
-        SET role = 'admin',
-            email = EXCLUDED.email,
+        SET email = EXCLUDED.email,
             name = EXCLUDED.name,
             user_type = 'employee',
             status = '在職',
             updated_at = NOW()
+        -- Note: role is NOT updated on conflict to preserve manual role changes
     """
         ),
-        {"nycu_id": admin_email.split("@")[0], "name": "System Administrator", "email": admin_email},
+        {"nycu_id": admin_nycu_id, "name": "System Administrator", "email": admin_email},
     )
 
     await session.commit()
-    print(f"  ✓ Admin user configured: {admin_email}")
+    print(f"  ✓ Super admin user configured: {admin_email}")
 
 
 async def seed_scholarships(session: AsyncSession):
@@ -374,7 +376,7 @@ async def seed_scholarships(session: AsyncSession):
     print("🎓 Creating scholarship data...")
 
     from app.models.enums import ApplicationCycle, SubTypeSelectionMode
-    from app.models.scholarship import ScholarshipCategory, ScholarshipStatus
+    from app.models.scholarship import ScholarshipStatus
 
     # 基本獎學金類型
     scholarships_data = [
@@ -384,7 +386,6 @@ async def seed_scholarships(session: AsyncSession):
             "name_en": "Undergraduate Freshman Scholarship",
             "description": "適用於學士班新生 白名單 與 地區劃分",
             "description_en": "For undergraduate freshmen, white list and regional",
-            "category": ScholarshipCategory.undergraduate_freshman.value,
             "application_cycle": ApplicationCycle.semester.value,
             "whitelist_enabled": True,
             "sub_type_selection_mode": SubTypeSelectionMode.single.value,
@@ -396,7 +397,6 @@ async def seed_scholarships(session: AsyncSession):
             "name_en": "PhD Scholarship",
             "description": "適用於一般博士生，需完整研究計畫和教授推薦",
             "description_en": "For regular PhD students, requires complete research plan",
-            "category": ScholarshipCategory.phd.value,
             "application_cycle": ApplicationCycle.yearly.value,
             "sub_type_list": ["nstc", "moe_1w"],
             "whitelist_enabled": False,
@@ -409,7 +409,6 @@ async def seed_scholarships(session: AsyncSession):
             "name_en": "Direct PhD Scholarship",
             "description": "適用於逕讀博士班學生，需完整研究計畫",
             "description_en": "For direct PhD students, requires complete research plan",
-            "category": ScholarshipCategory.direct_phd.value,
             "application_cycle": ApplicationCycle.yearly.value,
             "whitelist_enabled": False,
             "sub_type_selection_mode": SubTypeSelectionMode.single.value,
@@ -426,22 +425,13 @@ async def seed_scholarships(session: AsyncSession):
             text(
                 """
                 INSERT INTO scholarship_types (code, name, name_en, description, description_en,
-                                              category, application_cycle, whitelist_enabled,
+                                              application_cycle, whitelist_enabled,
                                               sub_type_selection_mode, status, sub_type_list)
                 VALUES (:code, :name, :name_en, :description, :description_en,
-                        :category, :application_cycle, :whitelist_enabled,
+                        :application_cycle, :whitelist_enabled,
                         :sub_type_selection_mode, :status, :sub_type_list)
-                ON CONFLICT (code) DO UPDATE SET
-                    name = EXCLUDED.name,
-                    name_en = EXCLUDED.name_en,
-                    description = EXCLUDED.description,
-                    description_en = EXCLUDED.description_en,
-                    category = EXCLUDED.category,
-                    application_cycle = EXCLUDED.application_cycle,
-                    whitelist_enabled = EXCLUDED.whitelist_enabled,
-                    sub_type_selection_mode = EXCLUDED.sub_type_selection_mode,
-                    status = EXCLUDED.status,
-                    sub_type_list = EXCLUDED.sub_type_list
+                ON CONFLICT (code) DO NOTHING
+                -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
             """
             ),
             {
@@ -476,10 +466,12 @@ async def seed_application_fields(session: AsyncSession):
             "field_type": "text",
             "is_required": True,
             "placeholder": "請輸入所有指導教授的姓名（如有多位請以逗號分隔）",
+            "placeholder_en": "Please enter all advisor names (separate with commas if multiple)",
             "max_length": 200,
             "display_order": 1,
             "is_active": True,
             "help_text": "請填寫所有指導教授的姓名",
+            "help_text_en": "Please provide all advisor names",
             "created_by": admin_id,
             "updated_by": admin_id,
         },
@@ -491,10 +483,49 @@ async def seed_application_fields(session: AsyncSession):
             "field_type": "text",
             "is_required": True,
             "placeholder": "請輸入研究題目（中文）",
+            "placeholder_en": "Please enter research topic (in Chinese)",
             "max_length": 200,
             "display_order": 2,
             "is_active": True,
             "help_text": "請填寫您的研究題目",
+            "help_text_en": "Please provide your research topic",
+            "created_by": admin_id,
+            "updated_by": admin_id,
+        },
+    ]
+
+    phd_fields = [
+        {
+            "scholarship_type": "phd",
+            "field_name": "master_school_info",
+            "field_label": "碩士畢業學校學院系所",
+            "field_label_en": "Master's Degree School/College/Department",
+            "field_type": "text",
+            "is_required": True,
+            "placeholder": "例如：國立陽明交通大學 資訊學院 資訊工程學系",
+            "placeholder_en": "e.g., NYCU College of Computer Science, Department of Computer Science",
+            "max_length": 200,
+            "display_order": 1,
+            "is_active": True,
+            "help_text": "請填寫完整的畢業學校、學院、系所名稱",
+            "help_text_en": "Please provide complete school, college, and department names",
+            "created_by": admin_id,
+            "updated_by": admin_id,
+        },
+        {
+            "scholarship_type": "phd",
+            "field_name": "enroll_date",
+            "field_label": "註冊入學日期",
+            "field_label_en": "Enrollment Date",
+            "field_type": "date",
+            "is_required": True,
+            "placeholder": "請選擇日期",
+            "placeholder_en": "Please select date",
+            "max_length": None,
+            "display_order": 2,
+            "is_active": True,
+            "help_text": "請選擇您正式註冊入學的日期",
+            "help_text_en": "Please select your official enrollment date",
             "created_by": admin_id,
             "updated_by": admin_id,
         },
@@ -505,29 +536,41 @@ async def seed_application_fields(session: AsyncSession):
             text(
                 """
                 INSERT INTO application_fields (scholarship_type, field_name, field_label, field_label_en,
-                                                field_type, is_required, placeholder, max_length,
-                                                display_order, is_active, help_text, created_by, updated_by)
+                                                field_type, is_required, placeholder, placeholder_en, max_length,
+                                                display_order, is_active, help_text, help_text_en, created_by, updated_by)
                 VALUES (:scholarship_type, :field_name, :field_label, :field_label_en,
-                        :field_type, :is_required, :placeholder, :max_length,
-                        :display_order, :is_active, :help_text, :created_by, :updated_by)
-                ON CONFLICT (scholarship_type, field_name) DO UPDATE SET
-                    field_label = EXCLUDED.field_label,
-                    field_label_en = EXCLUDED.field_label_en,
-                    field_type = EXCLUDED.field_type,
-                    is_required = EXCLUDED.is_required,
-                    placeholder = EXCLUDED.placeholder,
-                    max_length = EXCLUDED.max_length,
-                    display_order = EXCLUDED.display_order,
-                    is_active = EXCLUDED.is_active,
-                    help_text = EXCLUDED.help_text,
-                    updated_by = EXCLUDED.updated_by
+                        :field_type, :is_required, :placeholder, :placeholder_en, :max_length,
+                        :display_order, :is_active, :help_text, :help_text_en, :created_by, :updated_by)
+                ON CONFLICT (scholarship_type, field_name) DO NOTHING
+                -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
             """
             ),
             field_data,
         )
 
     await session.commit()
-    print(f"  ✓ {len(direct_phd_fields)} application fields created/updated")
+    print(f"  ✓ {len(direct_phd_fields)} direct PhD application fields created/skipped")
+
+    # Insert phd_fields
+    for field_data in phd_fields:
+        await session.execute(
+            text(
+                """
+                INSERT INTO application_fields (scholarship_type, field_name, field_label, field_label_en,
+                                                field_type, is_required, placeholder, placeholder_en, max_length,
+                                                display_order, is_active, help_text, help_text_en, created_by, updated_by)
+                VALUES (:scholarship_type, :field_name, :field_label, :field_label_en,
+                        :field_type, :is_required, :placeholder, :placeholder_en, :max_length,
+                        :display_order, :is_active, :help_text, :help_text_en, :created_by, :updated_by)
+                ON CONFLICT (scholarship_type, field_name) DO NOTHING
+                -- Note: Changed from DO UPDATE to DO NOTHING to preserve manual changes in production
+            """
+            ),
+            field_data,
+        )
+
+    await session.commit()
+    print(f"  ✓ {len(phd_fields)} PhD application fields created/skipped")
 
 
 async def seed_development():
@@ -626,6 +669,10 @@ async def seed_production():
 
             # Production: Only admin user
             await seed_admin_user(session)
+
+            # Initialize scholarships and application fields (DO NOTHING on conflict - won't overwrite)
+            await seed_scholarships(session)
+            await seed_application_fields(session)
 
             # System settings initialization
             print("\n⚙️ Initializing system settings...")

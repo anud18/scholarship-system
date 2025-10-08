@@ -223,9 +223,7 @@ async def get_all_users(
             perm_result = await db.execute(perm_stmt)
             scholarships = perm_result.scalars().all()
 
-            user_dict["scholarships"] = [
-                {"id": s.id, "code": s.code, "name": s.name, "category": s.category} for s in scholarships
-            ]
+            user_dict["scholarships"] = [{"id": s.id, "code": s.code, "name": s.name} for s in scholarships]
             user_dict["scholarship_count"] = len(scholarships)
         else:
             user_dict["scholarships"] = []
@@ -446,7 +444,7 @@ async def bulk_assign_scholarships(
         assigned_count=assigned_count,
         removed_count=removed_count,
         total_scholarships=len(scholarships),
-        scholarships=[{"id": s.id, "code": s.code, "name": s.name, "category": s.category} for s in scholarships],
+        scholarships=[{"id": s.id, "code": s.code, "name": s.name} for s in scholarships],
     )
 
 

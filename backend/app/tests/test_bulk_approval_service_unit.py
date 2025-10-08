@@ -75,7 +75,7 @@ class DummyApplication:
         self.student_data = kwargs.get("student_data", {"student_id": f"stu-{app_id}"})
         self.priority_score = kwargs.get("priority_score", 10)
         self.is_renewal = kwargs.get("is_renewal", False)
-        self.gpa = kwargs.get("gpa", "3.5")
+        # gpa removed - should be validated by ScholarshipRule system
         self.class_ranking_percent = kwargs.get("class_ranking_percent", "20")
         self.scholarship_type_id = kwargs.get("scholarship_type_id", 1)
         self.main_scholarship_type = kwargs.get("main_type", "MAIN")
@@ -321,8 +321,8 @@ def test_meets_approval_criteria_checks_values(caplog):
     )
     service = make_service(StubSession())
 
+    # GPA removed from criteria - should be validated by ScholarshipRule system
     criteria = {
-        "min_gpa": 3.0,
         "max_ranking": 40,
         "require_renewal": True,
         "min_priority_score": 10,
@@ -330,27 +330,27 @@ def test_meets_approval_criteria_checks_values(caplog):
 
     assert service._meets_approval_criteria(application, criteria) is False
 
-    # Error handling path
-    broken_app = SimpleNamespace(id=999, gpa="bad", class_ranking_percent=None, is_renewal=True, priority_score=None)
-    assert service._meets_approval_criteria(broken_app, {"min_gpa": 2.0}) is False
+    # Error handling path - GPA removed
+    broken_app = SimpleNamespace(id=999, class_ranking_percent=None, is_renewal=True, priority_score=None)
+    assert service._meets_approval_criteria(broken_app, {}) is True  # No criteria to fail
 
 
 def test_meets_approval_criteria_happy_path():
     app = DummyApplication(
         "APP-criteria",
         ApplicationStatus.submitted.value,
-        gpa="3.5",
+        # gpa removed - should be validated by ScholarshipRule system
         class_ranking_percent="25",
         is_renewal=True,
         priority_score=42,
     )
     service = make_service(StubSession())
 
+    # GPA removed from criteria - should be validated by ScholarshipRule system
     assert (
         service._meets_approval_criteria(
             app,
             {
-                "min_gpa": 3.0,
                 "max_ranking": 30,
                 "require_renewal": True,
                 "min_priority_score": 20,

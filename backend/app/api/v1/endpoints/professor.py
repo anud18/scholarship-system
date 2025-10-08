@@ -3,7 +3,7 @@ Professor review management API endpoints
 """
 
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +13,7 @@ from app.core.rate_limiting import professor_rate_limit
 from app.core.security import require_professor
 from app.db.deps import get_db
 from app.models.user import User
-from app.schemas.application import ApplicationListResponse, ProfessorReviewCreate, ProfessorReviewResponse
+from app.schemas.application import ProfessorReviewCreate
 from app.schemas.common import PaginatedResponse
 from app.services.application_service import ApplicationService
 
@@ -21,7 +21,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/applications", response_model=PaginatedResponse[ApplicationListResponse])
+@router.get("/applications")
 @professor_rate_limit(requests=100, window_seconds=600)  # 100 requests per 10 minutes
 async def get_professor_applications(
     request: Request,
@@ -50,13 +50,18 @@ async def get_professor_applications(
             f"Found {len(applications)} applications (page {page}/{total_pages}, total: {total_count}) for professor {current_user.id}"
         )
 
-        return PaginatedResponse(
+        response_data = PaginatedResponse(
             items=applications,
             total=total_count,
             page=page,
             size=size,
             pages=total_pages,
         )
+        return {
+            "success": True,
+            "message": "查詢成功",
+            "data": response_data.model_dump(),
+        }
 
     except Exception as e:
         logger.error(f"Error fetching professor applications: {str(e)}")
@@ -66,7 +71,7 @@ async def get_professor_applications(
         )
 
 
-@router.get("/applications/{application_id}/review", response_model=ProfessorReviewResponse)
+@router.get("/applications/{application_id}/review")
 @professor_rate_limit(requests=200, window_seconds=600)  # 200 requests per 10 minutes
 async def get_professor_review(
     request: Request,
@@ -85,7 +90,7 @@ async def get_professor_review(
             # Return empty review structure for new reviews
             from app.schemas.application import ProfessorReviewResponse
 
-            return ProfessorReviewResponse(
+            response_data = ProfessorReviewResponse(
                 id=0,  # Use 0 to indicate new/unsaved review
                 application_id=application_id,
                 professor_id=current_user.id,
@@ -95,8 +100,17 @@ async def get_professor_review(
                 created_at=None,
                 items=[],
             )
+            return {
+                "success": True,
+                "message": "查詢成功",
+                "data": response_data.model_dump(),
+            }
 
-        return review
+        return {
+            "success": True,
+            "message": "查詢成功",
+            "data": review.model_dump() if hasattr(review, "model_dump") else review.dict(),
+        }
 
     except NotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found")
@@ -108,7 +122,7 @@ async def get_professor_review(
         )
 
 
-@router.post("/applications/{application_id}/review", response_model=ProfessorReviewResponse)
+@router.post("/applications/{application_id}/review")
 @professor_rate_limit(requests=100, window_seconds=600)  # 100 review submissions per 10 minutes
 async def submit_professor_review(
     request: Request,
@@ -150,7 +164,11 @@ async def submit_professor_review(
         )
 
         logger.info("Professor {current_user.id} successfully submitted review for application {application_id}")
-        return review
+        return {
+            "success": True,
+            "message": "審核提交成功",
+            "data": review.model_dump() if hasattr(review, "model_dump") else review.dict(),
+        }
 
     except NotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
@@ -167,10 +185,7 @@ async def submit_professor_review(
         )
 
 
-@router.put(
-    "/applications/{application_id}/review/{review_id}",
-    response_model=ProfessorReviewResponse,
-)
+@router.put("/applications/{application_id}/review/{review_id}")
 @professor_rate_limit(requests=50, window_seconds=600)  # 50 review updates per 10 minutes
 async def update_professor_review(
     request: Request,
@@ -204,7 +219,11 @@ async def update_professor_review(
         review = await service.update_professor_review(review_id=review_id, review_data=review_data.dict())
 
         logger.info("Professor {current_user.id} successfully updated review {review_id}")
-        return review
+        return {
+            "success": True,
+            "message": "審核更新成功",
+            "data": review.model_dump() if hasattr(review, "model_dump") else review.dict(),
+        }
 
     except AuthorizationError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
@@ -216,7 +235,7 @@ async def update_professor_review(
         )
 
 
-@router.get("/applications/{application_id}/sub-types", response_model=List[dict])
+@router.get("/applications/{application_id}/sub-types")
 @professor_rate_limit(requests=300, window_seconds=600)  # 300 requests per 10 minutes (lighter endpoint)
 async def get_application_sub_types(
     request: Request,
@@ -232,7 +251,11 @@ async def get_application_sub_types(
         sub_types = await service.get_application_available_sub_types(application_id)
 
         logger.info("Found {len(sub_types)} sub-types for application {application_id}")
-        return sub_types
+        return {
+            "success": True,
+            "message": "查詢成功",
+            "data": sub_types,
+        }
 
     except Exception as e:
         logger.error(f"Error fetching application sub-types: {str(e)}")
@@ -242,7 +265,7 @@ async def get_application_sub_types(
         )
 
 
-@router.get("/stats", response_model=dict)
+@router.get("/stats")
 @professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_professor_review_stats(
     request: Request,
@@ -256,10 +279,15 @@ async def get_professor_review_stats(
         service = ApplicationService(db)
         stats = await service.get_professor_review_stats(current_user.id)
 
-        return {
+        stats_data = {
             "pending_reviews": stats.get("pending_reviews", 0),
             "completed_reviews": stats.get("completed_reviews", 0),
             "overdue_reviews": stats.get("overdue_reviews", 0),
+        }
+        return {
+            "success": True,
+            "message": "查詢成功",
+            "data": stats_data,
         }
 
     except Exception as e:

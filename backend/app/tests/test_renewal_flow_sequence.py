@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.models.enums import Semester
-from app.models.scholarship import ScholarshipCategory, ScholarshipStatus, ScholarshipType
+from app.models.scholarship import ScholarshipStatus, ScholarshipType
 
 
 class TestRenewalFlowSequence:
@@ -21,7 +21,6 @@ class TestRenewalFlowSequence:
         return ScholarshipType(
             code="SEQUENTIAL_SCHOLARSHIP",
             name="順序流程獎學金",
-            category=ScholarshipCategory.phd.value,
             academic_year=113,
             semester=Semester.first,
             amount=50000,

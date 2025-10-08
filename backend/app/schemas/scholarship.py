@@ -19,12 +19,6 @@ class ScholarshipStatusEnum(str, Enum):
     DRAFT = "draft"
 
 
-class ScholarshipCategoryEnum(str, Enum):
-    UNDERGRADUATE_FRESHMAN = "undergraduate_freshman"  # 學士班新生獎學金
-    PHD = "phd"  # 國科會/教育部博士生獎學金
-    DIRECT_PHD = "direct_phd"  # 逕讀博士獎學金
-
-
 # Removed SemesterEnum - using Semester from models.enums instead
 
 
@@ -52,7 +46,6 @@ class ScholarshipTypeBase(BaseModel):
     name_en: Optional[str] = None
     description: Optional[str] = None
     description_en: Optional[str] = None
-    category: ScholarshipCategoryEnum
     application_cycle: ApplicationCycleEnum = ApplicationCycleEnum.SEMESTER
     sub_type_list: Optional[List[str]] = None  # ["nstc", "moe_1w", "moe_2w"]
     amount: Decimal
@@ -271,7 +264,6 @@ class EligibleScholarshipResponse(BaseModel):
     name: str
     name_en: str
     eligible_sub_types: List[SubTypeOption]
-    category: str
     application_cycle: ApplicationCycleEnum
     description: Optional[str] = None
     description_en: Optional[str] = None

@@ -3,7 +3,7 @@ Application management API endpoints
 """
 
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile, status
 from pydantic import ValidationError
@@ -15,22 +15,18 @@ from app.db.deps import get_db
 from app.models.user import User
 from app.schemas.application import (
     ApplicationCreate,
-    ApplicationListResponse,
-    ApplicationResponse,
     ApplicationStatusUpdate,
     ApplicationUpdate,
-    DashboardStats,
     ProfessorReviewCreate,
     StudentDataSchema,
 )
-from app.schemas.common import MessageResponse
 from app.services.application_service import ApplicationService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_application(
     application_data: ApplicationCreate,
     is_draft: bool = Query(False, description="Save as draft"),
@@ -115,7 +111,20 @@ async def create_application(
             is_draft=is_draft,
         )
         logger.info(f"Application created successfully: {result.app_id}")
-        return result
+
+        # 包裝成 ApiResponse 格式
+        from app.schemas.application import ApplicationResponse
+
+        if isinstance(result, ApplicationResponse):
+            response_data = result
+        else:
+            response_data = ApplicationResponse.from_orm(result)
+
+        return {
+            "success": True,
+            "message": "申請已建立" if not is_draft else "草稿已儲存",
+            "data": response_data.dict() if hasattr(response_data, "dict") else response_data.model_dump(),
+        }
 
     except ValidationError as e:
         logger.error(f"Validation error: {str(e)}")
@@ -147,7 +156,7 @@ async def create_application(
         )
 
 
-@router.get("", response_model=List[ApplicationListResponse])
+@router.get("")
 async def get_my_applications(
     status: Optional[str] = Query(None, description="Filter by status"),
     current_user: User = Depends(require_student),
@@ -155,17 +164,27 @@ async def get_my_applications(
 ):
     """Get current user's applications"""
     service = ApplicationService(db)
-    return await service.get_user_applications(current_user, status)
+    result = await service.get_user_applications(current_user, status)
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+    }
 
 
-@router.get("/dashboard/stats", response_model=DashboardStats)
+@router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: User = Depends(require_student), db: AsyncSession = Depends(get_db)):
     """Get dashboard statistics for student"""
     service = ApplicationService(db)
-    return await service.get_student_dashboard_stats(current_user)
+    result = await service.get_student_dashboard_stats(current_user)
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+    }
 
 
-@router.get("/{application_id}", response_model=ApplicationResponse)
+@router.get("/{application_id}")
 async def get_application(
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(get_current_user),
@@ -173,7 +192,12 @@ async def get_application(
 ):
     """Get application by ID"""
     service = ApplicationService(db)
-    return await service.get_application_by_id(application_id, current_user)
+    result = await service.get_application_by_id(application_id, current_user)
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+    }
 
 
 @router.put("/{application_id}")
@@ -185,10 +209,15 @@ async def update_application(
 ):
     """Update application"""
     service = ApplicationService(db)
-    return await service.update_application(application_id, update_data, current_user)
+    result = await service.update_application(application_id, update_data, current_user)
+    return {
+        "success": True,
+        "message": "更新成功",
+        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+    }
 
 
-@router.post("/{application_id}/submit", response_model=ApplicationResponse)
+@router.post("/{application_id}/submit")
 async def submit_application(
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(require_student),
@@ -196,10 +225,15 @@ async def submit_application(
 ):
     """Submit application for review"""
     service = ApplicationService(db)
-    return await service.submit_application(application_id, current_user)
+    result = await service.submit_application(application_id, current_user)
+    return {
+        "success": True,
+        "message": "申請已提交",
+        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+    }
 
 
-@router.delete("/{application_id}", response_model=MessageResponse)
+@router.delete("/{application_id}")
 async def delete_application(
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(get_current_user),
@@ -210,7 +244,11 @@ async def delete_application(
     success = await service.delete_application(application_id, current_user)
 
     if success:
-        return MessageResponse(success=True, message="Application deleted successfully")
+        return {
+            "success": True,
+            "message": "申請已刪除",
+            "data": {"application_id": application_id},
+        }
     else:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -305,11 +343,20 @@ async def upload_file(
 ):
     """Upload file for application using MinIO"""
     service = ApplicationService(db)
-    return await service.upload_application_file_minio(application_id, current_user, file, file_type)
+    result = await service.upload_application_file_minio(application_id, current_user, file, file_type)
+    return {
+        "success": True,
+        "message": "檔案上傳成功",
+        "data": result.dict()
+        if hasattr(result, "dict")
+        else result.model_dump()
+        if hasattr(result, "model_dump")
+        else result,
+    }
 
 
 # Staff/Admin endpoints
-@router.get("/review/list", response_model=List[ApplicationListResponse])
+@router.get("/review/list")
 async def get_applications_for_review(
     status: Optional[str] = Query(None, description="Filter by status"),
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
@@ -318,10 +365,15 @@ async def get_applications_for_review(
 ):
     """Get applications for review (staff only)"""
     service = ApplicationService(db)
-    return await service.get_applications_for_review(current_user, status, scholarship_type_id)
+    result = await service.get_applications_for_review(current_user, status, scholarship_type_id)
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+    }
 
 
-@router.put("/{application_id}/status", response_model=ApplicationResponse)
+@router.put("/{application_id}/status")
 async def update_application_status(
     application_id: int = Path(..., description="Application ID"),
     status_update: ApplicationStatusUpdate = ...,
@@ -330,10 +382,15 @@ async def update_application_status(
 ):
     """Update application status (staff only)"""
     service = ApplicationService(db)
-    return await service.update_application_status(application_id, current_user, status_update)
+    result = await service.update_application_status(application_id, current_user, status_update)
+    return {
+        "success": True,
+        "message": "狀態已更新",
+        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+    }
 
 
-@router.post("/{application_id}/review", response_model=ApplicationResponse)
+@router.post("/{application_id}/review")
 async def submit_professor_review(
     application_id: int = Path(..., description="Application ID"),
     review_data: ProfessorReviewCreate = ...,
@@ -346,10 +403,15 @@ async def submit_professor_review(
 
         raise HTTPException(status_code=403, detail="Only professors can submit this review.")
     service = ApplicationService(db)
-    return await service.create_professor_review(application_id, current_user, review_data)
+    result = await service.create_professor_review(application_id, current_user, review_data)
+    return {
+        "success": True,
+        "message": "審查已提交",
+        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+    }
 
 
-@router.get("/college/review", response_model=List[ApplicationListResponse])
+@router.get("/college/review")
 async def get_college_applications_for_review(
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
     scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
@@ -365,16 +427,21 @@ async def get_college_applications_for_review(
 
     service = ApplicationService(db)
     # Get applications that are in submitted or under_review status for college review
-    return await service.get_applications_for_review(
+    result = await service.get_applications_for_review(
         current_user,
         skip=0,
         limit=100,
         status=status_filter or "submitted",  # Default to submitted for college review
         scholarship_type=scholarship_type,
     )
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+    }
 
 
-@router.put("/{application_id}/student-data", response_model=MessageResponse)
+@router.put("/{application_id}/student-data")
 async def update_student_data(
     application_id: int,
     student_data: StudentDataSchema,
@@ -392,7 +459,11 @@ async def update_student_data(
             current_user=current_user,
             refresh_from_api=refresh_from_api,
         )
-        return MessageResponse(message="學生資料更新成功")
+        return {
+            "success": True,
+            "message": "學生資料更新成功",
+            "data": {"application_id": application_id},
+        }
     except (NotFoundError, ValidationError, AuthorizationError) as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST
@@ -404,7 +475,7 @@ async def update_student_data(
         )
 
 
-@router.get("/{application_id}/student-data", response_model=StudentDataSchema)
+@router.get("/{application_id}/student-data")
 async def get_student_data(
     application_id: int,
     current_user: User = Depends(get_current_user),
@@ -429,4 +500,9 @@ async def get_student_data(
 
     # 回傳學生資料
     student_data = application.student_data or {}
-    return StudentDataSchema(**student_data)
+    response_data = StudentDataSchema(**student_data)
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": response_data.model_dump(),
+    }

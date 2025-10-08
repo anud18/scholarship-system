@@ -247,38 +247,8 @@ class EligibilityVerificationService:
                     }
                 )
 
-        # Attempt to locate GPA information from available student data
-        term_record = student.get("latest_term") or student.get("term_record") or {}
-        if not isinstance(term_record, dict):
-            term_record = {}
-        term_gpa = term_record.get("gpa") or student.get("gpa")
-
-        min_gpa = scholarship_type.min_gpa
-        if min_gpa and term_gpa is not None:
-            gpa_value = float(term_gpa)
-            required_gpa = float(min_gpa)
-            gpa_eligible = gpa_value >= required_gpa
-            details["scores"]["gpa"] = gpa_value
-            details["scores"]["required_gpa"] = required_gpa
-
-            if not gpa_eligible:
-                details["failures"].append(f"GPA {term_gpa} below minimum {min_gpa}")
-                details["checks"].append(
-                    {
-                        "check": "gpa_requirement",
-                        "passed": False,
-                        "details": f"GPA {term_gpa} < {min_gpa}",
-                    }
-                )
-            else:
-                details["checks"].append(
-                    {
-                        "check": "gpa_requirement",
-                        "passed": True,
-                        "details": f"GPA {term_gpa} meets requirement",
-                    }
-                )
-
+        # GPA validation is now handled by ScholarshipRule system using trm_ascore_gpa field
+        # No hardcoded GPA validation logic needed here
         # All ranking and term count requirements are now handled by scholarship rules
         # No hardcoded validation logic needed here
 

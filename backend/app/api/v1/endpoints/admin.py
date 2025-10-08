@@ -2275,7 +2275,6 @@ async def get_my_scholarships(
                 "name": scholarship.name,
                 "name_en": scholarship.name_en,
                 "code": scholarship.code,
-                "category": scholarship.category,  # category is already a string, not an enum
                 "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else None,
                 "status": scholarship.status,  # status is also a string, not an enum in this model
                 "whitelist_enabled": scholarship.whitelist_enabled,  # 申請白名單開關狀態

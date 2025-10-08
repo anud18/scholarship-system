@@ -464,7 +464,6 @@ async def get_scholarship_types_with_cycles(
                 "code": scholarship.code,
                 "name": scholarship.name,
                 "name_en": scholarship.name_en,
-                "category": scholarship.category,
                 "application_cycle": cycle,
                 "cycle_label": "學年制" if cycle == ApplicationCycle.yearly.value else "學期制",
                 "cycle_label_en": "Yearly" if cycle == ApplicationCycle.yearly.value else "Semester",

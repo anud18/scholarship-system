@@ -41,13 +41,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://140.113.207.40:3000,http://140.113.0.229:3000"
 
     # Email
-    smtp_host: str = "smtp.gmail.com"
-    smtp_port: int = 587
+    smtp_host: str = "140.113.7.200"
+    smtp_port: int = 25
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_use_tls: bool = False  # STARTTLS/TLS encryption (default: False for plain SMTP)
-    email_from: str = "noreply@scholarshipapp.com"
-    email_from_name: str = "Scholarship System"
+    email_from: str = "ss-test.aa@nycu.edu.tw"
+    email_from_name: str = "(測試)獎學金申請與簽核系統"
 
     # File Upload
     upload_dir: str = "./uploads"

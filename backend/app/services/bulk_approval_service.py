@@ -422,11 +422,7 @@ class BulkApprovalService:
         """Check if application meets approval criteria"""
 
         try:
-            # Check minimum GPA if specified
-            if "min_gpa" in criteria:
-                if application.gpa and float(application.gpa) < criteria["min_gpa"]:
-                    return False
-
+            # GPA validation should be handled by ScholarshipRule system
             # Check maximum ranking if specified
             if "max_ranking" in criteria:
                 if (

@@ -37,14 +37,6 @@ class ScholarshipStatus(enum.Enum):
     draft = "draft"
 
 
-class ScholarshipCategory(enum.Enum):
-    """Scholarship category enum"""
-
-    undergraduate_freshman = "undergraduate_freshman"  # 學士班新生獎學金
-    phd = "phd"  # 國科會/教育部博士生獎學金
-    direct_phd = "direct_phd"  # 逕讀博士獎學金
-
-
 class ScholarshipSubType(enum.Enum):
     """Scholarship sub-type enum for combined scholarships"""
 
@@ -75,7 +67,7 @@ class ScholarshipType(Base):
     description_en = Column(Text)
 
     # 類別設定
-    category = Column(String(50), nullable=False)
+    # category removed - no longer needed for classification
     sub_type_list = Column(JSON, default=[ScholarshipSubType.general.value])  # ["nstc", "moe_1w", "moe_2w"]
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]),

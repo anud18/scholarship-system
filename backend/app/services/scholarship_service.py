@@ -184,7 +184,6 @@ class ScholarshipService:
                     "name_en": scholarship_type.name_en,
                     "description": config.description or scholarship_type.description,
                     "description_en": config.description_en or scholarship_type.description_en,
-                    "category": scholarship_type.category,
                     "academic_year": config.academic_year,
                     "semester": config.semester.value if config.semester else None,
                     "application_cycle": scholarship_type.application_cycle.value
