@@ -32,7 +32,6 @@ from app.models.system_setting import ConfigCategory, EmailTemplate
 from app.models.user import AdminScholarship, User, UserRole
 from app.schemas.application import (
     ApplicationListResponse,
-    ApplicationResponse,
     BulkApproveRequest,
     HistoricalApplicationResponse,
     ProfessorAssignmentRequest,
@@ -93,7 +92,7 @@ def require_super_admin(current_user: User = Depends(require_admin)) -> User:
     return current_user
 
 
-@router.get("/applications", response_model=PaginatedResponse[ApplicationListResponse])
+@router.get("/applications")
 async def get_all_applications(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
@@ -206,19 +205,18 @@ async def get_all_applications(
 
         application_list.append(ApplicationListResponse.model_validate(app_data))
 
-    return PaginatedResponse(
-        items=application_list,
-        total=total,
-        page=page,
-        size=size,
-        pages=(total + size - 1) // size,
+    response_data = PaginatedResponse(
+        items=application_list, total=total, page=page, size=size, pages=(total + size - 1) // size
     )
 
+    return {
+        "success": True,
+        "message": "Applications retrieved successfully",
+        "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+    }
 
-@router.get(
-    "/applications/history",
-    response_model=PaginatedResponse[HistoricalApplicationResponse],
-)
+
+@router.get("/applications/history")
 async def get_historical_applications(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
@@ -256,10 +254,7 @@ async def get_historical_applications(
     stmt = (
         stmt.outerjoin(professor_user, Application.professor_id == professor_user.c.id)
         .outerjoin(reviewer_user, Application.reviewer_id == reviewer_user.c.id)
-        .add_columns(
-            professor_user.c.name.label("professor_name"),
-            reviewer_user.c.name.label("reviewer_name"),
-        )
+        .add_columns(professor_user.c.name.label("professor_name"), reviewer_user.c.name.label("reviewer_name"))
     )
 
     # Apply filters
@@ -348,16 +343,18 @@ async def get_historical_applications(
 
         historical_applications.append(historical_app)
 
-    return PaginatedResponse(
-        items=historical_applications,
-        total=total,
-        page=page,
-        size=size,
-        pages=(total + size - 1) // size,
+    response_data = PaginatedResponse(
+        items=historical_applications, total=total, page=page, size=size, pages=(total + size - 1) // size
     )
 
+    return {
+        "success": True,
+        "message": "Historical applications retrieved successfully",
+        "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+    }
 
-@router.get("/dashboard/stats", response_model=ApiResponse[Dict[str, Any]])
+
+@router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get dashboard statistics for admin"""
 
@@ -399,8 +396,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
     # Approved this month (filtered by permissions)
     this_month = datetime.now().replace(day=1)
     stmt = select(func.count(Application.id)).where(
-        Application.status == ApplicationStatus.approved.value,
-        Application.approved_at >= this_month,
+        Application.status == ApplicationStatus.approved.value, Application.approved_at >= this_month
     )
     if current_user.role in [UserRole.admin, UserRole.college] and allowed_scholarship_ids:
         stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
@@ -434,20 +430,20 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
     avg_days = result.scalar()
     avg_processing_time = f"{avg_days:.1f}天" if avg_days else "N/A"
 
-    return ApiResponse(
-        success=True,
-        message="Dashboard statistics retrieved successfully",
-        data={
+    return {
+        "success": True,
+        "message": "Dashboard statistics retrieved successfully",
+        "data": {
             "total_applications": total_applications,
             "pending_review": pending_review,
             "approved": approved_this_month,
             "rejected": status_counts.get(ApplicationStatus.rejected.value, 0),
             "avg_processing_time": avg_processing_time,
         },
-    )
+    }
 
 
-@router.get("/system/health", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/system/health")
 async def get_system_health(current_user: User = Depends(require_admin)):
     """Get system health status"""
     from app.integrations.nycu_emp import NYCUEmpError, create_nycu_emp_client_from_env
@@ -486,10 +482,10 @@ async def get_system_health(current_user: User = Depends(require_admin)):
         nycu_emp_status = "error"
         nycu_emp_details = {"error": str(e), "type": "UnexpectedError"}
 
-    return ApiResponse(
-        success=True,
-        message="System health status retrieved successfully",
-        data={
+    return {
+        "success": True,
+        "message": "System health status retrieved successfully",
+        "data": {
             "status": "healthy",
             "database": "connected",
             "redis": "connected",
@@ -497,10 +493,10 @@ async def get_system_health(current_user: User = Depends(require_admin)):
             "nycu_employee_api": {"status": nycu_emp_status, "details": nycu_emp_details},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
-    )
+    }
 
 
-@router.get("/debug/nycu-employee", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/debug/nycu-employee")
 async def debug_nycu_employee_api(
     page: int = Query(1, ge=1, description="Page number"),
     status: str = Query("01", description="Employee status filter"),
@@ -606,10 +602,10 @@ async def debug_nycu_employee_api(
             "suggestion": "Check system logs for more details",
         }
 
-    return ApiResponse(success=True, message="NYCU Employee API debug information retrieved", data=debug_info)
+    return {"success": True, "message": "NYCU Employee API debug information retrieved", "data": debug_info}
 
 
-@router.get("/system-setting", response_model=ApiResponse[SystemSettingSchema])
+@router.get("/system-setting")
 async def get_system_setting(
     key: str = Query(..., description="Setting key"),
     current_user: User = Depends(require_admin),
@@ -618,31 +614,29 @@ async def get_system_setting(
     """Get system setting by key (admin only)"""
     setting = await SystemSettingService.get_setting(db, key)
     if not setting:
-        return ApiResponse(
-            success=True,
-            message="System setting retrieved successfully",
-            data=SystemSettingSchema(key=key, value=""),
-        )
-    return ApiResponse(
-        success=True,
-        message="System setting retrieved successfully",
-        data=SystemSettingSchema.model_validate(setting),
-    )
+        return {
+            "success": True,
+            "message": "System setting retrieved successfully",
+            "data": SystemSettingSchema(key=key, value=""),
+        }
+    return {
+        "success": True,
+        "message": "System setting retrieved successfully",
+        "data": SystemSettingSchema.model_validate(setting),
+    }
 
 
-@router.put("/system-setting", response_model=ApiResponse[SystemSettingSchema])
+@router.put("/system-setting")
 async def set_system_setting(
-    data: SystemSettingSchema,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    data: SystemSettingSchema, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Update system setting (admin only)"""
     setting = await SystemSettingService.set_setting(db, key=data.key, value=data.value)
-    return ApiResponse(
-        success=True,
-        message="System setting updated successfully",
-        data=SystemSettingSchema.model_validate(setting),
-    )
+    return {
+        "success": True,
+        "message": "System setting updated successfully",
+        "data": SystemSettingSchema.model_validate(setting),
+    }
 
 
 @router.get("/email-template")
@@ -655,21 +649,12 @@ async def get_email_template(
     template = await EmailTemplateService.get_template(db, key)
     if not template:
         template_data = EmailTemplateSchema(
-            key=key,
-            subject_template="",
-            body_template="",
-            cc=None,
-            bcc=None,
-            updated_at=None,
+            key=key, subject_template="", body_template="", cc=None, bcc=None, updated_at=None
         )
     else:
         template_data = EmailTemplateSchema.model_validate(template)
 
-    return {
-        "success": True,
-        "message": "Email template retrieved successfully",
-        "data": template_data,
-    }
+    return {"success": True, "message": "Email template retrieved successfully", "data": template_data}
 
 
 @router.put("/email-template")
@@ -722,7 +707,7 @@ async def update_email_template(
     }
 
 
-@router.get("/email-templates", response_model=List[EmailTemplateSchema])
+@router.get("/email-templates")
 async def get_email_templates(
     sending_type: Optional[str] = Query(None, description="Filter by sending type (single/bulk)"),
     current_user: User = Depends(require_admin),
@@ -746,7 +731,7 @@ async def get_email_templates(
     return [EmailTemplateSchema.model_validate(template) for template in templates]
 
 
-@router.get("/recent-applications", response_model=ApiResponse[List[ApplicationListResponse]])
+@router.get("/recent-applications")
 async def get_recent_applications(
     limit: int = Query(5, ge=1, le=20, description="Number of recent applications"),
     current_user: User = Depends(require_admin),
@@ -767,7 +752,7 @@ async def get_recent_applications(
 
         # If no permissions assigned, return empty list
         if not allowed_scholarship_ids:
-            return ApiResponse(success=True, message="No scholarship permissions assigned", data=[])
+            return {"success": True, "message": "No scholarship permissions assigned", "data": []}
 
     # Build query with joins and load configurations
     stmt = (
@@ -855,14 +840,10 @@ async def get_recent_applications(
 
         response_list.append(ApplicationListResponse.model_validate(app_data))
 
-    return ApiResponse(
-        success=True,
-        message="Recent applications retrieved successfully",
-        data=response_list,
-    )
+    return {"success": True, "message": "Recent applications retrieved successfully", "data": response_list}
 
 
-@router.get("/system-announcements", response_model=ApiResponse[List[NotificationResponse]])
+@router.get("/system-announcements")
 async def get_system_announcements(
     limit: int = Query(5, ge=1, le=20, description="Number of announcements"),
     current_user: User = Depends(require_admin),
@@ -912,17 +893,13 @@ async def get_system_announcements(
         }
         response_list.append(NotificationResponse.model_validate(notification_dict))
 
-    return ApiResponse(
-        success=True,
-        message="System announcements retrieved successfully",
-        data=response_list,
-    )
+    return {"success": True, "message": "System announcements retrieved successfully", "data": response_list}
 
 
 # === 系統公告 CRUD === #
 
 
-@router.get("/announcements", response_model=ApiResponse[dict])
+@router.get("/announcements")
 async def get_all_announcements(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
@@ -985,24 +962,14 @@ async def get_all_announcements(
     # 計算總頁數
     pages = (total + size - 1) // size if total > 0 else 1
 
-    return ApiResponse(
-        success=True,
-        message="系統公告列表獲取成功",
-        data={
-            "items": response_items,
-            "total": total,
-            "page": page,
-            "size": size,
-            "pages": pages,
-        },
-    )
+    return {
+        "success": True,
+        "message": "系統公告列表獲取成功",
+        "data": {"items": response_items, "total": total, "page": page, "size": size, "pages": pages},
+    }
 
 
-@router.post(
-    "/announcements",
-    response_model=ApiResponse[NotificationResponse],
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/announcements", status_code=status.HTTP_201_CREATED)
 async def create_announcement(
     announcement_data: NotificationCreate,
     current_user: User = Depends(require_admin),
@@ -1059,18 +1026,16 @@ async def create_announcement(
         "meta_data": announcement.meta_data if isinstance(announcement.meta_data, (dict, type(None))) else None,
     }
 
-    return ApiResponse(
-        success=True,
-        message="System announcement created successfully",
-        data=NotificationResponse.model_validate(announcement_dict),
-    )
+    return {
+        "success": True,
+        "message": "System announcement created successfully",
+        "data": NotificationResponse.model_validate(announcement_dict),
+    }
 
 
-@router.get("/announcements/{announcement_id}", response_model=ApiResponse[NotificationResponse])
+@router.get("/announcements/{announcement_id}")
 async def get_announcement(
-    announcement_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    announcement_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Get specific system announcement (admin only)"""
 
@@ -1084,10 +1049,7 @@ async def get_announcement(
     announcement = result.scalar_one_or_none()
 
     if not announcement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="System announcement not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System announcement not found")
 
     # 修正 meta_data 字段以確保序列化正常
     announcement_dict = {
@@ -1114,14 +1076,14 @@ async def get_announcement(
         "meta_data": announcement.meta_data if isinstance(announcement.meta_data, (dict, type(None))) else None,
     }
 
-    return ApiResponse(
-        success=True,
-        message="System announcement retrieved successfully",
-        data=NotificationResponse.model_validate(announcement_dict),
-    )
+    return {
+        "success": True,
+        "message": "System announcement retrieved successfully",
+        "data": NotificationResponse.model_validate(announcement_dict),
+    }
 
 
-@router.put("/announcements/{announcement_id}", response_model=ApiResponse[NotificationResponse])
+@router.put("/announcements/{announcement_id}")
 async def update_announcement(
     announcement_id: int,
     announcement_data: NotificationUpdate,
@@ -1141,10 +1103,7 @@ async def update_announcement(
     announcement = result.scalar_one_or_none()
 
     if not announcement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="System announcement not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System announcement not found")
 
     # Update only fields defined in the Pydantic schema to prevent mass assignment
     # This automatically stays in sync with schema changes
@@ -1187,18 +1146,16 @@ async def update_announcement(
         "meta_data": announcement.meta_data if isinstance(announcement.meta_data, (dict, type(None))) else None,
     }
 
-    return ApiResponse(
-        success=True,
-        message="System announcement updated successfully",
-        data=NotificationResponse.model_validate(announcement_dict),
-    )
+    return {
+        "success": True,
+        "message": "System announcement updated successfully",
+        "data": NotificationResponse.model_validate(announcement_dict),
+    }
 
 
-@router.delete("/announcements/{announcement_id}", response_model=ApiResponse[MessageResponse])
+@router.delete("/announcements/{announcement_id}")
 async def delete_announcement(
-    announcement_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    announcement_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Delete system announcement (admin only)"""
 
@@ -1213,19 +1170,16 @@ async def delete_announcement(
     announcement = result.scalar_one_or_none()
 
     if not announcement:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="System announcement not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="System announcement not found")
 
     # Delete announcement
     await db.delete(announcement)
     await db.commit()
 
-    return ApiResponse(success=True, message="系統公告已成功刪除", data=MessageResponse(message="系統公告已成功刪除"))
+    return {"success": True, "message": "系統公告已成功刪除", "data": MessageResponse(message="系統公告已成功刪除")}
 
 
-@router.get("/scholarships/stats", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/scholarships/stats")
 async def get_scholarship_statistics(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get scholarship-specific statistics for admin dashboard"""
 
@@ -1298,17 +1252,10 @@ async def get_scholarship_statistics(current_user: User = Depends(require_admin)
             "has_sub_types": len(sub_types) > 0 and "general" not in sub_types,
         }
 
-    return ApiResponse(
-        success=True,
-        message="Scholarship statistics retrieved successfully",
-        data=scholarship_stats,
-    )
+    return {"success": True, "message": "Scholarship statistics retrieved successfully", "data": scholarship_stats}
 
 
-@router.get(
-    "/scholarships/{scholarship_identifier}/applications",
-    response_model=ApiResponse[List[ApplicationListResponse]],
-)
+@router.get("/scholarships/{scholarship_identifier}/applications")
 async def get_applications_by_scholarship(
     scholarship_identifier: str,
     sub_type: Optional[str] = Query(None, description="Filter by sub-type"),
@@ -1383,10 +1330,7 @@ async def get_applications_by_scholarship(
                 existing_docs = processed_form_data["documents"]
                 for existing_doc in existing_docs:
                     # Find matching file record
-                    matching_file = next(
-                        (f for f in app.files if f.file_type == existing_doc.get("document_id")),
-                        None,
-                    )
+                    matching_file = next((f for f in app.files if f.file_type == existing_doc.get("document_id")), None)
                     if matching_file:
                         # Update existing file information with URLs
                         base_url = f"{settings.base_url}{settings.api_v1_str}"
@@ -1489,21 +1433,16 @@ async def get_applications_by_scholarship(
 
         response_list.append(ApplicationListResponse.model_validate(app_data))
 
-    return ApiResponse(
-        success=True,
-        message=f"Applications for scholarship {scholarship.code} retrieved successfully",
-        data=response_list,
-    )
+    return {
+        "success": True,
+        "message": f"Applications for scholarship {scholarship.code} retrieved successfully",
+        "data": response_list,
+    }
 
 
-@router.get(
-    "/scholarships/{scholarship_code}/sub-types",
-    response_model=ApiResponse[List[Dict[str, Any]]],
-)
+@router.get("/scholarships/{scholarship_code}/sub-types")
 async def get_scholarship_sub_types(
-    scholarship_code: str,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    scholarship_code: str, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Get sub-types for a specific scholarship"""
 
@@ -1522,8 +1461,7 @@ async def get_scholarship_sub_types(
     for sub_type in sub_types:
         # Get applications for this sub-type
         stmt = select(Application).where(
-            Application.scholarship_type_id == scholarship.id,
-            Application.scholarship_subtype_list.contains([sub_type]),
+            Application.scholarship_type_id == scholarship.id, Application.scholarship_subtype_list.contains([sub_type])
         )
         result = await db.execute(stmt)
         applications = result.scalars().all()
@@ -1565,17 +1503,14 @@ async def get_scholarship_sub_types(
             }
         )
 
-    return ApiResponse(
-        success=True,
-        message=f"Sub-type statistics for scholarship {scholarship_code} retrieved successfully",
-        data=sub_type_stats,
-    )
+    return {
+        "success": True,
+        "message": f"Sub-type statistics for scholarship {scholarship_code} retrieved successfully",
+        "data": sub_type_stats,
+    }
 
 
-@router.get(
-    "/scholarships/sub-type-translations",
-    response_model=ApiResponse[Dict[str, Dict[str, str]]],
-)
+@router.get("/scholarships/sub-type-translations")
 async def get_sub_type_translations(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get sub-type name translations for all supported languages from database"""
 
@@ -1599,24 +1534,19 @@ async def get_sub_type_translations(current_user: User = Depends(require_admin),
         for lang in ["zh", "en"]:
             translations[lang].update(scholarship_translations[lang])
 
-    return ApiResponse(
-        success=True,
-        message="Sub-type translations retrieved successfully from database",
-        data=translations,
-    )
+    return {
+        "success": True,
+        "message": "Sub-type translations retrieved successfully from database",
+        "data": translations,
+    }
 
 
 # === 子類型配置管理 API === #
 
 
-@router.get(
-    "/scholarships/{scholarship_id}/sub-type-configs",
-    response_model=ApiResponse[List[ScholarshipSubTypeConfigResponse]],
-)
+@router.get("/scholarships/{scholarship_id}/sub-type-configs")
 async def get_scholarship_sub_type_configs(
-    scholarship_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    scholarship_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Get sub-type configurations for a specific scholarship"""
 
@@ -1680,17 +1610,10 @@ async def get_scholarship_sub_type_configs(
             }
             configs.append(ScholarshipSubTypeConfigResponse.model_validate(config_dict))
 
-    return ApiResponse(
-        success=True,
-        message="Sub-type configurations retrieved successfully",
-        data=configs,
-    )
+    return {"success": True, "message": "Sub-type configurations retrieved successfully", "data": configs}
 
 
-@router.post(
-    "/scholarships/{scholarship_id}/sub-type-configs",
-    response_model=ApiResponse[ScholarshipSubTypeConfigResponse],
-)
+@router.post("/scholarships/{scholarship_id}/sub-type-configs")
 async def create_sub_type_config(
     scholarship_id: int,
     config_data: ScholarshipSubTypeConfigCreate,
@@ -1718,8 +1641,7 @@ async def create_sub_type_config(
     # Prevent creating general sub-type configurations
     if config_data.sub_type_code == ScholarshipSubType.general.value:
         raise HTTPException(
-            status_code=400,
-            detail="Cannot create configuration for 'general' sub-type. It uses default values.",
+            status_code=400, detail="Cannot create configuration for 'general' sub-type. It uses default values."
         )
 
     # Check if config already exists
@@ -1761,17 +1683,14 @@ async def create_sub_type_config(
         "updated_at": config.updated_at,
     }
 
-    return ApiResponse(
-        success=True,
-        message="Sub-type configuration created successfully",
-        data=ScholarshipSubTypeConfigResponse.model_validate(config_dict),
-    )
+    return {
+        "success": True,
+        "message": "Sub-type configuration created successfully",
+        "data": ScholarshipSubTypeConfigResponse.model_validate(config_dict),
+    }
 
 
-@router.put(
-    "/scholarships/sub-type-configs/{config_id}",
-    response_model=ApiResponse[ScholarshipSubTypeConfigResponse],
-)
+@router.put("/scholarships/sub-type-configs/{config_id}")
 async def update_sub_type_config(
     config_id: int,
     config_data: ScholarshipSubTypeConfigUpdate,
@@ -1818,21 +1737,16 @@ async def update_sub_type_config(
         "updated_at": config.updated_at,
     }
 
-    return ApiResponse(
-        success=True,
-        message="Sub-type configuration updated successfully",
-        data=ScholarshipSubTypeConfigResponse.model_validate(config_dict),
-    )
+    return {
+        "success": True,
+        "message": "Sub-type configuration updated successfully",
+        "data": ScholarshipSubTypeConfigResponse.model_validate(config_dict),
+    }
 
 
-@router.delete(
-    "/scholarships/sub-type-configs/{config_id}",
-    response_model=ApiResponse[MessageResponse],
-)
+@router.delete("/scholarships/sub-type-configs/{config_id}")
 async def delete_sub_type_config(
-    config_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    config_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Delete sub-type configuration (soft delete by setting is_active=False)"""
 
@@ -1842,27 +1756,24 @@ async def delete_sub_type_config(
     config = result.scalar_one_or_none()
 
     if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Sub-type configuration not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sub-type configuration not found")
 
     # Soft delete
     config.is_active = False
     config.updated_by = current_user.id
     await db.commit()
 
-    return ApiResponse(
-        success=True,
-        message="Sub-type configuration deleted successfully",
-        data=MessageResponse(message="Sub-type configuration deleted successfully"),
-    )
+    return {
+        "success": True,
+        "message": "Sub-type configuration deleted successfully",
+        "data": MessageResponse(message="Sub-type configuration deleted successfully"),
+    }
 
 
 # === 獎學金權限管理相關 API === #
 
 
-@router.get("/scholarship-permissions", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("/scholarship-permissions")
 async def get_scholarship_permissions(
     user_id: Optional[int] = Query(None, description="Filter by user ID"),
     current_user: User = Depends(require_admin),
@@ -1900,11 +1811,11 @@ async def get_scholarship_permissions(
                     }
                 )
 
-            return ApiResponse(
-                success=True,
-                message=f"Retrieved {len(permission_list)} scholarship permissions (super admin has access to all)",
-                data=permission_list,
-            )
+            return {
+                "success": True,
+                "message": f"Retrieved {len(permission_list)} scholarship permissions (super admin has access to all)",
+                "data": permission_list,
+            }
 
     # Build query for regular permissions
     stmt = select(AdminScholarship).options(
@@ -1959,37 +1870,26 @@ async def get_scholarship_permissions(
                     }
                 )
 
-    return ApiResponse(
-        success=True,
-        message=f"Retrieved {len(permission_list)} scholarship permissions",
-        data=permission_list,
-    )
+    return {
+        "success": True,
+        "message": f"Retrieved {len(permission_list)} scholarship permissions",
+        "data": permission_list,
+    }
 
 
-@router.get(
-    "/scholarship-permissions/current-user",
-    response_model=ApiResponse[List[Dict[str, Any]]],
-)
+@router.get("/scholarship-permissions/current-user")
 async def get_current_user_scholarship_permissions(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Get current user's scholarship permissions"""
 
     # Only admin and college roles can have scholarship permissions
-    if current_user.role not in [
-        UserRole.admin,
-        UserRole.college,
-        UserRole.super_admin,
-    ]:
-        return ApiResponse(
-            success=True,
-            message="User role does not require scholarship permissions",
-            data=[],
-        )
+    if current_user.role not in [UserRole.admin, UserRole.college, UserRole.super_admin]:
+        return {"success": True, "message": "User role does not require scholarship permissions", "data": []}
 
     # Super admin has access to all scholarships (no specific permissions needed)
     if current_user.is_super_admin():
-        return ApiResponse(success=True, message="Super admin has access to all scholarships", data=[])
+        return {"success": True, "message": "Super admin has access to all scholarships", "data": []}
 
     # Get permissions for admin/college users
     stmt = (
@@ -2017,18 +1917,16 @@ async def get_current_user_scholarship_permissions(
             }
         )
 
-    return ApiResponse(
-        success=True,
-        message=f"Retrieved {len(permission_list)} scholarship permissions for current user",
-        data=permission_list,
-    )
+    return {
+        "success": True,
+        "message": f"Retrieved {len(permission_list)} scholarship permissions for current user",
+        "data": permission_list,
+    }
 
 
-@router.post("/scholarship-permissions", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/scholarship-permissions")
 async def create_scholarship_permission(
-    permission_data: Dict[str, Any],
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    permission_data: Dict[str, Any], current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Create new scholarship permission (admin can only assign scholarships they have permission for)"""
 
@@ -2042,8 +1940,7 @@ async def create_scholarship_permission(
     # Check if admin is trying to modify their own permissions (not allowed)
     if current_user.role == UserRole.admin and user_id == current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin users cannot modify their own permissions",
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin users cannot modify their own permissions"
         )
 
     # Check if user exists
@@ -2067,8 +1964,7 @@ async def create_scholarship_permission(
 
     # Check if permission already exists
     existing_stmt = select(AdminScholarship).where(
-        AdminScholarship.admin_id == user_id,
-        AdminScholarship.scholarship_id == scholarship_id,
+        AdminScholarship.admin_id == user_id, AdminScholarship.scholarship_id == scholarship_id
     )
     existing_result = await db.execute(existing_stmt)
     existing = existing_result.scalar_one_or_none()
@@ -2084,10 +1980,10 @@ async def create_scholarship_permission(
     await db.commit()
     await db.refresh(new_permission)
 
-    return ApiResponse(
-        success=True,
-        message="Scholarship permission created successfully",
-        data={
+    return {
+        "success": True,
+        "message": "Scholarship permission created successfully",
+        "data": {
             "id": new_permission.id,
             "user_id": new_permission.admin_id,
             "scholarship_id": new_permission.scholarship_id,
@@ -2097,13 +1993,10 @@ async def create_scholarship_permission(
             "created_at": new_permission.assigned_at.isoformat(),
             "updated_at": new_permission.assigned_at.isoformat(),
         },
-    )
+    }
 
 
-@router.put(
-    "/scholarship-permissions/{permission_id}",
-    response_model=ApiResponse[Dict[str, Any]],
-)
+@router.put("/scholarship-permissions/{permission_id}")
 async def update_scholarship_permission(
     permission_id: int,
     permission_data: Dict[str, Any],
@@ -2131,10 +2024,10 @@ async def update_scholarship_permission(
     await db.commit()
     await db.refresh(permission)
 
-    return ApiResponse(
-        success=True,
-        message="Scholarship permission updated successfully",
-        data={
+    return {
+        "success": True,
+        "message": "Scholarship permission updated successfully",
+        "data": {
             "id": permission.id,
             "user_id": permission.admin_id,
             "scholarship_id": permission.scholarship_id,
@@ -2144,17 +2037,12 @@ async def update_scholarship_permission(
             "created_at": permission.assigned_at.isoformat(),
             "updated_at": permission.assigned_at.isoformat(),
         },
-    )
+    }
 
 
-@router.delete(
-    "/scholarship-permissions/{permission_id}",
-    response_model=ApiResponse[Dict[str, str]],
-)
+@router.delete("/scholarship-permissions/{permission_id}")
 async def delete_scholarship_permission(
-    permission_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    permission_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Delete scholarship permission (admin can only delete permissions for scholarships they manage, and cannot delete their own permissions)"""
 
@@ -2173,8 +2061,7 @@ async def delete_scholarship_permission(
     # Check if admin is trying to delete their own permissions (not allowed)
     if current_user.role == UserRole.admin and permission.admin_id == current_user.id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin users cannot delete their own permissions",
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin users cannot delete their own permissions"
         )
 
     # Check if current user has permission for this scholarship
@@ -2184,17 +2071,14 @@ async def delete_scholarship_permission(
     await db.delete(permission)
     await db.commit()
 
-    return ApiResponse(
-        success=True,
-        message="Scholarship permission deleted successfully",
-        data={"message": "Permission deleted successfully"},
-    )
+    return {
+        "success": True,
+        "message": "Scholarship permission deleted successfully",
+        "data": {"message": "Permission deleted successfully"},
+    }
 
 
-@router.get(
-    "/scholarships/all-for-permissions",
-    response_model=ApiResponse[List[Dict[str, Any]]],
-)
+@router.get("/scholarships/all-for-permissions")
 async def get_all_scholarships_for_permissions(
     current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
@@ -2214,22 +2098,17 @@ async def get_all_scholarships_for_permissions(
     scholarship_list = []
     for scholarship in scholarships:
         scholarship_list.append(
-            {
-                "id": scholarship.id,
-                "name": scholarship.name,
-                "name_en": scholarship.name_en,
-                "code": scholarship.code,
-            }
+            {"id": scholarship.id, "name": scholarship.name, "name_en": scholarship.name_en, "code": scholarship.code}
         )
 
-    return ApiResponse(
-        success=True,
-        message=f"Retrieved {len(scholarship_list)} scholarships for permission management",
-        data=scholarship_list,
-    )
+    return {
+        "success": True,
+        "message": f"Retrieved {len(scholarship_list)} scholarships for permission management",
+        "data": scholarship_list,
+    }
 
 
-@router.get("/scholarships/my-scholarships", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("/scholarships/my-scholarships")
 async def get_my_scholarships(
     current_user: User = Depends(require_scholarship_manager), db: AsyncSession = Depends(get_db)
 ):
@@ -2256,8 +2135,7 @@ async def get_my_scholarships(
             select(ScholarshipType)
             .join(AdminScholarship, ScholarshipType.id == AdminScholarship.scholarship_id)
             .where(
-                AdminScholarship.admin_id == current_user.id,
-                ScholarshipType.status == ScholarshipStatus.active.value,
+                AdminScholarship.admin_id == current_user.id, ScholarshipType.status == ScholarshipStatus.active.value
             )
             .order_by(ScholarshipType.name)
         )
@@ -2282,11 +2160,11 @@ async def get_my_scholarships(
             }
         )
 
-    return ApiResponse(
-        success=True,
-        message=f"Retrieved {len(scholarship_list)} scholarships for current user",
-        data=scholarship_list,
-    )
+    return {
+        "success": True,
+        "message": f"Retrieved {len(scholarship_list)} scholarships for current user",
+        "data": scholarship_list,
+    }
 
 
 # ============================
@@ -2294,7 +2172,7 @@ async def get_my_scholarships(
 # ============================
 
 
-@router.get("/scholarship-rules", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+@router.get("/scholarship-rules")
 async def get_scholarship_rules(
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
@@ -2333,7 +2211,7 @@ async def get_scholarship_rules(
             stmt = stmt.where(ScholarshipRule.scholarship_type_id.in_(admin_scholarship_ids))
         else:
             # Admin has no scholarship permissions, return empty result
-            return ApiResponse(success=True, message="No scholarship rules found", data=[])
+            return {"success": True, "message": "No scholarship rules found", "data": []}
 
     if academic_year:
         stmt = stmt.where(ScholarshipRule.academic_year == academic_year)
@@ -2374,18 +2252,12 @@ async def get_scholarship_rules(
         rule_data.academic_period_label = rule.academic_period_label
         rule_responses.append(rule_data)
 
-    return ApiResponse(
-        success=True,
-        message=f"Retrieved {len(rule_responses)} scholarship rules",
-        data=rule_responses,
-    )
+    return {"success": True, "message": f"Retrieved {len(rule_responses)} scholarship rules", "data": rule_responses}
 
 
-@router.post("/scholarship-rules", response_model=ApiResponse[ScholarshipRuleResponse])
+@router.post("/scholarship-rules")
 async def create_scholarship_rule(
-    rule_data: ScholarshipRuleCreate,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    rule_data: ScholarshipRuleCreate, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Create a new scholarship rule"""
 
@@ -2422,18 +2294,12 @@ async def create_scholarship_rule(
     rule_response = ScholarshipRuleResponse.model_validate(new_rule)
     rule_response.academic_period_label = new_rule.academic_period_label
 
-    return ApiResponse(
-        success=True,
-        message="Scholarship rule created successfully",
-        data=rule_response,
-    )
+    return {"success": True, "message": "Scholarship rule created successfully", "data": rule_response}
 
 
-@router.get("/scholarship-rules/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse])
+@router.get("/scholarship-rules/{rule_id}")
 async def get_scholarship_rule(
-    rule_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    rule_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Get a specific scholarship rule"""
 
@@ -2462,14 +2328,10 @@ async def get_scholarship_rule(
     rule_response = ScholarshipRuleResponse.model_validate(rule)
     rule_response.academic_period_label = rule.academic_period_label
 
-    return ApiResponse(
-        success=True,
-        message="Scholarship rule retrieved successfully",
-        data=rule_response,
-    )
+    return {"success": True, "message": "Scholarship rule retrieved successfully", "data": rule_response}
 
 
-@router.put("/scholarship-rules/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse])
+@router.put("/scholarship-rules/{rule_id}")
 async def update_scholarship_rule(
     rule_id: int,
     rule_data: ScholarshipRuleUpdate,
@@ -2520,18 +2382,12 @@ async def update_scholarship_rule(
     rule_response = ScholarshipRuleResponse.model_validate(rule)
     rule_response.academic_period_label = rule.academic_period_label
 
-    return ApiResponse(
-        success=True,
-        message="Scholarship rule updated successfully",
-        data=rule_response,
-    )
+    return {"success": True, "message": "Scholarship rule updated successfully", "data": rule_response}
 
 
-@router.delete("/scholarship-rules/{rule_id}", response_model=ApiResponse[Dict[str, str]])
+@router.delete("/scholarship-rules/{rule_id}")
 async def delete_scholarship_rule(
-    rule_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    rule_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Delete a scholarship rule"""
 
@@ -2549,11 +2405,11 @@ async def delete_scholarship_rule(
     await db.delete(rule)
     await db.commit()
 
-    return ApiResponse(
-        success=True,
-        message="Scholarship rule deleted successfully",
-        data={"message": "Rule deleted successfully"},
-    )
+    return {
+        "success": True,
+        "message": "Scholarship rule deleted successfully",
+        "data": {"message": "Rule deleted successfully"},
+    }
 
 
 async def _copy_rules_in_batches(
@@ -2666,14 +2522,12 @@ async def _copy_rules_in_batches(
     else:
         message = f"Successfully copied {len(all_new_rules)} rules in batches."
 
-    return ApiResponse(success=True, message=message, data=rule_responses)
+    return {"success": True, "message": message, "data": rule_responses}
 
 
-@router.post("/scholarship-rules/copy", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+@router.post("/scholarship-rules/copy")
 async def copy_rules_between_periods(
-    copy_request: RuleCopyRequest,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    copy_request: RuleCopyRequest, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Copy rules between academic periods"""
 
@@ -2716,7 +2570,7 @@ async def copy_rules_between_periods(
     total_rules = count_result.scalar()
 
     if total_rules == 0:
-        return ApiResponse(success=True, message="No rules found to copy", data=[])
+        return {"success": True, "message": "No rules found to copy", "data": []}
 
     # For large datasets (>500 rules), use batch processing to avoid memory issues
     BATCH_SIZE = 500
@@ -2727,13 +2581,7 @@ async def copy_rules_between_periods(
     if use_batch_processing:
         # Process in batches for large datasets
         return await _copy_rules_in_batches(
-            db,
-            stmt,
-            copy_request,
-            target_semester_enum,
-            current_user,
-            total_rules,
-            BATCH_SIZE,
+            db, stmt, copy_request, target_semester_enum, current_user, total_rules, BATCH_SIZE
         )
     else:
         # Process all at once for smaller datasets
@@ -2825,10 +2673,10 @@ async def copy_rules_between_periods(
     else:
         message = f"Successfully copied {len(new_rules)} rules to target period."
 
-    return ApiResponse(success=True, message=message, data=rule_responses)
+    return {"success": True, "message": message, "data": rule_responses}
 
 
-@router.post("/scholarship-rules/bulk-operation", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/scholarship-rules/bulk-operation")
 async def bulk_rule_operation(
     operation_request: BulkRuleOperation,
     current_user: User = Depends(require_admin),
@@ -2845,21 +2693,14 @@ async def bulk_rule_operation(
     rules = result.scalars().all()
 
     if not rules:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No rules found with the provided IDs",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No rules found with the provided IDs")
 
     # Check permissions for all scholarship types involved
     scholarship_type_ids = set(rule.scholarship_type_id for rule in rules)
     for scholarship_type_id in scholarship_type_ids:
         check_scholarship_permission(current_user, scholarship_type_id)
 
-    operation_results = {
-        "operation": operation_request.operation,
-        "affected_rules": len(rules),
-        "details": [],
-    }
+    operation_results = {"operation": operation_request.operation, "affected_rules": len(rules), "details": []}
 
     if operation_request.operation == "activate":
         for rule in rules:
@@ -2883,15 +2724,14 @@ async def bulk_rule_operation(
 
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported operation: {operation_request.operation}",
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported operation: {operation_request.operation}"
         )
 
-    return ApiResponse(
-        success=True,
-        message=f"Bulk operation '{operation_request.operation}' completed successfully",
-        data=operation_results,
-    )
+    return {
+        "success": True,
+        "message": f"Bulk operation '{operation_request.operation}' completed successfully",
+        "data": operation_results,
+    }
 
 
 # ============================
@@ -2899,10 +2739,7 @@ async def bulk_rule_operation(
 # ============================
 
 
-@router.get(
-    "/scholarship-rules/templates",
-    response_model=ApiResponse[List[ScholarshipRuleResponse]],
-)
+@router.get("/scholarship-rules/templates")
 async def get_rule_templates(
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type"),
     current_user: User = Depends(require_admin),
@@ -2916,10 +2753,7 @@ async def get_rule_templates(
 
     stmt = (
         select(ScholarshipRule)
-        .options(
-            selectinload(ScholarshipRule.scholarship_type),
-            selectinload(ScholarshipRule.creator),
-        )
+        .options(selectinload(ScholarshipRule.scholarship_type), selectinload(ScholarshipRule.creator))
         .where(ScholarshipRule.is_template.is_(True))
     )
 
@@ -2935,7 +2769,7 @@ async def get_rule_templates(
             stmt = stmt.where(ScholarshipRule.scholarship_type_id.in_(admin_scholarship_ids))
         else:
             # Admin has no scholarship permissions, return empty result
-            return ApiResponse(success=True, message="No rule templates found", data=[])
+            return {"success": True, "message": "No rule templates found", "data": []}
 
     stmt = stmt.order_by(ScholarshipRule.template_name, ScholarshipRule.priority.desc())
 
@@ -2951,17 +2785,14 @@ async def get_rule_templates(
         template_response.academic_period_label = template.academic_period_label
         template_responses.append(template_response)
 
-    return ApiResponse(
-        success=True,
-        message=f"Retrieved {len(template_responses)} rule templates",
-        data=template_responses,
-    )
+    return {
+        "success": True,
+        "message": f"Retrieved {len(template_responses)} rule templates",
+        "data": template_responses,
+    }
 
 
-@router.post(
-    "/scholarship-rules/create-template",
-    response_model=ApiResponse[List[ScholarshipRuleResponse]],
-)
+@router.post("/scholarship-rules/create-template")
 async def create_rule_template(
     template_request: RuleTemplateRequest,
     current_user: User = Depends(require_admin),
@@ -2975,10 +2806,7 @@ async def create_rule_template(
     source_rules = result.scalars().all()
 
     if not source_rules:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No rules found with the provided IDs",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No rules found with the provided IDs")
 
     # Check permissions for all scholarship types involved
     scholarship_type_ids = set(rule.scholarship_type_id for rule in source_rules)
@@ -2988,8 +2816,7 @@ async def create_rule_template(
     # Verify all rules belong to the same scholarship type
     if not all(rule.scholarship_type_id == template_request.scholarship_type_id for rule in source_rules):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="All rules must belong to the same scholarship type",
+            status_code=status.HTTP_400_BAD_REQUEST, detail="All rules must belong to the same scholarship type"
         )
 
     # Create template rules
@@ -3050,17 +2877,14 @@ async def create_rule_template(
     else:
         template_responses = []
 
-    return ApiResponse(
-        success=True,
-        message=f"Created template '{template_request.template_name}' with {len(template_rules)} rules",
-        data=template_responses,
-    )
+    return {
+        "success": True,
+        "message": f"Created template '{template_request.template_name}' with {len(template_rules)} rules",
+        "data": template_responses,
+    }
 
 
-@router.post(
-    "/scholarship-rules/apply-template",
-    response_model=ApiResponse[List[ScholarshipRuleResponse]],
-)
+@router.post("/scholarship-rules/apply-template")
 async def apply_rule_template(
     template_request: ApplyTemplateRequest,
     current_user: User = Depends(require_admin),
@@ -3070,8 +2894,7 @@ async def apply_rule_template(
 
     # Get template rules
     stmt = select(ScholarshipRule).where(
-        ScholarshipRule.id == template_request.template_id,
-        ScholarshipRule.is_template.is_(True),
+        ScholarshipRule.id == template_request.template_id, ScholarshipRule.is_template.is_(True)
     )
     result = await db.execute(stmt)
     template_rule = result.scalar_one_or_none()
@@ -3173,17 +2996,14 @@ async def apply_rule_template(
     else:
         rule_responses = []
 
-    return ApiResponse(
-        success=True,
-        message=f"Applied template '{template_rule.template_name}' and created {len(new_rules)} rules",
-        data=rule_responses,
-    )
+    return {
+        "success": True,
+        "message": f"Applied template '{template_rule.template_name}' and created {len(new_rules)} rules",
+        "data": rule_responses,
+    }
 
 
-@router.delete(
-    "/scholarship-rules/templates/{template_name}",
-    response_model=ApiResponse[Dict[str, str]],
-)
+@router.delete("/scholarship-rules/templates/{template_name}")
 async def delete_rule_template(
     template_name: str,
     scholarship_type_id: int = Query(..., description="Scholarship type ID"),
@@ -3213,14 +3033,14 @@ async def delete_rule_template(
 
     await db.commit()
 
-    return ApiResponse(
-        success=True,
-        message=f"Deleted template '{template_name}' with {len(template_rules)} rules",
-        data={"message": f"Template '{template_name}' deleted successfully"},
-    )
+    return {
+        "success": True,
+        "message": f"Deleted template '{template_name}' with {len(template_rules)} rules",
+        "data": {"message": f"Template '{template_name}' deleted successfully"},
+    }
 
 
-@router.get("/scholarships/available-years", response_model=ApiResponse[List[int]])
+@router.get("/scholarships/available-years")
 async def get_available_years(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get available academic years from scholarship rules"""
 
@@ -3241,14 +3061,10 @@ async def get_available_years(current_user: User = Depends(require_admin), db: A
         current_taiwan_year = datetime.now().year - 1911
         years = [current_taiwan_year - 1, current_taiwan_year, current_taiwan_year + 1]
 
-    return ApiResponse(
-        success=True,
-        message=f"Retrieved {len(years)} available years",
-        data=list(years),
-    )
+    return {"success": True, "message": f"Retrieved {len(years)} available years", "data": list(years)}
 
 
-@router.get("/professors", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("/professors")
 async def get_available_professors(
     search: Optional[str] = Query(None, description="Search by name or NYCU ID"),
     current_user: User = Depends(require_admin),
@@ -3261,12 +3077,7 @@ async def get_available_professors(
 
         if search:
             search_term = f"%{search.lower()}%"
-            stmt = stmt.where(
-                or_(
-                    func.lower(User.name).like(search_term),
-                    func.lower(User.nycu_id).like(search_term),
-                )
-            )
+            stmt = stmt.where(or_(func.lower(User.name).like(search_term), func.lower(User.nycu_id).like(search_term)))
 
         result = await db.execute(stmt)
         professors = result.scalars().all() if result else []
@@ -3281,24 +3092,16 @@ async def get_available_professors(
             for professor in professors
         ]
 
-        return ApiResponse(
-            success=True,
-            message=f"Retrieved {len(serialized)} professors",
-            data=serialized,
-        )
+        return {"success": True, "message": f"Retrieved {len(serialized)} professors", "data": serialized}
 
     except Exception as exc:  # pragma: no cover - unexpected failure path
         logger.error(f"Error fetching professors: {exc}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch professors: {exc}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch professors: {exc}"
         ) from exc
 
 
-@router.put(
-    "/applications/{application_id}/assign-professor",
-    response_model=ApiResponse[ApplicationResponse],
-)
+@router.put("/applications/{application_id}/assign-professor")
 async def assign_professor_to_application(
     application_id: int,
     request: ProfessorAssignmentRequest,
@@ -3309,9 +3112,7 @@ async def assign_professor_to_application(
     try:
         service = ApplicationService(db)
         application = await service.assign_professor(
-            application_id=application_id,
-            professor_nycu_id=request.professor_nycu_id,
-            assigned_by=current_user,
+            application_id=application_id, professor_nycu_id=request.professor_nycu_id, assigned_by=current_user
         )
 
         # Create a safe response that doesn't trigger lazy loading
@@ -3350,28 +3151,22 @@ async def assign_professor_to_application(
             "professor_reviews": [],  # Empty to avoid lazy loading
         }
 
-        return ApiResponse(
-            success=True,
-            message=f"Professor {request.professor_nycu_id} assigned to application {application.app_id}",
-            data=response_data,
-        )
+        return {
+            "success": True,
+            "message": f"Professor {request.professor_nycu_id} assigned to application {application.app_id}",
+            "data": response_data,
+        }
 
     except Exception as e:
         logger.error(f"Error assigning professor: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to assign professor: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to assign professor: {str(e)}"
         )
 
 
-@router.post(
-    "/applications/bulk-approve",
-    response_model=ApiResponse[Dict[str, Any]],
-)
+@router.post("/applications/bulk-approve")
 async def bulk_approve_applications_endpoint(
-    payload: BulkApproveRequest,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    payload: BulkApproveRequest, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Bulk approve multiple applications."""
 
@@ -3383,11 +3178,7 @@ async def bulk_approve_applications_endpoint(
         send_notifications=payload.send_notifications,
     )
 
-    return ApiResponse(
-        success=True,
-        message="Bulk approval processed successfully",
-        data=result,
-    )
+    return {"success": True, "message": "Bulk approval processed successfully", "data": result}
 
 
 # ============================================
@@ -3395,7 +3186,7 @@ async def bulk_approve_applications_endpoint(
 # ============================================
 
 
-@router.get("/configurations", response_model=ApiResponse[List[ConfigurationCategorySchema]])
+@router.get("/configurations")
 async def get_all_configurations(
     category: Optional[ConfigCategory] = Query(None, description="Filter by category"),
     current_user: User = Depends(require_super_admin),
@@ -3465,21 +3256,16 @@ async def get_all_configurations(
             if config_items or not category:  # Include empty categories only when showing all
                 result.append(category_schema)
 
-        return ApiResponse(
-            success=True,
-            message="Configurations retrieved successfully",
-            data=result,
-        )
+        return {"success": True, "message": "Configurations retrieved successfully", "data": result}
 
     except Exception as e:
         logger.error(f"Error retrieving configurations: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve configurations: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configurations: {str(e)}"
         )
 
 
-@router.post("/configurations", response_model=ApiResponse[ConfigurationItemWithDecryptedValueSchema])
+@router.post("/configurations")
 async def create_configuration(
     config: ConfigurationCreateSchema,
     current_user: User = Depends(require_super_admin),
@@ -3493,8 +3279,7 @@ async def create_configuration(
         is_valid, message = await config_service.validate_configuration(config.key, config.value, config.data_type)
         if not is_valid:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid configuration value: {message}",
+                status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid configuration value: {message}"
             )
 
         # Create the configuration
@@ -3533,26 +3318,18 @@ async def create_configuration(
             updated_at=setting.updated_at,
         )
 
-        return ApiResponse(
-            success=True,
-            message=f"Configuration '{config.key}' created successfully",
-            data=response_data,
-        )
+        return {"success": True, "message": f"Configuration '{config.key}' created successfully", "data": response_data}
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating configuration: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create configuration: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
         )
 
 
-@router.put("/configurations/bulk", response_model=ApiResponse[List[ConfigurationItemWithDecryptedValueSchema]])
+@router.put("/configurations/bulk")
 async def bulk_update_configurations(
     update_request: ConfigurationBulkUpdateSchema,
     current_user: User = Depends(require_super_admin),
@@ -3567,8 +3344,7 @@ async def bulk_update_configurations(
             existing = await config_service.get_configuration(update.key)
             if not existing:
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Configuration '{update.key}' not found",
+                    status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration '{update.key}' not found"
                 )
 
             is_valid, message = await config_service.validate_configuration(
@@ -3576,8 +3352,7 @@ async def bulk_update_configurations(
             )
             if not is_valid:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid value for '{update.key}': {message}",
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid value for '{update.key}': {message}"
                 )
 
         # Perform bulk update
@@ -3627,23 +3402,22 @@ async def bulk_update_configurations(
                 )
             )
 
-        return ApiResponse(
-            success=True,
-            message=f"Successfully updated {len(updated_settings)} configurations",
-            data=response_data,
-        )
+        return {
+            "success": True,
+            "message": f"Successfully updated {len(updated_settings)} configurations",
+            "data": response_data,
+        }
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error in bulk configuration update: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update configurations: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configurations: {str(e)}"
         )
 
 
-@router.post("/configurations/validate", response_model=ApiResponse[ConfigurationValidationResultSchema])
+@router.post("/configurations/validate")
 async def validate_configuration(
     validation_request: ConfigurationValidationSchema,
     current_user: User = Depends(require_super_admin),
@@ -3673,21 +3447,16 @@ async def validate_configuration(
             is_valid=is_valid, message=message, suggested_value=None  # Could implement smart suggestions in the future
         )
 
-        return ApiResponse(
-            success=True,
-            message="Validation completed",
-            data=result,
-        )
+        return {"success": True, "message": "Validation completed", "data": result}
 
     except Exception as e:
         logger.error(f"Error validating configuration: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to validate configuration: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to validate configuration: {str(e)}"
         )
 
 
-@router.delete("/configurations/{key}", response_model=ApiResponse[str])
+@router.delete("/configurations/{key}")
 async def delete_configuration(
     key: str,
     change_reason: Optional[str] = Query(None, description="Reason for deletion"),
@@ -3701,27 +3470,16 @@ async def delete_configuration(
         success = await config_service.delete_configuration(key, current_user.id, change_reason)
 
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Configuration '{key}' not found",
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration '{key}' not found")
 
-        return ApiResponse(
-            success=True,
-            message=f"Configuration '{key}' deleted successfully",
-            data=key,
-        )
+        return {"success": True, "message": f"Configuration '{key}' deleted successfully", "data": key}
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Error deleting configuration: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete configuration: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete configuration: {str(e)}"
         )
 
 
@@ -3730,7 +3488,7 @@ async def delete_configuration(
 # ============================================
 
 
-@router.post("/bank-verification", response_model=ApiResponse[BankVerificationResultSchema])
+@router.post("/bank-verification")
 async def verify_bank_account(
     request: BankVerificationRequestSchema,
     current_user: User = Depends(require_admin),
@@ -3742,26 +3500,22 @@ async def verify_bank_account(
 
         result = await verification_service.verify_bank_account(request.application_id)
 
-        return ApiResponse(
-            success=True,
-            message="Bank account verification completed",
-            data=BankVerificationResultSchema(**result),
-        )
+        return {
+            "success": True,
+            "message": "Bank account verification completed",
+            "data": BankVerificationResultSchema(**result),
+        }
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.error(f"Error in bank verification: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to verify bank account: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to verify bank account: {str(e)}"
         )
 
 
-@router.post("/bank-verification/batch", response_model=ApiResponse[BankVerificationBatchResultSchema])
+@router.post("/bank-verification/batch")
 async def batch_verify_bank_accounts(
     request: BankVerificationBatchRequestSchema,
     current_user: User = Depends(require_admin),
@@ -3800,15 +3554,14 @@ async def batch_verify_bank_accounts(
             summary=summary,
         )
 
-        return ApiResponse(
-            success=True,
-            message=f"Batch verification completed for {total_processed} applications",
-            data=batch_result,
-        )
+        return {
+            "success": True,
+            "message": f"Batch verification completed for {total_processed} applications",
+            "data": batch_result,
+        }
 
     except Exception as e:
         logger.error(f"Error in batch bank verification: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to perform batch verification: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to perform batch verification: {str(e)}"
         )

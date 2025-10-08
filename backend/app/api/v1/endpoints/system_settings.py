@@ -169,7 +169,29 @@ async def create_configuration(
             validation_regex=configuration.validation_regex,
             user_id=current_user.id,
         )
-        return new_configuration
+
+        # Convert to dict for response
+        config_dict = {
+            "key": new_configuration.key,
+            "value": new_configuration.value if not new_configuration.is_sensitive else "***HIDDEN***",
+            "category": new_configuration.category,
+            "data_type": new_configuration.data_type,
+            "description": new_configuration.description,
+            "is_sensitive": new_configuration.is_sensitive,
+            "is_readonly": new_configuration.is_readonly,
+            "allow_empty": new_configuration.allow_empty,
+            "validation_regex": new_configuration.validation_regex,
+            "default_value": new_configuration.default_value,
+            "last_modified_by": new_configuration.last_modified_by,
+            "created_at": new_configuration.created_at,
+            "updated_at": new_configuration.updated_at,
+        }
+
+        return {
+            "success": True,
+            "message": "Configuration created successfully",
+            "data": config_dict,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -213,7 +235,29 @@ async def update_configuration(
             else existing.validation_regex,
             user_id=current_user.id,
         )
-        return updated_configuration
+
+        # Convert to dict for response
+        config_dict = {
+            "key": updated_configuration.key,
+            "value": updated_configuration.value if not updated_configuration.is_sensitive else "***HIDDEN***",
+            "category": updated_configuration.category,
+            "data_type": updated_configuration.data_type,
+            "description": updated_configuration.description,
+            "is_sensitive": updated_configuration.is_sensitive,
+            "is_readonly": updated_configuration.is_readonly,
+            "allow_empty": updated_configuration.allow_empty,
+            "validation_regex": updated_configuration.validation_regex,
+            "default_value": updated_configuration.default_value,
+            "last_modified_by": updated_configuration.last_modified_by,
+            "created_at": updated_configuration.created_at,
+            "updated_at": updated_configuration.updated_at,
+        }
+
+        return {
+            "success": True,
+            "message": "Configuration updated successfully",
+            "data": config_dict,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -272,7 +316,13 @@ async def validate_configuration(
             data_type=validation_request.data_type,
         )
 
-        return ConfigValidationResponse(is_valid=is_valid, error_message=error_message)
+        response_data = ConfigValidationResponse(is_valid=is_valid, error_message=error_message)
+
+        return {
+            "success": True,
+            "message": "Validation completed",
+            "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+        }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to validate configuration: {str(e)}"

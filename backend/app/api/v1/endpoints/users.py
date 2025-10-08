@@ -439,13 +439,19 @@ async def bulk_assign_scholarships(
     final_result = await db.execute(final_stmt)
     scholarships = final_result.scalars().all()
 
-    return BulkScholarshipAssignResponse(
+    response_data = BulkScholarshipAssignResponse(
         user_id=user_id,
         assigned_count=assigned_count,
         removed_count=removed_count,
         total_scholarships=len(scholarships),
         scholarships=[{"id": s.id, "code": s.code, "name": s.name} for s in scholarships],
     )
+
+    return {
+        "success": True,
+        "message": "Bulk scholarship assignment completed",
+        "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+    }
 
 
 @router.get("/stats/overview")

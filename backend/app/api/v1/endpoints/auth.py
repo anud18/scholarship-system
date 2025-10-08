@@ -11,7 +11,6 @@ from app.core.config import settings
 from app.core.security import get_current_user
 from app.db.deps import get_db
 from app.models.user import User, UserRole
-from app.schemas.common import MessageResponse
 from app.schemas.user import DeveloperProfileRequest, PortalSSORequest, UserCreate, UserLogin, UserResponse
 from app.services.auth_service import AuthService
 from app.services.developer_profile_service import DeveloperProfile, DeveloperProfileManager, DeveloperProfileService
@@ -25,7 +24,23 @@ router = APIRouter()
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
     auth_service = AuthService(db)
-    return await auth_service.register_user(user_data)
+    user = await auth_service.register_user(user_data)
+
+    # Convert to dict for response
+    user_dict = {
+        "id": user.id,
+        "nycu_id": user.nycu_id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role.value if hasattr(user.role, "value") else str(user.role),
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+    }
+
+    return {
+        "success": True,
+        "message": "User registered successfully",
+        "data": user_dict,
+    }
 
 
 @router.post("/login")
@@ -61,7 +76,11 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 @router.post("/logout")
 async def logout():
     """Logout user (client-side token removal)"""
-    return MessageResponse(message="Logged out successfully")
+    return {
+        "success": True,
+        "message": "Logged out successfully",
+        "data": None,
+    }
 
 
 @router.post("/refresh")
