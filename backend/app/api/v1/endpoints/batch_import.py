@@ -6,7 +6,7 @@ offline application data imports.
 """
 
 from io import BytesIO
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -21,11 +21,15 @@ from app.models.enums import BatchImportStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User, UserRole
 from app.schemas.batch_import import (
+    BatchDocumentUploadResponse,
+    BatchDocumentUploadResult,
     BatchImportConfirmRequest,
     BatchImportConfirmResponse,
     BatchImportDetailResponse,
     BatchImportHistoryItem,
     BatchImportHistoryResponse,
+    BatchImportRevalidateResponse,
+    BatchImportUpdateRecordRequest,
     BatchImportUploadResponse,
 )
 from app.services.batch_import_service import BatchImportService
@@ -227,6 +231,528 @@ async def upload_batch_import_data(
     return {
         "success": True,
         "message": "檔案上傳成功" if len(validation_errors) == 0 else f"檔案上傳完成，發現 {len(validation_errors)} 個驗證錯誤",
+        "data": response_data.model_dump(),
+    }
+
+
+@router.patch("/{batch_id}/records")
+async def update_batch_record(
+    batch_id: int,
+    request: BatchImportUpdateRecordRequest,
+    current_user: User = Depends(require_college_role),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    更新批次匯入中的單筆記錄
+
+    **流程**:
+    1. 驗證批次記錄存在且為 pending 狀態
+    2. 更新指定索引的記錄
+    3. 返回更新結果
+
+    **權限**: College 角色僅能編輯自己上傳的批次
+    """
+    # Get batch import record
+    batch_import = await db.get(BatchImport, batch_id)
+    if not batch_import:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"批次匯入記錄 {batch_id} 不存在",
+        )
+
+    # Verify ownership (skip for super_admin)
+    if batch_import.importer_id != current_user.id and current_user.role != UserRole.super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅能編輯自己上傳的批次匯入",
+        )
+
+    # Check status
+    if batch_import.import_status != BatchImportStatus.pending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"此批次狀態為 {batch_import.import_status.value}，無法編輯",
+        )
+
+    # Check if parsed_data exists
+    if not batch_import.parsed_data or "data" not in batch_import.parsed_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="批次匯入資料已過期或不存在",
+        )
+
+    parsed_data = batch_import.parsed_data["data"]
+
+    # Validate record index
+    if request.record_index >= len(parsed_data):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"記錄索引 {request.record_index} 超出範圍（總共 {len(parsed_data)} 筆）",
+        )
+
+    # Update the record
+    for key, value in request.updates.items():
+        parsed_data[request.record_index][key] = value
+
+    # Update in database
+    batch_import.parsed_data["data"] = parsed_data
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "記錄更新成功",
+        "data": {"updated_record": parsed_data[request.record_index]},
+    }
+
+
+@router.post("/{batch_id}/validate")
+async def revalidate_batch_import(
+    batch_id: int,
+    current_user: User = Depends(require_college_role),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    重新驗證批次匯入資料
+
+    **流程**:
+    1. 驗證批次記錄存在且為 pending 狀態
+    2. 重新執行所有驗證規則
+    3. 更新 parsed_data 中的錯誤列表
+    4. 返回驗證摘要
+
+    **權限**: College 角色僅能驗證自己上傳的批次
+    """
+    # Get batch import record
+    batch_import = await db.get(BatchImport, batch_id)
+    if not batch_import:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"批次匯入記錄 {batch_id} 不存在",
+        )
+
+    # Verify ownership (skip for super_admin)
+    if batch_import.importer_id != current_user.id and current_user.role != UserRole.super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅能驗證自己上傳的批次匯入",
+        )
+
+    # Check status
+    if batch_import.import_status != BatchImportStatus.pending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"此批次狀態為 {batch_import.import_status.value}，無法重新驗證",
+        )
+
+    # Check if parsed_data exists
+    if not batch_import.parsed_data or "data" not in batch_import.parsed_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="批次匯入資料已過期或不存在",
+        )
+
+    parsed_data = batch_import.parsed_data["data"]
+    service = BatchImportService(db)
+    validation_errors = []
+
+    # Get college code from user
+    college_code = current_user.college_code
+
+    # Re-validate all records
+    for row_data in parsed_data:
+        # Check college permission (skip for super_admin)
+        if current_user.role != UserRole.super_admin:
+            is_valid, error_msg = await service.validate_college_permission(
+                student_id=row_data.get("student_id"),
+                college_code=college_code,
+                dept_code=row_data.get("dept_code"),
+            )
+            if not is_valid:
+                validation_errors.append(
+                    {
+                        "row_number": parsed_data.index(row_data) + 2,
+                        "student_id": row_data.get("student_id"),
+                        "field": "college_code",
+                        "error_type": "permission_error",
+                        "message": error_msg,
+                    }
+                )
+
+        # Check duplicate
+        is_duplicate, error_msg = await service.check_duplicate_application(
+            student_id=row_data.get("student_id"),
+            scholarship_type_id=batch_import.scholarship_type_id,
+            academic_year=batch_import.academic_year,
+            semester=batch_import.semester,
+        )
+        if is_duplicate:
+            validation_errors.append(
+                {
+                    "row_number": parsed_data.index(row_data) + 2,
+                    "student_id": row_data.get("student_id"),
+                    "field": "duplicate",
+                    "error_type": "duplicate_application",
+                    "message": error_msg,
+                }
+            )
+
+    # Update parsed_data with new errors
+    batch_import.parsed_data["errors"] = validation_errors
+    await db.commit()
+
+    response_data = BatchImportRevalidateResponse(
+        batch_id=batch_id,
+        total_records=len(parsed_data),
+        valid_count=len(parsed_data) - len(validation_errors),
+        invalid_count=len(validation_errors),
+        errors=[
+            {
+                "row": e.get("row_number"),
+                "field": e.get("field"),
+                "message": e.get("message"),
+            }
+            for e in validation_errors[:20]  # Limit preview errors
+        ],
+    )
+
+    return {
+        "success": True,
+        "message": "驗證完成" if len(validation_errors) == 0 else f"驗證完成，發現 {len(validation_errors)} 個錯誤",
+        "data": response_data.model_dump(),
+    }
+
+
+@router.delete("/{batch_id}/records/{record_index}")
+async def delete_batch_record(
+    batch_id: int,
+    record_index: int,
+    current_user: User = Depends(require_college_role),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    刪除批次匯入中的單筆記錄
+
+    **流程**:
+    1. 驗證批次記錄存在且為 pending 狀態
+    2. 刪除指定索引的記錄
+    3. 更新總筆數
+    4. 返回刪除結果
+
+    **權限**: College 角色僅能刪除自己上傳的批次中的記錄
+    """
+    # Get batch import record
+    batch_import = await db.get(BatchImport, batch_id)
+    if not batch_import:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"批次匯入記錄 {batch_id} 不存在",
+        )
+
+    # Verify ownership (skip for super_admin)
+    if batch_import.importer_id != current_user.id and current_user.role != UserRole.super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅能刪除自己上傳的批次匯入中的記錄",
+        )
+
+    # Check status
+    if batch_import.import_status != BatchImportStatus.pending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"此批次狀態為 {batch_import.import_status.value}，無法刪除記錄",
+        )
+
+    # Check if parsed_data exists
+    if not batch_import.parsed_data or "data" not in batch_import.parsed_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="批次匯入資料已過期或不存在",
+        )
+
+    parsed_data = batch_import.parsed_data["data"]
+
+    # Validate record index
+    if record_index >= len(parsed_data):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"記錄索引 {record_index} 超出範圍（總共 {len(parsed_data)} 筆）",
+        )
+
+    # Delete the record
+    deleted_record = parsed_data.pop(record_index)
+
+    # Update total_records count
+    batch_import.total_records = len(parsed_data)
+    batch_import.parsed_data["data"] = parsed_data
+
+    # Also remove any validation errors for this record and adjust row numbers
+    if "errors" in batch_import.parsed_data:
+        errors = batch_import.parsed_data["errors"]
+        # Remove errors for the deleted row
+        errors = [e for e in errors if e.get("row_number") != record_index + 2]
+        # Adjust row numbers for records after the deleted one
+        for e in errors:
+            if e.get("row_number") > record_index + 2:
+                e["row_number"] -= 1
+        batch_import.parsed_data["errors"] = errors
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "記錄刪除成功",
+        "data": {
+            "deleted_record": deleted_record,
+            "remaining_records": len(parsed_data),
+        },
+    }
+
+
+@router.post("/{batch_id}/documents")
+async def upload_batch_documents(
+    batch_id: int,
+    file: UploadFile = File(..., description="包含所有文件的 ZIP 檔案"),
+    current_user: User = Depends(require_college_role),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    批次上傳文件（ZIP 格式）
+
+    **檔案命名規則**: `{學號}_文件類型.pdf`
+    - 範例: `111111111_transcript.pdf`, `222222222_id_card.pdf`
+
+    **支援的文件類型**:
+    - transcript: 成績單
+    - id_card: 身份證
+    - bank_book: 存摺封面
+    - other: 其他文件
+
+    **流程**:
+    1. 上傳 ZIP 檔案
+    2. 解壓並驗證檔案命名
+    3. 匹配學號到批次匯入的申請
+    4. 上傳文件到 MinIO
+    5. 建立 ApplicationFile 記錄
+
+    **權限**: College 角色僅能為自己的批次上傳文件
+    """
+    import re
+    import zipfile
+    from io import BytesIO
+
+    from app.core.config import settings
+    from app.models.application import Application, ApplicationFile
+    from app.services.minio_service import MinioService
+
+    # Get batch import record
+    batch_import = await db.get(BatchImport, batch_id)
+    if not batch_import:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"批次匯入記錄 {batch_id} 不存在",
+        )
+
+    # Verify ownership (skip for super_admin)
+    if batch_import.importer_id != current_user.id and current_user.role != UserRole.super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅能為自己的批次上傳文件",
+        )
+
+    # Check if batch is confirmed (has created applications)
+    if batch_import.import_status not in [BatchImportStatus.completed, BatchImportStatus.partial]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"批次狀態為 {batch_import.import_status.value}，必須先確認匯入才能上傳文件",
+        )
+
+    # Read ZIP file
+    zip_content = await file.read()
+
+    # Validate file size (100MB max)
+    if len(zip_content) > 100 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="ZIP 檔案大小不能超過 100MB",
+        )
+
+    # Validate ZIP file
+    try:
+        zip_file = zipfile.ZipFile(BytesIO(zip_content))
+    except zipfile.BadZipFile:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="無效的 ZIP 檔案",
+        )
+
+    # Document type mapping
+    doc_type_map = {
+        "transcript": "transcript",
+        "成績單": "transcript",
+        "id_card": "id_card",
+        "身份證": "id_card",
+        "bank_book": "bank_book",
+        "存摺": "bank_book",
+        "other": "other",
+        "其他": "other",
+    }
+
+    results: List[BatchDocumentUploadResult] = []
+    matched_count = 0
+    unmatched_count = 0
+    error_count = 0
+
+    # Get all applications from this batch
+    applications_stmt = select(Application).where(Application.batch_import_id == batch_id)
+    applications_result = await db.execute(applications_stmt)
+    applications = applications_result.scalars().all()
+
+    # Create student_id to application mapping
+    student_app_map = {app.student_id: app for app in applications}
+
+    # Initialize MinIO service
+    minio_service = MinioService()
+
+    # Process each file in ZIP
+    for file_info in zip_file.filelist:
+        # Skip directories
+        if file_info.is_dir():
+            continue
+
+        file_name = file_info.filename
+        # Skip __MACOSX and other hidden files
+        if file_name.startswith("__MACOSX") or file_name.startswith("."):
+            continue
+
+        # Extract file
+        try:
+            file_data = zip_file.read(file_name)
+        except Exception as e:
+            results.append(
+                BatchDocumentUploadResult(
+                    student_id="",
+                    file_name=file_name,
+                    document_type="unknown",
+                    status="error",
+                    message=f"無法讀取檔案: {str(e)}",
+                )
+            )
+            error_count += 1
+            continue
+
+        # Parse filename: {student_id}_{doc_type}.{ext}
+        base_name = file_name.split("/")[-1]  # Get filename without path
+        match = re.match(r"^([A-Za-z0-9]+)_(.+)\.(pdf|jpg|jpeg|png)$", base_name, re.IGNORECASE)
+
+        if not match:
+            results.append(
+                BatchDocumentUploadResult(
+                    student_id="",
+                    file_name=file_name,
+                    document_type="unknown",
+                    status="error",
+                    message="檔名格式錯誤，應為: {學號}_文件類型.pdf",
+                )
+            )
+            unmatched_count += 1
+            continue
+
+        student_id, doc_type_str, file_ext = match.groups()
+
+        # Map document type
+        doc_type = doc_type_map.get(doc_type_str.lower(), "other")
+
+        # Find application
+        app = student_app_map.get(student_id)
+        if not app:
+            results.append(
+                BatchDocumentUploadResult(
+                    student_id=student_id,
+                    file_name=file_name,
+                    document_type=doc_type,
+                    status="error",
+                    message="找不到對應的申請記錄",
+                )
+            )
+            unmatched_count += 1
+            continue
+
+        # Validate file size (10MB max per file)
+        if len(file_data) > 10 * 1024 * 1024:
+            results.append(
+                BatchDocumentUploadResult(
+                    student_id=student_id,
+                    file_name=file_name,
+                    document_type=doc_type,
+                    status="error",
+                    message="檔案大小超過 10MB",
+                    application_id=app.id,
+                )
+            )
+            error_count += 1
+            continue
+
+        # Upload to MinIO
+        try:
+            object_name = f"applications/{app.id}/{doc_type}_{base_name}"
+            minio_service.upload_file(
+                bucket_name=settings.minio_bucket,
+                object_name=object_name,
+                file_data=file_data,
+                content_type=f"application/{file_ext}" if file_ext == "pdf" else f"image/{file_ext}",
+            )
+
+            # Create ApplicationFile record
+            app_file = ApplicationFile(
+                application_id=app.id,
+                file_type=doc_type,
+                file_name=base_name,
+                object_name=object_name,
+                file_size=len(file_data),
+                uploaded_by=current_user.id,
+            )
+            db.add(app_file)
+
+            results.append(
+                BatchDocumentUploadResult(
+                    student_id=student_id,
+                    file_name=file_name,
+                    document_type=doc_type,
+                    status="success",
+                    message="上傳成功",
+                    application_id=app.id,
+                )
+            )
+            matched_count += 1
+
+        except Exception as e:
+            results.append(
+                BatchDocumentUploadResult(
+                    student_id=student_id,
+                    file_name=file_name,
+                    document_type=doc_type,
+                    status="error",
+                    message=f"上傳失敗: {str(e)}",
+                    application_id=app.id,
+                )
+            )
+            error_count += 1
+
+    # Commit all ApplicationFile records
+    await db.commit()
+
+    response_data = BatchDocumentUploadResponse(
+        batch_id=batch_id,
+        total_files=len(results),
+        matched_count=matched_count,
+        unmatched_count=unmatched_count,
+        error_count=error_count,
+        results=results[:50],  # Limit to 50 results in response
+    )
+
+    return {
+        "success": True,
+        "message": f"文件上傳完成：成功 {matched_count} 筆，失敗 {error_count + unmatched_count} 筆",
         "data": response_data.model_dump(),
     }
 

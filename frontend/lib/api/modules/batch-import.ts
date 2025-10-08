@@ -40,6 +40,45 @@ type BatchConfirmResult = {
   created_application_ids: number[];
 };
 
+type BatchUpdateRecordResult = {
+  updated_record: Record<string, any>;
+};
+
+type BatchRevalidateResult = {
+  batch_id: number;
+  total_records: number;
+  valid_count: number;
+  invalid_count: number;
+  errors: Array<{
+    row: number;
+    field: string;
+    message: string;
+  }>;
+};
+
+type BatchDeleteRecordResult = {
+  deleted_record: Record<string, any>;
+  remaining_records: number;
+};
+
+type BatchDocumentUploadResult = {
+  student_id: string;
+  file_name: string;
+  document_type: string;
+  status: string;
+  message?: string;
+  application_id?: number;
+};
+
+type BatchDocumentUploadResponse = {
+  batch_id: number;
+  total_files: number;
+  matched_count: number;
+  unmatched_count: number;
+  error_count: number;
+  results: BatchDocumentUploadResult[];
+};
+
 type BatchHistoryItem = {
   id: string;
   file_name: string;
@@ -114,6 +153,63 @@ export function createBatchImportApi(client: ApiClient) {
       return client.request(`/college/batch-import/${batchId}/confirm`, {
         method: "POST",
         body: JSON.stringify({ batch_id: batchId, confirm }),
+      });
+    },
+
+    /**
+     * Update a single record in the batch import
+     */
+    updateRecord: async (
+      batchId: string,
+      recordIndex: number,
+      updates: Record<string, any>
+    ): Promise<ApiResponse<BatchUpdateRecordResult>> => {
+      return client.request(`/college/batch-import/${batchId}/records`, {
+        method: "PATCH",
+        body: JSON.stringify({ record_index: recordIndex, updates }),
+      });
+    },
+
+    /**
+     * Re-validate all records in the batch import
+     */
+    revalidate: async (
+      batchId: string
+    ): Promise<ApiResponse<BatchRevalidateResult>> => {
+      return client.request(`/college/batch-import/${batchId}/validate`, {
+        method: "POST",
+      });
+    },
+
+    /**
+     * Delete a single record from the batch import
+     */
+    deleteRecord: async (
+      batchId: string,
+      recordIndex: number
+    ): Promise<ApiResponse<BatchDeleteRecordResult>> => {
+      return client.request(
+        `/college/batch-import/${batchId}/records/${recordIndex}`,
+        {
+          method: "DELETE",
+        }
+      );
+    },
+
+    /**
+     * Upload documents in bulk for batch import (ZIP file)
+     */
+    uploadDocuments: async (
+      batchId: string,
+      zipFile: File
+    ): Promise<ApiResponse<BatchDocumentUploadResponse>> => {
+      const formData = new FormData();
+      formData.append("file", zipFile);
+
+      return client.request(`/college/batch-import/${batchId}/documents`, {
+        method: "POST",
+        body: formData,
+        headers: {}, // Let browser set Content-Type for FormData
       });
     },
 

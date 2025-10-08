@@ -149,3 +149,42 @@ class BatchImportDataRequest(BaseModel):
     academic_year: int = Field(..., description="學年度", ge=100, le=200)
     semester: Optional[str] = Field(None, description="學期")
     data_rows: List[ApplicationDataRow] = Field(..., description="申請資料列表", min_length=1)
+
+
+class BatchImportUpdateRecordRequest(BaseModel):
+    """Request to update a single record in batch import"""
+
+    record_index: int = Field(..., description="記錄索引（從0開始）", ge=0)
+    updates: Dict[str, Any] = Field(..., description="要更新的欄位")
+
+
+class BatchImportRevalidateResponse(BaseModel):
+    """Response after revalidation"""
+
+    batch_id: int
+    total_records: int
+    valid_count: int
+    invalid_count: int
+    errors: List[Dict[str, Any]] = Field(default=[], description="驗證錯誤列表")
+
+
+class BatchDocumentUploadResult(BaseModel):
+    """Result of document matching"""
+
+    student_id: str
+    file_name: str
+    document_type: str
+    status: str  # "success" or "error"
+    message: Optional[str] = None
+    application_id: Optional[int] = None
+
+
+class BatchDocumentUploadResponse(BaseModel):
+    """Response after bulk document upload"""
+
+    batch_id: int
+    total_files: int
+    matched_count: int
+    unmatched_count: int
+    error_count: int
+    results: List[BatchDocumentUploadResult] = Field(default=[], description="上傳結果詳情")
