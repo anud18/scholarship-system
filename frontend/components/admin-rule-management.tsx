@@ -387,7 +387,7 @@ export function AdminRuleManagement({
           setSelectedScholarshipType(type || null);
         }}
       >
-        <TabsList className="grid w-full grid-cols-3 mt-4">
+        <TabsList className="grid w-full grid-cols-3 mt-4 h-14">
           {scholarshipTypes.map(type => (
             <TabsTrigger key={type.id} value={type.id.toString()}>
               {type.name}
