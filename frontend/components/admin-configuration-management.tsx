@@ -572,7 +572,7 @@ export function AdminConfigurationManagement({
       >
         <TabsList className="grid w-full grid-cols-3 mt-4 h-14">
           {scholarshipTypes.map(type => (
-            <TabsTrigger key={type.id} value={type.id.toString()}>
+            <TabsTrigger key={type.id} value={type.id.toString()} className="h-12">
               {type.name}
             </TabsTrigger>
           ))}
