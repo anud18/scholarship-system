@@ -384,4 +384,210 @@ describe('Modular API Structure', () => {
       expect(fetchCall[1].method).toBe('POST');
     });
   });
+
+  describe('Applications Module', () => {
+    beforeEach(() => {
+      apiClient.setToken('test-token');
+    });
+
+    it('should have applications module', () => {
+      expect(api.applications).toBeDefined();
+      expect(typeof api.applications).toBe('object');
+    });
+
+    it('should get my applications', async () => {
+      const mockApplications = [
+        { id: 1, scholarship_type: 'academic_excellence', status: 'submitted' },
+      ];
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'OK', data: mockApplications }),
+      });
+
+      const result = await api.applications.getMyApplications();
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(mockApplications);
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/applications',
+        expect.any(Object)
+      );
+    });
+
+    it('should create application', async () => {
+      const appData = {
+        scholarship_type: 'academic_excellence',
+        personal_statement: 'Test statement',
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Created', data: { id: 1, ...appData } }),
+      });
+
+      const result = await api.applications.createApplication(appData);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/applications');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+
+    it('should submit application', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Submitted', data: { id: 1, status: 'submitted' } }),
+      });
+
+      const result = await api.applications.submitApplication(1);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/applications/1/submit');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+  });
+
+  describe('Notifications Module', () => {
+    beforeEach(() => {
+      apiClient.setToken('test-token');
+    });
+
+    it('should have notifications module', () => {
+      expect(api.notifications).toBeDefined();
+      expect(typeof api.notifications).toBe('object');
+    });
+
+    it('should get notifications', async () => {
+      const mockNotifications = [
+        { id: 1, title: 'Test', message: 'Test notification', is_read: false },
+      ];
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'OK', data: mockNotifications }),
+      });
+
+      const result = await api.notifications.getNotifications();
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(mockNotifications);
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/notifications',
+        expect.any(Object)
+      );
+    });
+
+    it('should get unread count', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'OK', data: 5 }),
+      });
+
+      const result = await api.notifications.getUnreadCount();
+
+      expect(result.success).toBe(true);
+      expect(result.data).toBe(5);
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/notifications/unread-count',
+        expect.any(Object)
+      );
+    });
+
+    it('should mark notification as read', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Marked as read', data: { id: 1, is_read: true } }),
+      });
+
+      const result = await api.notifications.markAsRead(1);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/notifications/1/read');
+      expect(fetchCall[1].method).toBe('PATCH');
+    });
+  });
+
+  describe('Quota Module', () => {
+    beforeEach(() => {
+      apiClient.setToken('test-token');
+    });
+
+    it('should have quota module', () => {
+      expect(api.quota).toBeDefined();
+      expect(typeof api.quota).toBe('object');
+    });
+
+    it('should get available semesters', async () => {
+      const mockSemesters = [
+        { period: '2024-1', display_name: '2024 第一學期', quota_management_mode: 'matrix_based' },
+      ];
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'OK', data: mockSemesters }),
+      });
+
+      const result = await api.quota.getAvailableSemesters();
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(mockSemesters);
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/scholarship-configurations/available-semesters',
+        expect.any(Object)
+      );
+    });
+
+    it('should get quota overview', async () => {
+      const mockOverview = [
+        { scholarship_type: 'phd', total_quota: 100, used_quota: 50, remaining_quota: 50 },
+      ];
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'OK', data: mockOverview }),
+      });
+
+      const result = await api.quota.getQuotaOverview('2024-1');
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(mockOverview);
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/v1/scholarship-configurations/overview/2024-1',
+        expect.any(Object)
+      );
+    });
+
+    it('should update matrix quota', async () => {
+      const updateRequest = {
+        academic_year: '2024-1',
+        sub_type: 'nstc',
+        college: 'engineering',
+        total_quota: 50,
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Updated', data: updateRequest }),
+      });
+
+      const result = await api.quota.updateMatrixQuota(updateRequest);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/scholarship-configurations/matrix-quota');
+      expect(fetchCall[1].method).toBe('PUT');
+    });
+  });
 });

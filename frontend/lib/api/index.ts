@@ -16,6 +16,9 @@ import { ApiClient } from './client';
 import { createAuthApi } from './modules/auth';
 import { createUsersApi } from './modules/users';
 import { createScholarshipsApi } from './modules/scholarships';
+import { createApplicationsApi } from './modules/applications';
+import { createNotificationsApi } from './modules/notifications';
+import { createQuotaApi } from './modules/quota';
 
 // Re-export types from main api.ts for now
 // TODO: Move these to a dedicated types.ts file
@@ -34,6 +37,13 @@ export type {
   PaginatedResponse,
 } from '../api';
 
+// Re-export quota helper functions
+export {
+  calculateTotalQuota,
+  calculateUsagePercentage,
+  getQuotaStatusColor,
+} from './modules/quota';
+
 /**
  * Extended ApiClient with all API modules
  */
@@ -41,11 +51,14 @@ class ExtendedApiClient extends ApiClient {
   public auth: ReturnType<typeof createAuthApi>;
   public users: ReturnType<typeof createUsersApi>;
   public scholarships: ReturnType<typeof createScholarshipsApi>;
+  public applications: ReturnType<typeof createApplicationsApi>;
+  public notifications: ReturnType<typeof createNotificationsApi>;
+  public quota: ReturnType<typeof createQuotaApi>;
 
   // TODO: Add other modules as they are migrated
-  // public applications: ReturnType<typeof createApplicationsApi>;
-  // public notifications: ReturnType<typeof createNotificationsApi>;
   // public admin: ReturnType<typeof createAdminApi>;
+  // public professor: ReturnType<typeof createProfessorApi>;
+  // public college: ReturnType<typeof createCollegeApi>;
 
   constructor() {
     super();
@@ -54,11 +67,14 @@ class ExtendedApiClient extends ApiClient {
     this.auth = createAuthApi(this);
     this.users = createUsersApi(this);
     this.scholarships = createScholarshipsApi(this);
+    this.applications = createApplicationsApi(this);
+    this.notifications = createNotificationsApi(this);
+    this.quota = createQuotaApi(this);
 
     // TODO: Initialize other modules as they are created
-    // this.applications = createApplicationsApi(this);
-    // this.notifications = createNotificationsApi(this);
     // this.admin = createAdminApi(this);
+    // this.professor = createProfessorApi(this);
+    // this.college = createCollegeApi(this);
   }
 }
 
