@@ -13,7 +13,17 @@ import {
   AvailablePeriod,
 } from "@/types/quota";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/**
+ * Get API base URL - use relative path in browser, internal URL for SSR
+ */
+const getApiBase = (): string => {
+  if (typeof window !== "undefined") {
+    // Browser: use relative path (Nginx will proxy)
+    return "";
+  }
+  // Server-side: use internal Docker network or localhost
+  return process.env.INTERNAL_API_URL || "http://localhost:8000";
+};
 
 /**
  * Helper function to make authenticated API calls
@@ -26,7 +36,7 @@ const apiCall = async <T = any>(
   const token =
     typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
 
-  const response = await fetch(`${API_BASE}${url}`, {
+  const response = await fetch(`${getApiBase()}${url}`, {
     headers: {
       "Content-Type": "application/json",
       ...(token && { Authorization: `Bearer ${token}` }),
@@ -168,7 +178,7 @@ export const quotaApi = {
     });
 
     const response = await fetch(
-      `${API_BASE}/api/v1/scholarship-configurations/export-quota?${params}`,
+      `${getApiBase()}/api/v1/scholarship-configurations/export-quota?${params}`,
       {
         headers: {
           ...(token && { Authorization: `Bearer ${token}` }),

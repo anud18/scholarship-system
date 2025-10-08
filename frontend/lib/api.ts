@@ -1203,32 +1203,16 @@ class ApiClient {
   private token: string | null = null;
 
   constructor() {
-    // Dynamically determine backend URL
+    // Use relative path in browser (Nginx will proxy /api/ to backend)
+    // Use internal Docker network URL for server-side rendering
     if (typeof window !== "undefined") {
-      // Browser environment
-      if (process.env.NODE_ENV === "production") {
-        // Production: use current host (nginx will proxy /api/ requests to backend)
-        this.baseURL =
-          process.env.NEXT_PUBLIC_API_URL ||
-          `${window.location.protocol}//${window.location.host}`;
-        console.log(
-          "🏭 API Client Production mode - using nginx proxy via:",
-          this.baseURL
-        );
-      } else {
-        // Development: use port 8000 directly
-        const protocol = window.location.protocol;
-        const hostname = window.location.hostname;
-        this.baseURL =
-          process.env.NEXT_PUBLIC_API_URL || `${protocol}//${hostname}:8000`;
-        console.log(
-          "🛠️ API Client Development mode - using direct backend:",
-          this.baseURL
-        );
-      }
+      // Browser environment - always use relative path
+      // Nginx reverse proxy will handle routing /api/* to backend
+      this.baseURL = "";
+      console.log("🌐 API Client Browser mode - using relative path (Nginx proxy)");
     } else {
-      // Server-side environment - use environment variable or localhost
-      this.baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      // Server-side environment - use internal Docker network or localhost
+      this.baseURL = process.env.INTERNAL_API_URL || "http://localhost:8000";
       console.log("🖥️ API Client Server-side mode - using:", this.baseURL);
     }
 
@@ -3971,7 +3955,7 @@ class ApiClient {
     downloadTemplate: async (scholarshipType: string): Promise<void> => {
       const token = localStorage.getItem("auth_token");
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/college/batch-import/template?scholarship_type=${encodeURIComponent(scholarshipType)}`,
+        `${this.baseURL}/api/v1/college/batch-import/template?scholarship_type=${encodeURIComponent(scholarshipType)}`,
         {
           method: "GET",
           headers: {
