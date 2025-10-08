@@ -168,7 +168,7 @@ async def create_roster_schedule(
         )
 
 
-@router.get("/{schedule_id}", response_model=RosterScheduleResponse)
+@router.get("/{schedule_id}")
 async def get_roster_schedule(
     schedule_id: int,
     db: AsyncSession = Depends(get_db),
@@ -193,10 +193,15 @@ async def get_roster_schedule(
     if scheduler_status:
         schedule_dict["scheduler_info"] = scheduler_status
 
-    return RosterScheduleResponse(**schedule_dict)
+    response_data = RosterScheduleResponse(**schedule_dict)
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+    }
 
 
-@router.put("/{schedule_id}", response_model=RosterScheduleResponse)
+@router.put("/{schedule_id}")
 async def update_roster_schedule(
     schedule_id: int,
     schedule_data: RosterScheduleUpdate,
@@ -246,7 +251,12 @@ async def update_roster_schedule(
 
         logger.info(f"Updated roster schedule {schedule_id} by user {current_user.id}")
 
-        return RosterScheduleResponse(**schedule.to_dict())
+        response_data = RosterScheduleResponse(**schedule.to_dict())
+        return {
+            "success": True,
+            "message": "更新成功",
+            "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+        }
 
     except HTTPException:
         raise
@@ -258,7 +268,7 @@ async def update_roster_schedule(
         )
 
 
-@router.patch("/{schedule_id}/status", response_model=RosterScheduleResponse)
+@router.patch("/{schedule_id}/status")
 async def update_schedule_status(
     schedule_id: int,
     status_data: RosterScheduleStatusUpdate,
@@ -304,7 +314,12 @@ async def update_schedule_status(
 
         logger.info(f"Updated schedule {schedule_id} status from {old_status} to {status_data.status}")
 
-        return RosterScheduleResponse(**schedule.to_dict())
+        response_data = RosterScheduleResponse(**schedule.to_dict())
+        return {
+            "success": True,
+            "message": "狀態更新成功",
+            "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+        }
 
     except HTTPException:
         raise

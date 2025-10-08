@@ -11,7 +11,6 @@ from app.schemas.system_setting import (
     ConfigValidationRequest,
     ConfigValidationResponse,
     SystemSettingCreate,
-    SystemSettingResponse,
     SystemSettingUpdate,
 )
 from app.services.config_management_service import ConfigurationService
@@ -141,7 +140,7 @@ async def get_configuration(
         )
 
 
-@router.post("", response_model=SystemSettingResponse)
+@router.post("")
 async def create_configuration(
     configuration: SystemSettingCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
@@ -179,7 +178,7 @@ async def create_configuration(
         )
 
 
-@router.put("/{config_key}", response_model=SystemSettingResponse)
+@router.put("/{config_key}")
 async def update_configuration(
     config_key: str,
     configuration: SystemSettingUpdate,
@@ -255,7 +254,7 @@ async def delete_configuration(
         )
 
 
-@router.post("/validate", response_model=ConfigValidationResponse)
+@router.post("/validate")
 async def validate_configuration(
     validation_request: ConfigValidationRequest,
     db: AsyncSession = Depends(get_db),

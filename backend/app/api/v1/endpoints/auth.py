@@ -21,7 +21,7 @@ from app.services.portal_sso_service import PortalSSOService
 router = APIRouter()
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
     auth_service = AuthService(db)
@@ -58,7 +58,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     }
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post("/logout")
 async def logout():
     """Logout user (client-side token removal)"""
     return MessageResponse(message="Logged out successfully")

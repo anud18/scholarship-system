@@ -358,7 +358,7 @@ async def update_user_college(
     }
 
 
-@router.post("/{user_id}/scholarships/bulk", response_model=BulkScholarshipAssignResponse)
+@router.post("/{user_id}/scholarships/bulk")
 async def bulk_assign_scholarships(
     user_id: int,
     request: BulkScholarshipAssignRequest,

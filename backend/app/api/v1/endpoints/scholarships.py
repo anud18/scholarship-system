@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
@@ -18,7 +18,7 @@ from app.schemas.scholarship import EligibleScholarshipResponse, ScholarshipType
 router = APIRouter()
 
 
-@router.get("", response_model=ApiResponse[List[dict]])
+@router.get("")
 async def get_all_scholarships(
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
@@ -180,7 +180,7 @@ async def get_all_scholarships(
 
 
 # 學生查看自己可以申請的獎學金
-@router.get("/eligible", response_model=List[EligibleScholarshipResponse])
+@router.get("/eligible")
 async def get_scholarship_eligibility(
     db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
@@ -243,7 +243,7 @@ async def get_scholarship_eligibility(
     return response_data
 
 
-@router.get("/{scholarship_id}", response_model=ScholarshipTypeResponse)
+@router.get("/{scholarship_id}")
 async def get_scholarship_detail(scholarship_id: int, db: AsyncSession = Depends(get_db)):
     """Get scholarship details"""
     stmt = (
@@ -409,7 +409,7 @@ async def add_student_to_whitelist(
     )
 
 
-@router.post("/{scholarship_type}/upload-terms", response_model=ApiResponse[dict])
+@router.post("/{scholarship_type}/upload-terms")
 async def upload_terms_document(
     scholarship_type: str,
     file: UploadFile = File(...),
@@ -605,7 +605,7 @@ async def get_terms_document(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve terms document: {str(e)}")
 
 
-@router.patch("/{scholarship_id}/whitelist", response_model=ApiResponse[ScholarshipTypeResponse])
+@router.patch("/{scholarship_id}/whitelist")
 async def toggle_scholarship_whitelist(
     scholarship_id: int,
     request: WhitelistToggleRequest,
