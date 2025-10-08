@@ -451,8 +451,8 @@ class BatchImportService:
                     user_id=user.id,
                     scholarship_type_id=scholarship_type_id,
                     scholarship_name=scholarship.name,
-                    amount=scholarship.amount,
-                    main_scholarship_type=scholarship.main_type,
+                    amount=None,  # Amount is now per sub-type in ScholarshipSubTypeConfig
+                    main_scholarship_type=scholarship.get_main_type_from_code(),
                     sub_scholarship_type=row_data.get("sub_types", [None])[0]
                     if row_data.get("sub_types")
                     else "GENERAL",

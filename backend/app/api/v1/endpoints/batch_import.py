@@ -43,7 +43,7 @@ def require_college_role(current_user: User = Depends(get_current_user)) -> User
     return current_user
 
 
-@router.post("/upload-data", response_model=BatchImportUploadResponse)
+@router.post("/upload-data")
 async def upload_batch_import_data(
     file: UploadFile = File(..., description="Excel或CSV檔案"),
     scholarship_type: str = Query(..., description="獎學金類型代碼"),
@@ -175,7 +175,7 @@ async def upload_batch_import_data(
     # Create batch import record
     batch_import = await service.create_batch_import_record(
         importer_id=current_user.id,
-        college_code=college_code or "super_admin",  # Use special value for super_admin
+        college_code=college_code or "admin",  # Use special value for super_admin (max 10 chars)
         scholarship_type_id=scholarship.id,
         academic_year=academic_year,
         semester=semester,
@@ -201,20 +201,37 @@ async def upload_batch_import_data(
     await db.commit()
 
     # Return preview (first 10 rows) and validation summary
-    return BatchImportUploadResponse(
+    # Transform error structure to match frontend expectations
+    frontend_errors = [
+        {
+            "row": e.get("row_number") if isinstance(e, dict) else e.row_number,
+            "field": e.get("field") if isinstance(e, dict) else getattr(e, "field", None),
+            "message": e.get("message") if isinstance(e, dict) else getattr(e, "message", str(e)),
+        }
+        for e in validation_errors[:20]  # Limit preview errors
+    ]
+
+    response_data = BatchImportUploadResponse(
         batch_id=batch_import.id,
         file_name=file.filename,
         total_records=len(parsed_data),
         preview_data=parsed_data[:10],
         validation_summary={
-            "total_errors": len(validation_errors),
-            "has_errors": len(validation_errors) > 0,
-            "errors": validation_errors[:20],  # Limit preview errors
+            "valid_count": len(parsed_data) - len(validation_errors),
+            "invalid_count": len(validation_errors),
+            "warnings": [],  # No warnings for now
+            "errors": frontend_errors,
         },
     )
 
+    return {
+        "success": True,
+        "message": "檔案上傳成功" if len(validation_errors) == 0 else f"檔案上傳完成，發現 {len(validation_errors)} 個驗證錯誤",
+        "data": response_data.model_dump(),
+    }
 
-@router.post("/{batch_id}/confirm", response_model=BatchImportConfirmResponse)
+
+@router.post("/{batch_id}/confirm")
 async def confirm_batch_import(
     batch_id: int,
     request: BatchImportConfirmRequest,
@@ -248,23 +265,28 @@ async def confirm_batch_import(
         )
 
     # Check status
-    if batch_import.import_status != BatchImportStatus.pending.value:
+    if batch_import.import_status != BatchImportStatus.pending:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"此批次狀態為 {batch_import.import_status}，無法再次確認",
+            detail=f"此批次狀態為 {batch_import.import_status.value}，無法再次確認",
         )
 
     if not request.confirm:
         # Cancel the batch
         batch_import.import_status = BatchImportStatus.cancelled.value
         await db.commit()
-        return BatchImportConfirmResponse(
+        response_data = BatchImportConfirmResponse(
             batch_id=batch_id,
             success_count=0,
             failed_count=0,
             errors=[],
             created_application_ids=[],
         )
+        return {
+            "success": True,
+            "message": "批次匯入已取消",
+            "data": response_data.model_dump(),
+        }
 
     # Check if parsed_data exists
     if not batch_import.parsed_data or "data" not in batch_import.parsed_data:
@@ -302,7 +324,7 @@ async def confirm_batch_import(
             status="completed" if len(creation_errors) == 0 else "partial",
         )
 
-        return BatchImportConfirmResponse(
+        response_data = BatchImportConfirmResponse(
             batch_id=batch_id,
             success_count=len(created_ids),
             failed_count=len(creation_errors),
@@ -319,6 +341,12 @@ async def confirm_batch_import(
             created_application_ids=created_ids,
         )
 
+        return {
+            "success": True,
+            "message": "批次匯入成功" if len(creation_errors) == 0 else f"批次匯入完成，部分失敗 ({len(creation_errors)} 筆錯誤)",
+            "data": response_data.model_dump(),
+        }
+
     except BatchImportError as e:
         # Re-raise to let the global exception handler deal with it
         # Batch status has already been updated to 'failed' in the service
@@ -328,7 +356,7 @@ async def confirm_batch_import(
         )
 
 
-@router.get("/history", response_model=BatchImportHistoryResponse)
+@router.get("/history")
 async def get_batch_import_history(
     skip: int = Query(0, ge=0, description="跳過筆數"),
     limit: int = Query(20, ge=1, le=100, description="每頁筆數"),
@@ -377,16 +405,21 @@ async def get_batch_import_history(
                 total_records=batch.total_records,
                 success_count=batch.success_count,
                 failed_count=batch.failed_count,
-                import_status=batch.import_status,
+                import_status=batch.import_status.value if batch.import_status else "unknown",
                 created_at=batch.created_at,
                 importer_name=batch.importer.name if batch.importer else None,
             )
         )
 
-    return BatchImportHistoryResponse(total=total, items=items)
+    response_data = BatchImportHistoryResponse(total=total, items=items)
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": response_data.model_dump(),
+    }
 
 
-@router.get("/{batch_id}/details", response_model=BatchImportDetailResponse)
+@router.get("/{batch_id}/details")
 async def get_batch_import_details(
     batch_id: int,
     current_user: User = Depends(require_college_role),
@@ -415,7 +448,7 @@ async def get_batch_import_details(
     # Get created applications
     created_app_ids = [app.id for app in batch_import.applications]
 
-    return BatchImportDetailResponse(
+    response_data = BatchImportDetailResponse(
         id=batch_import.id,
         college_code=batch_import.college_code,
         scholarship_type_id=batch_import.scholarship_type_id,
@@ -427,12 +460,18 @@ async def get_batch_import_details(
         success_count=batch_import.success_count,
         failed_count=batch_import.failed_count,
         error_summary=batch_import.error_summary,
-        import_status=batch_import.import_status,
+        import_status=batch_import.import_status.value if batch_import.import_status else "unknown",
         created_at=batch_import.created_at,
         updated_at=batch_import.updated_at,
         importer_name=batch_import.importer.name if batch_import.importer else None,
         created_applications=created_app_ids,
     )
+
+    return {
+        "success": True,
+        "message": "查詢成功",
+        "data": response_data.model_dump(),
+    }
 
 
 @router.get("/template")

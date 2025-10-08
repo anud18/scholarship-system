@@ -43,14 +43,14 @@ interface PeriodOption {
 }
 
 interface UploadedBatch {
-  batch_id: string;
+  batch_id: number;
   file_name: string;
   total_records: number;
   preview_data: Array<Record<string, any>>;
   validation_summary: {
     valid_count: number;
     invalid_count: number;
-    warnings: string[];
+    warnings: any[];
     errors: Array<{
       row: number;
       field?: string;
@@ -296,7 +296,9 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
               <tr key={idx} className="hover:bg-gray-50">
                 {columns.map((col) => (
                   <td key={col} className="border border-gray-200 px-4 py-2 text-sm">
-                    {row[col]}
+                    {typeof row[col] === 'object' && row[col] !== null
+                      ? JSON.stringify(row[col])
+                      : row[col] ?? ''}
                   </td>
                 ))}
               </tr>
