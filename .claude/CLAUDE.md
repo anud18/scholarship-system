@@ -106,6 +106,143 @@ If you see `LookupError: 'value' is not among the defined enum values`:
 2. Verify `values_callable` parameter is set in SQLAlchemy columns
 3. Ensure frontend sends lowercase values to backend APIs
 
+### 5. API Response Standardization
+
+**CRITICAL**: All API endpoints MUST return a consistent ApiResponse format for frontend compatibility.
+
+#### Standard Format
+```python
+{
+    "success": bool,
+    "message": str,
+    "data": any  # Can be dict, list, Pydantic model, or None
+}
+```
+
+#### Backend Implementation Rules
+
+**Remove response_model decorators**:
+```python
+# ❌ WRONG - Using response_model
+@router.get("/users", response_model=List[UserResponse])
+async def get_users():
+    return users
+
+# ✅ CORRECT - Manual dict wrapping
+@router.get("/users")
+async def get_users():
+    return {
+        "success": True,
+        "message": "Users retrieved successfully",
+        "data": [user.model_dump() for user in users],
+    }
+```
+
+**Converting Pydantic Schemas**:
+```python
+# For Pydantic v2 (preferred)
+response_data.model_dump()
+
+# Fallback for v1
+response_data.dict()
+
+# Safe universal conversion
+response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict()
+```
+
+**Wrapping PaginatedResponse**:
+```python
+# ❌ WRONG - Direct return
+return PaginatedResponse(items=items, total=total, page=page, size=size)
+
+# ✅ CORRECT - Wrapped in ApiResponse
+response_data = PaginatedResponse(items=items, total=total, page=page, size=size)
+return {
+    "success": True,
+    "message": "Data retrieved successfully",
+    "data": response_data.model_dump(),
+}
+```
+
+#### Frontend Compatibility
+The frontend `api.ts` automatically detects ApiResponse format:
+```typescript
+// Frontend auto-detection (already implemented)
+if ("success" in data && "message" in data) {
+    return data as ApiResponse<T>;
+}
+```
+
+#### Migration Checklist
+When standardizing existing endpoints:
+- [ ] Remove `response_model=` parameter from `@router` decorator
+- [ ] Wrap return statement in `{success, message, data}` dict format
+- [ ] Convert Pydantic schemas using `.model_dump()` or `.dict()`
+- [ ] Remove unused imports (MessageResponse, specific response models)
+- [ ] Run `python -m black` for auto-formatting
+- [ ] Verify with `python -m flake8` (check F401 unused imports)
+- [ ] Test endpoint returns expected format
+
+#### Common Issues & Solutions
+
+**1. Syntax errors after regex replacement**:
+```bash
+# Fix double commas
+python -c "import re; content = open('file.py').read(); \
+    content = re.sub(r',,+', ',', content); \
+    open('file.py', 'w').write(content)"
+
+# Fix trailing commas before closing brackets
+python -c "import re; content = open('file.py').read(); \
+    content = re.sub(r',(\s*[}\]\)])', r'\1', content); \
+    open('file.py', 'w').write(content)"
+```
+
+**2. Decorator missing commas**:
+```python
+# ❌ WRONG (after response_model removal)
+@router.post("/announcements"
+    status_code=status.HTTP_201_CREATED)
+
+# ✅ CORRECT
+@router.post("/announcements",
+    status_code=status.HTTP_201_CREATED)
+```
+
+**3. Auto-formatting solution**:
+```bash
+# Let black handle all formatting issues
+python -m black path/to/file.py
+```
+
+**4. Unused imports after migration**:
+```python
+# Remove these if no longer used:
+from app.schemas.common import MessageResponse  # Old single-field response
+from app.schemas.application import ApplicationResponse  # Replaced by dict wrapping
+```
+
+#### Batch Migration Script Template
+```python
+import re
+
+with open('endpoint.py', 'r') as f:
+    content = f.read()
+
+# Remove response_model parameters
+content = re.sub(r',?\s*response_model\s*=\s*[^\n\)]*(?:\[[^\]]*\])?[^\n\)]*', '', content)
+
+# Clean up formatting
+content = re.sub(r',,+', ',', content)
+content = re.sub(r',(\s*[}\]\)])', r'\1', content)
+
+with open('endpoint.py', 'w') as f:
+    f.write(content)
+
+# Then run black to fix all formatting
+# python -m black endpoint.py
+```
+
 ## Database Initialization & Migration Standards
 
 ### Database Volume Recreation
