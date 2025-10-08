@@ -174,7 +174,6 @@ export function EmailPanel({ user }: EmailPanelProps) {
           // Initialize empty template
           setEmailTemplate({
             key: emailTab,
-            label: emailTab,
             subject_template: "",
             body_template: "",
             recipient_options: [],
@@ -191,7 +190,6 @@ export function EmailPanel({ user }: EmailPanelProps) {
         // Initialize empty template on error
         setEmailTemplate({
           key: emailTab,
-          label: emailTab,
           subject_template: "",
           body_template: "",
           recipient_options: [],
@@ -296,7 +294,7 @@ export function EmailPanel({ user }: EmailPanelProps) {
 
     return emailTemplates.map(template => ({
       key: template.key,
-      label: labelMap[template.key] || template.label || template.key,
+      label: labelMap[template.key] || template.key,
     }));
   };
 

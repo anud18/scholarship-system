@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useAdminDashboard } from "@/hooks/use-admin";
+import { useDashboard } from "@/hooks/admin/use-dashboard";
 import {
   AlertCircle,
   Clock,
@@ -18,12 +18,11 @@ import {
 } from "lucide-react";
 
 export function DashboardPanel() {
-  const { stats, isStatsLoading, error, fetchDashboardStats } =
-    useAdminDashboard();
+  const { stats, isLoading, error, refetch } = useDashboard();
 
   return (
     <div className="space-y-4">
-      {isStatsLoading ? (
+      {isLoading ? (
         <div className="flex items-center justify-center py-8">
           <div className="flex items-center gap-3">
             <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
@@ -38,7 +37,7 @@ export function DashboardPanel() {
           </p>
           <p className="text-sm text-gray-600 mb-4">{error}</p>
           <Button
-            onClick={fetchDashboardStats}
+            onClick={() => refetch()}
             variant="outline"
             className="border-red-300 text-red-600 hover:bg-red-50"
           >
