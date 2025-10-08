@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="371" failures="0" errors="0" time="4.178">
-  <testsuite name="useApplications Hook" errors="0" failures="0" skipped="16" timestamp="2025-10-08T13:18:07" time="0.624" tests="16">
+<testsuites name="jest tests" tests="377" failures="0" errors="0" time="4.364">
+  <testsuite name="useApplications Hook" errors="0" failures="0" skipped="16" timestamp="2025-10-08T13:31:20" time="0.601" tests="16">
     <testcase classname="useApplications Hook › fetchApplications" name="should fetch applications successfully" time="0">
       <skipped/>
     </testcase>
@@ -50,7 +50,7 @@
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="FileUpload Component" errors="0" failures="0" skipped="12" timestamp="2025-10-08T13:18:08" time="0.238" tests="12">
+  <testsuite name="FileUpload Component" errors="0" failures="0" skipped="12" timestamp="2025-10-08T13:31:20" time="0.263" tests="12">
     <testcase classname="FileUpload Component" name="should render upload area correctly" time="0">
       <skipped/>
     </testcase>
@@ -88,7 +88,7 @@
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="DevLoginPage Component" errors="0" failures="0" skipped="9" timestamp="2025-10-08T13:18:08" time="0.184" tests="9">
+  <testsuite name="DevLoginPage Component" errors="0" failures="0" skipped="9" timestamp="2025-10-08T13:31:21" time="0.191" tests="9">
     <testcase classname="DevLoginPage Component" name="should render development login interface correctly" time="0">
       <skipped/>
     </testcase>
@@ -117,7 +117,63 @@
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="AdminConfigurationManagement Component" errors="0" failures="0" skipped="20" timestamp="2025-10-08T13:18:07" time="1.293" tests="20">
+  <testsuite name="FileUpload Component" errors="0" failures="0" skipped="18" timestamp="2025-10-08T13:31:21" time="0.159" tests="18">
+    <testcase classname="FileUpload Component" name="should render file upload area" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should render in English locale" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should handle file selection via input" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should handle drag and drop" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should filter invalid file types" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should filter files exceeding size limit" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should enforce max files limit" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should display uploaded files" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should allow file removal" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should handle file preview" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should close preview dialog" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should show file size in appropriate units" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should handle drag state correctly" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should generate unique input IDs" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component" name="should identify uploaded files correctly" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component › accessibility" name="should have proper ARIA labels" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component › accessibility" name="should have proper button roles" time="0">
+      <skipped/>
+    </testcase>
+    <testcase classname="FileUpload Component › error handling" name="should handle files without extensions" time="0">
+      <skipped/>
+    </testcase>
+  </testsuite>
+  <testsuite name="AdminConfigurationManagement Component" errors="0" failures="0" skipped="20" timestamp="2025-10-08T13:31:20" time="1.32" tests="20">
     <testcase classname="AdminConfigurationManagement Component" name="should render component with loading state initially" time="0">
       <skipped/>
     </testcase>
@@ -179,233 +235,7 @@
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="Modular API Structure" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:09" time="0.247" tests="84">
-    <testcase classname="Modular API Structure › Exports" name="should export api singleton" time="0.004">
-    </testcase>
-    <testcase classname="Modular API Structure › Exports" name="should export apiClient singleton" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Exports" name="api and apiClient should reference the same instance" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Exports" name="should have auth module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have login method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have logout method" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have register method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have getCurrentUser method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have refreshToken method" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have getMockUsers method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have mockSSOLogin method" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module - Login Functionality" name="should call login and set token on success" time="0.003">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module - Login Functionality" name="should handle login failure" time="0.043">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module - Logout Functionality" name="should clear token on logout" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Token Management" name="should set token correctly" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Token Management" name="should clear token correctly" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Request Method" name="should make authenticated requests" time="0.004">
-    </testcase>
-    <testcase classname="Modular API Structure › Request Method" name="should handle query parameters" time="0.002">
-    </testcase>
-    <testcase classname="Modular API Structure › Users Module" name="should have users module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Users Module" name="should get user profile" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Users Module" name="should update user profile" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Users Module" name="should get all users with pagination" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should have scholarships module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should get eligible scholarships" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should get scholarship by ID" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should get all scholarships" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should create combined PhD scholarship" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Applications Module" name="should have applications module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Applications Module" name="should get my applications" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Applications Module" name="should create application" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Applications Module" name="should submit application" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Notifications Module" name="should have notifications module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Notifications Module" name="should get notifications" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Notifications Module" name="should get unread count" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Notifications Module" name="should mark notification as read" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Quota Module" name="should have quota module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Quota Module" name="should get available semesters" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Quota Module" name="should get quota overview" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Quota Module" name="should update matrix quota" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Professor Module" name="should have professor module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Professor Module" name="should get applications for review" time="0.003">
-    </testcase>
-    <testcase classname="Modular API Structure › Professor Module" name="should get professor stats" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Professor Module" name="should submit professor review" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should have college module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should get applications for college review" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should get college rankings" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should create college ranking" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should get college statistics" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Whitelist Module" name="should have whitelist module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Whitelist Module" name="should toggle scholarship whitelist" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Whitelist Module" name="should get configuration whitelist" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Whitelist Module" name="should batch add to whitelist" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › System Settings Module" name="should have systemSettings module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › System Settings Module" name="should get all configurations" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › System Settings Module" name="should validate configuration" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Bank Verification Module" name="should have bankVerification module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Bank Verification Module" name="should verify single bank account" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Bank Verification Module" name="should verify batch bank accounts" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Professor-Student Module" name="should have professorStudent module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Professor-Student Module" name="should get professor-student relationships" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Professor-Student Module" name="should create professor-student relationship" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Automation Module" name="should have emailAutomation module" time="0.003">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Automation Module" name="should get automation rules" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Automation Module" name="should toggle automation rule" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Batch Import Module" name="should have batchImport module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Batch Import Module" name="should get batch import history" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Batch Import Module" name="should confirm batch import" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Reference Data Module" name="should have referenceData module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Reference Data Module" name="should get all academies" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Reference Data Module" name="should get all reference data" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Reference Data Module" name="should get scholarship periods" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Application Fields Module" name="should have applicationFields module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Application Fields Module" name="should get form config" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Application Fields Module" name="should create field" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Application Fields Module" name="should get documents" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › User Profiles Module" name="should have userProfiles module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › User Profiles Module" name="should get my profile" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › User Profiles Module" name="should update bank info" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › User Profiles Module" name="should get incomplete profiles (admin)" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should have emailManagement module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should get email history" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should approve scheduled email" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should get test mode status" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should enable test mode" time="0.001">
-    </testcase>
-  </testsuite>
-  <testsuite name="FileUpload Component" errors="0" failures="0" skipped="18" timestamp="2025-10-08T13:18:09" time="0.144" tests="18">
-    <testcase classname="FileUpload Component" name="should render file upload area" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should render in English locale" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should handle file selection via input" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should handle drag and drop" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should filter invalid file types" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should filter files exceeding size limit" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should enforce max files limit" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should display uploaded files" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should allow file removal" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should handle file preview" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should close preview dialog" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should show file size in appropriate units" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should handle drag state correctly" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should generate unique input IDs" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component" name="should identify uploaded files correctly" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component › accessibility" name="should have proper ARIA labels" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component › accessibility" name="should have proper button roles" time="0">
-      <skipped/>
-    </testcase>
-    <testcase classname="FileUpload Component › error handling" name="should handle files without extensions" time="0">
-      <skipped/>
-    </testcase>
-  </testsuite>
-  <testsuite name="FileUpload Component - Simple Tests" errors="0" failures="0" skipped="11" timestamp="2025-10-08T13:18:09" time="0.127" tests="11">
+  <testsuite name="FileUpload Component - Simple Tests" errors="0" failures="0" skipped="11" timestamp="2025-10-08T13:31:21" time="0.127" tests="11">
     <testcase classname="FileUpload Component - Simple Tests" name="should render without crashing" time="0">
       <skipped/>
     </testcase>
@@ -440,154 +270,308 @@
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="NotificationButton" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:09" time="0.467" tests="10">
-    <testcase classname="NotificationButton" name="renders notification button" time="0.073">
+  <testsuite name="NotificationButton" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:21" time="0.473" tests="10">
+    <testcase classname="NotificationButton" name="renders notification button" time="0.079">
     </testcase>
-    <testcase classname="NotificationButton" name="shows unread indicator when unread count is greater than 0" time="0.007">
+    <testcase classname="NotificationButton" name="shows unread indicator when unread count is greater than 0" time="0.011">
     </testcase>
-    <testcase classname="NotificationButton" name="shows badge when unread count is greater than 3" time="0.01">
+    <testcase classname="NotificationButton" name="shows badge when unread count is greater than 3" time="0.007">
     </testcase>
-    <testcase classname="NotificationButton" name="shows 99+ when unread count exceeds 99" time="0.008">
+    <testcase classname="NotificationButton" name="shows 99+ when unread count exceeds 99" time="0.004">
     </testcase>
     <testcase classname="NotificationButton" name="does not show indicator when unread count is 0" time="0.004">
     </testcase>
     <testcase classname="NotificationButton" name="opens notification panel when button is clicked" time="0.073">
     </testcase>
-    <testcase classname="NotificationButton" name="notifies context when panel is opened" time="0.044">
+    <testcase classname="NotificationButton" name="notifies context when panel is opened" time="0.049">
     </testcase>
-    <testcase classname="NotificationButton" name="passes locale to notification panel" time="0.039">
+    <testcase classname="NotificationButton" name="passes locale to notification panel" time="0.041">
     </testcase>
     <testcase classname="NotificationButton" name="applies custom className" time="0.006">
     </testcase>
-    <testcase classname="NotificationButton" name="handles notification click callback" time="0.042">
+    <testcase classname="NotificationButton" name="handles notification click callback" time="0.047">
     </testcase>
   </testsuite>
-  <testsuite name="ScholarshipTimeline Component" errors="0" failures="0" skipped="3" timestamp="2025-10-08T13:18:09" time="0.283" tests="6">
+  <testsuite name="ScholarshipTimeline Component" errors="0" failures="0" skipped="3" timestamp="2025-10-08T13:31:22" time="0.289" tests="6">
     <testcase classname="ScholarshipTimeline Component" name="should show all scholarships for super admin" time="0">
       <skipped/>
     </testcase>
     <testcase classname="ScholarshipTimeline Component" name="should filter scholarships based on admin permissions" time="0">
       <skipped/>
     </testcase>
-    <testcase classname="ScholarshipTimeline Component" name="should show no permissions message for admin with no permissions" time="0.038">
+    <testcase classname="ScholarshipTimeline Component" name="should show no permissions message for admin with no permissions" time="0.046">
     </testcase>
-    <testcase classname="ScholarshipTimeline Component" name="should not render for student role" time="0.007">
+    <testcase classname="ScholarshipTimeline Component" name="should not render for student role" time="0.005">
     </testcase>
-    <testcase classname="ScholarshipTimeline Component" name="should show loading state while permissions are loading" time="0.011">
+    <testcase classname="ScholarshipTimeline Component" name="should show loading state while permissions are loading" time="0.01">
     </testcase>
     <testcase classname="ScholarshipTimeline Component" name="should handle API errors gracefully" time="0">
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="ApplicationFormDataDisplay" errors="0" failures="0" skipped="1" timestamp="2025-10-08T13:18:10" time="0.182" tests="11">
-    <testcase classname="ApplicationFormDataDisplay" name="should render form data with Chinese labels" time="0.017">
+  <testsuite name="EnhancedStudentPortal" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:21" time="1.241" tests="12">
+    <testcase classname="EnhancedStudentPortal" name="should render scholarship information" time="0.15">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should render form data with English labels" time="0.006">
+    <testcase classname="EnhancedStudentPortal" name="should render scholarship information in Chinese" time="0.043">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should show empty state when no applications exist" time="0.038">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should display applications when they exist" time="0.057">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should show loading state" time="0.2">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should show error state" time="0.057">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should allow switching to new application tab" time="0.075">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should show form fields in new application tab" time="0.08">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should show Chinese text when locale is zh" time="0.041">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should handle withdraw application action" time="0.038">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should show progress timeline for applications" time="0.038">
+    </testcase>
+    <testcase classname="EnhancedStudentPortal" name="should handle different application statuses" time="0.028">
+    </testcase>
+  </testsuite>
+  <testsuite name="Modular API Structure" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:22" time="0.572" tests="90">
+    <testcase classname="Modular API Structure › Exports" name="should export api singleton" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Exports" name="should export apiClient singleton" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Exports" name="api and apiClient should reference the same instance" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Exports" name="should have auth module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have login method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have logout method" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have register method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have getCurrentUser method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have refreshToken method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have getMockUsers method" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have mockSSOLogin method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module - Login Functionality" name="should call login and set token on success" time="0.002">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module - Login Functionality" name="should handle login failure" time="0.034">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module - Logout Functionality" name="should clear token on logout" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Token Management" name="should set token correctly" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Token Management" name="should clear token correctly" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Request Method" name="should make authenticated requests" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Request Method" name="should handle query parameters" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Users Module" name="should have users module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Users Module" name="should get user profile" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Users Module" name="should update user profile" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Users Module" name="should get all users with pagination" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should have scholarships module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should get eligible scholarships" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should get scholarship by ID" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should get all scholarships" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should create combined PhD scholarship" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Applications Module" name="should have applications module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Applications Module" name="should get my applications" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Applications Module" name="should create application" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Applications Module" name="should submit application" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Notifications Module" name="should have notifications module" time="0.003">
+    </testcase>
+    <testcase classname="Modular API Structure › Notifications Module" name="should get notifications" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Notifications Module" name="should get unread count" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Notifications Module" name="should mark notification as read" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Quota Module" name="should have quota module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Quota Module" name="should get available semesters" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Quota Module" name="should get quota overview" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Quota Module" name="should update matrix quota" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor Module" name="should have professor module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor Module" name="should get applications for review" time="0.003">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor Module" name="should get professor stats" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor Module" name="should submit professor review" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should have college module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should get applications for college review" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should get college rankings" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should create college ranking" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should get college statistics" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Whitelist Module" name="should have whitelist module" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Whitelist Module" name="should toggle scholarship whitelist" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Whitelist Module" name="should get configuration whitelist" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Whitelist Module" name="should batch add to whitelist" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › System Settings Module" name="should have systemSettings module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › System Settings Module" name="should get all configurations" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › System Settings Module" name="should validate configuration" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Bank Verification Module" name="should have bankVerification module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Bank Verification Module" name="should verify single bank account" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Bank Verification Module" name="should verify batch bank accounts" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor-Student Module" name="should have professorStudent module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor-Student Module" name="should get professor-student relationships" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor-Student Module" name="should create professor-student relationship" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Automation Module" name="should have emailAutomation module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Automation Module" name="should get automation rules" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Automation Module" name="should toggle automation rule" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Batch Import Module" name="should have batchImport module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Batch Import Module" name="should get batch import history" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Batch Import Module" name="should confirm batch import" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Reference Data Module" name="should have referenceData module" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Reference Data Module" name="should get all academies" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Reference Data Module" name="should get all reference data" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Reference Data Module" name="should get scholarship periods" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Application Fields Module" name="should have applicationFields module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Application Fields Module" name="should get form config" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Application Fields Module" name="should create field" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Application Fields Module" name="should get documents" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › User Profiles Module" name="should have userProfiles module" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › User Profiles Module" name="should get my profile" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › User Profiles Module" name="should update bank info" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › User Profiles Module" name="should get incomplete profiles (admin)" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should have emailManagement module" time="0.003">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should get email history" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should approve scheduled email" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should get test mode status" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should enable test mode" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should have admin module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should get dashboard stats" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should get all applications" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should create announcement" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should get scholarship rules" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should create scholarship configuration" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="ApplicationFormDataDisplay" errors="0" failures="0" skipped="1" timestamp="2025-10-08T13:31:22" time="0.183" tests="11">
+    <testcase classname="ApplicationFormDataDisplay" name="should render form data with Chinese labels" time="0.016">
+    </testcase>
+    <testcase classname="ApplicationFormDataDisplay" name="should render form data with English labels" time="0.005">
     </testcase>
     <testcase classname="ApplicationFormDataDisplay" name="should handle direct form_data structure" time="0.005">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should handle flat object structure" time="0.007">
+    <testcase classname="ApplicationFormDataDisplay" name="should handle flat object structure" time="0.006">
     </testcase>
     <testcase classname="ApplicationFormDataDisplay" name="should skip empty and excluded fields" time="0.005">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should use static field names when dynamic labels not provided" time="0.007">
+    <testcase classname="ApplicationFormDataDisplay" name="should use static field names when dynamic labels not provided" time="0.006">
     </testcase>
     <testcase classname="ApplicationFormDataDisplay" name="should fallback to Chinese when English label not available" time="0.007">
     </testcase>
     <testcase classname="ApplicationFormDataDisplay" name="should handle nested object values" time="0">
       <skipped/>
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should handle array values" time="0.005">
+    <testcase classname="ApplicationFormDataDisplay" name="should handle array values" time="0.004">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should show loading state initially" time="0.004">
+    <testcase classname="ApplicationFormDataDisplay" name="should show loading state initially" time="0.002">
     </testcase>
     <testcase classname="ApplicationFormDataDisplay" name="should handle malformed form data gracefully" time="0.004">
     </testcase>
   </testsuite>
-  <testsuite name="EnhancedStudentPortal" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:09" time="1.24" tests="12">
-    <testcase classname="EnhancedStudentPortal" name="should render scholarship information" time="0.15">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should render scholarship information in Chinese" time="0.038">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show empty state when no applications exist" time="0.041">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should display applications when they exist" time="0.056">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show loading state" time="0.207">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show error state" time="0.064">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should allow switching to new application tab" time="0.056">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show form fields in new application tab" time="0.081">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show Chinese text when locale is zh" time="0.043">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should handle withdraw application action" time="0.042">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show progress timeline for applications" time="0.034">
-    </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should handle different application statuses" time="0.027">
-    </testcase>
-  </testsuite>
-  <testsuite name="useAuth Hook" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:10" time="0.16" tests="3">
-    <testcase classname="useAuth Hook" name="should provide auth context" time="0.01">
+  <testsuite name="useAuth Hook" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.146" tests="3">
+    <testcase classname="useAuth Hook" name="should provide auth context" time="0.006">
     </testcase>
     <testcase classname="useAuth Hook" name="should initialize with correct default state" time="0.003">
     </testcase>
-    <testcase classname="useAuth Hook" name="should throw error when used outside provider" time="0.023">
+    <testcase classname="useAuth Hook" name="should throw error when used outside provider" time="0.02">
     </testcase>
   </testsuite>
-  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:10" time="0.144" tests="9">
-    <testcase classname="API Client › Authentication" name="should login successfully with valid credentials" time="0.001">
+  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.15" tests="9">
+    <testcase classname="API Client › Authentication" name="should login successfully with valid credentials" time="0.002">
     </testcase>
-    <testcase classname="API Client › Authentication" name="should handle login failure" time="0.075">
+    <testcase classname="API Client › Authentication" name="should handle login failure" time="0.07">
     </testcase>
     <testcase classname="API Client › Authentication" name="should get current user with valid token" time="0.001">
     </testcase>
-    <testcase classname="API Client › Applications" name="should fetch user applications" time="0.001">
+    <testcase classname="API Client › Applications" name="should fetch user applications" time="0">
     </testcase>
-    <testcase classname="API Client › Applications" name="should create new application" time="0.001">
+    <testcase classname="API Client › Applications" name="should create new application" time="0.002">
     </testcase>
     <testcase classname="API Client › Applications" name="should submit application" time="0.001">
     </testcase>
-    <testcase classname="API Client › Token Management" name="should set and clear tokens correctly" time="0">
+    <testcase classname="API Client › Token Management" name="should set and clear tokens correctly" time="0.007">
     </testcase>
     <testcase classname="API Client › Error Handling" name="should handle network errors" time="0.001">
     </testcase>
     <testcase classname="API Client › Error Handling" name="should handle HTTP errors" time="0.001">
     </testcase>
   </testsuite>
-  <testsuite name="useScholarshipPermissions" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:10" time="0.132" tests="5">
-    <testcase classname="useScholarshipPermissions" name="should allow access for admin user" time="0.005">
-    </testcase>
-    <testcase classname="useScholarshipPermissions" name="should check permissions correctly" time="0.003">
-    </testcase>
-    <testcase classname="useScholarshipPermissions" name="should deny access for unauthenticated users" time="0.002">
-    </testcase>
-    <testcase classname="useScholarshipPermissions" name="should handle invalid scholarship IDs" time="0.007">
-    </testcase>
-    <testcase classname="useScholarshipPermissions" name="should get allowed scholarships for admin user" time="0.003">
-    </testcase>
-  </testsuite>
-  <testsuite name="useLanguagePreference" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:10" time="0.108" tests="7">
-    <testcase classname="useLanguagePreference" name="should initialize with default language (zh)" time="0.003">
-    </testcase>
-    <testcase classname="useLanguagePreference" name="should initialize with saved language preference" time="0.001">
-    </testcase>
-    <testcase classname="useLanguagePreference" name="should change language and save to localStorage" time="0.001">
-    </testcase>
-    <testcase classname="useLanguagePreference" name="should change between languages" time="0.002">
-    </testcase>
-    <testcase classname="useLanguagePreference" name="should handle invalid saved language preference" time="0.001">
-    </testcase>
-    <testcase classname="useLanguagePreference" name="should provide language switch enabled flag" time="0.001">
-    </testcase>
-    <testcase classname="useLanguagePreference" name="should disable language preference for non-student roles" time="0.001">
-    </testcase>
-  </testsuite>
-  <testsuite name="useIsMobile Hook" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:10" time="0.14" tests="12">
-    <testcase classname="useIsMobile Hook" name="should initialize as undefined and then set correct mobile state" time="0.007">
+  <testsuite name="useIsMobile Hook" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.139" tests="12">
+    <testcase classname="useIsMobile Hook" name="should initialize as undefined and then set correct mobile state" time="0.006">
     </testcase>
     <testcase classname="useIsMobile Hook" name="should return true for mobile width" time="0.001">
     </testcase>
@@ -595,39 +579,123 @@
     </testcase>
     <testcase classname="useIsMobile Hook" name="should return true for width at mobile breakpoint boundary" time="0.001">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should return false for width at desktop breakpoint boundary" time="0.001">
+    <testcase classname="useIsMobile Hook" name="should return false for width at desktop breakpoint boundary" time="0.002">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should set up media query listener correctly" time="0.003">
+    <testcase classname="useIsMobile Hook" name="should set up media query listener correctly" time="0.002">
     </testcase>
     <testcase classname="useIsMobile Hook" name="should clean up event listener on unmount" time="0.001">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should respond to media query changes" time="0.003">
+    <testcase classname="useIsMobile Hook" name="should respond to media query changes" time="0.005">
     </testcase>
     <testcase classname="useIsMobile Hook" name="should handle undefined window.innerWidth gracefully" time="0.001">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should always return boolean value" time="0.001">
+    <testcase classname="useIsMobile Hook" name="should always return boolean value" time="0.002">
     </testcase>
-    <testcase classname="useIsMobile Hook › breakpoint calculations" name="should use correct breakpoint constant" time="0.002">
+    <testcase classname="useIsMobile Hook › breakpoint calculations" name="should use correct breakpoint constant" time="0.001">
     </testcase>
     <testcase classname="useIsMobile Hook › breakpoint calculations" name="should classify widths correctly around breakpoint" time="0.003">
     </testcase>
   </testsuite>
-  <testsuite name="FormValidator" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:11" time="0.086" tests="42">
-    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return error for empty GPA" time="0.001">
+  <testsuite name="useScholarshipPermissions" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.134" tests="5">
+    <testcase classname="useScholarshipPermissions" name="should allow access for admin user" time="0.005">
+    </testcase>
+    <testcase classname="useScholarshipPermissions" name="should check permissions correctly" time="0.003">
+    </testcase>
+    <testcase classname="useScholarshipPermissions" name="should deny access for unauthenticated users" time="0.003">
+    </testcase>
+    <testcase classname="useScholarshipPermissions" name="should handle invalid scholarship IDs" time="0.003">
+    </testcase>
+    <testcase classname="useScholarshipPermissions" name="should get allowed scholarships for admin user" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="useLanguagePreference" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.121" tests="7">
+    <testcase classname="useLanguagePreference" name="should initialize with default language (zh)" time="0.002">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should initialize with saved language preference" time="0.002">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should change language and save to localStorage" time="0.001">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should change between languages" time="0.002">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should handle invalid saved language preference" time="0.001">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should provide language switch enabled flag" time="0.002">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should disable language preference for non-student roles" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="Application Helpers" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.107" tests="27">
+    <testcase classname="Application Helpers › formatDate" name="should format date for Chinese locale" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatDate" name="should format date for English locale" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatDate" name="should return empty string for null date" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › formatDate" name="should return empty string for undefined date" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › formatDate" name="should return empty string for empty date" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for draft status in Chinese" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for submitted status in English" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for approved status" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for rejected status" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getStatusColor" name="should return correct colors for different statuses" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getStatusName" name="should return Chinese status names" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getStatusName" name="should return English status names" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldName" name="should return Chinese field names" time="0.005">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldName" name="should return English field names" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldName" name="should return original field name if not mapped" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldValue" name="should format scholarship type from API response" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldValue" name="should return code if scholarship not found in API" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldValue" name="should return code if API fails" time="0.007">
+    </testcase>
+    <testcase classname="Application Helpers › formatFieldValue" name="should return value as-is for non-scholarship fields" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getDocumentLabel" name="should use dynamic label when provided" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › getDocumentLabel" name="should fallback to Chinese label when English not available" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › getDocumentLabel" name="should use static labels when no dynamic label provided" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › getDocumentLabel" name="should return original docType if not mapped" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › fetchApplicationFiles" name="should fetch files from application details" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › fetchApplicationFiles" name="should fallback to files API if no documents in application details" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if both APIs fail" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if no files found" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="FormValidator" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.084" tests="42">
+    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return error for empty GPA" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return error for invalid GPA format" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return error for GPA below 0" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return error for GPA below 0" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return error for GPA above 4" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return error for GPA above 4" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return warning for undergraduate GPA below 3.38" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return info for excellent GPA" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return info for excellent GPA" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return valid for normal GPA" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return valid for normal GPA" time="0.001">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return error for empty ranking" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return error for empty ranking" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return error for invalid ranking format" time="0">
     </testcase>
@@ -635,9 +703,9 @@
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return error for ranking above 100" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return error for undergraduate ranking above 35%" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return error for undergraduate ranking above 35%" time="0.001">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return info for top 10% ranking" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return info for top 10% ranking" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return valid for acceptable ranking" time="0">
     </testcase>
@@ -657,109 +725,53 @@
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validatePhone" name="should accept valid mobile format" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validatePhone" name="should accept valid landline format" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validatePhone" name="should accept valid landline format" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validatePhone" name="should return error for invalid phone format" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for empty bank account" time="0.001">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for account too short" time="0.004">
+    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for account too short" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for account too long" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for account too long" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for non-numeric account" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should accept valid bank account" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateEmail" name="should return error for empty email" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateEmail" name="should return error for empty email" time="0.004">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateEmail" name="should return error for invalid email format" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateEmail" name="should accept valid email" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateAddress" name="should return error for empty address" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateAddress" name="should return error for empty address" time="0.001">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateAddress" name="should return error for address too short" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateAddress" name="should return error for address too short" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateAddress" name="should accept valid address" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for empty proposal" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for empty proposal" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for proposal too short" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for proposal too long" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for proposal too long" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should accept valid proposal" time="0">
     </testcase>
-    <testcase classname="FormValidator › English locale" name="should return English error messages" time="0">
+    <testcase classname="FormValidator › English locale" name="should return English error messages" time="0.001">
     </testcase>
-    <testcase classname="FormValidator › English locale" name="should return English warning messages" time="0.001">
+    <testcase classname="FormValidator › English locale" name="should return English warning messages" time="0">
     </testcase>
-    <testcase classname="FormValidator › English locale" name="should return English info messages" time="0">
-    </testcase>
-  </testsuite>
-  <testsuite name="Application Helpers" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:11" time="0.103" tests="27">
-    <testcase classname="Application Helpers › formatDate" name="should format date for Chinese locale" time="0.016">
-    </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should format date for English locale" time="0.004">
-    </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should return empty string for null date" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should return empty string for undefined date" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should return empty string for empty date" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for draft status in Chinese" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for submitted status in English" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for approved status" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for rejected status" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › getStatusColor" name="should return correct colors for different statuses" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › getStatusName" name="should return Chinese status names" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › getStatusName" name="should return English status names" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldName" name="should return Chinese field names" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldName" name="should return English field names" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldName" name="should return original field name if not mapped" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should format scholarship type from API response" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should return code if scholarship not found in API" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should return code if API fails" time="0.008">
-    </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should return value as-is for non-scholarship fields" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › getDocumentLabel" name="should use dynamic label when provided" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › getDocumentLabel" name="should fallback to Chinese label when English not available" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › getDocumentLabel" name="should use static labels when no dynamic label provided" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › getDocumentLabel" name="should return original docType if not mapped" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › fetchApplicationFiles" name="should fetch files from application details" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › fetchApplicationFiles" name="should fallback to files API if no documents in application details" time="0">
-    </testcase>
-    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if both APIs fail" time="0.001">
-    </testcase>
-    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if no files found" time="0">
+    <testcase classname="FormValidator › English locale" name="should return English info messages" time="0.001">
     </testcase>
   </testsuite>
-  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:11" time="0.075" tests="24">
-    <testcase classname="API Client › Authentication" name="should include auth token in requests" time="0.002">
+  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.089" tests="24">
+    <testcase classname="API Client › Authentication" name="should include auth token in requests" time="0.001">
     </testcase>
     <testcase classname="API Client › Authentication" name="should handle requests without auth token" time="0">
     </testcase>
-    <testcase classname="API Client › Authentication" name="should clear token on 401 response" time="0.001">
+    <testcase classname="API Client › Authentication" name="should clear token on 401 response" time="0">
     </testcase>
     <testcase classname="API Client › Error Handling" name="should handle network errors" time="0.001">
     </testcase>
@@ -767,9 +779,9 @@
     </testcase>
     <testcase classname="API Client › Error Handling" name="should handle malformed JSON responses" time="0.001">
     </testcase>
-    <testcase classname="API Client › Scholarship APIs" name="should get all scholarships" time="0.001">
+    <testcase classname="API Client › Scholarship APIs" name="should get all scholarships" time="0.004">
     </testcase>
-    <testcase classname="API Client › Scholarship APIs" name="should get eligible scholarships" time="0">
+    <testcase classname="API Client › Scholarship APIs" name="should get eligible scholarships" time="0.001">
     </testcase>
     <testcase classname="API Client › Scholarship APIs" name="should get scholarship by ID" time="0">
     </testcase>
@@ -779,101 +791,101 @@
     </testcase>
     <testcase classname="API Client › Application APIs" name="should update application" time="0.001">
     </testcase>
-    <testcase classname="API Client › Application APIs" name="should delete application" time="0.001">
+    <testcase classname="API Client › Application APIs" name="should delete application" time="0">
     </testcase>
-    <testcase classname="API Client › Admin APIs" name="should get dashboard stats" time="0">
+    <testcase classname="API Client › Admin APIs" name="should get dashboard stats" time="0.001">
     </testcase>
     <testcase classname="API Client › Admin APIs" name="should get all applications with filters" time="0.001">
     </testcase>
-    <testcase classname="API Client › Admin APIs" name="should update application status" time="0.001">
+    <testcase classname="API Client › Admin APIs" name="should update application status" time="0">
     </testcase>
     <testcase classname="API Client › File APIs" name="should upload document" time="0.001">
     </testcase>
-    <testcase classname="API Client › File APIs" name="should get files by application ID" time="0.001">
+    <testcase classname="API Client › File APIs" name="should get files by application ID" time="0">
     </testcase>
     <testcase classname="API Client › Request Configuration" name="should set correct Content-Type for JSON requests" time="0">
     </testcase>
     <testcase classname="API Client › Request Configuration" name="should handle FormData without explicit Content-Type header" time="0">
     </testcase>
-    <testcase classname="API Client › Request Configuration" name="should include Accept header" time="0">
+    <testcase classname="API Client › Request Configuration" name="should include Accept header" time="0.001">
     </testcase>
     <testcase classname="API Client › Response Processing" name="should parse successful JSON responses" time="0">
     </testcase>
-    <testcase classname="API Client › Response Processing" name="should handle empty responses" time="0.001">
+    <testcase classname="API Client › Response Processing" name="should handle empty responses" time="0">
     </testcase>
-    <testcase classname="API Client › Response Processing" name="should handle text responses" time="0">
+    <testcase classname="API Client › Response Processing" name="should handle text responses" time="0.001">
     </testcase>
   </testsuite>
-  <testsuite name="FormValidator (Simple)" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:11" time="0.069" tests="22">
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for empty string" time="0">
+  <testsuite name="FormValidator (Simple)" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.066" tests="22">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for empty string" time="0.001">
     </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for whitespace only" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for whitespace only" time="0">
     </testcase>
     <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for null" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for undefined" time="0">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for undefined" time="0.001">
     </testcase>
     <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return null for valid string" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for invalid email format" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for invalid email format" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for email without @" time="0">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for email without @" time="0.001">
     </testcase>
     <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for email without domain" time="0">
     </testcase>
     <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return null for valid email" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return null for complex valid email" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return null for complex valid email" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return error for GPA below 0" time="0">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return error for GPA below 0" time="0.001">
     </testcase>
     <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return error for GPA above 4.3" time="0">
     </testcase>
     <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return null for valid GPA" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return null for GPA at boundaries" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return null for GPA at boundaries" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return error for ranking below 0" time="0">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return error for ranking below 0" time="0.001">
     </testcase>
     <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return error for ranking above 100" time="0">
     </testcase>
     <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return null for valid ranking" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return null for ranking at boundaries" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return null for ranking at boundaries" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › English locale › validateRequired" name="should return English error message" time="0">
+    <testcase classname="FormValidator (Simple) › English locale › validateRequired" name="should return English error message" time="0.001">
     </testcase>
-    <testcase classname="FormValidator (Simple) › English locale › validateEmail" name="should return English error message" time="0.001">
+    <testcase classname="FormValidator (Simple) › English locale › validateEmail" name="should return English error message" time="0">
     </testcase>
     <testcase classname="FormValidator (Simple) › English locale › validateGPA" name="should return English error message" time="0">
     </testcase>
-    <testcase classname="FormValidator (Simple) › English locale › validateRanking" name="should return English error message" time="0">
+    <testcase classname="FormValidator (Simple) › English locale › validateRanking" name="should return English error message" time="0.001">
     </testcase>
   </testsuite>
-  <testsuite name="Utils" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:11" time="0.063" tests="7">
+  <testsuite name="Utils" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.056" tests="7">
     <testcase classname="Utils › cn function" name="should merge className strings correctly" time="0.002">
     </testcase>
-    <testcase classname="Utils › cn function" name="should handle conditional classes" time="0">
+    <testcase classname="Utils › cn function" name="should handle conditional classes" time="0.001">
     </testcase>
     <testcase classname="Utils › cn function" name="should merge Tailwind classes properly" time="0">
     </testcase>
-    <testcase classname="Utils › cn function" name="should handle arrays of classes" time="0.001">
+    <testcase classname="Utils › cn function" name="should handle arrays of classes" time="0">
     </testcase>
     <testcase classname="Utils › cn function" name="should handle undefined and null values" time="0">
     </testcase>
-    <testcase classname="Utils › cn function" name="should handle empty inputs" time="0">
+    <testcase classname="Utils › cn function" name="should handle empty inputs" time="0.001">
     </testcase>
-    <testcase classname="Utils › cn function" name="should handle duplicate classes" time="0.001">
+    <testcase classname="Utils › cn function" name="should handle duplicate classes" time="0">
     </testcase>
   </testsuite>
-  <testsuite name="Jest Setup" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:18:11" time="0.056" tests="4">
-    <testcase classname="Jest Setup" name="should resolve @/ path aliases correctly" time="0.001">
+  <testsuite name="Jest Setup" errors="0" failures="0" skipped="0" timestamp="2025-10-08T13:31:23" time="0.058" tests="4">
+    <testcase classname="Jest Setup" name="should resolve @/ path aliases correctly" time="0">
     </testcase>
     <testcase classname="Jest Setup" name="should have testing environment configured" time="0">
     </testcase>
     <testcase classname="Jest Setup" name="should mock API client methods" time="0">
     </testcase>
-    <testcase classname="Jest Setup" name="should have DOM testing utilities available" time="0.001">
+    <testcase classname="Jest Setup" name="should have DOM testing utilities available" time="0">
     </testcase>
   </testsuite>
 </testsuites>

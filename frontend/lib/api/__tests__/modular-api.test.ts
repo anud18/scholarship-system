@@ -1308,4 +1308,106 @@ describe('Modular API Structure', () => {
       expect(fetchCall[1].method).toBe('POST');
     });
   });
+
+  describe('Admin Module', () => {
+    it('should have admin module', () => {
+      expect(api.admin).toBeDefined();
+    });
+
+    it('should get dashboard stats', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Dashboard stats retrieved',
+          data: { total_applications: 100, total_scholarships: 10 }
+        }),
+      });
+
+      const result = await api.admin.getDashboardStats();
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/admin/dashboard/stats');
+    });
+
+    it('should get all applications', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Applications retrieved',
+          data: { items: [], total: 0, page: 1, size: 10 }
+        }),
+      });
+
+      const result = await api.admin.getAllApplications(1, 10, 'pending');
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/admin/applications?page=1&size=10&status=pending');
+    });
+
+    it('should create announcement', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Announcement created',
+          data: { id: 1, title: 'Test Announcement' }
+        }),
+      });
+
+      const result = await api.admin.createAnnouncement({ title: 'Test', content: 'Test content' });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/admin/announcements');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+
+    it('should get scholarship rules', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Rules retrieved',
+          data: []
+        }),
+      });
+
+      const result = await api.admin.getScholarshipRules({ scholarship_type_id: 1 });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/admin/scholarship-rules?scholarship_type_id=1');
+    });
+
+    it('should create scholarship configuration', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Configuration created',
+          data: { id: 1, config_code: 'TEST-113-1' }
+        }),
+      });
+
+      const result = await api.admin.createScholarshipConfiguration({
+        scholarship_type_id: 1,
+        academic_year: 113,
+        semester: 'first'
+      });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/scholarship-configurations/configurations');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+  });
 });
