@@ -101,29 +101,12 @@ class ApplicationDataRow(BaseModel):
     # 必要欄位
     student_id: str = Field(..., description="學號", min_length=1, max_length=20)
     student_name: str = Field(..., description="姓名", min_length=1, max_length=100)
-    dept_code: Optional[str] = Field(None, description="科系代碼", max_length=10)
 
     # 子類型
     sub_types: List[str] = Field(default=[], description="子類型列表")
 
-    # 銀行帳戶資訊
-    bank_account: Optional[str] = Field(None, description="銀行帳號", max_length=20)
-    account_holder: Optional[str] = Field(None, description="帳戶戶名", max_length=100)
-    bank_name: Optional[str] = Field(None, description="銀行名稱", max_length=50)
-
-    # 指導教授資訊
-    supervisor_id: Optional[str] = Field(None, description="指導教授工號", max_length=20)
-    supervisor_name: Optional[str] = Field(None, description="指導教授姓名", max_length=100)
-    supervisor_email: Optional[str] = Field(None, description="指導教授email", max_length=255)
-
-    # 聯絡資訊
-    contact_phone: Optional[str] = Field(None, description="聯絡電話", max_length=20)
-    contact_address: Optional[str] = Field(None, description="聯絡地址", max_length=200)
-
-    # 成績資訊
-    gpa: Optional[float] = Field(None, description="GPA", ge=0.0, le=4.3)
-    class_ranking: Optional[int] = Field(None, description="班級排名", ge=1)
-    dept_ranking: Optional[int] = Field(None, description="系所排名", ge=1)
+    # 郵局帳戶資訊
+    postal_account: Optional[str] = Field(None, description="郵局帳號", max_length=20)
 
     # 其他動態欄位
     custom_fields: Optional[Dict[str, Any]] = Field(default={}, description="其他自定義欄位")
@@ -137,51 +120,25 @@ class ApplicationDataRow(BaseModel):
             raise ValueError("學號僅能包含英文字母和數字")
         return v
 
-    @field_validator("student_name", "account_holder", "supervisor_name")
+    @field_validator("student_name")
     @classmethod
-    def validate_name_fields(cls, v: Optional[str]) -> Optional[str]:
+    def validate_name_fields(cls, v: str) -> str:
         """Validate name fields - no HTML/script tags for XSS prevention"""
-        if v is None:
-            return v
         v = v.strip()
         # Check for common XSS patterns
         if re.search(r"<[^>]*script|<[^>]*iframe|javascript:", v, re.IGNORECASE):
             raise ValueError("名稱欄位包含不允許的字元")
         return v
 
-    @field_validator("bank_account")
+    @field_validator("postal_account")
     @classmethod
-    def validate_bank_account(cls, v: Optional[str]) -> Optional[str]:
-        """Validate bank account - numbers and hyphens only"""
+    def validate_postal_account(cls, v: Optional[str]) -> Optional[str]:
+        """Validate postal account - numbers and hyphens only"""
         if v is None:
             return v
         v = v.strip()
         if not re.match(r"^[0-9\-]+$", v):
-            raise ValueError("銀行帳號僅能包含數字和連字號")
-        return v
-
-    @field_validator("contact_phone")
-    @classmethod
-    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
-        """Validate phone number format"""
-        if v is None:
-            return v
-        v = v.strip()
-        # Allow numbers, hyphens, parentheses, plus sign
-        if not re.match(r"^[0-9\-\(\)\+\s]+$", v):
-            raise ValueError("電話號碼格式不正確")
-        return v
-
-    @field_validator("supervisor_email")
-    @classmethod
-    def validate_email(cls, v: Optional[str]) -> Optional[str]:
-        """Validate email format"""
-        if v is None:
-            return v
-        v = v.strip().lower()
-        # Basic email validation
-        if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", v):
-            raise ValueError("Email 格式不正確")
+            raise ValueError("郵局帳號僅能包含數字和連字號")
         return v
 
 

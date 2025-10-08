@@ -42,6 +42,9 @@ class BatchImportService:
         Returns:
             Tuple of (parsed_data, validation_errors)
         """
+        from app.models.application_field import ApplicationField
+        from app.models.scholarship import ScholarshipType
+
         errors = []
         parsed_data = []
 
@@ -64,25 +67,72 @@ class BatchImportService:
                 )
                 return [], errors
 
-        # Validate required columns
-        required_columns = ["student_id", "student_name"]
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
+        # Get scholarship type for sub_type_list
+        scholarship = await self.db.get(ScholarshipType, scholarship_type_id)
+        if not scholarship:
+            errors.append(
+                BatchImportValidationError(
+                    row_number=0,
+                    student_id=None,
+                    field="scholarship_type",
+                    error_type="not_found",
+                    message=f"獎學金類型 ID {scholarship_type_id} 不存在",
+                )
+            )
+            return [], errors
+
+        # Get custom fields configuration
+        custom_fields_stmt = (
+            select(ApplicationField)
+            .where(ApplicationField.scholarship_type == scholarship.code)
+            .where(ApplicationField.is_active == True)
+        )
+        custom_fields_result = await self.db.execute(custom_fields_stmt)
+        custom_fields = custom_fields_result.scalars().all()
+
+        # Sub-type label mapping
+        sub_type_labels = {
+            "國科會": "nstc",
+            "教育部配合款1萬": "moe_1w",
+            "教育部配合款2萬": "moe_2w",
+        }
+
+        # Add custom field mappings
+        custom_field_mapping = {}
+        for field in custom_fields:
+            custom_field_mapping[field.field_label] = field.field_name
+
+        # Validate required columns (check both Chinese and English names)
+        required_columns_chinese = ["學號", "學生姓名"]
+        required_columns_english = ["student_id", "student_name"]
+
+        has_chinese = all(col in df.columns for col in required_columns_chinese)
+        has_english = all(col in df.columns for col in required_columns_english)
+
+        if not has_chinese and not has_english:
             errors.append(
                 BatchImportValidationError(
                     row_number=0,
                     student_id=None,
                     field="columns",
                     error_type="missing_columns",
-                    message=f"缺少必要欄位: {', '.join(missing_columns)}",
+                    message=f"缺少必要欄位: {', '.join(required_columns_chinese)}",
                 )
             )
             return [], errors
 
+        # Determine which format is used
+        use_chinese_columns = has_chinese
+
         # Process each row
         for idx, row in df.iterrows():
             row_number = idx + 2  # Excel row number (header is 1)
-            student_id = str(row.get("student_id", "")).strip()
+
+            # Get student_id based on column format
+            if use_chinese_columns:
+                student_id = str(row.get("學號", "")).strip()
+            else:
+                student_id = str(row.get("student_id", "")).strip()
 
             if not student_id:
                 errors.append(
@@ -98,45 +148,60 @@ class BatchImportService:
 
             # Build application data row
             try:
-                data_row = {
-                    "student_id": student_id,
-                    "student_name": str(row.get("student_name", "")).strip(),
-                    "dept_code": str(row.get("dept_code", "")).strip() if pd.notna(row.get("dept_code")) else None,
-                    "bank_account": (
-                        str(row.get("bank_account", "")).strip() if pd.notna(row.get("bank_account")) else None
-                    ),
-                    "account_holder": (
-                        str(row.get("account_holder", "")).strip() if pd.notna(row.get("account_holder")) else None
-                    ),
-                    "bank_name": str(row.get("bank_name", "")).strip() if pd.notna(row.get("bank_name")) else None,
-                    "supervisor_id": (
-                        str(row.get("supervisor_id", "")).strip() if pd.notna(row.get("supervisor_id")) else None
-                    ),
-                    "supervisor_name": (
-                        str(row.get("supervisor_name", "")).strip() if pd.notna(row.get("supervisor_name")) else None
-                    ),
-                    "supervisor_email": (
-                        str(row.get("supervisor_email", "")).strip() if pd.notna(row.get("supervisor_email")) else None
-                    ),
-                    "contact_phone": (
-                        str(row.get("contact_phone", "")).strip() if pd.notna(row.get("contact_phone")) else None
-                    ),
-                    "contact_address": (
-                        str(row.get("contact_address", "")).strip() if pd.notna(row.get("contact_address")) else None
-                    ),
-                    "gpa": float(row.get("gpa")) if pd.notna(row.get("gpa")) else None,
-                    "class_ranking": int(row.get("class_ranking")) if pd.notna(row.get("class_ranking")) else None,
-                    "dept_ranking": int(row.get("dept_ranking")) if pd.notna(row.get("dept_ranking")) else None,
-                    "sub_types": [],  # Will be populated from sub_type columns
-                    "custom_fields": {},
-                }
+                # Get values based on column format
+                if use_chinese_columns:
+                    data_row = {
+                        "student_id": student_id,
+                        "student_name": str(row.get("學生姓名", "")).strip(),
+                        "postal_account": (str(row.get("郵局帳號", "")).strip() if pd.notna(row.get("郵局帳號")) else None),
+                        "sub_types": [],
+                        "custom_fields": {},
+                    }
 
-                # Parse sub_types from columns (e.g., sub_type_moe_1w, sub_type_nstc)
-                for col in df.columns:
-                    if col.startswith("sub_type_"):
-                        sub_type_code = col.replace("sub_type_", "")
-                        if row.get(col) in ["Y", "y", "是", "1", 1, True]:
-                            data_row["sub_types"].append(sub_type_code)
+                    # Parse sub_types from Chinese column names
+                    for chinese_label, sub_type_code in sub_type_labels.items():
+                        if chinese_label in df.columns:
+                            if row.get(chinese_label) in ["Y", "y", "是", "1", 1, True]:
+                                data_row["sub_types"].append(sub_type_code)
+
+                    # Parse custom fields from Chinese column names
+                    for chinese_label, field_name in custom_field_mapping.items():
+                        if chinese_label in df.columns and pd.notna(row.get(chinese_label)):
+                            value = row.get(chinese_label)
+                            # Convert to appropriate type
+                            if isinstance(value, (int, float, bool)):
+                                data_row["custom_fields"][field_name] = value
+                            else:
+                                data_row["custom_fields"][field_name] = str(value).strip()
+                else:
+                    # English column format (backward compatibility)
+                    data_row = {
+                        "student_id": student_id,
+                        "student_name": str(row.get("student_name", "")).strip(),
+                        "postal_account": (
+                            str(row.get("postal_account", "")).strip() if pd.notna(row.get("postal_account")) else None
+                        ),
+                        "sub_types": [],
+                        "custom_fields": {},
+                    }
+
+                    # Parse sub_types from English column names (sub_type_*)
+                    for col in df.columns:
+                        if col.startswith("sub_type_"):
+                            sub_type_code = col.replace("sub_type_", "")
+                            if row.get(col) in ["Y", "y", "是", "1", 1, True]:
+                                data_row["sub_types"].append(sub_type_code)
+
+                    # Parse custom fields from English column names (custom_*)
+                    for col in df.columns:
+                        if col.startswith("custom_"):
+                            field_name = col.replace("custom_", "")
+                            if pd.notna(row.get(col)):
+                                value = row.get(col)
+                                if isinstance(value, (int, float, bool)):
+                                    data_row["custom_fields"][field_name] = value
+                                else:
+                                    data_row["custom_fields"][field_name] = str(value).strip()
 
                 # Validate using Pydantic schema
                 ApplicationDataRow(**data_row)
@@ -403,17 +468,7 @@ class BatchImportService:
                     submitted_at=datetime.now(timezone.utc),
                     student_data={"nycu_id": student_id, "name": row_data["student_name"]},
                     submitted_form_data={
-                        "bank_account": row_data.get("bank_account"),
-                        "account_holder": row_data.get("account_holder"),
-                        "bank_name": row_data.get("bank_name"),
-                        "supervisor_id": row_data.get("supervisor_id"),
-                        "supervisor_name": row_data.get("supervisor_name"),
-                        "supervisor_email": row_data.get("supervisor_email"),
-                        "contact_phone": row_data.get("contact_phone"),
-                        "contact_address": row_data.get("contact_address"),
-                        "gpa": row_data.get("gpa"),
-                        "class_ranking": row_data.get("class_ranking"),
-                        "dept_ranking": row_data.get("dept_ranking"),
+                        "postal_account": row_data.get("postal_account"),
                         "custom_fields": row_data.get("custom_fields", {}),
                     },
                 )

@@ -106,6 +106,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],  # Allow frontend to read filename from Content-Disposition header
 )
 
 # Add schema validation middleware (development only)

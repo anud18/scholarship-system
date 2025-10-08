@@ -24,9 +24,18 @@ class UserBase(BaseModel):
     role: UserRole = UserRole.student
 
 
-class UserCreate(UserBase):
-    """User creation schema"""
+class UserCreate(BaseModel):
+    """User creation schema - fields are optional as SSO populates them on first login"""
 
+    nycu_id: str = Field(..., min_length=1, max_length=50, description="NYCU ID (required)")
+    name: Optional[str] = Field(None, min_length=1, max_length=100, description="User name (auto-populated by SSO)")
+    email: Optional[EmailStr] = Field(None, description="User email (auto-populated by SSO)")
+    user_type: Optional[UserType] = Field(UserType.student, description="User type (defaults to student)")
+    status: Optional[EmployeeStatus] = Field(EmployeeStatus.student, description="User status (defaults to 在學)")
+    dept_code: Optional[str] = Field(None, max_length=20)
+    dept_name: Optional[str] = Field(None, max_length=100)
+    college_code: Optional[str] = Field(None, max_length=10)
+    role: UserRole = Field(UserRole.student, description="System role")
     comment: Optional[str] = Field(None, max_length=255)
 
 
@@ -50,10 +59,19 @@ class UserLogin(BaseModel):
     username: str  # nycu_id or email
 
 
-class UserResponse(UserBase):
-    """User response schema"""
+class UserResponse(BaseModel):
+    """User response schema - fields may be None if SSO hasn't populated them yet"""
 
     id: int
+    nycu_id: str
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    user_type: Optional[UserType] = None
+    status: Optional[EmployeeStatus] = None
+    dept_code: Optional[str] = None
+    dept_name: Optional[str] = None
+    college_code: Optional[str] = None
+    role: UserRole
     comment: Optional[str] = None
     created_at: datetime
     updated_at: datetime

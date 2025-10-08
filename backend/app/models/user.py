@@ -50,12 +50,14 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
     nycu_id = Column(String(50), unique=True, nullable=False)  # nycuID
-    name = Column(String(100), nullable=False)  # txtName
+    name = Column(String(100), nullable=True)  # txtName - nullable as SSO populates on first login
     email = Column(String(100))  # mail
     user_type = Column(
-        Enum(UserType, values_callable=lambda obj: [e.value for e in obj]), nullable=False
+        Enum(UserType, values_callable=lambda obj: [e.value for e in obj]), nullable=False, default=UserType.student
     )  # employee / student
-    status = Column(Enum(EmployeeStatus, values_callable=lambda obj: [e.value for e in obj]))  # 在學 / 畢業 / 在職 / 退休
+    status = Column(
+        Enum(EmployeeStatus, values_callable=lambda obj: [e.value for e in obj]), default=EmployeeStatus.student
+    )  # 在學 / 畢業 / 在職 / 退休
     dept_code = Column(String(20))  # deptCode
     dept_name = Column(String(100))  # dept
     college_code = Column(String(10), nullable=True)  # College code for college role users

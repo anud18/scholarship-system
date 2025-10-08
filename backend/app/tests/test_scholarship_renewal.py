@@ -21,11 +21,11 @@ class TestScholarshipRenewalPeriod:
         return ScholarshipType(
             code="TEST_SCHOLARSHIP",
             name="測試獎學金",
-            category=ScholarshipCategory.PHD.value,
+            category=ScholarshipCategory.phd.value,
             academic_year=113,
             semester=Semester.first,
             amount=50000,
-            status=ScholarshipStatus.ACTIVE.value,
+            status=ScholarshipStatus.active.value,
             # 續領申請期間（優先處理）
             renewal_application_start_date=now - timedelta(days=10),
             renewal_application_end_date=now + timedelta(days=5),

@@ -3989,7 +3989,19 @@ class ApiClient {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `batch_import_template_${scholarshipType}.xlsx`;
+
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers.get("content-disposition");
+      let filename = `batch_import_template_${scholarshipType}.xlsx`;
+      if (contentDisposition) {
+        // Match filename*=UTF-8''encoded_name (RFC 5987)
+        const filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1].trim());
+        }
+      }
+
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

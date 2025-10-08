@@ -295,7 +295,17 @@ export function UserPermissionManagement() {
     setUserFormLoading(true);
 
     try {
-      const response = await apiClient.users.create(userForm);
+      // Only send fields that have values - SSO will populate the rest on first login
+      const createData: any = {
+        nycu_id: userForm.nycu_id,
+        role: userForm.role,
+      };
+
+      // Add optional fields only if they have non-empty values
+      if (userForm.comment) createData.comment = userForm.comment;
+      if (userForm.college_code) createData.college_code = userForm.college_code;
+
+      const response = await apiClient.users.create(createData);
 
       if (response.success) {
         const newUserId = response.data?.id;

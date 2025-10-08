@@ -21,11 +21,11 @@ class TestRenewalFlowSequence:
         return ScholarshipType(
             code="SEQUENTIAL_SCHOLARSHIP",
             name="順序流程獎學金",
-            category=ScholarshipCategory.PHD.value,
+            category=ScholarshipCategory.phd.value,
             academic_year=113,
             semester=Semester.first,
             amount=50000,
-            status=ScholarshipStatus.ACTIVE.value,
+            status=ScholarshipStatus.active.value,
             # 續領申請期間（優先處理）
             renewal_application_start_date=now - timedelta(days=60),
             renewal_application_end_date=now - timedelta(days=40),

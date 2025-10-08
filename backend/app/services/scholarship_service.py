@@ -579,23 +579,23 @@ class ScholarshipApplicationService:
         """Extract main scholarship type from code"""
         code_upper = scholarship_code.upper()
         if "UNDERGRADUATE_FRESHMAN" in code_upper:
-            return ScholarshipMainType.UNDERGRADUATE_FRESHMAN.value
+            return ScholarshipMainType.undergraduate_freshman.value
         elif "DIRECT_PHD" in code_upper:
-            return ScholarshipMainType.DIRECT_PHD.value
+            return ScholarshipMainType.direct_phd.value
         elif "PHD" in code_upper:
-            return ScholarshipMainType.PHD.value
-        return ScholarshipMainType.PHD.value  # Default
+            return ScholarshipMainType.phd.value
+        return ScholarshipMainType.phd.value  # Default
 
     def _extract_sub_type(self, scholarship_code: str) -> str:
         """Extract sub scholarship type from code"""
         code_upper = scholarship_code.upper()
         if "NSTC" in code_upper:
-            return ScholarshipSubType.NSTC.value
+            return ScholarshipSubType.nstc.value
         elif "MOE_1W" in code_upper:
-            return ScholarshipSubType.MOE_1W.value
+            return ScholarshipSubType.moe_1w.value
         elif "MOE_2W" in code_upper:
-            return ScholarshipSubType.MOE_2W.value
-        return ScholarshipSubType.GENERAL.value  # Default
+            return ScholarshipSubType.moe_2w.value
+        return ScholarshipSubType.general.value  # Default
 
     def _calculate_initial_priority(self, is_renewal: bool, student_id: int) -> int:
         """Calculate initial priority score for application"""
@@ -733,12 +733,12 @@ class ScholarshipQuotaService:
 
         # For now, use default quotas (these would come from configuration)
         default_quotas = {
-            (ScholarshipMainType.PHD.value, ScholarshipSubType.NSTC.value): 50,
-            (ScholarshipMainType.PHD.value, ScholarshipSubType.GENERAL.value): 30,
-            (ScholarshipMainType.DIRECT_PHD.value, ScholarshipSubType.NSTC.value): 40,
+            (ScholarshipMainType.phd.value, ScholarshipSubType.nstc.value): 50,
+            (ScholarshipMainType.phd.value, ScholarshipSubType.general.value): 30,
+            (ScholarshipMainType.direct_phd.value, ScholarshipSubType.nstc.value): 40,
             (
-                ScholarshipMainType.UNDERGRADUATE_FRESHMAN.value,
-                ScholarshipSubType.GENERAL.value,
+                ScholarshipMainType.undergraduate_freshman.value,
+                ScholarshipSubType.general.value,
             ): 100,
         }
 

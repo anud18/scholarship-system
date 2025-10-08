@@ -19,12 +19,12 @@ router = APIRouter()
 
 
 def convert_user_to_dict(user: User) -> dict:
-    """Convert User model to dictionary for Pydantic validation"""
+    """Convert User model to dictionary for Pydantic validation - handles None values from SSO workflow"""
     return {
         "id": user.id,
         "nycu_id": user.nycu_id,
-        "name": user.name,
-        "email": user.email,
+        "name": user.name,  # May be None if SSO hasn't populated yet
+        "email": user.email,  # May be None if SSO hasn't populated yet
         "user_type": user.user_type.value if user.user_type else None,
         "status": user.status.value if user.status else None,
         "dept_code": user.dept_code,
@@ -275,10 +275,11 @@ async def create_user(
     """Create a new user (admin only)"""
     auth_service = AuthService(db)
 
-    # Check if user already exists
-    existing_user = await auth_service.get_user_by_email(user_data.email)
-    if existing_user:
-        raise HTTPException(status_code=409, detail="User with this email already exists")
+    # Check if user already exists (only check email if provided)
+    if user_data.email:
+        existing_user = await auth_service.get_user_by_email(user_data.email)
+        if existing_user:
+            raise HTTPException(status_code=409, detail="User with this email already exists")
 
     existing_nycu_id = await auth_service.get_user_by_nycu_id(user_data.nycu_id)
     if existing_nycu_id:

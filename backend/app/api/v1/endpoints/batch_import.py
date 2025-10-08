@@ -445,14 +445,15 @@ async def download_batch_import_template(
     下載批次匯入範例 Excel 檔案
 
     **範例檔案包含**:
-    - 必要欄位: student_id, student_name
-    - 可選欄位: dept_code, bank_account, account_holder, bank_name,
-                supervisor_id, supervisor_name, supervisor_email,
-                contact_phone, contact_address, gpa, class_ranking, dept_ranking
-    - 子類型欄位: 根據獎學金類型動態生成 sub_type_* 欄位
+    - 必要欄位: 學號, 學生姓名
+    - 可選欄位: 郵局帳號
+    - 子類型欄位: 根據獎學金類型動態生成（使用繁體中文）
+    - 自訂欄位: 根據 ApplicationField 配置動態生成（使用繁體中文）
 
     **權限**: 僅限 college 角色
     """
+    from app.models.application_field import ApplicationField
+
     # Validate scholarship type
     stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
     result = await db.execute(stmt)
@@ -464,62 +465,60 @@ async def download_batch_import_template(
             detail=f"獎學金類型 {scholarship_type} 不存在",
         )
 
-    # Define base columns
+    # Define base columns (Traditional Chinese)
     columns = [
-        "student_id",  # 必填
-        "student_name",  # 必填
-        "dept_code",
-        "bank_account",
-        "account_holder",
-        "bank_name",
-        "supervisor_id",
-        "supervisor_name",
-        "supervisor_email",
-        "contact_phone",
-        "contact_address",
-        "gpa",
-        "class_ranking",
-        "dept_ranking",
+        "學號",  # student_id - 必填
+        "學生姓名",  # student_name - 必填
+        "郵局帳號",  # postal_account - 可選
     ]
 
-    # Add sub_type columns if scholarship has sub types
+    # Mapping for internal use (Chinese to English)
+    column_mapping = {
+        "學號": "student_id",
+        "學生姓名": "student_name",
+        "郵局帳號": "postal_account",
+    }
+
+    # Sub-type label mapping
+    sub_type_labels = {
+        "nstc": "國科會",
+        "moe_1w": "教育部配合款1萬",
+        "moe_2w": "教育部配合款2萬",
+    }
+
+    # Add sub_type columns if scholarship has sub types (Traditional Chinese)
     if scholarship.sub_type_list:
         for sub_type_code in scholarship.sub_type_list:
-            columns.append(f"sub_type_{sub_type_code}")
+            label = sub_type_labels.get(sub_type_code, sub_type_code)
+            columns.append(label)
+            column_mapping[label] = f"sub_type_{sub_type_code}"
+
+    # Query custom fields for this scholarship type
+    custom_fields_stmt = (
+        select(ApplicationField)
+        .where(ApplicationField.scholarship_type == scholarship.code)
+        .where(ApplicationField.is_active == True)
+        .order_by(ApplicationField.display_order)
+    )
+    custom_fields_result = await db.execute(custom_fields_stmt)
+    custom_fields = custom_fields_result.scalars().all()
+
+    # Add custom field columns (Traditional Chinese)
+    for field in custom_fields:
+        columns.append(field.field_label)  # Use Chinese label
+        column_mapping[field.field_label] = f"custom_{field.field_name}"
 
     # Create sample data (2 example rows)
     sample_data = [
         {
-            "student_id": "111111111",
-            "student_name": "王小明",
-            "dept_code": "5201",
-            "bank_account": "1234567890123",
-            "account_holder": "王小明",
-            "bank_name": "台灣銀行",
-            "supervisor_id": "T123456",
-            "supervisor_name": "李教授",
-            "supervisor_email": "professor@example.com",
-            "contact_phone": "0912345678",
-            "contact_address": "新竹市大學路1001號",
-            "gpa": 3.8,
-            "class_ranking": 1,
-            "dept_ranking": 5,
+            "學號": "111111111",
+            "學生姓名": "王小明",
+            "郵局帳號": "1234567890123",
         },
         {
-            "student_id": "222222222",
-            "student_name": "陳小華",
-            "dept_code": "5202",
-            "bank_account": "9876543210987",
-            "account_holder": "陳小華",
-            "bank_name": "第一銀行",
-            "supervisor_id": "T234567",
-            "supervisor_name": "張教授",
-            "supervisor_email": "prof.zhang@example.com",
-            "contact_phone": "0923456789",
-            "contact_address": "新竹市光復路二段101號",
-            "gpa": 3.9,
-            "class_ranking": 2,
-            "dept_ranking": 3,
+            "學號": "222222222",
+            "學生姓名": "陳小華",
+            "郵局帳號": "9876543210987",
         },
     ]
 
@@ -527,8 +526,28 @@ async def download_batch_import_template(
     if scholarship.sub_type_list:
         for i, row in enumerate(sample_data):
             for j, sub_type_code in enumerate(scholarship.sub_type_list):
+                label = sub_type_labels.get(sub_type_code, sub_type_code)
                 # First row has first sub_type as Y, second row has second sub_type as Y
-                row[f"sub_type_{sub_type_code}"] = "Y" if i == j else ""
+                row[label] = "Y" if i == j else ""
+
+    # Add custom field sample values
+    for field in custom_fields:
+        for i, row in enumerate(sample_data):
+            # Provide sample values based on field type
+            if field.field_type == "text":
+                row[field.field_label] = f"範例{field.field_label}{i + 1}"
+            elif field.field_type == "number":
+                row[field.field_label] = 100 + i
+            elif field.field_type == "select":
+                # Use first option if available
+                if field.field_options and len(field.field_options) > 0:
+                    row[field.field_label] = field.field_options[0].get("label", "")
+                else:
+                    row[field.field_label] = ""
+            elif field.field_type == "checkbox":
+                row[field.field_label] = "Y" if i == 0 else ""
+            else:
+                row[field.field_label] = ""
 
     # Create DataFrame
     df = pd.DataFrame(sample_data, columns=columns)
@@ -538,13 +557,46 @@ async def download_batch_import_template(
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="批次匯入範例")
 
+        # Auto-adjust column widths
+        from openpyxl.utils import get_column_letter
+
+        worksheet = writer.sheets["批次匯入範例"]
+        for idx, col in enumerate(df.columns, 1):
+            # Calculate max length for this column
+            column_values = df[col].astype(str).tolist()
+
+            # Collect all content in this column (header + all data)
+            all_content = [str(col)] + column_values
+
+            # Calculate max character length
+            max_length = max(len(text) for text in all_content) if all_content else 0
+
+            # Count Chinese characters in each cell and find the max
+            # Chinese characters need approximately 2x the width of English characters
+            max_chinese_in_cell = (
+                max(sum(1 for c in text if "\u4e00" <= c <= "\u9fff") for text in all_content) if all_content else 0
+            )
+
+            # Adjusted width calculation:
+            # - Base width from character count
+            # - Add extra width for Chinese characters (they're wider)
+            # - Add padding
+            adjusted_width = max_length + max_chinese_in_cell * 1.2 + 2
+
+            # Apply width to column
+            column_letter = get_column_letter(idx)
+            worksheet.column_dimensions[column_letter].width = adjusted_width
+
     output.seek(0)
 
-    # Return as downloadable file
-    filename = f"batch_import_template_{scholarship_type}.xlsx"
+    # Return as downloadable file with Chinese filename
+    from urllib.parse import quote
+
+    filename = f"{scholarship.name}_批次匯入範例.xlsx"
+    encoded_filename = quote(filename, encoding="utf-8")
 
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
     )

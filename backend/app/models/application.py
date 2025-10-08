@@ -52,18 +52,18 @@ class ApplicationStatus(enum.Enum):
 class ScholarshipMainType(enum.Enum):
     """Main scholarship types for issue #10"""
 
-    UNDERGRADUATE_FRESHMAN = "UNDERGRADUATE_FRESHMAN"
-    PHD = "PHD"
-    DIRECT_PHD = "DIRECT_PHD"
+    undergraduate_freshman = "undergraduate_freshman"
+    phd = "phd"
+    direct_phd = "direct_phd"
 
 
 class ScholarshipSubType(enum.Enum):
     """Sub scholarship types for issue #10"""
 
-    GENERAL = "GENERAL"
-    NSTC = "NSTC"
-    MOE_1W = "MOE_1W"
-    MOE_2W = "MOE_2W"
+    general = "general"
+    nstc = "nstc"
+    moe_1w = "moe_1w"
+    moe_2w = "moe_2w"
 
 
 class ReviewCycle(enum.Enum):
@@ -284,8 +284,8 @@ class Application(Base):
             try:
                 return ScholarshipSubType(self.sub_scholarship_type)
             except ValueError:
-                return ScholarshipSubType.GENERAL
-        return ScholarshipSubType.GENERAL
+                return ScholarshipSubType.general
+        return ScholarshipSubType.general
 
     @property
     def academic_term_label(self) -> str:

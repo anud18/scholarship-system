@@ -37,7 +37,7 @@ class TestCombinedScholarship:
             name_en="PhD Scholarship",
             description="國科會與教育部聯合博士生獎學金",
             description_en="Combined NSTC and MOE PhD Scholarship",
-            category=ScholarshipCategory.PHD.value,
+            category=ScholarshipCategory.phd.value,
             sub_scholarships=[
                 {
                     "code": "test_nstc",
@@ -60,7 +60,7 @@ class TestCombinedScholarship:
 
         assert scholarship is not None
         assert scholarship.is_combined is True
-        assert scholarship.category == ScholarshipCategory.PHD.value
+        assert scholarship.category == ScholarshipCategory.phd.value
 
         # Verify sub-scholarships were created
         sub_scholarships = await service.get_scholarship_with_sub_types(scholarship.id)
@@ -80,7 +80,7 @@ class TestCombinedScholarship:
             name_en="Test Combined",
             description="Test",
             description_en="Test",
-            category=ScholarshipCategory.PHD.value,
+            category=ScholarshipCategory.phd.value,
             sub_scholarships=[
                 {
                     "code": "test_sub1",
@@ -105,7 +105,7 @@ class TestCombinedScholarship:
             name_en="Eligible Combined",
             description="Test",
             description_en="Test",
-            category=ScholarshipCategory.PHD.value,
+            category=ScholarshipCategory.phd.value,
             sub_scholarships=[
                 {
                     "code": "eligible_sub",

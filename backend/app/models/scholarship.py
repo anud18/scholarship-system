@@ -32,28 +32,28 @@ if TYPE_CHECKING:
 class ScholarshipStatus(enum.Enum):
     """Scholarship status enum"""
 
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    DRAFT = "draft"
+    active = "active"
+    inactive = "inactive"
+    draft = "draft"
 
 
 class ScholarshipCategory(enum.Enum):
     """Scholarship category enum"""
 
-    UNDERGRADUATE_FRESHMAN = "undergraduate_freshman"  # 學士班新生獎學金
-    PHD = "phd"  # 國科會/教育部博士生獎學金
-    DIRECT_PHD = "direct_phd"  # 逕讀博士獎學金
+    undergraduate_freshman = "undergraduate_freshman"  # 學士班新生獎學金
+    phd = "phd"  # 國科會/教育部博士生獎學金
+    direct_phd = "direct_phd"  # 逕讀博士獎學金
 
 
 class ScholarshipSubType(enum.Enum):
     """Scholarship sub-type enum for combined scholarships"""
 
-    GENERAL = "GENERAL"  # 作為無子獎學金類型時的預設值
+    general = "general"  # 作為無子獎學金類型時的預設值
 
     # For PhD scholarships
-    NSTC = "NSTC"  # 國科會 (National Science and Technology Council)
-    MOE_1W = "MOE_1W"  # 教育部 (Ministry of Education) + 指導教授配合款一萬
-    MOE_2W = "MOE_2W"  # 教育部 (Ministry of Education) + 指導教授配合款兩萬
+    nstc = "nstc"  # 國科會 (National Science and Technology Council)
+    moe_1w = "moe_1w"  # 教育部 (Ministry of Education) + 指導教授配合款一萬
+    moe_2w = "moe_2w"  # 教育部 (Ministry of Education) + 指導教授配合款兩萬
 
 
 class ScholarshipType(Base):
@@ -76,7 +76,7 @@ class ScholarshipType(Base):
 
     # 類別設定
     category = Column(String(50), nullable=False)
-    sub_type_list = Column(JSON, default=[ScholarshipSubType.GENERAL.value])  # ["nstc", "moe_1w", "moe_2w"]
+    sub_type_list = Column(JSON, default=[ScholarshipSubType.general.value])  # ["nstc", "moe_1w", "moe_2w"]
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]),
         default=SubTypeSelectionMode.single,
@@ -97,7 +97,7 @@ class ScholarshipType(Base):
     terms_document_url = Column(String(500), nullable=True)  # 申請條款文件 URL
 
     # 狀態與設定
-    status = Column(String(20), default=ScholarshipStatus.ACTIVE.value)
+    status = Column(String(20), default=ScholarshipStatus.active.value)
 
     # 時間戳記
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -131,7 +131,7 @@ class ScholarshipType(Base):
     @property
     def is_active(self) -> bool:
         """Check if scholarship type is active"""
-        return bool(self.status == ScholarshipStatus.ACTIVE.value)
+        return bool(self.status == ScholarshipStatus.active.value)
 
     def is_renewal_college_review_period(self) -> bool:
         """Check if within renewal college review period"""
@@ -236,7 +236,7 @@ class ScholarshipType(Base):
     def get_sub_type_config(self, sub_type_code: str) -> Optional["ScholarshipSubTypeConfig"]:
         """Get sub-type configuration by code"""
         # 如果是 general 且沒有配置，返回 None（使用預設值）
-        if sub_type_code == ScholarshipSubType.GENERAL.value:
+        if sub_type_code == ScholarshipSubType.general.value:
             for config in self.sub_type_configs:
                 if config.sub_type_code == sub_type_code and config.is_active:
                     return config

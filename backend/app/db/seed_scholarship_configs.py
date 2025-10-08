@@ -57,7 +57,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "semester": Semester.first,
             "description": "114學年度第一學期學士班新生獎學金配置",
             "description_en": "Undergraduate Freshman Scholarship Configuration for 114-1",
-            "has_quota_limit": True,
+            "has_quota_limit": False,
             "has_college_quota": False,
             "quota_management_mode": QuotaManagementMode.simple,
             "total_quota": 50,
@@ -77,7 +77,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "config_name": "博士生獎學金 114學年",
             "academic_year": 114,
             "semester": None,  # 學年制
-            "description": "114學年度博士生獎學金配置（含NSTC/MOE子類型，矩陣配額管理）",
+            "description": "114學年度博士生獎學金配置",
             "description_en": "PhD Scholarship Configuration for Academic Year 114 with Matrix Quota",
             "has_quota_limit": True,
             "has_college_quota": True,
@@ -161,7 +161,7 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "semester": None,  # 學年制
             "description": "114學年度逕讀博士獎學金配置",
             "description_en": "Direct PhD Scholarship Configuration for Academic Year 114",
-            "has_quota_limit": True,
+            "has_quota_limit": False,
             "has_college_quota": False,
             "quota_management_mode": QuotaManagementMode.simple,
             "total_quota": 30,
