@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { EnhancedStudentPortal } from "@/components/enhanced-student-portal";
 import { AdminScholarshipDashboard } from "@/components/admin-scholarship-dashboard";
-import { AdminManagementInterface } from "@/components/admin-management-interface";
+import { AdminManagementShell } from "@/components/admin/AdminManagementShell";
 import { ProfessorReviewComponent } from "@/components/professor-review-component";
 import { CollegeDashboard } from "@/components/college-dashboard";
 import { AdminDashboard } from "@/components/admin-dashboard";
@@ -550,7 +550,7 @@ export default function ScholarshipManagementSystem() {
           {/* 系統管理 - 只有 admin 和 super_admin 可見 */}
           {(user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="admin" className="space-y-4">
-              <AdminManagementInterface user={user} />
+              <AdminManagementShell user={user} />
             </TabsContent>
           )}
         </Tabs>

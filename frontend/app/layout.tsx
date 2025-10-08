@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/hooks/use-auth";
 import { NotificationProvider } from "@/contexts/notification-context";
+import { QueryProvider } from "@/components/providers/query-provider";
 import { DebugPanel } from "@/components/debug-panel";
 
 export const metadata: Metadata = {
@@ -39,12 +40,14 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" className="scroll-smooth">
       <body className="antialiased">
-        <AuthProvider>
-          <NotificationProvider>
-            {children}
-            <DebugPanel />
-          </NotificationProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <NotificationProvider>
+              {children}
+              <DebugPanel />
+            </NotificationProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );
