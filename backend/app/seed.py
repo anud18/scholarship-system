@@ -674,6 +674,22 @@ async def seed_production():
             await seed_scholarships(session)
             await seed_application_fields(session)
 
+            # 5. Scholarship configurations, rules, sub-types, and email templates
+            print("\n🎓 Initializing scholarship configurations, rules, and templates...")
+            from app.db.seed_scholarship_configs import (
+                seed_email_automation_rules,
+                seed_email_templates,
+                seed_scholarship_configurations,
+                seed_scholarship_rules,
+                seed_scholarship_sub_type_configs,
+            )
+
+            await seed_scholarship_configurations(session)
+            await seed_scholarship_rules(session)
+            await seed_scholarship_sub_type_configs(session)
+            await seed_email_templates(session)
+            await seed_email_automation_rules(session)
+
             # System settings initialization
             print("\n⚙️ Initializing system settings...")
             from app.db.seed_system_settings import seed_system_settings as _seed_system_settings_prod
