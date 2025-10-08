@@ -81,6 +81,9 @@ class ExtendedApiClient extends ApiClient {
   public emailManagement: ReturnType<typeof createEmailManagementApi>;
   public admin: ReturnType<typeof createAdminApi>;
 
+  // Backward compatibility alias
+  public system: ReturnType<typeof createSystemSettingsApi>;
+
   constructor() {
     super();
 
@@ -104,6 +107,9 @@ class ExtendedApiClient extends ApiClient {
     this.userProfiles = createUserProfilesApi(this);
     this.emailManagement = createEmailManagementApi(this);
     this.admin = createAdminApi(this);
+
+    // Initialize backward compatibility alias
+    this.system = this.systemSettings;
   }
 }
 
