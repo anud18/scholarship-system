@@ -48,7 +48,7 @@ describe("API Client", () => {
       const result = await apiClient.auth.login("testuser", "password");
 
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe("http://localhost:8000/api/v1/auth/login");
+      expect(fetchCall[0]).toBe("/api/v1/auth/login");
       expect(fetchCall[1].method).toBe("POST");
       expect(fetchCall[1].body).toBe(
         JSON.stringify({ username: "testuser", password: "password" })
@@ -215,7 +215,7 @@ describe("API Client", () => {
 
       const fetchCall = mockFetch.mock.calls[0];
       expect(fetchCall[0]).toBe(
-        `http://localhost:8000/api/v1/applications/${applicationId}/submit`
+        `/api/v1/applications/${applicationId}/submit`
       );
       expect(fetchCall[1].method).toBe("POST");
       expect(getHeader(fetchCall[1]?.headers, "Authorization")).toBe(
