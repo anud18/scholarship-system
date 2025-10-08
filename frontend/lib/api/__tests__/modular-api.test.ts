@@ -776,4 +776,211 @@ describe('Modular API Structure', () => {
       expect(fetchCall[1].method).toBe('POST');
     });
   });
+
+  describe('System Settings Module', () => {
+    it('should have systemSettings module', () => {
+      expect(api.systemSettings).toBeDefined();
+    });
+
+    it('should get all configurations', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Configurations retrieved', data: [] }),
+      });
+
+      const result = await api.systemSettings.getConfigurations('email', true);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/system-settings?category=email&include_sensitive=true');
+    });
+
+    it('should validate configuration', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Validation result',
+          data: { valid: true, errors: [], warnings: [] }
+        }),
+      });
+
+      const result = await api.systemSettings.validateConfiguration({
+        key: 'test_key',
+        value: 'test_value',
+        data_type: 'string'
+      });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/system-settings/validate');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+  });
+
+  describe('Bank Verification Module', () => {
+    it('should have bankVerification module', () => {
+      expect(api.bankVerification).toBeDefined();
+    });
+
+    it('should verify single bank account', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Verified',
+          data: { application_id: 1, verified: true }
+        }),
+      });
+
+      const result = await api.bankVerification.verifyBankAccount(1);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/admin/bank-verification');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+
+    it('should verify batch bank accounts', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Batch verified',
+          data: { total: 3, verified: 2, failed: 1, results: [] }
+        }),
+      });
+
+      const result = await api.bankVerification.verifyBankAccountsBatch([1, 2, 3]);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/admin/bank-verification/batch');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+  });
+
+  describe('Professor-Student Module', () => {
+    it('should have professorStudent module', () => {
+      expect(api.professorStudent).toBeDefined();
+    });
+
+    it('should get professor-student relationships', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Relationships retrieved', data: [] }),
+      });
+
+      const result = await api.professorStudent.getProfessorStudentRelationships({
+        professor_id: 1,
+        status: 'active'
+      });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/professor-student?professor_id=1&status=active');
+    });
+
+    it('should create professor-student relationship', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Relationship created', data: { id: 1 } }),
+      });
+
+      const result = await api.professorStudent.createProfessorStudentRelationship({
+        professor_id: 1,
+        student_id: 2,
+        relationship_type: 'advisor'
+      });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/professor-student');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+  });
+
+  describe('Email Automation Module', () => {
+    it('should have emailAutomation module', () => {
+      expect(api.emailAutomation).toBeDefined();
+    });
+
+    it('should get automation rules', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Rules retrieved', data: [] }),
+      });
+
+      const result = await api.emailAutomation.getRules({ is_active: true });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/email-automation?is_active=true');
+    });
+
+    it('should toggle automation rule', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({ success: true, message: 'Rule toggled', data: {} }),
+      });
+
+      const result = await api.emailAutomation.toggleRule(1);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/email-automation/1/toggle');
+      expect(fetchCall[1].method).toBe('PATCH');
+    });
+  });
+
+  describe('Batch Import Module', () => {
+    it('should have batchImport module', () => {
+      expect(api.batchImport).toBeDefined();
+    });
+
+    it('should get batch import history', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'History retrieved',
+          data: { items: [], total: 0 }
+        }),
+      });
+
+      const result = await api.batchImport.getHistory({ limit: 10 });
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/college/batch-import/history?limit=10');
+    });
+
+    it('should confirm batch import', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({
+          success: true,
+          message: 'Batch confirmed',
+          data: { success_count: 10, failed_count: 0, errors: [], created_application_ids: [] }
+        }),
+      });
+
+      const result = await api.batchImport.confirm('batch-123', true);
+
+      expect(result.success).toBe(true);
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[0]).toBe('/api/v1/college/batch-import/batch-123/confirm');
+      expect(fetchCall[1].method).toBe('POST');
+    });
+  });
 });

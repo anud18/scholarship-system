@@ -22,6 +22,11 @@ import { createQuotaApi } from './modules/quota';
 import { createProfessorApi } from './modules/professor';
 import { createCollegeApi } from './modules/college';
 import { createWhitelistApi } from './modules/whitelist';
+import { createSystemSettingsApi } from './modules/system-settings';
+import { createBankVerificationApi } from './modules/bank-verification';
+import { createProfessorStudentApi } from './modules/professor-student';
+import { createEmailAutomationApi } from './modules/email-automation';
+import { createBatchImportApi } from './modules/batch-import';
 
 // Re-export types from main api.ts for now
 // TODO: Move these to a dedicated types.ts file
@@ -60,10 +65,14 @@ class ExtendedApiClient extends ApiClient {
   public professor: ReturnType<typeof createProfessorApi>;
   public college: ReturnType<typeof createCollegeApi>;
   public whitelist: ReturnType<typeof createWhitelistApi>;
+  public systemSettings: ReturnType<typeof createSystemSettingsApi>;
+  public bankVerification: ReturnType<typeof createBankVerificationApi>;
+  public professorStudent: ReturnType<typeof createProfessorStudentApi>;
+  public emailAutomation: ReturnType<typeof createEmailAutomationApi>;
+  public batchImport: ReturnType<typeof createBatchImportApi>;
 
   // TODO: Add other modules as they are migrated
   // public admin: ReturnType<typeof createAdminApi>;
-  // public system: ReturnType<typeof createSystemApi>;
 
   constructor() {
     super();
@@ -78,10 +87,14 @@ class ExtendedApiClient extends ApiClient {
     this.professor = createProfessorApi(this);
     this.college = createCollegeApi(this);
     this.whitelist = createWhitelistApi(this);
+    this.systemSettings = createSystemSettingsApi(this);
+    this.bankVerification = createBankVerificationApi(this);
+    this.professorStudent = createProfessorStudentApi(this);
+    this.emailAutomation = createEmailAutomationApi(this);
+    this.batchImport = createBatchImportApi(this);
 
     // TODO: Initialize other modules as they are created
     // this.admin = createAdminApi(this);
-    // this.system = createSystemApi(this);
   }
 }
 
