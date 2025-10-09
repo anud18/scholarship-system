@@ -427,6 +427,17 @@ class ScholarshipRule(Base):
     """
 
     __tablename__ = "scholarship_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "scholarship_type_id",
+            "sub_type",
+            "academic_year",
+            "semester",
+            "rule_name",
+            "rule_type",
+            name="uq_scholarship_rule_key_fields",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)

@@ -202,6 +202,14 @@ async def seed_scholarship_rules(session: AsyncSession) -> None:
     logger.info("Initializing scholarship rules...")
     print("  📋 Initializing scholarship rules...")
 
+    # Check if scholarship rules already exist
+    result = await session.execute(select(ScholarshipRule))
+    existing_rules = result.scalars().all()
+
+    if existing_rules:
+        print(f"  ✓ Scholarship rules already initialized ({len(existing_rules)} found)")
+        return
+
     # Get admin user ID
     result = await session.execute(text("SELECT id FROM users WHERE nycu_id = 'admin' LIMIT 1"))
     admin_id = result.scalar()
