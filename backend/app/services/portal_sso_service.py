@@ -113,8 +113,8 @@ class PortalSSOService:
 
     def _validate_portal_response(self, data: Dict) -> bool:
         """Validate portal response contains required fields"""
-        # Require: nycuID, txtName, mail (all must have non-empty values)
-        required_fields = ["nycuID", "txtName", "mail"]
+        # Only require nycuID and txtName (mail can be None)
+        required_fields = ["nycuID", "txtName"]
         return all(field in data and data[field] for field in required_fields)
 
     async def _verify_student_status(self, nycu_id: str) -> tuple[bool, Optional[Dict]]:
@@ -215,10 +215,6 @@ class PortalSSOService:
                 user_role = UserRole.student
                 mapped_user_type = UserType.student
             logger.info(f"User {nycu_id} classified as {user_type} based on Portal data")
-
-        # Generate email if not provided
-        if not email:
-            email = f"{nycu_id}@nycu.edu.tw"
 
         # Find or create user
         user = await self._find_or_create_user(
