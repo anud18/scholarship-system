@@ -278,7 +278,17 @@ class PortalSSOService:
             # Update existing user data
             user.name = name
             user.email = email
-            user.role = user_role  # Update role based on Student API verification
+
+            # Only update role if it's not a pre-authorized special role
+            # Preserve: super_admin, admin, college
+            # Update only: student, professor
+            if user.role not in [UserRole.super_admin, UserRole.admin, UserRole.college]:
+                old_role = user.role.value
+                user.role = user_role
+                logger.info(f"Updated role for {nycu_id}: {old_role} -> {user_role.value}")
+            else:
+                logger.info(f"Preserved pre-authorized role for {nycu_id}: {user.role.value}")
+
             user.user_type = user_type  # Update user type based on verification
             if dept_name:
                 user.dept_name = dept_name
@@ -291,7 +301,7 @@ class PortalSSOService:
                     user.raw_data["student_api_data"] = student_data
                 else:
                     user.raw_data = {"student_api_data": student_data}
-            logger.info(f"Updated existing user {nycu_id} with role {user_role.value}")
+            logger.info(f"Updated existing user {nycu_id}")
             return user
 
         # Create new user
