@@ -113,8 +113,8 @@ class PortalSSOService:
 
     def _validate_portal_response(self, data: Dict) -> bool:
         """Validate portal response contains required fields"""
-        # Only require essential fields, mail can be None
-        required_fields = ["txtID", "nycuID", "txtName"]
+        # Require: nycuID, txtName, mail (all must have non-empty values)
+        required_fields = ["nycuID", "txtName", "mail"]
         return all(field in data and data[field] for field in required_fields)
 
     async def _verify_student_status(self, nycu_id: str) -> tuple[bool, Optional[Dict]]:
