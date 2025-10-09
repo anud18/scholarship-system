@@ -318,7 +318,7 @@ export function UserPermissionManagement() {
           );
           if (tempPermissions.length > 0) {
             // Use bulk API to assign permissions
-            await fetch(`/api/v1/admin/users/${newUserId}/scholarships/bulk`, {
+            await fetch(`/api/v1/users/${newUserId}/scholarships/bulk`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -367,7 +367,7 @@ export function UserPermissionManagement() {
 
           // Use bulk API to update permissions
           await fetch(
-            `/api/v1/admin/users/${editingUser.id}/scholarships/bulk`,
+            `/api/v1/users/${editingUser.id}/scholarships/bulk`,
             {
               method: "POST",
               headers: {
@@ -383,7 +383,7 @@ export function UserPermissionManagement() {
         } else {
           // Remove all permissions for non-college/admin roles
           await fetch(
-            `/api/v1/admin/users/${editingUser.id}/scholarships/bulk`,
+            `/api/v1/users/${editingUser.id}/scholarships/bulk`,
             {
               method: "POST",
               headers: {

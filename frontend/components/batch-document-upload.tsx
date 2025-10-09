@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table";
 
 interface BatchDocumentUploadProps {
-  batchId: string;
+  batchId: number;
   onUploadComplete?: () => void;
   locale?: "zh" | "en";
 }

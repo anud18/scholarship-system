@@ -6,9 +6,26 @@
  * - Authentication token management
  * - Request/response transformation
  * - Error handling
+ * - Runtime validation with Zod (optional)
  */
 
 import type { ApiResponse } from '../api'; // Import from main api.ts for now
+import { z, type ZodType } from 'zod';
+
+/**
+ * API validation error with detailed information
+ */
+export class ApiValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly zodError: z.ZodError,
+    public readonly endpoint: string,
+    public readonly responseData: unknown
+  ) {
+    super(message);
+    this.name = 'ApiValidationError';
+  }
+}
 
 export class ApiClient {
   private baseURL: string;
@@ -81,13 +98,17 @@ export class ApiClient {
   }
 
   /**
-   * Make an authenticated API request
+   * Make an authenticated API request with optional runtime validation
    * @param endpoint - API endpoint (e.g., "/auth/login")
-   * @param options - Fetch options with optional params
+   * @param options - Fetch options with optional params and schema
    */
   async request<T = any>(
     endpoint: string,
-    options: RequestInit & { params?: Record<string, any> } = {}
+    options: RequestInit & {
+      params?: Record<string, any>;
+      schema?: ZodType<T>;
+      validateResponse?: boolean;
+    } = {}
   ): Promise<ApiResponse<T>> {
     // Handle query parameters
     let url = `${this.baseURL}/api/v1${endpoint}`;
@@ -118,8 +139,8 @@ export class ApiClient {
       headers.set("Authorization", `Bearer ${this.token}`);
     }
 
-    // Remove params from options before passing to fetch
-    const { params, ...fetchOptions } = options;
+    // Remove params and schema from options before passing to fetch
+    const { params, schema, validateResponse = false, ...fetchOptions } = options;
     const config: RequestInit = {
       ...fetchOptions,
       headers,
@@ -175,11 +196,58 @@ export class ApiClient {
         throw new Error(msg);
       }
 
+      // Runtime validation if schema provided
+      if (schema && (validateResponse || process.env.NODE_ENV === 'development')) {
+        try {
+          // Validate the entire ApiResponse structure if data has success/message
+          if (data && typeof data === "object" && "success" in data && "data" in data) {
+            schema.parse(data.data);
+          } else {
+            // Validate raw data
+            schema.parse(data);
+          }
+        } catch (error) {
+          if (error instanceof z.ZodError) {
+            console.error("❌ API Response Validation Failed:", {
+              endpoint,
+              errors: error.errors,
+              received: data,
+            });
+
+            // Only throw in development to prevent breaking production
+            if (process.env.NODE_ENV === 'development' || validateResponse) {
+              throw new ApiValidationError(
+                `API response validation failed for ${endpoint}`,
+                error,
+                endpoint,
+                data
+              );
+            }
+          }
+        }
+      }
+
       // Handle different response formats from backend
       if (data && typeof data === "object") {
-        // If response already has success/message structure, return as-is
-        if ("success" in data && "message" in data) {
-          return data as ApiResponse<T>;
+        // If response already has success structure (with message or data), return as-is
+        if ("success" in data && ("message" in data || "data" in data)) {
+          // Ensure message property exists for consistency
+          const message = data.message || "Request completed successfully";
+
+          // Log warning in development if message was missing
+          if (!data.message && process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ API Response missing message field:', {
+              endpoint,
+              success: data.success,
+              hasData: !!data.data,
+            });
+          }
+
+          return {
+            success: data.success,
+            message,
+            data: data.data,
+          } as ApiResponse<T>;
         }
         // If it's a PaginatedResponse, wrap it
         else if (

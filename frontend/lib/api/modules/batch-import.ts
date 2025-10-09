@@ -13,7 +13,7 @@ import type { ApiClient } from '../client';
 import type { ApiResponse } from '../../api';
 
 type BatchUploadResult = {
-  batch_id: string;
+  batch_id: number;
   file_name: string;
   total_records: number;
   preview_data: Array<Record<string, any>>;
@@ -80,17 +80,18 @@ type BatchDocumentUploadResponse = {
 };
 
 type BatchHistoryItem = {
-  id: string;
+  id: number;
   file_name: string;
-  uploaded_by: number;
-  uploaded_at: string;
+  importer_name?: string;
+  created_at: string;
   total_records: number;
   success_count: number;
   failed_count: number;
-  status: "pending" | "completed" | "failed";
-  scholarship_type: string;
+  import_status: string;
+  scholarship_type_id?: number;
+  college_code: string;
   academic_year: number;
-  semester: string;
+  semester: string | null;
 };
 
 type BatchHistoryResponse = {
@@ -99,6 +100,7 @@ type BatchHistoryResponse = {
 };
 
 type BatchDetails = BatchHistoryItem & {
+  created_applications?: number[];
   validation_summary: {
     valid_count: number;
     invalid_count: number;
@@ -147,7 +149,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Confirm batch import after validation
      */
     confirm: async (
-      batchId: string,
+      batchId: number,
       confirm: boolean = true
     ): Promise<ApiResponse<BatchConfirmResult>> => {
       return client.request(`/college/batch-import/${batchId}/confirm`, {
@@ -160,7 +162,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Update a single record in the batch import
      */
     updateRecord: async (
-      batchId: string,
+      batchId: number,
       recordIndex: number,
       updates: Record<string, any>
     ): Promise<ApiResponse<BatchUpdateRecordResult>> => {
@@ -174,7 +176,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Re-validate all records in the batch import
      */
     revalidate: async (
-      batchId: string
+      batchId: number
     ): Promise<ApiResponse<BatchRevalidateResult>> => {
       return client.request(`/college/batch-import/${batchId}/validate`, {
         method: "POST",
@@ -185,7 +187,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Delete a single record from the batch import
      */
     deleteRecord: async (
-      batchId: string,
+      batchId: number,
       recordIndex: number
     ): Promise<ApiResponse<BatchDeleteRecordResult>> => {
       return client.request(
@@ -200,7 +202,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Upload documents in bulk for batch import (ZIP file)
      */
     uploadDocuments: async (
-      batchId: string,
+      batchId: number,
       zipFile: File
     ): Promise<ApiResponse<BatchDocumentUploadResponse>> => {
       const formData = new FormData();
@@ -239,7 +241,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Get detailed information about a specific batch import
      */
     getDetails: async (
-      batchId: string
+      batchId: number
     ): Promise<ApiResponse<BatchDetails>> => {
       return client.request(`/college/batch-import/${batchId}/details`);
     },
@@ -276,6 +278,64 @@ export function createBatchImportApi(client: ApiClient) {
       if (contentDisposition) {
         // Match filename*=UTF-8''encoded_name (RFC 5987)
         const filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1].trim());
+        }
+      }
+
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+
+    /**
+     * Delete a batch import and all its related applications
+     */
+    deleteBatch: async (batchId: number): Promise<ApiResponse<{ batch_id: number; deleted_applications: number }>> => {
+      return client.request(`/college/batch-import/${batchId}`, {
+        method: "DELETE",
+      });
+    },
+
+    /**
+     * Download original file for a batch import
+     */
+    downloadFile: async (batchId: number): Promise<void> => {
+      const token = client.getToken();
+      const baseURL =
+        typeof window !== "undefined"
+          ? ""
+          : process.env.INTERNAL_API_URL || "http://localhost:8000";
+
+      const response = await fetch(
+        `${baseURL}/api/v1/college/batch-import/${batchId}/download`,
+        {
+          method: "GET",
+          headers: {
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to download file");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers.get("content-disposition");
+      let filename = `batch_import_${batchId}.xlsx`;
+      if (contentDisposition) {
+        // Match filename*=UTF-8''encoded_name (RFC 5987)
+        const filenameMatch = contentDisposition.match(
+          /filename\*=UTF-8''([^;]+)/
+        );
         if (filenameMatch) {
           filename = decodeURIComponent(filenameMatch[1].trim());
         }

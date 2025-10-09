@@ -33,8 +33,8 @@ import { createUserProfilesApi } from './modules/user-profiles';
 import { createEmailManagementApi } from './modules/email-management';
 import { createAdminApi } from './modules/admin';
 
-// Re-export types from main api.ts for now
-// TODO: Move these to a dedicated types.ts file
+// Re-export ALL types from legacy api.ts for backward compatibility
+// TODO: Move these to a dedicated types.ts file in the modular structure
 export type {
   ApiResponse,
   User,
@@ -46,9 +46,57 @@ export type {
   ScholarshipType,
   ScholarshipConfiguration,
   ScholarshipRule,
-  Notification,
   PaginatedResponse,
-} from '../api';
+  ApplicationCreate,
+  DashboardStats,
+  RecipientOption,
+  EmailTemplate,
+  SystemSetting,
+  SystemConfiguration,
+  SystemConfigurationCreate,
+  SystemConfigurationUpdate,
+  SystemConfigurationValidation,
+  ConfigurationValidationResult,
+  BankVerificationResult,
+  BankVerificationBatchResult,
+  ProfessorStudentRelationship,
+  ProfessorStudentRelationshipCreate,
+  ProfessorStudentRelationshipUpdate,
+  AnnouncementCreate,
+  AnnouncementUpdate,
+  NotificationResponse,
+  SubTypeOption,
+  UserListResponse,
+  UserResponse,
+  UserCreate,
+  UserUpdate,
+  UserStats,
+  ApplicationField,
+  ApplicationFieldCreate,
+  ApplicationFieldUpdate,
+  ApplicationDocument,
+  HistoricalApplication,
+  HistoricalApplicationFilters,
+  ApplicationDocumentCreate,
+  ApplicationDocumentUpdate,
+  ScholarshipFormConfig,
+  FormConfigSaveRequest,
+  ScholarshipStats,
+  SubTypeStats,
+  Workflow,
+  SystemStats,
+  ScholarshipPermission,
+  ScholarshipPermissionCreate,
+  WhitelistStudentInfo,
+  WhitelistResponse,
+  WhitelistBatchAddRequest,
+  WhitelistBatchRemoveRequest,
+  WhitelistImportResult,
+  WhitelistToggleRequest,
+  ScholarshipConfigurationFormData,
+  UserProfile,
+  CompleteUserProfile,
+} from '../api.legacy';
 
 // Re-export quota helper functions
 export {

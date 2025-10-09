@@ -5,9 +5,12 @@ Provides endpoints for uploading, validating, and confirming
 offline application data imports.
 """
 
+import os
+import re
 from io import BytesIO
 from typing import List, Optional
 
+import magic
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
@@ -100,34 +103,37 @@ async def upload_batch_import_data(
             detail=f"檔案大小超過限制 ({settings.max_file_size / 1024 / 1024:.1f}MB)",
         )
 
-    # Validate file type using magic bytes
-    # Excel .xlsx files start with PK (ZIP signature: 50 4B)
-    # Excel .xls files start with D0 CF 11 E0 (OLE2 signature)
-    # CSV files are text, check if it's valid UTF-8/text
-    is_valid_type = False
+    # Validate file type using python-magic for accurate MIME detection
+    mime_type = magic.from_buffer(file_content, mime=True)
 
-    if len(file_content) >= 4:
-        magic_bytes = file_content[:4]
-        if magic_bytes[:2] == b"PK":  # .xlsx (ZIP-based)
-            is_valid_type = True
-        elif magic_bytes == b"\xD0\xCF\x11\xE0":  # .xls (OLE2-based)
-            is_valid_type = True
-        else:
-            # Try to decode as text for CSV
-            try:
-                file_content.decode("utf-8")
-                is_valid_type = True
-            except UnicodeDecodeError:
-                try:
-                    file_content.decode("big5")  # Try Big5 for traditional Chinese
-                    is_valid_type = True
-                except UnicodeDecodeError:
-                    pass
+    # Allowed MIME types for Excel and CSV files
+    allowed_mime_types = {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # .xlsx
+        "application/vnd.ms-excel",  # .xls
+        "application/x-ole-storage",  # .xls (alternative)
+        "text/csv",  # .csv
+        "text/plain",  # .csv (sometimes detected as plain text)
+        "application/csv",  # .csv (alternative)
+    }
 
-    if not is_valid_type:
+    if mime_type not in allowed_mime_types:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="不支援的檔案格式，請上傳 Excel (.xlsx, .xls) 或 CSV 檔案",
+            detail=f"不支援的檔案格式 ({mime_type})，請上傳 Excel (.xlsx, .xls) 或 CSV 檔案",
+        )
+
+    # Additional validation: Try to parse the file structure
+    try:
+        if mime_type.startswith("application/vnd"):
+            # Verify it's a valid Excel file by attempting to read metadata
+            pd.read_excel(BytesIO(file_content), nrows=0)
+        elif "csv" in mime_type or mime_type == "text/plain":
+            # Verify it's a valid CSV/text file
+            pd.read_csv(BytesIO(file_content), nrows=0)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"檔案結構驗證失敗: {str(e)}",
         )
 
     # Parse and validate
@@ -138,43 +144,51 @@ async def upload_batch_import_data(
         semester=semester,
     )
 
-    # Additional validations
-    for row_data in parsed_data:
-        # Check college permission (skip for super_admin)
-        if current_user.role != UserRole.super_admin:
-            is_valid, error_msg = await service.validate_college_permission(
-                student_id=row_data["student_id"],
-                college_code=college_code,
-                dept_code=row_data.get("dept_code"),
-            )
-            if not is_valid:
-                validation_errors.append(
-                    {
-                        "row_number": parsed_data.index(row_data) + 2,
-                        "student_id": row_data["student_id"],
-                        "field": "college_code",
-                        "error_type": "permission_error",
-                        "message": error_msg,
-                    }
-                )
+    # Bulk validation for performance optimization
+    if parsed_data:
+        # Collect all student IDs
+        student_ids = [row_data["student_id"] for row_data in parsed_data]
 
-        # Check duplicate
-        is_duplicate, error_msg = await service.check_duplicate_application(
-            student_id=row_data["student_id"],
+        # Perform bulk validation (single query instead of N queries)
+        permission_results, duplicate_results = await service.bulk_validate_permissions_and_duplicates(
+            student_ids=student_ids,
+            college_code=college_code or "",
             scholarship_type_id=scholarship.id,
             academic_year=academic_year,
             semester=semester,
         )
-        if is_duplicate:
-            validation_errors.append(
-                {
-                    "row_number": parsed_data.index(row_data) + 2,
-                    "student_id": row_data["student_id"],
-                    "field": "duplicate",
-                    "error_type": "duplicate_application",
-                    "message": error_msg,
-                }
-            )
+
+        # Process validation results
+        for idx, row_data in enumerate(parsed_data):
+            student_id = row_data["student_id"]
+            row_number = idx + 2  # Excel row number (1-indexed + header row)
+
+            # Check college permission (skip for super_admin)
+            if current_user.role != UserRole.super_admin:
+                is_valid, error_msg = permission_results.get(student_id, (False, "未知錯誤"))
+                if not is_valid:
+                    validation_errors.append(
+                        {
+                            "row_number": row_number,
+                            "student_id": student_id,
+                            "field": "college_code",
+                            "error_type": "permission_error",
+                            "message": error_msg,
+                        }
+                    )
+
+            # Check duplicate
+            is_duplicate, error_msg = duplicate_results.get(student_id, (False, None))
+            if is_duplicate:
+                validation_errors.append(
+                    {
+                        "row_number": row_number,
+                        "student_id": student_id,
+                        "field": "duplicate",
+                        "error_type": "duplicate_application",
+                        "message": error_msg,
+                    }
+                )
 
     # Create batch import record
     batch_import = await service.create_batch_import_record(
@@ -186,6 +200,29 @@ async def upload_batch_import_data(
         file_name=file.filename,
         total_records=len(parsed_data),
     )
+
+    # Upload original file to MinIO for later download/preview
+    from app.services.minio_service import MinIOService
+
+    try:
+        minio_service = MinIOService()
+        object_name = f"batch-imports/{batch_import.id}/{file.filename}"
+        minio_service.upload_file(
+            bucket_name=settings.minio_bucket,
+            object_name=object_name,
+            file_data=file_content,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            if file.filename.endswith(".xlsx")
+            else "application/vnd.ms-excel"
+            if file.filename.endswith(".xls")
+            else "text/csv",
+        )
+        batch_import.file_path = object_name
+    except Exception as e:
+        # Log error but don't fail the upload if MinIO is unavailable
+        import logging
+
+        logging.error(f"Failed to upload batch import file to MinIO: {e}")
 
     # Store parsed data for confirm step
     batch_import.parsed_data = {
@@ -536,13 +573,12 @@ async def upload_batch_documents(
 
     **權限**: College 角色僅能為自己的批次上傳文件
     """
-    import re
     import zipfile
     from io import BytesIO
 
     from app.core.config import settings
     from app.models.application import Application, ApplicationFile
-    from app.services.minio_service import MinioService
+    from app.services.minio_service import MinIOService
 
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
@@ -585,6 +621,34 @@ async def upload_batch_documents(
             detail="無效的 ZIP 檔案",
         )
 
+    # ZIP bomb protection
+    # 1. Check file count limit (max 1000 files)
+    file_count = len(zip_file.filelist)
+    if file_count > 1000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"ZIP 檔案包含過多檔案 ({file_count})，最多允許 1000 個檔案",
+        )
+
+    # 2. Check total uncompressed size and compression ratio
+    compressed_size = len(zip_content)
+    total_uncompressed_size = sum(file_info.file_size for file_info in zip_file.filelist)
+
+    # Max uncompressed size: 100MB
+    max_uncompressed_size = 100 * 1024 * 1024
+    if total_uncompressed_size > max_uncompressed_size:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"ZIP 解壓縮後大小 ({total_uncompressed_size / 1024 / 1024:.1f}MB) 超過限制 (100MB)",
+        )
+
+    # Max compression ratio: 100:1
+    if compressed_size > 0 and total_uncompressed_size / compressed_size > 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"ZIP 壓縮比過高 ({total_uncompressed_size / compressed_size:.1f}:1)，可能為 ZIP 炸彈攻擊",
+        )
+
     # Document type mapping
     doc_type_map = {
         "transcript": "transcript",
@@ -611,7 +675,7 @@ async def upload_batch_documents(
     student_app_map = {app.student_id: app for app in applications}
 
     # Initialize MinIO service
-    minio_service = MinioService()
+    minio_service = MinIOService()
 
     # Process each file in ZIP
     for file_info in zip_file.filelist:
@@ -620,6 +684,37 @@ async def upload_batch_documents(
             continue
 
         file_name = file_info.filename
+
+        # Path traversal prevention
+        # 1. Check for directory traversal patterns
+        if ".." in file_name or file_name.startswith("/") or file_name.startswith("\\"):
+            results.append(
+                BatchDocumentUploadResult(
+                    student_id="",
+                    file_name=file_name,
+                    document_type="unknown",
+                    status="error",
+                    message="檔案路徑包含非法字元（目錄遍歷攻擊）",
+                )
+            )
+            error_count += 1
+            continue
+
+        # 2. Normalize path and validate it stays within bounds
+        normalized_path = os.path.normpath(file_name)
+        if normalized_path.startswith("..") or os.path.isabs(normalized_path):
+            results.append(
+                BatchDocumentUploadResult(
+                    student_id="",
+                    file_name=file_name,
+                    document_type="unknown",
+                    status="error",
+                    message="檔案路徑驗證失敗",
+                )
+            )
+            error_count += 1
+            continue
+
         # Skip __MACOSX and other hidden files
         if file_name.startswith("__MACOSX") or file_name.startswith("."):
             continue
@@ -658,6 +753,21 @@ async def upload_batch_documents(
             continue
 
         student_id, doc_type_str, file_ext = match.groups()
+
+        # Sanitize and validate student_id
+        # Only allow alphanumeric characters and underscores
+        if not re.match(r"^[A-Za-z0-9_]{1,20}$", student_id):
+            results.append(
+                BatchDocumentUploadResult(
+                    student_id=student_id,
+                    file_name=file_name,
+                    document_type="unknown",
+                    status="error",
+                    message="學號格式無效，僅允許英數字和底線，最長20字元",
+                )
+            )
+            error_count += 1
+            continue
 
         # Map document type
         doc_type = doc_type_map.get(doc_type_str.lower(), "other")
@@ -894,21 +1004,41 @@ async def get_batch_import_history(
 
     **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
     """
-    # Query batch imports
+    # Query batch imports - only show confirmed imports (exclude pending)
+    # Pending imports are temporary and should not appear in history until confirmed
+    confirmed_statuses = [
+        BatchImportStatus.completed,
+        BatchImportStatus.partial,
+        BatchImportStatus.failed,
+        BatchImportStatus.cancelled,
+    ]
+
     if current_user.role == UserRole.super_admin:
-        # Super admin can see all batch imports
-        stmt = select(BatchImport).order_by(desc(BatchImport.created_at)).offset(skip).limit(limit)
-        count_stmt = select(BatchImport)
-    else:
-        # College role can only see their own
+        # Super admin can see all confirmed batch imports
         stmt = (
             select(BatchImport)
-            .where(BatchImport.importer_id == current_user.id)
+            .where(BatchImport.import_status.in_(confirmed_statuses))
             .order_by(desc(BatchImport.created_at))
             .offset(skip)
             .limit(limit)
         )
-        count_stmt = select(BatchImport).where(BatchImport.importer_id == current_user.id)
+        count_stmt = select(BatchImport).where(BatchImport.import_status.in_(confirmed_statuses))
+    else:
+        # College role can only see their own confirmed imports
+        stmt = (
+            select(BatchImport)
+            .where(
+                BatchImport.importer_id == current_user.id,
+                BatchImport.import_status.in_(confirmed_statuses),
+            )
+            .order_by(desc(BatchImport.created_at))
+            .offset(skip)
+            .limit(limit)
+        )
+        count_stmt = select(BatchImport).where(
+            BatchImport.importer_id == current_user.id,
+            BatchImport.import_status.in_(confirmed_statuses),
+        )
 
     result = await db.execute(stmt)
     batch_imports = result.scalars().all()
@@ -971,8 +1101,19 @@ async def get_batch_import_details(
             detail="僅能查看自己上傳的批次匯入記錄",
         )
 
-    # Get created applications
-    created_app_ids = [app.id for app in batch_import.applications]
+    # Get created applications IDs using explicit query (avoid lazy loading)
+    from app.models.application import Application
+
+    app_stmt = select(Application.id).where(Application.batch_import_id == batch_id)
+    app_result = await db.execute(app_stmt)
+    created_app_ids = [row[0] for row in app_result.fetchall()]
+
+    # Get importer name using explicit query (avoid lazy loading)
+    importer_name = None
+    if batch_import.importer_id:
+        importer_stmt = select(User.name).where(User.id == batch_import.importer_id)
+        importer_result = await db.execute(importer_stmt)
+        importer_name = importer_result.scalar_one_or_none()
 
     response_data = BatchImportDetailResponse(
         id=batch_import.id,
@@ -989,7 +1130,7 @@ async def get_batch_import_details(
         import_status=batch_import.import_status.value if batch_import.import_status else "unknown",
         created_at=batch_import.created_at,
         updated_at=batch_import.updated_at,
-        importer_name=batch_import.importer.name if batch_import.importer else None,
+        importer_name=importer_name,
         created_applications=created_app_ids,
     )
 
@@ -997,6 +1138,150 @@ async def get_batch_import_details(
         "success": True,
         "message": "查詢成功",
         "data": response_data.model_dump(),
+    }
+
+
+@router.get("/{batch_id}/download")
+async def download_batch_import_file(
+    batch_id: int,
+    current_user: User = Depends(require_college_role),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    下載批次匯入的原始 Excel 檔案
+
+    **權限**: College 角色僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
+    """
+    from app.services.minio_service import MinIOService
+
+    # Get batch import
+    batch_import = await db.get(BatchImport, batch_id)
+    if not batch_import:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"批次匯入記錄 {batch_id} 不存在",
+        )
+
+    # Verify ownership (skip for super_admin)
+    if batch_import.importer_id != current_user.id and current_user.role != UserRole.super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅能下載自己上傳的批次匯入檔案",
+        )
+
+    # Check if file exists
+    if not batch_import.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="原始檔案不存在（可能是舊版本匯入或檔案已被刪除）",
+        )
+
+    # Get file from MinIO
+    try:
+        from app.core.config import settings
+
+        minio_service = MinIOService()
+        file_data = minio_service.get_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
+
+        # Determine content type
+        if batch_import.file_name.endswith(".xlsx"):
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        elif batch_import.file_name.endswith(".xls"):
+            content_type = "application/vnd.ms-excel"
+        else:
+            content_type = "text/csv"
+
+        # Return file as download
+        from urllib.parse import quote
+
+        encoded_filename = quote(batch_import.file_name, encoding="utf-8")
+
+        return StreamingResponse(
+            BytesIO(file_data),
+            media_type=content_type,
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
+        )
+    except Exception as e:
+        import logging
+
+        logging.error(f"Failed to download batch import file from MinIO: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="下載檔案時發生錯誤",
+        )
+
+
+@router.delete("/{batch_id}")
+async def delete_batch_import(
+    batch_id: int,
+    current_user: User = Depends(require_college_role),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    刪除批次匯入記錄及其所有相關申請
+
+    **權限**: College 角色僅能刪除自己上傳的批次，Admin/Super Admin 可刪除所有批次
+    """
+    import logging
+
+    from app.core.config import settings
+    from app.services.minio_service import MinIOService
+
+    logger = logging.getLogger(__name__)
+
+    # Get batch import with related applications
+    stmt = select(BatchImport).where(BatchImport.id == batch_id)
+    result = await db.execute(stmt)
+    batch_import = result.scalar_one_or_none()
+
+    if not batch_import:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"批次匯入記錄 {batch_id} 不存在",
+        )
+
+    # Verify ownership (skip for admin/super_admin)
+    if current_user.role not in [UserRole.admin, UserRole.super_admin]:
+        if batch_import.importer_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="僅能刪除自己上傳的批次匯入記錄",
+            )
+
+    # Get applications using explicit query (avoid lazy loading)
+    from app.models.application import Application
+
+    app_stmt = select(Application).where(Application.batch_import_id == batch_id)
+    app_result = await db.execute(app_stmt)
+    applications = app_result.scalars().all()
+
+    # Get application count for response
+    application_count = len(applications)
+
+    # Delete related applications
+    for application in applications:
+        await db.delete(application)
+
+    # Delete MinIO file if exists
+    if batch_import.file_path:
+        try:
+            minio_service = MinIOService()
+            minio_service.delete_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
+        except Exception as e:
+            logger.warning(f"Failed to delete batch import file from MinIO: {e}")
+            # Continue with batch deletion even if MinIO deletion fails
+
+    # Delete batch import record
+    await db.delete(batch_import)
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"成功刪除批次匯入記錄及其 {application_count} 個申請",
+        "data": {
+            "batch_id": batch_id,
+            "deleted_applications": application_count,
+        },
     }
 
 

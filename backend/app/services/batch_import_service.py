@@ -313,6 +313,96 @@ class BatchImportService:
 
         return False, None
 
+    async def bulk_validate_permissions_and_duplicates(
+        self,
+        student_ids: List[str],
+        college_code: str,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+    ) -> Tuple[Dict[str, Tuple[bool, Optional[str]]], Dict[str, Tuple[bool, Optional[str]]]]:
+        """
+        Bulk validate college permissions and check duplicates for multiple students
+
+        Returns:
+            Tuple of (permission_results, duplicate_results)
+            Each dict maps student_id to (is_valid/is_duplicate, error_message)
+        """
+        from app.models.student import Department
+
+        permission_results = {}
+        duplicate_results = {}
+
+        # Batch query: Get all students by student IDs
+        students_stmt = select(User).where(User.nycu_id.in_(student_ids))
+        students_result = await self.db.execute(students_stmt)
+        students = students_result.scalars().all()
+        student_map = {s.nycu_id: s for s in students}
+
+        # Find missing students
+        for student_id in student_ids:
+            if student_id not in student_map:
+                permission_results[student_id] = (False, f"查無學號 {student_id} 的學生資料")
+                duplicate_results[student_id] = (False, None)
+
+        # Get department info for permission validation
+        for student_id, student in student_map.items():
+            # Get student's department from raw_data JSON or dept_code column
+            if student.raw_data and isinstance(student.raw_data, dict):
+                student_dept = student.raw_data.get("deptCode") or student.dept_code
+            else:
+                student_dept = student.dept_code
+
+            if not student_dept:
+                permission_results[student_id] = (False, f"學生 {student_id} 無系所資料")
+                continue
+
+            # Get department college code
+            dept_stmt = select(Department).where(Department.code == student_dept)
+            dept_result = await self.db.execute(dept_stmt)
+            dept = dept_result.scalar_one_or_none()
+
+            if not dept:
+                permission_results[student_id] = (False, f"系所代碼 {student_dept} 不存在")
+                continue
+
+            # Validate college permission
+            if dept.college_code != college_code:
+                permission_results[student_id] = (
+                    False,
+                    f"學生 {student_id} 屬於 {dept.college_code} 學院，不屬於 {college_code} 學院",
+                )
+            else:
+                permission_results[student_id] = (True, None)
+
+        # Batch query: Check for duplicate applications
+        user_ids = [s.id for s in students]
+        if user_ids:
+            duplicates_stmt = select(Application).where(
+                Application.user_id.in_(user_ids),
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.semester == semester,
+            )
+            duplicates_result = await self.db.execute(duplicates_stmt)
+            duplicate_apps = duplicates_result.scalars().all()
+
+            # Map user_id to application
+            user_id_to_app = {app.user_id: app for app in duplicate_apps}
+
+            # Check each student for duplicates
+            for student_id, student in student_map.items():
+                if student.id in user_id_to_app:
+                    app = user_id_to_app[student.id]
+                    duplicate_results[student_id] = (
+                        True,
+                        f"學生 {student_id} 已有此獎學金的申請記錄 (APP-{app.id})",
+                    )
+                else:
+                    duplicate_results[student_id] = (False, None)
+
+        return permission_results, duplicate_results
+
     async def create_batch_import_record(
         self,
         importer_id: int,

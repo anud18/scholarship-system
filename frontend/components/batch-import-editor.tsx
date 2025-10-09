@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table";
 
 interface BatchImportEditorProps {
-  batchId: string;
+  batchId: number;
   previewData: Array<Record<string, any>>;
   validationErrors: Array<{
     row: number;

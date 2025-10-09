@@ -1,8 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useCallback, useEffect } from "react";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import { useNotificationCount } from "@/hooks/use-notification-count";
 
 interface NotificationContextValue {
   unreadCount: number;
@@ -16,19 +17,25 @@ const NotificationContext = createContext<NotificationContextValue | undefined>(
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const {
+    data,
+    mutate,
+  } = useNotificationCount(Boolean(user));
+
+  const unreadCount = user ? data ?? 0 : 0;
 
   // 獲取未讀通知數量
   const refreshUnreadCount = useCallback(async () => {
+    if (!user) {
+      return;
+    }
+
     try {
-      const response = await apiClient.notifications.getUnreadCount();
-      if (response.success) {
-        setUnreadCount(response.data || 0);
-      }
+      await mutate();
     } catch (err) {
       console.error("獲取未讀通知數量錯誤:", err);
     }
-  }, []);
+  }, [mutate, user]);
 
   // 標記單個通知為已讀
   const markAsRead = useCallback(async (notificationId: number) => {
@@ -36,7 +43,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const response = await apiClient.notifications.markAsRead(notificationId);
       if (response.success) {
         // 更新未讀數量
-        await refreshUnreadCount();
+        mutate(prev => Math.max((prev ?? 0) - 1, 0), false);
 
         // 發送事件通知其他元件
         window.dispatchEvent(new CustomEvent("notification-read", {
@@ -46,14 +53,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } catch (err) {
       console.error("標記已讀失敗:", err);
     }
-  }, [refreshUnreadCount]);
+  }, [mutate]);
 
   // 標記全部通知為已讀
   const markAllAsRead = useCallback(async () => {
     try {
       const response = await apiClient.notifications.markAllAsRead();
       if (response.success) {
-        setUnreadCount(0);
+        mutate(() => 0, false);
 
         // 發送事件通知其他元件
         window.dispatchEvent(new CustomEvent("notifications-all-read"));
@@ -61,45 +68,24 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } catch (err) {
       console.error("標記全部已讀失敗:", err);
     }
-  }, []);
+  }, [mutate]);
 
   // 通知 Panel 開啟
   const notifyPanelOpen = useCallback(() => {
     window.dispatchEvent(new CustomEvent("notification-panel-open"));
   }, []);
 
-  // 監聽用戶登入狀態，當用戶登入時自動刷新未讀通知數量
-  useEffect(() => {
-    if (user) {
-      // 用戶已登入，刷新未讀通知數量
-      refreshUnreadCount();
-    }
-  }, [user, refreshUnreadCount]);
-
-  // 初始載入時取得未讀數量（作為備用機制）
-  useEffect(() => {
-    refreshUnreadCount();
-  }, [refreshUnreadCount]);
-
-  // 監聽 notification panel 開啟事件，當面板開啟時刷新未讀數量
+  // 當通知面板開啟時重新取得未讀數量
   useEffect(() => {
     const handlePanelOpen = () => {
-      refreshUnreadCount();
+      if (user) {
+        void mutate();
+      }
     };
 
     window.addEventListener("notification-panel-open", handlePanelOpen);
     return () => window.removeEventListener("notification-panel-open", handlePanelOpen);
-  }, [refreshUnreadCount]);
-
-  // 監聽頁面焦點變化，當用戶切回視窗時刷新未讀數量
-  useEffect(() => {
-    const handleFocus = () => {
-      refreshUnreadCount();
-    };
-
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
-  }, [refreshUnreadCount]);
+  }, [mutate, user]);
 
   const value: NotificationContextValue = {
     unreadCount,

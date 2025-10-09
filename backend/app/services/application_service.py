@@ -609,6 +609,9 @@ class ApplicationService:
                 selectinload(Application.scholarship_configuration).selectinload(
                     ScholarshipConfiguration.scholarship_type
                 ),
+                selectinload(Application.scholarship).selectinload(
+                    ScholarshipType.sub_type_configs
+                ),  # Preload scholarship with sub_type_configs for labels
                 selectinload(Application.student),
             )
             .where(Application.id == application_id)
@@ -701,6 +704,10 @@ class ApplicationService:
             scholarship_name = application.scholarship_configuration.config_name
             amount = application.scholarship_configuration.amount
             currency = application.scholarship_configuration.currency or "TWD"
+        elif application.scholarship:  # Fallback for batch import applications without scholarship_configuration
+            scholarship_type_name = application.scholarship.code
+            scholarship_type_zh = application.scholarship.name
+            scholarship_name = application.scholarship.name
 
         # Extract student name and student number from student_data
         student_name = None
@@ -717,6 +724,16 @@ class ApplicationService:
                 if not student_no:
                     student_no = application.student.nycu_id
 
+        # Build sub_type labels from scholarship.sub_type_configs
+        sub_type_labels = {}
+        if application.scholarship and hasattr(application.scholarship, "sub_type_configs"):
+            for config in application.scholarship.sub_type_configs:
+                if config.is_active:
+                    sub_type_labels[config.sub_type_code] = {
+                        "zh": config.name,
+                        "en": config.name_en or config.name,
+                    }
+
         # Build ApplicationResponse with all the original fields plus display fields
         response_data = {
             # Original Application fields
@@ -726,6 +743,7 @@ class ApplicationService:
             "student_id": application.student.nycu_id if application.student else None,
             "scholarship_type_id": application.scholarship_type_id,
             "scholarship_subtype_list": application.scholarship_subtype_list or [],
+            "sub_type_labels": sub_type_labels,
             "status": application.status,
             "status_name": application.status_name,
             "is_renewal": application.is_renewal,
@@ -1538,12 +1556,19 @@ class ApplicationService:
         if current_user.role == UserRole.student:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only delete your own applications")
+            # Students can only delete draft applications
+            if application.status != ApplicationStatus.draft.value:
+                raise ValidationError("Only draft applications can be deleted")
+        elif current_user.role == UserRole.college:
+            # College users can delete batch-imported applications they created
+            if application.import_source == "batch_import" and application.imported_by_id == current_user.id:
+                # Can delete batch-imported applications
+                pass
+            else:
+                raise AuthorizationError("College users can only delete batch-imported applications they created")
         elif current_user.role not in [UserRole.admin, UserRole.super_admin]:
             raise AuthorizationError("You don't have permission to delete applications")
-
-        # Only draft applications can be deleted
-        if application.status != ApplicationStatus.draft.value:
-            raise ValidationError("Only draft applications can be deleted")
+        # Admin and super_admin can delete any application (no status restriction)
 
         # Delete associated files from MinIO if they exist
         if application.submitted_form_data and "documents" in application.submitted_form_data:

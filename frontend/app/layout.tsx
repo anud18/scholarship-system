@@ -4,7 +4,8 @@ import "./globals.css";
 import { AuthProvider } from "@/hooks/use-auth";
 import { NotificationProvider } from "@/contexts/notification-context";
 import { QueryProvider } from "@/components/providers/query-provider";
-import { DebugPanel } from "@/components/debug-panel";
+import { DebugPanelWrapper } from "@/components/debug-panel-wrapper";
+import { SWRProvider } from "@/components/providers/swr-provider";
 
 export const metadata: Metadata = {
   title: "獎學金申請與簽核系統 | 國立陽明交通大學教務處",
@@ -41,12 +42,14 @@ export default function RootLayout({
     <html lang="zh-TW" className="scroll-smooth">
       <body className="antialiased">
         <QueryProvider>
-          <AuthProvider>
-            <NotificationProvider>
-              {children}
-              <DebugPanel />
-            </NotificationProvider>
-          </AuthProvider>
+          <SWRProvider>
+            <AuthProvider>
+              <NotificationProvider>
+                {children}
+                <DebugPanelWrapper />
+              </NotificationProvider>
+            </AuthProvider>
+          </SWRProvider>
         </QueryProvider>
       </body>
     </html>

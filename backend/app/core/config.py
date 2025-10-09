@@ -78,6 +78,9 @@ class Settings(BaseSettings):
 
     # Redis Cache
     redis_url: str = "redis://localhost:6379/0"
+
+    # Scheduler Control
+    enable_scheduler: bool = True  # Default: enabled for production
     cache_ttl: int = 600  # 10 minutes
 
     # Logging
@@ -213,6 +216,32 @@ class Settings(BaseSettings):
         """Ensure upload directory exists"""
         os.makedirs(v, exist_ok=True)
         return v
+
+    @property
+    def should_start_scheduler(self) -> bool:
+        """
+        Determine if scheduler should start based on context.
+
+        Scheduler is disabled in the following cases:
+        - Running pytest tests (PYTEST_CURRENT_TEST env var)
+        - Running Alembic migrations (sys.argv contains 'alembic')
+        - Explicitly disabled via ENABLE_SCHEDULER env var
+        """
+        import sys
+
+        # Check if running in pytest
+        if os.getenv("PYTEST_CURRENT_TEST"):
+            return False
+
+        # Check if explicitly disabled
+        if not self.enable_scheduler:
+            return False
+
+        # Check if running Alembic migrations
+        if "alembic" in sys.argv:
+            return False
+
+        return True
 
     @field_validator("roster_template_dir", mode="before")
     @classmethod

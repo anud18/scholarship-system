@@ -290,42 +290,6 @@ async def get_application_files(
                 }
                 files_with_urls.append(file_dict)
 
-    # 如果 submitted_form_data.documents 中沒有文件資訊，嘗試從獨立的 files 欄位獲取（向後兼容）
-    if not files_with_urls and application.files:
-        # Generate a temporary token for file access
-        from app.core.config import settings
-        from app.core.security import create_access_token
-
-        token_data = {"sub": str(current_user.id)}
-        access_token = create_access_token(token_data)
-
-        for file in application.files:
-            file_dict = {
-                "id": file.id,
-                "filename": file.filename,
-                "original_filename": file.original_filename,
-                "file_size": file.file_size,
-                "mime_type": file.mime_type,
-                "file_type": file.file_type,
-                "is_verified": file.is_verified,
-                "uploaded_at": file.uploaded_at,
-            }
-
-            # Generate backend proxy URLs instead of MinIO direct URLs
-            if file.object_name:
-                base_url = f"{settings.base_url}{settings.api_v1_str}"
-                file_dict[
-                    "file_path"
-                ] = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
-                file_dict[
-                    "download_url"
-                ] = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
-            else:
-                file_dict["file_path"] = None
-                file_dict["download_url"] = None
-
-            files_with_urls.append(file_dict)
-
     return {
         "success": True,
         "message": "Files retrieved successfully",

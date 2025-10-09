@@ -66,12 +66,17 @@ LOGGER = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI):
     """Manage application lifespan events"""  # pylint: disable=unused-argument
     # Startup
+    scheduler_started = False
     try:
         LOGGER.info("Starting application...")
 
-        # Initialize the roster scheduler
-        await init_scheduler()
-        LOGGER.info("Roster scheduler initialized")
+        # Conditionally initialize the roster scheduler
+        if settings.should_start_scheduler:
+            await init_scheduler()
+            scheduler_started = True
+            LOGGER.info("Roster scheduler initialized")
+        else:
+            LOGGER.info("Roster scheduler disabled (test/CLI mode or explicitly disabled)")
 
         yield
 
@@ -81,11 +86,12 @@ async def lifespan(_app: FastAPI):
     finally:
         # Shutdown
         LOGGER.info("Shutting down application...")
-        try:
-            await shutdown_scheduler()
-            LOGGER.info("Roster scheduler shut down")
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            LOGGER.exception("Error during scheduler shutdown: %s", exc)
+        if scheduler_started:
+            try:
+                await shutdown_scheduler()
+                LOGGER.info("Roster scheduler shut down")
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                LOGGER.exception("Error during scheduler shutdown: %s", exc)
 
 
 app = FastAPI(

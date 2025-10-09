@@ -40,17 +40,8 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   const { user, token } = useAuth();
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Only show when explicitly enabled via environment variable or in test mode
-  const isTestEnvironment = () => {
-    if (typeof window === 'undefined') return false;
-    const hostname = window.location.hostname;
-    return hostname.includes("test") || hostname.includes("staging") || hostname.includes("localhost") || hostname === "140.113.7.148";
-  };
-
-  const shouldShow =
-    isTestMode ||
-    process.env.NODE_ENV === "development" ||
-    isTestEnvironment();
+  // Component only renders when NEXT_PUBLIC_ENABLE_DEBUG_PANEL is true (controlled by parent)
+  // No need for runtime environment checks - tree-shaken out in production builds
 
   // Handle modal focus management and escape key
   useEffect(() => {
@@ -270,8 +261,8 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   };
 
   useEffect(() => {
-    if (!shouldShow || !token) {
-      console.log("🔍 Debug Panel: No token available or not in debug mode");
+    if (!token) {
+      console.log("🔍 Debug Panel: No token available");
       return;
     }
 
@@ -351,9 +342,9 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
           .map((part, i) => `Part ${i}: ${part.substring(0, 20)}...`)
       );
     }
-  }, [token, shouldShow]);
+  }, [token]);
 
-  if (!shouldShow) return null;
+  if (!token) return null;
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);

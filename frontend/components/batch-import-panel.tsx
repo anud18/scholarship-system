@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useTransition } from "react";
 import { apiClient } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,11 @@ import {
   Eye,
   History,
   X,
+  Trash2,
 } from "lucide-react";
+import { BatchDocumentUpload } from "@/components/batch-document-upload";
+import { BatchApplicationFileUpload } from "@/components/batch-application-file-upload";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface BatchImportPanelProps {
   locale?: "zh" | "en";
@@ -60,20 +64,23 @@ interface UploadedBatch {
 }
 
 interface ImportHistoryItem {
-  id: string;
+  id: number;
   file_name: string;
-  uploaded_by: number;
-  uploaded_at: string;
+  importer_name?: string;
+  created_at: string;
   total_records: number;
   success_count: number;
   failed_count: number;
-  status: "pending" | "completed" | "failed";
-  scholarship_type: string;
+  import_status: string;
+  scholarship_type_id?: number;
+  college_code: string;
   academic_year: number;
-  semester: string;
+  semester: string | null;
 }
 
 export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
+  const [isPending, startTransition] = useTransition();
+  const abortControllerRef = React.useRef<AbortController | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [scholarships, setScholarships] = useState<Scholarship[]>([]);
   const [selectedScholarship, setSelectedScholarship] = useState<Scholarship | null>(null);
@@ -83,6 +90,11 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [uploadedBatch, setUploadedBatch] = useState<UploadedBatch | null>(null);
+  const [confirmedBatch, setConfirmedBatch] = useState<{
+    id: number;
+    name: string;
+    applicationIds: number[];
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -105,6 +117,16 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
       setSelectedPeriod("");
     }
   }, [selectedScholarship]);
+
+  // Cleanup: Abort pending requests on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   const fetchScholarships = async () => {
     setIsLoadingScholarships(true);
@@ -256,8 +278,16 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
             ? `匯入完成！成功: ${response.data.success_count}, 失敗: ${response.data.failed_count}`
             : `Import complete! Success: ${response.data.success_count}, Failed: ${response.data.failed_count}`
         );
-        setUploadedBatch(null);
-        fetchHistory();
+        // Batch state updates to prevent race conditions and UI flicker
+        startTransition(() => {
+          setConfirmedBatch({
+            id: uploadedBatch.batch_id,
+            name: uploadedBatch.file_name,
+            applicationIds: response.data?.created_application_ids || [],
+          });
+          setUploadedBatch(null);
+          fetchHistory();
+        });
       } else {
         setError(response.message || (locale === "zh" ? "確認匯入失敗" : "Confirm import failed"));
       }
@@ -269,9 +299,80 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
   };
 
   const handleCancel = () => {
+    // Abort any pending API requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    // Release file object if it exists
+    if (selectedFile) {
+      // If the file object has a URL, revoke it to free memory
+      // Note: This is for files created with createObjectURL, not File objects from input
+      // But we still set it to null to release the reference
+      setSelectedFile(null);
+    }
+
+    // Clear state
     setUploadedBatch(null);
-    setSelectedFile(null);
     setError(null);
+    setIsUploading(false);
+    setIsConfirming(false);
+  };
+
+  const handleViewBatch = async (batchId: number, batchName: string) => {
+    try {
+      const response = await apiClient.batchImport.getDetails(batchId);
+      if (response.success && response.data) {
+        setConfirmedBatch({
+          id: batchId,
+          name: batchName,
+          applicationIds: response.data.created_applications || [],
+        });
+        // Scroll to document upload section
+        setTimeout(() => {
+          const uploadSection = document.getElementById('document-upload-section');
+          if (uploadSection) {
+            uploadSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+      }
+    } catch (error: any) {
+      setError(
+        error.message || (locale === "zh" ? "獲取批次詳情失敗" : "Failed to get batch details")
+      );
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: number, applicationCount: number) => {
+    const confirmMessage =
+      locale === "zh"
+        ? `確定要刪除此批次嗎？這將刪除 ${applicationCount} 個申請，此操作無法復原。`
+        : `Are you sure you want to delete this batch? This will delete ${applicationCount} applications. This action cannot be undone.`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.batchImport.deleteBatch(batchId);
+      if (response.success) {
+        // Clear confirmedBatch if it's the one being deleted
+        if (confirmedBatch?.id === batchId) {
+          setConfirmedBatch(null);
+        }
+        // Refresh history
+        await fetchHistory();
+        alert(
+          response.message ||
+            (locale === "zh" ? "批次刪除成功" : "Batch deleted successfully")
+        );
+      }
+    } catch (error: any) {
+      setError(
+        error.message || (locale === "zh" ? "刪除批次失敗" : "Failed to delete batch")
+      );
+    }
   };
 
   const renderPreviewTable = () => {
@@ -610,28 +711,70 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                       <th className="px-4 py-2 text-left text-sm font-semibold">{locale === "zh" ? "成功" : "Success"}</th>
                       <th className="px-4 py-2 text-left text-sm font-semibold">{locale === "zh" ? "失敗" : "Failed"}</th>
                       <th className="px-4 py-2 text-left text-sm font-semibold">{locale === "zh" ? "狀態" : "Status"}</th>
+                      <th className="px-4 py-2 text-left text-sm font-semibold">{locale === "zh" ? "操作" : "Actions"}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {history.map((item) => (
                       <tr key={item.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2 text-sm">{item.file_name}</td>
-                        <td className="px-4 py-2 text-sm">{new Date(item.uploaded_at).toLocaleString()}</td>
+                        <td className="px-4 py-2 text-sm">{new Date(item.created_at).toLocaleString()}</td>
                         <td className="px-4 py-2 text-sm">{item.total_records}</td>
                         <td className="px-4 py-2 text-sm text-green-600">{item.success_count}</td>
                         <td className="px-4 py-2 text-sm text-red-600">{item.failed_count}</td>
                         <td className="px-4 py-2 text-sm">
                           <span
                             className={`px-2 py-1 rounded text-xs font-semibold ${
-                              item.status === "completed"
+                              item.import_status === "completed"
                                 ? "bg-green-100 text-green-800"
-                                : item.status === "failed"
+                                : item.import_status === "failed"
                                 ? "bg-red-100 text-red-800"
                                 : "bg-yellow-100 text-yellow-800"
                             }`}
                           >
-                            {item.status === "completed" ? (locale === "zh" ? "完成" : "Completed") : item.status === "failed" ? (locale === "zh" ? "失敗" : "Failed") : (locale === "zh" ? "待處理" : "Pending")}
+                            {item.import_status === "completed" ? (locale === "zh" ? "完成" : "Completed") : item.import_status === "failed" ? (locale === "zh" ? "失敗" : "Failed") : (locale === "zh" ? "待處理" : "Pending")}
                           </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewBatch(item.id, item.file_name)}
+                              title={locale === "zh" ? "查看/上傳文件" : "View/Upload Files"}
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await apiClient.batchImport.downloadFile(item.id);
+                                } catch (error: any) {
+                                  setError(
+                                    error.message ||
+                                      (locale === "zh"
+                                        ? "下載檔案失敗"
+                                        : "Failed to download file")
+                                  );
+                                }
+                              }}
+                              title={locale === "zh" ? "下載原始檔案" : "Download original file"}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteBatch(item.id, item.total_records)}
+                              title={locale === "zh" ? "刪除批次" : "Delete batch"}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -639,6 +782,55 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                 </table>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Document Upload Section */}
+      {confirmedBatch && (
+        <Card id="document-upload-section" className="border-nycu-blue-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-nycu-navy-800">
+              <Upload className="h-5 w-5 text-nycu-blue-600" />
+              {locale === "zh" ? "上傳申請文件" : "Upload Application Documents"}
+            </CardTitle>
+            <CardDescription>
+              {locale === "zh"
+                ? `為批次 "${confirmedBatch.name}" 的 ${confirmedBatch.applicationIds.length} 個申請上傳文件`
+                : `Upload documents for ${confirmedBatch.applicationIds.length} applications in batch "${confirmedBatch.name}"`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="individual" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="individual">
+                  {locale === "zh" ? "個別上傳" : "Individual Upload"}
+                </TabsTrigger>
+                <TabsTrigger value="batch">
+                  {locale === "zh" ? "批次 ZIP 上傳" : "Batch ZIP Upload"}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="individual" className="mt-4">
+                <BatchApplicationFileUpload
+                  applicationIds={confirmedBatch.applicationIds}
+                  onUploadComplete={() => {
+                    // Don't close the panel, allow uploading more files
+                    // Just refresh the data
+                    fetchHistory();
+                  }}
+                  locale={locale}
+                />
+              </TabsContent>
+              <TabsContent value="batch" className="mt-4">
+                <BatchDocumentUpload
+                  batchId={confirmedBatch.id}
+                  onUploadComplete={() => {
+                    fetchHistory();
+                  }}
+                  locale={locale}
+                />
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       )}
