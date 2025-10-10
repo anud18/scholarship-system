@@ -29,7 +29,7 @@ class EmailAutomationService:
             stmt = (
                 select(EmailAutomationRule)
                 .where(EmailAutomationRule.trigger_event == TriggerEvent(trigger_event))
-                .where(EmailAutomationRule.is_active == True)
+                .where(EmailAutomationRule.is_active)
             )
 
             result = await db.execute(stmt)

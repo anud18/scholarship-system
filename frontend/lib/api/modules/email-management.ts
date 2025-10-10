@@ -1,5 +1,5 @@
 /**
- * Email Management API Module
+ * Email Management API Module (OpenAPI-typed)
  *
  * Handles email history, scheduling, and test mode:
  * - Email history and tracking
@@ -7,10 +7,13 @@
  * - Email approval workflows
  * - Test mode configuration
  * - Audit logging
+ *
+ * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import type { ApiClient } from '../client';
-import type { ApiResponse } from '../../api';
+import { typedClient } from '../typed-client';
+import { toApiResponse } from '../compat';
+import type { ApiResponse } from '../../api.legacy';
 
 type EmailHistoryParams = {
   skip?: number;
@@ -81,106 +84,117 @@ type SimpleTestEmailParams = {
   body: string;
 };
 
-export function createEmailManagementApi(client: ApiClient) {
+export function createEmailManagementApi() {
   return {
     /**
      * Get email history with filters
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getEmailHistory: async (
       params?: EmailHistoryParams
     ): Promise<ApiResponse<PaginatedEmailResponse>> => {
-      return client.request("/email-management/history", {
-        method: "GET",
-        params,
+      const response = await typedClient.raw.GET('/api/v1/email-management/history', {
+        params: { query: params as any },
       });
+      return toApiResponse<PaginatedEmailResponse>(response);
     },
 
     /**
      * Get scheduled emails with filters
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getScheduledEmails: async (
       params?: ScheduledEmailParams
     ): Promise<ApiResponse<PaginatedEmailResponse>> => {
-      return client.request("/email-management/scheduled", {
-        method: "GET",
-        params,
+      const response = await typedClient.raw.GET('/api/v1/email-management/scheduled', {
+        params: { query: params as any },
       });
+      return toApiResponse<PaginatedEmailResponse>(response);
     },
 
     /**
      * Get due scheduled emails (superadmin only)
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getDueScheduledEmails: async (
       limit?: number
     ): Promise<ApiResponse<any[]>> => {
-      const params = limit ? { limit } : {};
-      return client.request("/email-management/scheduled/due", {
-        method: "GET",
-        params,
+      const response = await typedClient.raw.GET('/api/v1/email-management/scheduled/due', {
+        params: { query: { limit } },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Approve scheduled email
+     * Type-safe: Path parameter and request body validated against OpenAPI
      */
     approveScheduledEmail: async (
       emailId: number,
       approvalNotes?: string
     ): Promise<ApiResponse<any>> => {
-      return client.request(`/email-management/scheduled/${emailId}/approve`, {
-        method: "PATCH",
-        body: JSON.stringify({
+      const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}/approve', {
+        params: { path: { email_id: emailId } },
+        body: {
           approval_notes: approvalNotes,
-        }),
+        },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Cancel scheduled email
+     * Type-safe: Path parameter validated against OpenAPI
      */
     cancelScheduledEmail: async (
       emailId: number
     ): Promise<ApiResponse<any>> => {
-      return client.request(`/email-management/scheduled/${emailId}/cancel`, {
-        method: "PATCH",
+      const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}/cancel', {
+        params: { path: { email_id: emailId } },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Update scheduled email
+     * Type-safe: Path parameter and request body validated against OpenAPI
      */
     updateScheduledEmail: async (
       emailId: number,
       data: { subject: string; body: string }
     ): Promise<ApiResponse<any>> => {
-      return client.request(`/email-management/scheduled/${emailId}`, {
-        method: "PATCH",
-        body: JSON.stringify(data),
+      const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}', {
+        params: { path: { email_id: emailId } },
+        body: data,
       });
+      return toApiResponse(response);
     },
 
     /**
      * Process due emails (superadmin only)
+     * Type-safe: Query parameters validated against OpenAPI
      */
     processDueEmails: async (
       batchSize?: number
     ): Promise<ApiResponse<ProcessDueEmailsResult>> => {
-      const params = batchSize ? { batch_size: batchSize } : {};
-      return client.request("/email-management/scheduled/process", {
-        method: "POST",
-        params,
+      const response = await typedClient.raw.POST('/api/v1/email-management/scheduled/process', {
+        params: { query: { batch_size: batchSize } },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Get email categories
+     * Type-safe: Response type inferred from OpenAPI
      */
     getEmailCategories: async (): Promise<ApiResponse<string[]>> => {
-      return client.request("/email-management/categories");
+      const response = await typedClient.raw.GET('/api/v1/email-management/categories');
+      return toApiResponse(response);
     },
 
     /**
      * Get email and schedule statuses
+     * Type-safe: Response type inferred from OpenAPI
      */
     getEmailStatuses: async (): Promise<
       ApiResponse<{
@@ -188,18 +202,22 @@ export function createEmailManagementApi(client: ApiClient) {
         schedule_statuses: string[];
       }>
     > => {
-      return client.request("/email-management/statuses");
+      const response = await typedClient.raw.GET('/api/v1/email-management/statuses');
+      return toApiResponse(response);
     },
 
     /**
      * Get test mode status
+     * Type-safe: Response type inferred from OpenAPI
      */
     getTestModeStatus: async (): Promise<ApiResponse<TestModeStatus>> => {
-      return client.request("/email-management/test-mode/status");
+      const response = await typedClient.raw.GET('/api/v1/email-management/test-mode/status');
+      return toApiResponse(response);
     },
 
     /**
      * Enable test mode
+     * Type-safe: Query parameters validated against OpenAPI
      */
     enableTestMode: async (
       params: TestModeEnableParams
@@ -209,31 +227,31 @@ export function createEmailManagementApi(client: ApiClient) {
         ? params.redirect_emails.join(",")
         : params.redirect_emails;
 
-      const queryParams = new URLSearchParams({
-        redirect_emails: emailsStr,
-        duration_hours: (params.duration_hours || 24).toString(),
+      const response = await typedClient.raw.POST('/api/v1/email-management/test-mode/enable', {
+        params: {
+          query: {
+            redirect_emails: emailsStr,
+            duration_hours: params.duration_hours || 24,
+          },
+        },
       });
-      return client.request(
-        `/email-management/test-mode/enable?${queryParams.toString()}`,
-        {
-          method: "POST",
-        }
-      );
+      return toApiResponse(response);
     },
 
     /**
      * Disable test mode
+     * Type-safe: Response type inferred from OpenAPI
      */
     disableTestMode: async (): Promise<
       ApiResponse<TestModeStatus & { disabled_by: number; disabled_at: string }>
     > => {
-      return client.request("/email-management/test-mode/disable", {
-        method: "POST",
-      });
+      const response = await typedClient.raw.POST('/api/v1/email-management/test-mode/disable');
+      return toApiResponse(response);
     },
 
     /**
      * Get test mode audit logs
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getTestModeAuditLogs: async (params?: {
       limit?: number;
@@ -244,14 +262,15 @@ export function createEmailManagementApi(client: ApiClient) {
         total: number;
       }>
     > => {
-      return client.request("/email-management/test-mode/audit", {
-        method: "GET",
-        params,
+      const response = await typedClient.raw.GET('/api/v1/email-management/test-mode/audit', {
+        params: { query: params },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Send simple test email
+     * Type-safe: Request body validated against OpenAPI
      */
     sendSimpleTestEmail: async (
       params: SimpleTestEmailParams
@@ -263,10 +282,10 @@ export function createEmailManagementApi(client: ApiClient) {
         error?: string;
       }>
     > => {
-      return client.request("/email-management/send-simple-test", {
-        method: "POST",
-        body: JSON.stringify(params),
+      const response = await typedClient.raw.POST('/api/v1/email-management/send-simple-test', {
+        body: params,
       });
+      return toApiResponse(response);
     },
   };
 }

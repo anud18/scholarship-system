@@ -80,9 +80,9 @@ async def get_all_configurations(
         )
 
 
-@router.get("/{config_key}")
+@router.get("/{id}")
 async def get_configuration(
-    config_key: str,
+    id: str,
     include_sensitive: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
@@ -93,10 +93,10 @@ async def get_configuration(
     config_service = ConfigurationService(db)
 
     try:
-        configuration = await config_service.get_configuration(config_key)
+        configuration = await config_service.get_configuration(id)
         if not configuration:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{config_key}' not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{id}' not found"
             )
 
         # Convert to response model with display logic
@@ -127,7 +127,7 @@ async def get_configuration(
 
         return {
             "success": True,
-            "message": f"Retrieved configuration '{config_key}'",
+            "message": f"Retrieved configuration '{id}'",
             "data": config_data,
             "errors": None,
             "trace_id": None,
@@ -200,9 +200,9 @@ async def create_configuration(
         )
 
 
-@router.put("/{config_key}")
+@router.put("/{id}")
 async def update_configuration(
-    config_key: str,
+    id: str,
     configuration: SystemSettingUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
@@ -214,14 +214,14 @@ async def update_configuration(
 
     try:
         # Check if configuration exists
-        existing = await config_service.get_configuration(config_key)
+        existing = await config_service.get_configuration(id)
         if not existing:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{config_key}' not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{id}' not found"
             )
 
         updated_configuration = await config_service.set_configuration(
-            key=config_key,
+            key=id,
             value=configuration.value if configuration.value is not None else existing.value,
             category=configuration.category if configuration.category is not None else existing.category,
             data_type=configuration.data_type if configuration.data_type is not None else existing.data_type,
@@ -266,9 +266,9 @@ async def update_configuration(
         )
 
 
-@router.delete("/{config_key}")
+@router.delete("/{id}")
 async def delete_configuration(
-    config_key: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
+    id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """
     刪除系統配置
@@ -277,13 +277,13 @@ async def delete_configuration(
 
     try:
         # Check if configuration exists
-        existing = await config_service.get_configuration(config_key)
+        existing = await config_service.get_configuration(id)
         if not existing:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{config_key}' not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{id}' not found"
             )
 
-        success = await config_service.delete_configuration(config_key, current_user.id)
+        success = await config_service.delete_configuration(id, current_user.id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete configuration"

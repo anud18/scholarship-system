@@ -126,8 +126,8 @@ export default function TestUsersPage() {
                   <p className="text-2xl font-bold">{userStats.total_users}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">活躍用戶</p>
-                  <p className="text-2xl font-bold">{userStats.active_users}</p>
+                  <p className="text-sm text-gray-600">在職用戶</p>
+                  <p className="text-2xl font-bold">{userStats.status_distribution?.['在職'] || 0}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-600">學生用戶</p>

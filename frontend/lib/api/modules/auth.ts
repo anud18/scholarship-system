@@ -1,20 +1,25 @@
 /**
- * Authentication API Module
+ * Authentication API Module (OpenAPI-typed)
  *
  * Handles user authentication including:
  * - Login/logout
  * - User registration
  * - Token management
  * - Mock SSO for development
+ *
+ * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import type { ApiClient } from '../client';
-import type { ApiResponse, User } from '../../api'; // Import from main api.ts for now
+import { typedClient } from '../typed-client';
+import { toApiResponse } from '../compat';
+import type { ApiResponse, User } from '../../api.legacy';
 
-export function createAuthApi(client: ApiClient) {
+export function createAuthApi() {
   return {
     /**
      * Login with username and password
+     *
+     * Type-safe: Parameters and response types inferred from OpenAPI schema
      */
     login: async (
       username: string,
@@ -27,17 +32,23 @@ export function createAuthApi(client: ApiClient) {
         user: User;
       }>
     > => {
-      const response = await client.request("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ username, password }),
+      const response = await typedClient.raw.POST('/api/v1/auth/login', {
+        body: { username, password },
       });
 
+      const apiResponse = toApiResponse<{
+        access_token: string;
+        token_type: string;
+        expires_in: number;
+        user: User;
+      }>(response);
+
       // Store token after successful login
-      if (response.success && response.data?.access_token) {
-        client.setToken(response.data.access_token);
+      if (apiResponse.success && apiResponse.data?.access_token) {
+        typedClient.setToken(apiResponse.data.access_token);
       }
 
-      return response;
+      return apiResponse;
     },
 
     /**
@@ -45,20 +56,22 @@ export function createAuthApi(client: ApiClient) {
      */
     logout: async (): Promise<ApiResponse<void>> => {
       // Optional: call backend logout endpoint if needed
-      // await client.request("/auth/logout", { method: "POST" });
+      // const response = await typedClient.raw.POST('/api/v1/auth/logout', {});
 
       // Clear local token
-      client.clearToken();
+      typedClient.clearToken();
 
       return {
         success: true,
-        message: "Logged out successfully",
+        message: 'Logged out successfully',
         data: undefined,
       };
     },
 
     /**
      * Register a new user
+     *
+     * Type-safe: Request body validated against OpenAPI schema
      */
     register: async (userData: {
       username: string;
@@ -66,46 +79,57 @@ export function createAuthApi(client: ApiClient) {
       password: string;
       full_name: string;
     }): Promise<ApiResponse<User>> => {
-      return client.request("/auth/register", {
-        method: "POST",
-        body: JSON.stringify(userData),
+      const response = await typedClient.raw.POST('/api/v1/auth/register', {
+        body: userData as any, // TODO: Update OpenAPI schema for registration endpoint
       });
+
+      return toApiResponse<User>(response);
     },
 
     /**
      * Get current authenticated user
+     *
+     * Type-safe: Response type inferred from OpenAPI schema
      */
     getCurrentUser: async (): Promise<ApiResponse<User>> => {
-      return client.request("/auth/me");
+      const response = await typedClient.raw.GET('/api/v1/auth/me');
+      return toApiResponse<User>(response);
     },
 
     /**
      * Refresh authentication token
+     *
+     * Type-safe: Response includes access_token and token_type
      */
     refreshToken: async (): Promise<
       ApiResponse<{ access_token: string; token_type: string }>
     > => {
-      const response = await client.request("/auth/refresh", {
-        method: "POST",
-      });
+      const response = await typedClient.raw.POST('/api/v1/auth/refresh', {});
+
+      const apiResponse = toApiResponse<{ access_token: string; token_type: string }>(response);
 
       // Update token after successful refresh
-      if (response.success && response.data?.access_token) {
-        client.setToken(response.data.access_token);
+      if (apiResponse.success && apiResponse.data?.access_token) {
+        typedClient.setToken(apiResponse.data.access_token);
       }
 
-      return response;
+      return apiResponse;
     },
 
     /**
      * Get list of mock SSO users (development only)
+     *
+     * Type-safe: Response array type inferred from OpenAPI
      */
     getMockUsers: async (): Promise<ApiResponse<any[]>> => {
-      return client.request("/auth/mock-sso/users");
+      const response = await typedClient.raw.GET('/api/v1/auth/mock-sso/users');
+      return toApiResponse<any[]>(response);
     },
 
     /**
      * Login using mock SSO (development only)
+     *
+     * Type-safe: Request body and response validated
      */
     mockSSOLogin: async (
       nycu_id: string
@@ -117,17 +141,23 @@ export function createAuthApi(client: ApiClient) {
         user: User;
       }>
     > => {
-      const response = await client.request("/auth/mock-sso/login", {
-        method: "POST",
-        body: JSON.stringify({ nycu_id }),
+      const response = await typedClient.raw.POST('/api/v1/auth/mock-sso/login', {
+        body: { nycu_id },
       });
 
+      const apiResponse = toApiResponse<{
+        access_token: string;
+        token_type: string;
+        expires_in: number;
+        user: User;
+      }>(response);
+
       // Store token after successful mock login
-      if (response.success && response.data?.access_token) {
-        client.setToken(response.data.access_token);
+      if (apiResponse.success && apiResponse.data?.access_token) {
+        typedClient.setToken(apiResponse.data.access_token);
       }
 
-      return response;
+      return apiResponse;
     },
   };
 }

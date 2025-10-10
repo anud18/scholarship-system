@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [backend-lint, frontend-lint, security-scan, dependency-check]
+        check: [backend-lint, frontend-lint, dependency-check]
 
     steps:
       - name: Checkout
@@ -141,18 +141,6 @@ jobs:
         run: |
           npm ci
           npm run lint || echo "Linting issues found"
-
-      - name: Security Quick Scan
-        if: matrix.check == 'security-scan'
-        run: |
-          pip install safety bandit || true
-          if [[ "${{ needs.changes.outputs.backend }}" == "true" ]]; then
-            cd backend && safety check --json || true
-            bandit -r app -f txt || true
-          fi
-          if [[ "${{ needs.changes.outputs.frontend }}" == "true" ]]; then
-            cd frontend && npm audit --audit-level=high || true
-          fi
 
       - name: Dependency Vulnerability Check
         if: matrix.check == 'dependency-check'

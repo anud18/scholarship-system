@@ -1,5 +1,5 @@
 /**
- * Batch Import API Module
+ * Batch Import API Module (OpenAPI-typed)
  *
  * Handles bulk application data import for college administrators:
  * - Upload and validate Excel/CSV files
@@ -7,10 +7,14 @@
  * - Confirm batch imports
  * - View import history and details
  * - Download import templates
+ *
+ * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import type { ApiClient } from '../client';
-import type { ApiResponse } from '../../api';
+import { typedClient } from '../typed-client';
+import { toApiResponse } from '../compat';
+import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
+import type { ApiResponse } from '../../api.legacy';
 
 type BatchUploadResult = {
   batch_id: number;
@@ -119,10 +123,11 @@ type BatchDetails = BatchHistoryItem & {
   }>;
 };
 
-export function createBatchImportApi(client: ApiClient) {
+export function createBatchImportApi() {
   return {
     /**
      * Upload and validate batch import data file
+     * Type-safe: FormData upload with query parameters validated
      */
     uploadData: async (
       file: File,
@@ -130,131 +135,140 @@ export function createBatchImportApi(client: ApiClient) {
       academicYear: number,
       semester: string
     ): Promise<ApiResponse<BatchUploadResult>> => {
-      const formData = new FormData();
-      formData.append("file", file);
+      const formData = createFileUploadFormData({ file });
 
-      return client.request("/college/batch-import/upload-data", {
-        method: "POST",
-        body: formData,
-        headers: {}, // Let browser set Content-Type for FormData
+      const response = await typedClient.raw.POST('/api/v1/college-review/batch-import/upload-data', {
         params: {
-          scholarship_type: scholarshipType,
-          academic_year: academicYear,
-          semester: semester,
+          query: {
+            scholarship_type: scholarshipType,
+            academic_year: academicYear,
+            semester: semester,
+          },
         },
+        body: formData as MultipartFormData<{ file: string }>,
       });
+      return toApiResponse<BatchUploadResult>(response);
     },
 
     /**
      * Confirm batch import after validation
+     * Type-safe: Path parameter and request body validated against OpenAPI
      */
     confirm: async (
       batchId: number,
       confirm: boolean = true
     ): Promise<ApiResponse<BatchConfirmResult>> => {
-      return client.request(`/college/batch-import/${batchId}/confirm`, {
-        method: "POST",
-        body: JSON.stringify({ batch_id: batchId, confirm }),
+      const response = await typedClient.raw.POST('/api/v1/college-review/batch-import/{batch_id}/confirm', {
+        params: { path: { batch_id: batchId } },
+        body: { batch_id: batchId, confirm },
       });
+      return toApiResponse<BatchConfirmResult>(response);
     },
 
     /**
      * Update a single record in the batch import
+     * Type-safe: Path parameter and request body validated against OpenAPI
      */
     updateRecord: async (
       batchId: number,
       recordIndex: number,
       updates: Record<string, any>
     ): Promise<ApiResponse<BatchUpdateRecordResult>> => {
-      return client.request(`/college/batch-import/${batchId}/records`, {
-        method: "PATCH",
-        body: JSON.stringify({ record_index: recordIndex, updates }),
+      const response = await typedClient.raw.PATCH('/api/v1/college-review/batch-import/{batch_id}/records', {
+        params: { path: { batch_id: batchId } },
+        body: { record_index: recordIndex, updates } as any,
       });
+      return toApiResponse<BatchUpdateRecordResult>(response);
     },
 
     /**
      * Re-validate all records in the batch import
+     * Type-safe: Path parameter validated against OpenAPI
      */
     revalidate: async (
       batchId: number
     ): Promise<ApiResponse<BatchRevalidateResult>> => {
-      return client.request(`/college/batch-import/${batchId}/validate`, {
-        method: "POST",
+      const response = await typedClient.raw.POST('/api/v1/college-review/batch-import/{batch_id}/validate', {
+        params: { path: { batch_id: batchId } },
       });
+      return toApiResponse<BatchRevalidateResult>(response);
     },
 
     /**
      * Delete a single record from the batch import
+     * Type-safe: Path parameters validated against OpenAPI
      */
     deleteRecord: async (
       batchId: number,
       recordIndex: number
     ): Promise<ApiResponse<BatchDeleteRecordResult>> => {
-      return client.request(
-        `/college/batch-import/${batchId}/records/${recordIndex}`,
-        {
-          method: "DELETE",
-        }
-      );
+      const response = await typedClient.raw.DELETE('/api/v1/college-review/batch-import/{batch_id}/records/{record_index}', {
+        params: { path: { batch_id: batchId, record_index: recordIndex } },
+      });
+      return toApiResponse<BatchDeleteRecordResult>(response);
     },
 
     /**
      * Upload documents in bulk for batch import (ZIP file)
+     * Type-safe: Path parameter and FormData body properly typed
      */
     uploadDocuments: async (
       batchId: number,
       zipFile: File
     ): Promise<ApiResponse<BatchDocumentUploadResponse>> => {
-      const formData = new FormData();
-      formData.append("file", zipFile);
+      const formData = createFileUploadFormData({ file: zipFile });
 
-      return client.request(`/college/batch-import/${batchId}/documents`, {
-        method: "POST",
-        body: formData,
-        headers: {}, // Let browser set Content-Type for FormData
+      const response = await typedClient.raw.POST('/api/v1/college-review/batch-import/{batch_id}/documents', {
+        params: { path: { batch_id: batchId } },
+        body: formData as MultipartFormData<{ file: string }>,
       });
+      return toApiResponse<BatchDocumentUploadResponse>(response);
     },
 
     /**
      * Get batch import history with optional filtering
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getHistory: async (params?: {
       skip?: number;
       limit?: number;
       status?: string;
     }): Promise<ApiResponse<BatchHistoryResponse>> => {
-      const queryParams = new URLSearchParams();
-      if (params) {
-        Object.entries(params).forEach(([key, value]) => {
-          if (value !== undefined) {
-            queryParams.append(key, value.toString());
-          }
-        });
-      }
-      const query = queryParams.toString();
-      return client.request(
-        `/college/batch-import/history${query ? `?${query}` : ""}`
-      );
+      const response = await typedClient.raw.GET('/api/v1/college-review/batch-import/history', {
+        params: {
+          query: {
+            skip: params?.skip,
+            limit: params?.limit,
+            status: params?.status,
+          },
+        },
+      });
+      return toApiResponse<BatchHistoryResponse>(response);
     },
 
     /**
      * Get detailed information about a specific batch import
+     * Type-safe: Path parameter validated against OpenAPI
      */
     getDetails: async (
       batchId: number
     ): Promise<ApiResponse<BatchDetails>> => {
-      return client.request(`/college/batch-import/${batchId}/details`);
+      const response = await typedClient.raw.GET('/api/v1/college-review/batch-import/{batch_id}/details', {
+        params: { path: { batch_id: batchId } },
+      });
+      return toApiResponse<BatchDetails>(response);
     },
 
     /**
      * Download batch import template for a scholarship type
+     * Type-safe: Returns blob for file download
      */
     downloadTemplate: async (scholarshipType: string): Promise<void> => {
-      const token = client.getToken();
+      const token = typedClient.getToken();
       const baseURL = typeof window !== "undefined" ? "" : process.env.INTERNAL_API_URL || "http://localhost:8000";
 
       const response = await fetch(
-        `${baseURL}/api/v1/college/batch-import/template?scholarship_type=${encodeURIComponent(scholarshipType)}`,
+        `${baseURL}/api/v1/college-review/batch-import/template?scholarship_type=${encodeURIComponent(scholarshipType)}`,
         {
           method: "GET",
           headers: {
@@ -292,25 +306,28 @@ export function createBatchImportApi(client: ApiClient) {
 
     /**
      * Delete a batch import and all its related applications
+     * Type-safe: Path parameter validated against OpenAPI
      */
     deleteBatch: async (batchId: number): Promise<ApiResponse<{ batch_id: number; deleted_applications: number }>> => {
-      return client.request(`/college/batch-import/${batchId}`, {
-        method: "DELETE",
+      const response = await typedClient.raw.DELETE('/api/v1/college-review/batch-import/{batch_id}', {
+        params: { path: { batch_id: batchId } },
       });
+      return toApiResponse<{ batch_id: number; deleted_applications: number }>(response);
     },
 
     /**
      * Download original file for a batch import
+     * Type-safe: Returns blob for file download
      */
     downloadFile: async (batchId: number): Promise<void> => {
-      const token = client.getToken();
+      const token = typedClient.getToken();
       const baseURL =
         typeof window !== "undefined"
           ? ""
           : process.env.INTERNAL_API_URL || "http://localhost:8000";
 
       const response = await fetch(
-        `${baseURL}/api/v1/college/batch-import/${batchId}/download`,
+        `${baseURL}/api/v1/college-review/batch-import/${batchId}/download`,
         {
           method: "GET",
           headers: {

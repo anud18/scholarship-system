@@ -243,12 +243,10 @@ async def get_scholarship_eligibility(
     return response_data
 
 
-@router.get("/{scholarship_id}")
-async def get_scholarship_detail(scholarship_id: int, db: AsyncSession = Depends(get_db)):
+@router.get("/{id}")
+async def get_scholarship_detail(id: int, db: AsyncSession = Depends(get_db)):
     """Get scholarship details"""
-    stmt = (
-        select(ScholarshipType).options(joinedload(ScholarshipType.rules)).where(ScholarshipType.id == scholarship_id)
-    )
+    stmt = select(ScholarshipType).options(joinedload(ScholarshipType.rules)).where(ScholarshipType.id == id)
     result = await db.execute(stmt)
     scholarship = result.unique().scalar_one_or_none()
     if not scholarship:
@@ -258,7 +256,7 @@ async def get_scholarship_detail(scholarship_id: int, db: AsyncSession = Depends
     config_stmt = (
         select(ScholarshipConfiguration)
         .where(
-            ScholarshipConfiguration.scholarship_type_id == scholarship_id,
+            ScholarshipConfiguration.scholarship_type_id == id,
             ScholarshipConfiguration.is_active.is_(True),
         )
         .order_by(
@@ -345,9 +343,9 @@ async def reset_application_periods(current_user: User = Depends(require_admin),
     )
 
 
-@router.post("/dev/toggle-whitelist/{scholarship_id}")
+@router.post("/dev/toggle-whitelist/{id}")
 async def dev_toggle_scholarship_whitelist(
-    scholarship_id: int,
+    id: int,
     enable: bool = True,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -355,7 +353,7 @@ async def dev_toggle_scholarship_whitelist(
     """Toggle scholarship whitelist for testing (dev only)"""
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Only available in development mode")
-    stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
+    stmt = select(ScholarshipType).where(ScholarshipType.id == id)
     result = await db.execute(stmt)
     scholarship = result.scalar_one_or_none()
     if not scholarship:
@@ -368,16 +366,16 @@ async def dev_toggle_scholarship_whitelist(
         success=True,
         message=f"Whitelist {'enabled' if enable else 'disabled'} for {scholarship.name}",
         data={
-            "scholarship_id": scholarship_id,
+            "scholarship_id": id,
             "scholarship_name": scholarship.name,
             "whitelist_enabled": scholarship.whitelist_enabled,
         },
     )
 
 
-@router.post("/dev/add-to-whitelist/{scholarship_id}")
+@router.post("/dev/add-to-whitelist/{id}")
 async def add_student_to_whitelist(
-    scholarship_id: int,
+    id: int,
     student_id: int,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -385,7 +383,7 @@ async def add_student_to_whitelist(
     """Add student to scholarship whitelist (dev only)"""
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Only available in development mode")
-    stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
+    stmt = select(ScholarshipType).where(ScholarshipType.id == id)
     result = await db.execute(stmt)
     scholarship = result.scalar_one_or_none()
     if not scholarship:
@@ -402,7 +400,7 @@ async def add_student_to_whitelist(
         success=True,
         message=f"Student {student_id} added to {scholarship.name} whitelist",
         data={
-            "scholarship_id": scholarship_id,
+            "scholarship_id": id,
             "student_id": student_id,
             "whitelist_size": len(scholarship.whitelist_student_ids),
         },
@@ -605,9 +603,9 @@ async def get_terms_document(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve terms document: {str(e)}")
 
 
-@router.patch("/{scholarship_id}/whitelist")
+@router.patch("/{id}/whitelist")
 async def toggle_scholarship_whitelist(
-    scholarship_id: int,
+    id: int,
     request: WhitelistToggleRequest,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -616,7 +614,7 @@ async def toggle_scholarship_whitelist(
     Toggle scholarship whitelist enable/disable
 
     Args:
-        scholarship_id: Scholarship type ID
+        id: Scholarship type ID
         request: Whitelist toggle request with enabled flag
         current_user: Current authenticated admin user
         db: Database session
@@ -625,12 +623,12 @@ async def toggle_scholarship_whitelist(
         Updated scholarship type with whitelist status
     """
     # Get scholarship type
-    stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
+    stmt = select(ScholarshipType).where(ScholarshipType.id == id)
     result = await db.execute(stmt)
     scholarship = result.scalar_one_or_none()
 
     if not scholarship:
-        raise HTTPException(status_code=404, detail=f"找不到ID為 {scholarship_id} 的獎學金類型")
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {id} 的獎學金類型")
 
     # Update whitelist_enabled
     scholarship.whitelist_enabled = request.enabled
@@ -643,7 +641,7 @@ async def toggle_scholarship_whitelist(
     config_stmt = (
         select(ScholarshipConfiguration)
         .where(
-            ScholarshipConfiguration.scholarship_type_id == scholarship_id,
+            ScholarshipConfiguration.scholarship_type_id == id,
             ScholarshipConfiguration.is_active.is_(True),
         )
         .order_by(

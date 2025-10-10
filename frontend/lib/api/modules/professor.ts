@@ -1,17 +1,20 @@
 /**
- * Professor Review API Module
+ * Professor Review API Module (OpenAPI-typed)
  *
  * Handles professor-level scholarship review operations:
  * - View assigned applications for review
  * - Submit and update recommendations
  * - Manage review status and sub-type selections
  * - Track review statistics
+ *
+ * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import type { ApiClient } from '../client';
-import type { ApiResponse, Application, PaginatedResponse } from '../../api';
+import { typedClient } from '../typed-client';
+import { toApiResponse } from '../compat';
+import type { ApiResponse, Application, PaginatedResponse } from '../../api.legacy';
 
-export function createProfessorApi(client: ApiClient) {
+export function createProfessorApi() {
   return {
     /**
      * Get applications requiring professor review
@@ -21,43 +24,36 @@ export function createProfessorApi(client: ApiClient) {
       statusFilter?: string
     ): Promise<ApiResponse<Application[]>> => {
       try {
-        const params = statusFilter ? `?status_filter=${statusFilter}` : "";
-        console.log(
-          "🔍 Requesting professor applications with params:",
-          params
-        );
+        const response = await typedClient.raw.GET('/api/v1/professor/applications', {
+          params: {
+            query: {
+              status_filter: statusFilter,
+            },
+          },
+        });
 
-        const response = await client.request<PaginatedResponse<Application>>(
-          `/professor/applications${params}`
-        );
-        console.log("📨 Professor applications raw response:", response);
+        const apiResponse = toApiResponse<PaginatedResponse<Application>>(response);
 
         if (
-          response.success &&
-          response.data &&
-          Array.isArray(response.data.items)
+          apiResponse.success &&
+          apiResponse.data &&
+          Array.isArray(apiResponse.data.items)
         ) {
-          console.log(
-            "✅ Loaded professor applications:",
-            response.data.items.length
-          );
           return {
             success: true,
-            message: response.message || "Applications loaded successfully",
-            data: response.data.items,
+            message: apiResponse.message || "Applications loaded successfully",
+            data: apiResponse.data.items,
           };
         }
 
-        console.warn("⚠️ Unexpected response format:", response);
         return {
           success: false,
           message:
-            response.message ||
+            apiResponse.message ||
             "Failed to load applications - unexpected response format",
           data: [],
         };
       } catch (error: any) {
-        console.error("❌ Error in professor.getApplications:", error);
         return {
           success: false,
           message: error.message || "Failed to load applications",
@@ -68,13 +64,18 @@ export function createProfessorApi(client: ApiClient) {
 
     /**
      * Get existing professor review for an application
+     * Type-safe: Path parameter validated against OpenAPI
      */
     getReview: async (applicationId: number): Promise<ApiResponse<any>> => {
-      return client.request(`/professor/applications/${applicationId}/review`);
+      const response = await typedClient.raw.GET('/api/v1/professor/applications/{application_id}/review', {
+        params: { path: { application_id: applicationId } },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Submit professor review for an application
+     * Type-safe: Path parameter and request body validated against OpenAPI
      */
     submitReview: async (
       applicationId: number,
@@ -87,14 +88,16 @@ export function createProfessorApi(client: ApiClient) {
         }>;
       }
     ): Promise<ApiResponse<any>> => {
-      return client.request(`/professor/applications/${applicationId}/review`, {
-        method: "POST",
-        body: JSON.stringify(reviewData),
+      const response = await typedClient.raw.POST('/api/v1/professor/applications/{application_id}/review', {
+        params: { path: { application_id: applicationId } },
+        body: reviewData,
       });
+      return toApiResponse(response);
     },
 
     /**
      * Update existing professor review
+     * Type-safe: Path parameters and request body validated against OpenAPI
      */
     updateReview: async (
       applicationId: number,
@@ -108,17 +111,16 @@ export function createProfessorApi(client: ApiClient) {
         }>;
       }
     ): Promise<ApiResponse<any>> => {
-      return client.request(
-        `/professor/applications/${applicationId}/review/${reviewId}`,
-        {
-          method: "PUT",
-          body: JSON.stringify(reviewData),
-        }
-      );
+      const response = await typedClient.raw.PUT('/api/v1/professor/applications/{application_id}/review/{review_id}', {
+        params: { path: { application_id: applicationId, review_id: reviewId } },
+        body: reviewData,
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Get available sub-types for an application
+     * Type-safe: Path parameter validated against OpenAPI
      */
     getSubTypes: async (
       applicationId: number
@@ -132,11 +134,15 @@ export function createProfessorApi(client: ApiClient) {
         }>
       >
     > => {
-      return client.request(`/professor/applications/${applicationId}/sub-types`);
+      const response = await typedClient.raw.GET('/api/v1/professor/applications/{application_id}/sub-types', {
+        params: { path: { application_id: applicationId } },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Get basic review statistics
+     * Type-safe: Response type inferred from OpenAPI
      */
     getStats: async (): Promise<
       ApiResponse<{
@@ -145,7 +151,8 @@ export function createProfessorApi(client: ApiClient) {
         overdue_reviews: number;
       }>
     > => {
-      return client.request("/professor/stats");
+      const response = await typedClient.raw.GET('/api/v1/professor/stats');
+      return toApiResponse(response);
     },
   };
 }

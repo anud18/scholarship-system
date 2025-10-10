@@ -377,7 +377,7 @@ async def get_scholarship_periods(
         # Get all active configurations for this scholarship type
         config_stmt = select(ScholarshipConfiguration).where(
             ScholarshipConfiguration.scholarship_type_id == scholarship.id,
-            ScholarshipConfiguration.is_active == True,
+            ScholarshipConfiguration.is_active,
         )
         config_result = await session.execute(config_stmt)
         active_configs = config_result.scalars().all()

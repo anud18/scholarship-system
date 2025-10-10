@@ -118,7 +118,7 @@ export default function UserProfileManagement() {
       console.log("Profile response:", response); // 調試用
 
       if (response.success && response.data) {
-        setProfile(response.data);
+        setProfile(response.data as unknown as CompleteUserProfile);
         if (response.data.profile) {
           setEditingProfile(response.data.profile);
         } else {
@@ -483,7 +483,7 @@ export default function UserProfileManagement() {
       const response = await api.userProfiles.getHistory();
 
       if (response.success && response.data) {
-        setHistory(response.data);
+        setHistory(response.data as unknown as ProfileHistory[]);
         setShowHistory(true);
       } else {
         throw new Error(response.message || "Failed to load history");

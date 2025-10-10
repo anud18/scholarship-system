@@ -243,6 +243,17 @@ with open('endpoint.py', 'w') as f:
 # python -m black endpoint.py
 ```
 
+### 6. OpenAPI Type Generation
+
+**When modifying API endpoints/schemas**, regenerate TypeScript types to maintain type safety:
+
+```bash
+cd frontend && npm run api:generate
+git add lib/api/generated/schema.d.ts
+```
+
+CI validates type sync automatically. Backend must be running on `localhost:8000` during generation.
+
 ## Database Initialization & Migration Standards
 
 ### Database Volume Recreation

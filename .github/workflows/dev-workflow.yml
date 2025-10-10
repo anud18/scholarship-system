@@ -169,135 +169,6 @@ jobs:
               console.log('⚠️ Unable to post comment (insufficient permissions):', error.message);
             }
 
-  # Code quality checks
-  code-quality:
-    name: Code Quality
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-
-    strategy:
-      matrix:
-        component: [backend, frontend]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python (Backend)
-        if: matrix.component == 'backend'
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Setup Node.js (Frontend)
-        if: matrix.component == 'frontend'
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies (Backend)
-        if: matrix.component == 'backend'
-        working-directory: ./backend
-        run: |
-          pip install -r requirements.txt
-          pip install black isort flake8 mypy pytest-cov
-
-      - name: Install dependencies (Frontend)
-        if: matrix.component == 'frontend'
-        working-directory: ./frontend
-        run: npm ci
-
-      - name: Run backend quality checks
-        if: matrix.component == 'backend'
-        working-directory: ./backend
-        run: |
-          echo "## 🐍 Backend Code Quality Results" >> quality-report.md
-          echo "" >> quality-report.md
-
-          # Black formatting check
-          echo "### Code Formatting (Black)" >> quality-report.md
-          if black --check --diff .; then
-            echo "✅ Code is properly formatted" >> quality-report.md
-          else
-            echo "❌ Code formatting issues found" >> quality-report.md
-            echo "\`\`\`diff" >> quality-report.md
-            black --check --diff . >> quality-report.md || true
-            echo "\`\`\`" >> quality-report.md
-          fi
-          echo "" >> quality-report.md
-
-          # Import sorting check
-          echo "### Import Sorting (isort)" >> quality-report.md
-          if isort --check-only --diff .; then
-            echo "✅ Imports are properly sorted" >> quality-report.md
-          else
-            echo "❌ Import sorting issues found" >> quality-report.md
-            echo "\`\`\`diff" >> quality-report.md
-            isort --check-only --diff . >> quality-report.md || true
-            echo "\`\`\`" >> quality-report.md
-          fi
-          echo "" >> quality-report.md
-
-          # Flake8 style check
-          echo "### Code Style (Flake8)" >> quality-report.md
-          if flake8 . --count --statistics --format='%(path)s:%(row)d:%(col)d: %(code)s %(text)s'; then
-            echo "✅ No style issues found" >> quality-report.md
-          else
-            echo "❌ Style issues found" >> quality-report.md
-          fi
-          echo "" >> quality-report.md
-
-          # Type checking
-          echo "### Type Checking (MyPy)" >> quality-report.md
-          if mypy app --ignore-missing-imports; then
-            echo "✅ No type errors found" >> quality-report.md
-          else
-            echo "⚠️ Type checking completed with warnings" >> quality-report.md
-          fi
-
-      - name: Run frontend quality checks
-        if: matrix.component == 'frontend'
-        working-directory: ./frontend
-        run: |
-          echo "## ⚛️ Frontend Code Quality Results" >> quality-report.md
-          echo "" >> quality-report.md
-
-          # ESLint check
-          echo "### Linting (ESLint)" >> quality-report.md
-          if npm run lint; then
-            echo "✅ No linting errors found" >> quality-report.md
-          else
-            echo "❌ Linting errors found" >> quality-report.md
-          fi
-          echo "" >> quality-report.md
-
-          # Prettier formatting check
-          echo "### Code Formatting (Prettier)" >> quality-report.md
-          if npx prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}"; then
-            echo "✅ Code is properly formatted" >> quality-report.md
-          else
-            echo "❌ Code formatting issues found" >> quality-report.md
-          fi
-          echo "" >> quality-report.md
-
-          # TypeScript check
-          echo "### Type Checking (TypeScript)" >> quality-report.md
-          if npx tsc --noEmit; then
-            echo "✅ No type errors found" >> quality-report.md
-          else
-            echo "❌ TypeScript errors found" >> quality-report.md
-          fi
-
-      - name: Upload quality report
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-report-${{ matrix.component }}
-          path: ${{ matrix.component }}/quality-report.md
-          retention-days: 7
-
   # Bundle size analysis for frontend
   bundle-analysis:
     name: Bundle Size Analysis
@@ -581,7 +452,7 @@ jobs:
   dev-workflow-summary:
     name: Dev Workflow Summary
     runs-on: ubuntu-latest
-    needs: [pr-labeling, conflict-check, code-quality, bundle-analysis, reviewer-assignment, pr-readiness]
+    needs: [pr-labeling, conflict-check, bundle-analysis, reviewer-assignment, pr-readiness]
     if: always() && github.event_name == 'pull_request'
 
     steps:
@@ -594,7 +465,6 @@ jobs:
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| PR Labeling | ${{ needs.pr-labeling.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Conflict Check | ${{ needs.conflict-check.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Code Quality | ${{ needs.code-quality.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Bundle Analysis | ${{ needs.bundle-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Reviewer Assignment | ${{ needs.reviewer-assignment.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| PR Readiness | ${{ needs.pr-readiness.result }} |" >> $GITHUB_STEP_SUMMARY

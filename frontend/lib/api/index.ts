@@ -13,6 +13,7 @@
  */
 
 import { ApiClient } from './client';
+import { typedClient } from './typed-client';
 import { createAuthApi } from './modules/auth';
 import { createUsersApi } from './modules/users';
 import { createScholarshipsApi } from './modules/scholarships';
@@ -136,28 +137,60 @@ class ExtendedApiClient extends ApiClient {
     super();
 
     // Initialize modules
-    this.auth = createAuthApi(this);
-    this.users = createUsersApi(this);
-    this.scholarships = createScholarshipsApi(this);
-    this.applications = createApplicationsApi(this);
-    this.notifications = createNotificationsApi(this);
-    this.quota = createQuotaApi(this);
-    this.professor = createProfessorApi(this);
-    this.college = createCollegeApi(this);
-    this.whitelist = createWhitelistApi(this);
-    this.systemSettings = createSystemSettingsApi(this);
-    this.bankVerification = createBankVerificationApi(this);
-    this.professorStudent = createProfessorStudentApi(this);
-    this.emailAutomation = createEmailAutomationApi(this);
-    this.batchImport = createBatchImportApi(this);
-    this.referenceData = createReferenceDataApi(this);
-    this.applicationFields = createApplicationFieldsApi(this);
-    this.userProfiles = createUserProfilesApi(this);
-    this.emailManagement = createEmailManagementApi(this);
-    this.admin = createAdminApi(this);
+    this.auth = createAuthApi(); // Now using typed client internally
+    this.users = createUsersApi(); // Now using typed client internally
+    this.scholarships = createScholarshipsApi(); // Now using typed client internally
+    this.applications = createApplicationsApi(); // Now using typed client internally
+    this.notifications = createNotificationsApi(); // Now using typed client internally
+    this.quota = createQuotaApi(); // Now using typed client internally
+    this.professor = createProfessorApi(); // Now using typed client internally
+    this.college = createCollegeApi(); // Now using typed client internally
+    this.whitelist = createWhitelistApi(); // Now using typed client internally
+    this.systemSettings = createSystemSettingsApi(); // Now using typed client internally
+    this.bankVerification = createBankVerificationApi(); // Now using typed client internally
+    this.professorStudent = createProfessorStudentApi(); // Now using typed client internally
+    this.emailAutomation = createEmailAutomationApi(); // Now using typed client internally
+    this.batchImport = createBatchImportApi(); // Now using typed client internally
+    this.referenceData = createReferenceDataApi(); // Now using typed client internally
+    this.applicationFields = createApplicationFieldsApi(); // Now using typed client internally
+    this.userProfiles = createUserProfilesApi(); // Now using typed client internally
+    this.emailManagement = createEmailManagementApi(); // Now using typed client internally
+    this.admin = createAdminApi(); // Now using typed client internally
 
     // Initialize backward compatibility alias
     this.system = this.systemSettings;
+  }
+
+  /**
+   * Override setToken to synchronize with typedClient
+   * This ensures modules using typedClient also have the token
+   */
+  setToken(token: string): void {
+    super.setToken(token);
+    typedClient.setToken(token);
+  }
+
+  /**
+   * Override clearToken to synchronize with typedClient
+   */
+  clearToken(): void {
+    super.clearToken();
+    typedClient.clearToken();
+  }
+
+  /**
+   * Override getToken to delegate to typedClient
+   * This ensures we always get the current state, even if typedClient clears the token
+   */
+  getToken(): string | null {
+    return typedClient.getToken();
+  }
+
+  /**
+   * Override hasToken to delegate to typedClient
+   */
+  hasToken(): boolean {
+    return typedClient.hasToken();
   }
 }
 

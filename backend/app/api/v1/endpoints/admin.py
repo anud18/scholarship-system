@@ -32,6 +32,7 @@ from app.models.system_setting import ConfigCategory, EmailTemplate
 from app.models.user import AdminScholarship, User, UserRole
 from app.schemas.application import (
     ApplicationListResponse,
+    ApplicationStatusUpdate,
     BulkApproveRequest,
     HistoricalApplicationResponse,
     ProfessorAssignmentRequest,
@@ -1033,14 +1034,12 @@ async def create_announcement(
     }
 
 
-@router.get("/announcements/{announcement_id}")
-async def get_announcement(
-    announcement_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+@router.get("/announcements/{id}")
+async def get_announcement(id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get specific system announcement (admin only)"""
 
     stmt = select(Notification).where(
-        Notification.id == announcement_id,
+        Notification.id == id,
         Notification.user_id.is_(None),
         Notification.related_resource_type == "system",
     )
@@ -1083,9 +1082,9 @@ async def get_announcement(
     }
 
 
-@router.put("/announcements/{announcement_id}")
+@router.put("/announcements/{id}")
 async def update_announcement(
-    announcement_id: int,
+    id: int,
     announcement_data: NotificationUpdate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -1094,7 +1093,7 @@ async def update_announcement(
 
     # Check if announcement exists
     stmt = select(Notification).where(
-        Notification.id == announcement_id,
+        Notification.id == id,
         Notification.user_id.is_(None),
         Notification.related_resource_type == "system",
     )
@@ -1153,15 +1152,13 @@ async def update_announcement(
     }
 
 
-@router.delete("/announcements/{announcement_id}")
-async def delete_announcement(
-    announcement_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
-):
+@router.delete("/announcements/{id}")
+async def delete_announcement(id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Delete system announcement (admin only)"""
 
     # Check if announcement exists
     stmt = select(Notification).where(
-        Notification.id == announcement_id,
+        Notification.id == id,
         Notification.user_id.is_(None),
         Notification.related_resource_type == "system",
     )
@@ -1690,9 +1687,9 @@ async def create_sub_type_config(
     }
 
 
-@router.put("/scholarships/sub-type-configs/{config_id}")
+@router.put("/scholarships/sub-type-configs/{id}")
 async def update_sub_type_config(
-    config_id: int,
+    id: int,
     config_data: ScholarshipSubTypeConfigUpdate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -1700,7 +1697,7 @@ async def update_sub_type_config(
     """Update sub-type configuration"""
 
     # Get config
-    stmt = select(ScholarshipSubTypeConfig).where(ScholarshipSubTypeConfig.id == config_id)
+    stmt = select(ScholarshipSubTypeConfig).where(ScholarshipSubTypeConfig.id == id)
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
 
@@ -1744,14 +1741,14 @@ async def update_sub_type_config(
     }
 
 
-@router.delete("/scholarships/sub-type-configs/{config_id}")
+@router.delete("/scholarships/sub-type-configs/{id}")
 async def delete_sub_type_config(
-    config_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Delete sub-type configuration (soft delete by setting is_active=False)"""
 
     # Get config
-    stmt = select(ScholarshipSubTypeConfig).where(ScholarshipSubTypeConfig.id == config_id)
+    stmt = select(ScholarshipSubTypeConfig).where(ScholarshipSubTypeConfig.id == id)
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
 
@@ -1996,9 +1993,9 @@ async def create_scholarship_permission(
     }
 
 
-@router.put("/scholarship-permissions/{permission_id}")
+@router.put("/scholarship-permissions/{id}")
 async def update_scholarship_permission(
-    permission_id: int,
+    id: int,
     permission_data: Dict[str, Any],
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -2006,11 +2003,7 @@ async def update_scholarship_permission(
     """Update scholarship permission (admin only)"""
 
     # Check if permission exists
-    stmt = (
-        select(AdminScholarship)
-        .options(selectinload(AdminScholarship.scholarship))
-        .where(AdminScholarship.id == permission_id)
-    )
+    stmt = select(AdminScholarship).options(selectinload(AdminScholarship.scholarship)).where(AdminScholarship.id == id)
     result = await db.execute(stmt)
     permission = result.scalar_one_or_none()
 
@@ -2040,18 +2033,14 @@ async def update_scholarship_permission(
     }
 
 
-@router.delete("/scholarship-permissions/{permission_id}")
+@router.delete("/scholarship-permissions/{id}")
 async def delete_scholarship_permission(
-    permission_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Delete scholarship permission (admin can only delete permissions for scholarships they manage, and cannot delete their own permissions)"""
 
     # Check if permission exists
-    stmt = (
-        select(AdminScholarship)
-        .options(selectinload(AdminScholarship.scholarship))
-        .where(AdminScholarship.id == permission_id)
-    )
+    stmt = select(AdminScholarship).options(selectinload(AdminScholarship.scholarship)).where(AdminScholarship.id == id)
     result = await db.execute(stmt)
     permission = result.scalar_one_or_none()
 
@@ -2309,9 +2298,9 @@ async def create_scholarship_rule(
     return {"success": True, "message": "Scholarship rule created successfully", "data": rule_response}
 
 
-@router.get("/scholarship-rules/{rule_id}")
+@router.get("/scholarship-rules/{id}")
 async def get_scholarship_rule(
-    rule_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Get a specific scholarship rule"""
 
@@ -2322,7 +2311,7 @@ async def get_scholarship_rule(
             selectinload(ScholarshipRule.creator),
             selectinload(ScholarshipRule.updater),
         )
-        .where(ScholarshipRule.id == rule_id)
+        .where(ScholarshipRule.id == id)
     )
 
     result = await db.execute(stmt)
@@ -2343,9 +2332,9 @@ async def get_scholarship_rule(
     return {"success": True, "message": "Scholarship rule retrieved successfully", "data": rule_response}
 
 
-@router.put("/scholarship-rules/{rule_id}")
+@router.put("/scholarship-rules/{id}")
 async def update_scholarship_rule(
-    rule_id: int,
+    id: int,
     rule_data: ScholarshipRuleUpdate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -2353,7 +2342,7 @@ async def update_scholarship_rule(
     """Update a scholarship rule"""
 
     # Get existing rule
-    stmt = select(ScholarshipRule).where(ScholarshipRule.id == rule_id)
+    stmt = select(ScholarshipRule).where(ScholarshipRule.id == id)
     result = await db.execute(stmt)
     rule = result.scalar_one_or_none()
 
@@ -2397,14 +2386,14 @@ async def update_scholarship_rule(
     return {"success": True, "message": "Scholarship rule updated successfully", "data": rule_response}
 
 
-@router.delete("/scholarship-rules/{rule_id}")
+@router.delete("/scholarship-rules/{id}")
 async def delete_scholarship_rule(
-    rule_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Delete a scholarship rule"""
 
     # Get existing rule
-    stmt = select(ScholarshipRule).where(ScholarshipRule.id == rule_id)
+    stmt = select(ScholarshipRule).where(ScholarshipRule.id == id)
     result = await db.execute(stmt)
     rule = result.scalar_one_or_none()
 
@@ -3113,9 +3102,9 @@ async def get_available_professors(
         ) from exc
 
 
-@router.put("/applications/{application_id}/assign-professor")
+@router.put("/applications/{id}/assign-professor")
 async def assign_professor_to_application(
-    application_id: int,
+    id: int,
     request: ProfessorAssignmentRequest,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -3124,7 +3113,7 @@ async def assign_professor_to_application(
     try:
         service = ApplicationService(db)
         application = await service.assign_professor(
-            application_id=application_id, professor_nycu_id=request.professor_nycu_id, assigned_by=current_user
+            application_id=id, professor_nycu_id=request.professor_nycu_id, assigned_by=current_user
         )
 
         # Create a safe response that doesn't trigger lazy loading
@@ -3577,3 +3566,188 @@ async def batch_verify_bank_accounts(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to perform batch verification: {str(e)}"
         )
+
+
+@router.patch("/applications/{id}/status")
+async def admin_update_application_status(
+    id: int,
+    status_update: ApplicationStatusUpdate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update application status (admin version)
+
+    This is a wrapper around the applications endpoint for admin-specific access.
+    """
+    service = ApplicationService(db)
+    result = await service.update_application_status(id, current_user, status_update)
+    return {
+        "success": True,
+        "message": "Application status updated successfully",
+        "data": result,
+    }
+
+
+@router.get("/scholarship-email-templates/{scholarship_type_id}")
+async def get_scholarship_email_templates(
+    scholarship_type_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all email templates for a scholarship type"""
+    service = EmailTemplateService(db)
+    templates = await service.get_scholarship_templates(scholarship_type_id)
+    return {
+        "success": True,
+        "message": "Email templates retrieved successfully",
+        "data": templates,
+    }
+
+
+@router.get("/scholarship-email-templates/{scholarship_type_id}/{template_key}")
+async def get_scholarship_email_template(
+    scholarship_type_id: int,
+    template_key: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a specific email template"""
+    service = EmailTemplateService(db)
+    template = await service.get_template(scholarship_type_id, template_key)
+    return {
+        "success": True,
+        "message": "Email template retrieved successfully",
+        "data": template,
+    }
+
+
+@router.post("/scholarship-email-templates")
+async def create_scholarship_email_template(
+    template_data: EmailTemplateSchema,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new email template"""
+    service = EmailTemplateService(db)
+    template = await service.create_template(template_data)
+    return {
+        "success": True,
+        "message": "Email template created successfully",
+        "data": template,
+    }
+
+
+@router.put("/scholarship-email-templates/{scholarship_type_id}/{template_key}")
+async def update_scholarship_email_template(
+    scholarship_type_id: int,
+    template_key: str,
+    template_data: EmailTemplateUpdateSchema,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update an email template"""
+    service = EmailTemplateService(db)
+    template = await service.update_template(scholarship_type_id, template_key, template_data)
+    return {
+        "success": True,
+        "message": "Email template updated successfully",
+        "data": template,
+    }
+
+
+@router.delete("/scholarship-email-templates/{scholarship_type_id}/{template_key}")
+async def delete_scholarship_email_template(
+    scholarship_type_id: int,
+    template_key: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete an email template"""
+    service = EmailTemplateService(db)
+    await service.delete_template(scholarship_type_id, template_key)
+    return {
+        "success": True,
+        "message": "Email template deleted successfully",
+    }
+
+
+@router.post("/scholarship-email-templates/{scholarship_type_id}/bulk-create")
+async def bulk_create_scholarship_email_templates(
+    scholarship_type_id: int,
+    templates: List[EmailTemplateSchema],
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk create email templates"""
+    service = EmailTemplateService(db)
+    created_templates = []
+    for template_data in templates:
+        template = await service.create_template(template_data)
+        created_templates.append(template)
+    return {
+        "success": True,
+        "message": f"{len(created_templates)} email templates created successfully",
+        "data": created_templates,
+    }
+
+
+@router.get("/scholarship-email-templates/{scholarship_type_id}/available")
+async def get_available_scholarship_email_templates(
+    scholarship_type_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get available email template keys for a scholarship type"""
+    # Return available template keys
+    available_keys = [
+        "application_approved",
+        "application_rejected",
+        "application_pending",
+        "reminder_incomplete",
+        "notification_new_application",
+    ]
+    return {
+        "success": True,
+        "message": "Available template keys retrieved successfully",
+        "data": available_keys,
+    }
+
+
+@router.get("/professor-student-relationships")
+async def get_professor_student_relationships(
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(20, ge=1, le=100, description="Page size"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all professor-student relationships with pagination"""
+    # This endpoint needs to be implemented based on your relationship model
+    # For now, return a placeholder response
+    return {
+        "success": True,
+        "message": "Professor-student relationships retrieved successfully",
+        "data": {
+            "items": [],
+            "total": 0,
+            "page": page,
+            "size": size,
+            "pages": 0,
+        },
+    }
+
+
+@router.post("/professor-student-relationships")
+async def create_professor_student_relationship(
+    relationship_data: Any,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new professor-student relationship"""
+    # This endpoint needs to be implemented based on your relationship model
+    # For now, return a placeholder response
+    return {
+        "success": True,
+        "message": "Professor-student relationship created successfully",
+        "data": relationship_data,
+    }

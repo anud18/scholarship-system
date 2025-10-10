@@ -85,7 +85,7 @@ class BatchImportService:
         custom_fields_stmt = (
             select(ApplicationField)
             .where(ApplicationField.scholarship_type == scholarship.code)
-            .where(ApplicationField.is_active == True)
+            .where(ApplicationField.is_active)
         )
         custom_fields_result = await self.db.execute(custom_fields_stmt)
         custom_fields = custom_fields_result.scalars().all()

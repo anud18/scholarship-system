@@ -207,15 +207,21 @@ async def upload_batch_import_data(
     try:
         minio_service = MinIOService()
         object_name = f"batch-imports/{batch_import.id}/{file.filename}"
-        minio_service.upload_file(
-            bucket_name=settings.minio_bucket,
-            object_name=object_name,
-            file_data=file_content,
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        file_buffer = BytesIO(file_content)
+        content_type = (
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             if file.filename.endswith(".xlsx")
             else "application/vnd.ms-excel"
             if file.filename.endswith(".xls")
-            else "text/csv",
+            else "text/csv"
+        )
+
+        minio_service.client.put_object(
+            bucket_name=settings.minio_bucket,
+            object_name=object_name,
+            data=file_buffer,
+            length=len(file_content),
+            content_type=content_type,
         )
         batch_import.file_path = object_name
     except Exception as e:
@@ -805,11 +811,14 @@ async def upload_batch_documents(
         # Upload to MinIO
         try:
             object_name = f"applications/{app.id}/{doc_type}_{base_name}"
-            minio_service.upload_file(
+            file_buffer = BytesIO(file_data)
+
+            minio_service.client.put_object(
                 bucket_name=settings.minio_bucket,
                 object_name=object_name,
-                file_data=file_data,
-                content_type=f"application/{file_ext}" if file_ext == "pdf" else f"image/{file_ext}",
+                data=file_buffer,
+                length=len(file_data),
+                content_type=(f"application/{file_ext}" if file_ext.lower() == "pdf" else f"image/{file_ext.lower()}"),
             )
 
             # Create ApplicationFile record
@@ -1347,7 +1356,7 @@ async def download_batch_import_template(
     custom_fields_stmt = (
         select(ApplicationField)
         .where(ApplicationField.scholarship_type == scholarship.code)
-        .where(ApplicationField.is_active == True)
+        .where(ApplicationField.is_active)
         .order_by(ApplicationField.display_order)
     )
     custom_fields_result = await db.execute(custom_fields_stmt)

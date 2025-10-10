@@ -379,8 +379,8 @@ export function AdminManagementInterface({
   const [userStats, setUserStats] = useState<UserStats>({
     total_users: 0,
     role_distribution: {},
-    active_users: 0,
-    inactive_users: 0,
+    user_type_distribution: {},
+    status_distribution: {},
     recent_registrations: 0,
   });
   const [showUserForm, setShowUserForm] = useState(false);

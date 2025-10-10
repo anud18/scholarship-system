@@ -186,7 +186,7 @@ class ApplicationService:
                 select(ScholarshipConfiguration)
                 .where(
                     ScholarshipConfiguration.scholarship_type_id == scholarship.id,
-                    ScholarshipConfiguration.is_active == True,
+                    ScholarshipConfiguration.is_active,
                 )
                 .limit(1)
             )

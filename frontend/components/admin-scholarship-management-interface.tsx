@@ -161,8 +161,9 @@ export function AdminScholarshipManagementInterface({
       // 管理端需要看到所有欄位（包括停用的）
       const response = await api.applicationFields.getFormConfig(type, true);
       if (response.success && response.data) {
-        const { fields = [], documents = [] } = response.data;
-        setFormConfig(response.data);
+        const config = response.data as ScholarshipFormConfig;
+        const { fields = [], documents = [] } = config;
+        setFormConfig(config);
         setApplicationFields(fields);
         setDocumentRequirements(documents);
       } else {
@@ -188,7 +189,8 @@ export function AdminScholarshipManagementInterface({
       const response = await api.scholarships.getAll();
       if (response.success && response.data) {
         // Find scholarship matching the type prop by code
-        const scholarship = response.data.find((s: any) => s.code === type);
+        const scholarships = response.data as any[];
+        const scholarship = scholarships.find(s => s.code === type);
         if (scholarship) {
           setScholarshipTypeData(scholarship);
           const configId = scholarship.configuration_id;
@@ -222,7 +224,7 @@ export function AdminScholarshipManagementInterface({
       setLoadingWhitelist(true);
       const response = await api.whitelist.getConfigurationWhitelist(configId);
       if (response.success && response.data) {
-        setWhitelist(response.data);
+        setWhitelist(response.data as WhitelistResponse[]);
       }
     } catch (err: any) {
       console.error("Failed to load whitelist:", err);
@@ -290,7 +292,7 @@ export function AdminScholarshipManagementInterface({
         setSuccessMessage(`${formConfig?.title}設定已成功保存`);
         // 不要重新載入配置，保持當前狀態
         // 只有在需要獲取新的 ID 時才重新載入
-        const savedConfig = response.data;
+        const savedConfig = response.data as ScholarshipFormConfig;
         if (savedConfig) {
           // 更新現有項目的 ID（如果是新創建的）
           if (savedConfig.fields) {
@@ -386,9 +388,9 @@ export function AdminScholarshipManagementInterface({
   // Field management handlers
   const handleCreateField = async (fieldData: ApplicationFieldCreate) => {
     try {
-      const response = await api.applicationFields.createField(fieldData);
+      const response = await api.applicationFields.createField(fieldData as any);
       if (response.success && response.data) {
-        const newField = response.data;
+        const newField = response.data as unknown as ApplicationField;
         setApplicationFields(prev => [...prev, newField]);
         setSuccessMessage("欄位新增成功");
         setFieldFormOpen(false);
@@ -410,7 +412,7 @@ export function AdminScholarshipManagementInterface({
         fieldData
       );
       if (response.success && response.data) {
-        const updatedField = response.data;
+        const updatedField = response.data as unknown as ApplicationField;
         setApplicationFields(prev =>
           prev.map(field =>
             field.id === editingField.id ? updatedField : field
@@ -450,9 +452,9 @@ export function AdminScholarshipManagementInterface({
     documentData: ApplicationDocumentCreate
   ) => {
     try {
-      const response = await api.applicationFields.createDocument(documentData);
+      const response = await api.applicationFields.createDocument(documentData as any);
       if (response.success && response.data) {
-        const newDocument = response.data;
+        const newDocument = response.data as unknown as ApplicationDocument;
         setDocumentRequirements(prev => [...prev, newDocument]);
         setSuccessMessage("文件要求新增成功");
         setDocumentFormOpen(false);
@@ -496,7 +498,7 @@ export function AdminScholarshipManagementInterface({
         documentData
       );
       if (response.success && response.data) {
-        const updatedDocument = response.data;
+        const updatedDocument = response.data as unknown as ApplicationDocument;
         setDocumentRequirements(prev =>
           prev.map(doc =>
             doc.id === editingDocument.id ? updatedDocument : doc
@@ -605,7 +607,7 @@ export function AdminScholarshipManagementInterface({
         // Update the document in state to remove example_file_url
         setDocumentRequirements(prev =>
           prev.map(doc =>
-            doc.id === documentId ? { ...doc, example_file_url: null } : doc
+            doc.id === documentId ? { ...doc, example_file_url: undefined } : doc
           )
         );
         setSuccessMessage("範例文件刪除成功");
@@ -645,9 +647,10 @@ export function AdminScholarshipManagementInterface({
           await loadWhitelist(activeConfigId);
         }
       } else if (response.data?.failed_items && response.data.failed_items.length > 0) {
+        const batchResult = response.data as { success_count: number; failed_items: Array<{ nycu_id: string; reason: string; }>; };
         toast({
           title: "新增失敗",
-          description: response.data.failed_items[0].reason,
+          description: batchResult.failed_items[0].reason,
           variant: "destructive",
         });
       }
@@ -696,7 +699,7 @@ export function AdminScholarshipManagementInterface({
       const response = await api.whitelist.importWhitelistExcel(activeConfigId, file);
 
       if (response.success && response.data) {
-        const result = response.data;
+        const result = response.data as { success_count: number; failed_items: Array<{ nycu_id: string; reason: string; }>; };
         toast({
           title: "匯入完成",
           description: `成功: ${result.success_count} 筆，失敗: ${result.failed_items.length} 筆`,

@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     nycu_employee,
     payment_rosters,
     professor,
+    professor_student,
     quota_dashboard,
     reference_data,
     roster_schedules,
@@ -56,8 +57,9 @@ api_router.include_router(reference_data.router, prefix="/reference-data", tags=
 api_router.include_router(user_profiles.router, prefix="/user-profiles", tags=["User Profiles"])
 api_router.include_router(scholarship_rules.router, prefix="/scholarship-rules", tags=["Scholarship Rules"])
 api_router.include_router(professor.router, prefix="/professor", tags=["Professor Review"])
-api_router.include_router(college_review.router, prefix="/college", tags=["College Review"])
-api_router.include_router(batch_import.router, prefix="/college/batch-import", tags=["Batch Import"])
+api_router.include_router(professor_student.router, prefix="/professor-student", tags=["Professor-Student Relations"])
+api_router.include_router(college_review.router, prefix="/college-review", tags=["College Review"])
+api_router.include_router(batch_import.router, prefix="/college-review/batch-import", tags=["Batch Import"])
 api_router.include_router(email_management.router, prefix="/email-management", tags=["Email Management"])
 api_router.include_router(email_automation.router, prefix="/email-automation", tags=["Email Automation"])
 api_router.include_router(nycu_employee.router, prefix="/nycu-employee", tags=["NYCU Employee"])

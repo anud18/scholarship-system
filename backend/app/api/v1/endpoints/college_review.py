@@ -50,22 +50,13 @@ class CollegeReviewCreate(BaseModel):
         None, ge=0, le=100, description="Special circumstances score (0-100)"
     )
     review_comments: Optional[str] = Field(None, max_length=2000, description="Detailed review comments")
-    recommendation: str = Field(
-        ...,
-        description="Review recommendation",
-        pattern="^(approve|reject|conditional)$",
-    )
+    recommendation: str = Field(..., description="Review recommendation", pattern="^(approve|reject|conditional)$")
     decision_reason: Optional[str] = Field(None, max_length=1000, description="Reason for the recommendation")
     is_priority: Optional[bool] = Field(False, description="Mark as priority application")
     needs_special_attention: Optional[bool] = Field(False, description="Flag for special review")
     scoring_weights: Optional[Dict[str, float]] = Field(None, description="Custom scoring weights")
 
-    @validator(
-        "academic_score",
-        "professor_review_score",
-        "college_criteria_score",
-        "special_circumstances_score",
-    )
+    @validator("academic_score", "professor_review_score", "college_criteria_score", "special_circumstances_score")
     def validate_scores(cls, v):
         if v is not None and (v < 0 or v > 100):
             raise ValueError("Score must be between 0 and 100")
@@ -98,12 +89,7 @@ class CollegeReviewUpdate(BaseModel):
     is_priority: Optional[bool] = None
     needs_special_attention: Optional[bool] = None
 
-    @validator(
-        "academic_score",
-        "professor_review_score",
-        "college_criteria_score",
-        "special_circumstances_score",
-    )
+    @validator("academic_score", "professor_review_score", "college_criteria_score", "special_circumstances_score")
     def validate_scores(cls, v):
         if v is not None and (v < 0 or v > 100):
             raise ValueError("Score must be between 0 and 100")
@@ -162,10 +148,7 @@ async def _check_scholarship_permission(user: User, scholarship_type_id: int, db
     from app.models.user import AdminScholarship
 
     stmt = select(AdminScholarship).where(
-        and_(
-            AdminScholarship.user_id == user.id,
-            AdminScholarship.scholarship_type_id == scholarship_type_id,
-        )
+        and_(AdminScholarship.user_id == user.id, AdminScholarship.scholarship_type_id == scholarship_type_id)
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none() is not None
@@ -206,7 +189,7 @@ async def _check_application_review_permission(user: User, application_id: int, 
     return True  # Default allow if no specific restrictions
 
 
-@router.get("/applications", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("/applications")
 @professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_applications_for_review(
     request: Request,
@@ -279,33 +262,24 @@ async def get_applications_for_review(
             filtered_applications.append(filtered_app)
 
         return ApiResponse(
-            success=True,
-            message="Applications for review retrieved successfully",
-            data=filtered_applications,
+            success=True, message="Applications for review retrieved successfully", data=filtered_applications
         )
 
     except HTTPException:
         raise
     except ValueError as e:
         logger.warning(f"Invalid request parameters for college applications: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid request parameters: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid request parameters: {str(e)}")
     except ReviewPermissionError as e:
         logger.warning(f"Permission denied for college applications access: {str(e)}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
         logger.error(f"Invalid parameters for applications query: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid query parameters: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid query parameters: {str(e)}")
     except DatabaseError as e:
         logger.error(f"Database error retrieving applications: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database service temporarily unavailable",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
         )
     except Exception as e:
         logger.error(f"Unexpected error retrieving applications: {str(e)}")
@@ -315,10 +289,7 @@ async def get_applications_for_review(
         )
 
 
-@router.post(
-    "/applications/{application_id}/review",
-    response_model=ApiResponse[CollegeReviewResponse],
-)
+@router.post("/applications/{application_id}/review")
 @professor_rate_limit(requests=50, window_seconds=600)  # 50 review submissions per 10 minutes
 async def create_college_review(
     request: Request,
@@ -344,9 +315,7 @@ async def create_college_review(
     try:
         service = CollegeReviewService(db)
         college_review = await service.create_or_update_review(
-            application_id=application_id,
-            reviewer_id=current_user.id,
-            review_data=review_data.dict(exclude_unset=True),
+            application_id=application_id, reviewer_id=current_user.id, review_data=review_data.dict(exclude_unset=True)
         )
 
         return ApiResponse(
@@ -357,33 +326,20 @@ async def create_college_review(
 
     except ValueError as e:
         logger.warning(f"Invalid review data for application {application_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid review data: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}")
     except PermissionError as e:
         logger.warning(f"Permission denied for college review creation by user {current_user.id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to review this application",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application")
     except ValueError as e:
         logger.error(f"Invalid review data for application {application_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid review data: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}")
     except IntegrityError as e:
         logger.error(f"Database integrity error creating review for application {application_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Review creation conflicts with existing data",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Review creation conflicts with existing data")
     except DatabaseError as e:
         logger.error(f"Database error creating review for application {application_id}: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database service temporarily unavailable",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
         )
     except Exception as e:
         logger.error(f"Unexpected error creating college review for application {application_id}: {str(e)}")
@@ -393,7 +349,7 @@ async def create_college_review(
         )
 
 
-@router.put("/reviews/{review_id}", response_model=ApiResponse[CollegeReviewResponse])
+@router.put("/reviews/{review_id}")
 async def update_college_review(
     review_id: int,
     review_data: CollegeReviewUpdate,
@@ -416,10 +372,7 @@ async def update_college_review(
             UserRole.admin,
             UserRole.super_admin,
         ]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to update this review",
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this review")
 
         # Update review
         service = CollegeReviewService(db)
@@ -439,33 +392,20 @@ async def update_college_review(
         raise
     except ValueError as e:
         logger.warning(f"Invalid review data for review {review_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid review data: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}")
     except PermissionError as e:
         logger.warning(f"Permission denied for review update by user {current_user.id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this review",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this review")
     except ValueError as e:
         logger.error(f"Invalid review data for update {review_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid review data: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}")
     except IntegrityError as e:
         logger.error(f"Database integrity error updating review {review_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Review update conflicts with existing data",
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Review update conflicts with existing data")
     except DatabaseError as e:
         logger.error(f"Database error updating review {review_id}: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database service temporarily unavailable",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
         )
     except Exception as e:
         logger.error(f"Unexpected error updating college review {review_id}: {str(e)}")
@@ -475,7 +415,7 @@ async def update_college_review(
         )
 
 
-@router.get("/rankings", response_model=ApiResponse[List[Dict[str, Any]]])
+@router.get("/rankings")
 async def get_rankings(
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
@@ -532,29 +472,21 @@ async def get_rankings(
             )
 
         return ApiResponse(
-            success=True,
-            message=f"Retrieved {len(rankings_data)} rankings successfully",
-            data=rankings_data,
+            success=True, message=f"Retrieved {len(rankings_data)} rankings successfully", data=rankings_data
         )
 
     except ValueError as e:
         logger.warning(f"Invalid query parameters for rankings: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid query parameters: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid query parameters: {str(e)}")
     except CollegeReviewError as e:
         logger.error(f"College review error retrieving rankings: {str(e)}")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error retrieving rankings: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve rankings",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve rankings")
 
 
-@router.post("/rankings", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/rankings")
 async def create_ranking(
     scholarship_type_id: int = Body(..., description="Scholarship type ID"),
     sub_type_code: str = Body(..., description="Sub-type code"),
@@ -605,28 +537,19 @@ async def create_ranking(
 
     except ValueError as e:
         logger.warning(f"Invalid ranking creation data: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid ranking data: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid ranking data: {str(e)}")
     except CollegeReviewError as e:
         logger.error(f"College review error creating ranking: {str(e)}")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error creating ranking: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create ranking",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create ranking")
 
 
-@router.get("/rankings/{ranking_id}", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/rankings/{ranking_id}")
 @professor_rate_limit(requests=200, window_seconds=600)  # 200 requests per 10 minutes
 async def get_ranking(
-    request: Request,
-    ranking_id: int,
-    current_user: User = Depends(require_college),
-    db: AsyncSession = Depends(get_db),
+    request: Request, ranking_id: int, current_user: User = Depends(require_college), db: AsyncSession = Depends(get_db)
 ):
     """Get a ranking with all its items"""
 
@@ -708,13 +631,10 @@ async def get_ranking(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error retrieving ranking: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve ranking",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve ranking")
 
 
-@router.put("/rankings/{ranking_id}/order", response_model=ApiResponse[Dict[str, Any]])
+@router.put("/rankings/{ranking_id}/order")
 @professor_rate_limit(requests=30, window_seconds=600)  # 30 ranking updates per 10 minutes
 async def update_ranking_order(
     request: Request,
@@ -751,13 +671,10 @@ async def update_ranking_order(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error updating ranking order: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update ranking order",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update ranking order")
 
 
-@router.post("/rankings/{ranking_id}/distribute", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/rankings/{ranking_id}/distribute")
 async def execute_quota_distribution(
     ranking_id: int,
     distribution_request: QuotaDistributionRequest,
@@ -800,13 +717,10 @@ async def execute_quota_distribution(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error executing distribution: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to execute distribution",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to execute distribution")
 
 
-@router.post("/rankings/{ranking_id}/finalize", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/rankings/{ranking_id}/finalize")
 async def finalize_ranking(
     ranking_id: int,
     current_user: User = Depends(require_admin),  # Only admin can finalize rankings
@@ -840,13 +754,10 @@ async def finalize_ranking(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error finalizing ranking: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to finalize ranking",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to finalize ranking")
 
 
-@router.get("/quota-status", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/quota-status")
 async def get_quota_status(
     scholarship_type_id: int = Query(..., description="Scholarship type ID"),
     academic_year: int = Query(..., description="Academic year"),
@@ -859,35 +770,23 @@ async def get_quota_status(
     try:
         service = CollegeReviewService(db)
         quota_status = await service.get_quota_status(
-            scholarship_type_id=scholarship_type_id,
-            academic_year=academic_year,
-            semester=semester,
+            scholarship_type_id=scholarship_type_id, academic_year=academic_year, semester=semester
         )
 
-        return ApiResponse(
-            success=True,
-            message="Quota status retrieved successfully",
-            data=quota_status,
-        )
+        return ApiResponse(success=True, message="Quota status retrieved successfully", data=quota_status)
 
     except ValueError as e:
         logger.warning(f"Invalid quota status parameters: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid parameters: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid parameters: {str(e)}")
     except CollegeReviewError as e:
         logger.error(f"College review error retrieving quota status: {str(e)}")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error retrieving quota status: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve quota status",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota status")
 
 
-@router.get("/statistics", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/statistics")
 async def get_college_review_statistics(
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
@@ -909,11 +808,7 @@ async def get_college_review_statistics(
             from sqlalchemy.orm import join
 
             base_query = base_query.select_from(
-                join(
-                    CollegeReview,
-                    Application,
-                    CollegeReview.application_id == Application.id,
-                )
+                join(CollegeReview, Application, CollegeReview.application_id == Application.id)
             )
 
             if academic_year:
@@ -950,30 +845,20 @@ async def get_college_review_statistics(
             },
         }
 
-        return ApiResponse(
-            success=True,
-            message="College review statistics retrieved successfully",
-            data=statistics,
-        )
+        return ApiResponse(success=True, message="College review statistics retrieved successfully", data=statistics)
 
     except ValueError as e:
         logger.warning(f"Invalid statistics parameters: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid parameters: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid parameters: {str(e)}")
     except CollegeReviewError as e:
         logger.error(f"College review error retrieving statistics: {str(e)}")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error retrieving statistics: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve statistics",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve statistics")
 
 
-@router.get("/available-combinations", response_model=ApiResponse[Dict[str, Any]])
+@router.get("/available-combinations")
 async def get_available_combinations(current_user: User = Depends(require_college), db: AsyncSession = Depends(get_db)):
     """Get available combinations of scholarship types, academic years, and semesters from configurations"""
 
@@ -1065,11 +950,7 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
             f"Retrieved {len(scholarship_types)} scholarship types, {len(academic_years)} years, {len(semester_strings)} semesters"
         )
 
-        return ApiResponse(
-            success=True,
-            message="Available combinations retrieved successfully",
-            data=response_data,
-        )
+        return ApiResponse(success=True, message="Available combinations retrieved successfully", data=response_data)
 
     except Exception as e:
         logger.error(f"Error retrieving available combinations: {str(e)}")

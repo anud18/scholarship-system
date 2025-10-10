@@ -1,15 +1,18 @@
 /**
- * Reference Data API Module
+ * Reference Data API Module (OpenAPI-typed)
  *
  * Provides access to system reference data:
  * - Academies/colleges
  * - Departments
  * - Degrees, identities, enrollment types
  * - Scholarship periods
+ *
+ * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import type { ApiClient } from '../client';
-import type { ApiResponse } from '../../api';
+import { typedClient } from '../typed-client';
+import { toApiResponse } from '../compat';
+import type { ApiResponse } from '../../api.legacy';
 
 type Academy = {
   id: number;
@@ -59,49 +62,54 @@ type ScholarshipPeriodsResponse = {
   total_periods: number;
 };
 
-export function createReferenceDataApi(client: ApiClient) {
+export function createReferenceDataApi() {
   return {
     /**
      * Get all academies/colleges
+     * Type-safe: Response type inferred from OpenAPI
      */
     getAcademies: async (): Promise<ApiResponse<Academy[]>> => {
-      return client.request("/reference-data/academies");
+      const response = await typedClient.raw.GET('/api/v1/reference-data/academies');
+      return toApiResponse(response);
     },
 
     /**
      * Get all departments
+     * Type-safe: Response type inferred from OpenAPI
      */
     getDepartments: async (): Promise<ApiResponse<Department[]>> => {
-      return client.request("/reference-data/departments");
+      const response = await typedClient.raw.GET('/api/v1/reference-data/departments');
+      return toApiResponse(response);
     },
 
     /**
      * Get all reference data in one request
+     * Type-safe: Response type inferred from OpenAPI
      */
     getAll: async (): Promise<ApiResponse<ReferenceDataAll>> => {
-      return client.request("/reference-data/all");
+      const response = await typedClient.raw.GET('/api/v1/reference-data/all');
+      return toApiResponse(response);
     },
 
     /**
      * Get scholarship periods based on application cycle
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getScholarshipPeriods: async (params?: {
       scholarship_id?: number;
       scholarship_code?: string;
       application_cycle?: string;
     }): Promise<ApiResponse<ScholarshipPeriodsResponse>> => {
-      const queryParams = new URLSearchParams();
-      if (params) {
-        Object.entries(params).forEach(([key, value]) => {
-          if (value !== undefined) {
-            queryParams.append(key, value.toString());
-          }
-        });
-      }
-      const query = queryParams.toString();
-      return client.request(
-        `/reference-data/scholarship-periods${query ? `?${query}` : ""}`
-      );
+      const response = await typedClient.raw.GET('/api/v1/reference-data/scholarship-periods', {
+        params: {
+          query: {
+            scholarship_id: params?.scholarship_id,
+            scholarship_code: params?.scholarship_code,
+            application_cycle: params?.application_cycle,
+          },
+        },
+      });
+      return toApiResponse(response);
     },
   };
 }

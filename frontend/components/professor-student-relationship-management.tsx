@@ -143,7 +143,7 @@ export default function ProfessorStudentRelationshipManagement() {
       const response =
         await api.professorStudent.getProfessorStudentRelationships();
       if (response.success && response.data) {
-        setRelationships(response.data);
+        setRelationships(response.data as ProfessorStudentRelationship[]);
       }
     } catch (error) {
       toast({

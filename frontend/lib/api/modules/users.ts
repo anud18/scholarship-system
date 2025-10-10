@@ -1,15 +1,18 @@
 /**
- * Users API Module
+ * Users API Module (OpenAPI-typed)
  *
  * Handles user-related operations including:
  * - Profile management
  * - Student information
  * - User CRUD operations (admin)
  * - User statistics
+ *
+ * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import type { ApiClient } from '../client';
-import type { ApiResponse, User, Student, StudentInfoResponse } from '../../api';
+import { typedClient } from '../typed-client';
+import { toApiResponse } from '../compat';
+import type { ApiResponse, User, Student, StudentInfoResponse } from '../../api.legacy';
 
 // Import types from main api.ts for now
 // TODO: Move these to a shared types file
@@ -63,129 +66,163 @@ type UserCreate = {
   status?: "在學" | "畢業" | "在職" | "退休";
   dept_code?: string;
   dept_name?: string;
+  college_code?: string;
   comment?: string;
+  raw_data?: {
+    chinese_name?: string;
+    english_name?: string;
+    [key: string]: any;
+  };
+  // Backward compatibility fields
+  username?: string;
+  full_name?: string;
+  chinese_name?: string;
+  english_name?: string;
 };
 
 type UserUpdate = Partial<UserCreate>;
 
 type UserStats = {
   total_users: number;
-  by_role: Record<string, number>;
-  by_user_type: Record<string, number>;
-  by_status: Record<string, number>;
+  role_distribution: Record<string, number>;
+  user_type_distribution: Record<string, number>;
+  status_distribution: Record<string, number>;
   recent_registrations: number;
 };
 
-export function createUsersApi(client: ApiClient) {
+export function createUsersApi() {
   return {
     /**
      * Get current user's profile
+     * Type-safe: Response type inferred from OpenAPI
      */
     getProfile: async (): Promise<ApiResponse<User>> => {
-      return client.request("/users/me");
+      const response = await typedClient.raw.GET('/api/v1/users/me');
+      return toApiResponse<User>(response);
     },
 
     /**
      * Update current user's profile
+     * Type-safe: Request body validated against OpenAPI
      */
     updateProfile: async (
       userData: Partial<User>
     ): Promise<ApiResponse<User>> => {
-      return client.request("/users/me", {
-        method: "PUT",
-        body: JSON.stringify(userData),
+      const response = await typedClient.raw.PUT('/api/v1/users/me', {
+        body: userData,
       });
+      return toApiResponse<User>(response);
     },
 
     /**
      * Get current student's detailed information
+     * Type-safe: Response type inferred from OpenAPI
      */
     getStudentInfo: async (): Promise<ApiResponse<StudentInfoResponse>> => {
-      return client.request("/users/student-info");
+      const response = await typedClient.raw.GET('/api/v1/users/student-info');
+      return toApiResponse<StudentInfoResponse>(response);
     },
 
     /**
      * Update current student's information
+     * Type-safe: Request body validated against OpenAPI
      */
     updateStudentInfo: async (
       studentData: Partial<Student>
     ): Promise<ApiResponse<Student>> => {
-      return client.request("/users/student-info", {
-        method: "PUT",
-        body: JSON.stringify(studentData),
+      const response = await typedClient.raw.PUT('/api/v1/users/student-info', {
+        body: studentData as any, // Partial<Student> makes all fields optional for PATCH updates
       });
+      return toApiResponse<Student>(response);
     },
 
     /**
      * Get all users with pagination and filters (admin)
+     * Type-safe: Query parameters validated against OpenAPI
      */
-    getAll: (params?: {
+    getAll: async (params?: {
       page?: number;
       size?: number;
       role?: string;
       search?: string;
-    }) =>
-      client.request<PaginatedResponse<UserListResponse>>("/users", {
-        method: "GET",
-        params,
-      }),
+    }) => {
+      const response = await typedClient.raw.GET('/api/v1/users', {
+        params: { query: params },
+      });
+      return toApiResponse<PaginatedResponse<UserListResponse>>(response);
+    },
 
     /**
      * Get user by ID (admin)
+     * Type-safe: Path parameter validated against OpenAPI
      */
-    getById: (userId: number) =>
-      client.request<UserResponse>(`/users/${userId}`, {
-        method: "GET",
-      }),
+    getById: async (userId: number) => {
+      const response = await typedClient.raw.GET('/api/v1/users/{id}', {
+        params: { path: { id: userId } },
+      });
+      return toApiResponse<UserResponse>(response);
+    },
 
     /**
      * Create new user (admin)
+     * Type-safe: Request body validated against OpenAPI
      */
-    create: (userData: UserCreate) =>
-      client.request<UserResponse>("/users", {
-        method: "POST",
-        body: JSON.stringify(userData),
-      }),
+    create: async (userData: UserCreate) => {
+      const response = await typedClient.raw.POST('/api/v1/users', {
+        body: userData as any, // TypeScript undefined vs Python None/null handling difference
+      });
+      return toApiResponse<UserResponse>(response);
+    },
 
     /**
      * Update user (admin)
+     * Type-safe: Request body and path parameter validated
      */
-    update: (userId: number, userData: UserUpdate) =>
-      client.request<UserResponse>(`/users/${userId}`, {
-        method: "PUT",
-        body: JSON.stringify(userData),
-      }),
+    update: async (userId: number, userData: UserUpdate) => {
+      const response = await typedClient.raw.PUT('/api/v1/users/{id}', {
+        params: { path: { id: userId } },
+        body: userData,
+      });
+      return toApiResponse<UserResponse>(response);
+    },
 
     /**
      * Delete user - hard delete (admin)
+     * Type-safe: Path parameter validated against OpenAPI
      */
-    delete: (userId: number) =>
-      client.request<{
+    delete: async (userId: number) => {
+      const response = await typedClient.raw.DELETE('/api/v1/users/{id}', {
+        params: { path: { id: userId } },
+      });
+      return toApiResponse<{
         success: boolean;
         message: string;
         data: { user_id: number };
-      }>(`/users/${userId}`, {
-        method: "DELETE",
-      }),
+      }>(response);
+    },
 
     /**
      * Reset user password (not supported in SSO model)
+     * Type-safe: Path parameter validated against OpenAPI
      */
-    resetPassword: (userId: number) =>
-      client.request<{
+    resetPassword: async (userId: number) => {
+      const response = await typedClient.raw.POST('/api/v1/users/{id}/reset-password', {
+        params: { path: { id: userId } },
+      });
+      return toApiResponse<{
         success: boolean;
         message: string;
         data: { user_id: number };
-      }>(`/users/${userId}/reset-password`, {
-        method: "POST",
-      }),
+      }>(response);
+    },
 
     /**
      * Get user statistics overview (admin)
+     * Type-safe: Response type inferred from OpenAPI
      */
-    getStats: () =>
-      client.request<UserStats>("/users/stats/overview", {
-        method: "GET",
-      }),
+    getStats: async () => {
+      const response = await typedClient.raw.GET('/api/v1/users/stats/overview');
+      return toApiResponse<UserStats>(response);
+    },
   };
 }

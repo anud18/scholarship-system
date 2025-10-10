@@ -61,7 +61,7 @@ export function EmailTestModeBanner() {
 
   return (
     <Alert
-      variant="warning"
+      variant="default"
       className="relative border-yellow-500 bg-yellow-50 dark:bg-yellow-950 mb-4 rounded-lg"
     >
       <div className="flex items-start gap-3">

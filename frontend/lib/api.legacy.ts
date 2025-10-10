@@ -477,6 +477,8 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
+    status?: 'data_unavailable' | 'passed' | 'failed';
+    system_message?: string;
   }>;
   warnings?: Array<{
     rule_id: number;
@@ -489,6 +491,8 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
+    status?: 'data_unavailable' | 'passed' | 'failed';
+    system_message?: string;
   }>;
   errors?: Array<{
     rule_id: number;
@@ -501,6 +505,8 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
+    status?: 'data_unavailable' | 'passed' | 'failed';
+    system_message?: string;
   }>;
   created_at?: string;
 }
@@ -665,8 +671,8 @@ export interface UserUpdate {
 export interface UserStats {
   total_users: number;
   role_distribution: Record<string, number>;
-  active_users: number;
-  inactive_users: number;
+  user_type_distribution: Record<string, number>;
+  status_distribution: Record<string, number>;
   recent_registrations: number;
 }
 
@@ -760,6 +766,7 @@ export interface ApplicationDocument {
   is_active: boolean;
   upload_instructions?: string;
   upload_instructions_en?: string;
+  example_file_url?: string; // MinIO object name for example file
   validation_rules?: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -1119,9 +1126,9 @@ export interface UserProfile {
 }
 
 export interface CompleteUserProfile {
-  user_info: UserResponse;
+  user_info: Record<string, any>; // From User model API
   profile: UserProfile | null;
-  student_info?: any;
+  student_info?: Record<string, any>; // Student-specific data if applicable
 }
 
 export interface UserProfileUpdate {

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiClient } from "@/lib/api";
+import type { UserStats, UserCreate as UserCreateType } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -44,34 +45,12 @@ interface UserListResponse {
   };
 }
 
-interface UserStats {
-  total_users: number;
-  role_distribution: Record<string, number>;
-  active_users: number;
-  inactive_users: number;
-  recent_registrations: number;
-}
+// Using UserStats from @/lib/api
 
-interface UserCreate {
-  nycu_id: string;
-  email: string;
-  name: string;
-  role: string;
-  user_type: string;
-  status: string;
-  dept_code: string;
-  dept_name: string;
-  comment: string;
-  raw_data: {
-    chinese_name: string;
-    english_name: string;
-  };
-  username: string;
-  full_name: string;
-  chinese_name: string;
-  english_name: string;
-  password: string;
-  student_no: string;
+// Extend imported UserCreate with form-specific fields
+interface UserCreateForm extends UserCreateType {
+  password?: string;
+  student_no?: string;
 }
 
 interface ScholarshipPermission {
@@ -102,30 +81,17 @@ export function UserPermissionManagement() {
   const [userStats, setUserStats] = useState<UserStats>({
     total_users: 0,
     role_distribution: {},
-    active_users: 0,
-    inactive_users: 0,
+    user_type_distribution: {},
+    status_distribution: {},
     recent_registrations: 0,
   });
   const [showUserForm, setShowUserForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserListResponse | null>(null);
-  const [userForm, setUserForm] = useState<UserCreate>({
+  const [userForm, setUserForm] = useState<UserCreateForm>({
     nycu_id: "",
     email: "",
     name: "",
     role: "college",
-    user_type: "student",
-    status: "在學",
-    dept_code: "",
-    dept_name: "",
-    comment: "",
-    raw_data: {
-      chinese_name: "",
-      english_name: "",
-    },
-    username: "",
-    full_name: "",
-    chinese_name: "",
-    english_name: "",
     password: "",
     student_no: "",
   });
@@ -164,7 +130,7 @@ export function UserPermissionManagement() {
       }
       rolesParam = rolesParam
         .split(",")
-        .map((role) => role.trim().toUpperCase())
+        .map((role) => role.trim())
         .join(",");
 
       const params: any = {
@@ -273,7 +239,7 @@ export function UserPermissionManagement() {
     }
   }, [userSearch, userRoleFilter]);
 
-  const handleUserFormChange = (field: keyof UserCreate, value: any) => {
+  const handleUserFormChange = (field: keyof UserCreateForm, value: any) => {
     setUserForm((prev) => ({ ...prev, [field]: value }));
 
     if (field === "role") {
@@ -581,14 +547,14 @@ export function UserPermissionManagement() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">活躍使用者</CardTitle>
+            <CardTitle className="text-sm font-medium">在職使用者</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {userStats.active_users || 0}
+              {userStats.status_distribution?.['在職'] || 0}
             </div>
-            <p className="text-xs text-muted-foreground">最近30天登入</p>
+            <p className="text-xs text-muted-foreground">目前在職狀態</p>
           </CardContent>
         </Card>
 

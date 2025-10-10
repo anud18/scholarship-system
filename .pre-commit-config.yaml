@@ -81,7 +81,8 @@ repos:
       - id: check-toml
       - id: check-xml
       - id: check-added-large-files
-        args: [--maxkb=1000]
+        args: ['--maxkb=1000', '--enforce-all']
+        exclude: ^frontend/lib/api/generated/
       - id: check-case-conflict
       - id: check-merge-conflict
       - id: check-executables-have-shebangs
@@ -172,6 +173,15 @@ repos:
         files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false
 
+      # OpenAPI Type Generation Check
+      - id: api-types-check
+        name: Check API Types are up-to-date
+        entry: bash -c 'cd frontend && npm run api:generate && git diff --exit-code lib/api/generated/schema.d.ts || (echo "⚠️  API types changed! Please commit the updated schema.d.ts file."; exit 1)'
+        language: system
+        pass_filenames: false
+        files: ^backend/app/(api|models|schemas)/.*\.py$
+        stages: [commit]
+
       # Database migration check
       - id: migration-check
         name: Migration Check
@@ -183,21 +193,7 @@ repos:
       # Environment file validation
       - id: env-validation
         name: Environment File Validation
-        entry: bash -c 'python3 -c "
-import os
-import sys
-from pathlib import Path
-
-env_files = [\"backend/.env.example\", \"frontend/.env.example\"]
-for env_file in env_files:
-    if Path(env_file).exists():
-        with open(env_file) as f:
-            content = f.read()
-            if \"secret\" in content.lower() and \"=example\" not in content.lower() and \"=your\" not in content.lower():
-                print(f\"Warning: {env_file} may contain real secrets\")
-                sys.exit(1)
-print(\"Environment files validated\")
-"'
+        entry: bash -c 'python3 -c "import os; import sys; from pathlib import Path; env_files = [\"backend/.env.example\", \"frontend/.env.example\"]; [sys.exit(1) if Path(f).exists() and \"secret\" in open(f).read().lower() and \"=example\" not in open(f).read().lower() and \"=your\" not in open(f).read().lower() else None for f in env_files]; print(\"Environment files validated\")"'
         language: system
         files: \.env.*
         pass_filenames: false
@@ -225,6 +221,7 @@ exclude: |
     .*\.min\.css|
     frontend/public/|
     frontend/.next/|
+    frontend/lib/api/generated/schema\.d\.ts|
     backend/alembic/versions/|
     .*\.pyc|
     .*/__pycache__/|

@@ -1,47 +1,61 @@
 /**
- * Scholarships API Module
+ * Scholarships API Module (OpenAPI-typed)
  *
  * Handles scholarship-related operations including:
  * - Fetching eligible scholarships
  * - Getting scholarship details
  * - Managing combined PhD scholarships
+ *
+ * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import type { ApiClient } from '../client';
-import type { ApiResponse, ScholarshipType } from '../../api';
+import { typedClient } from '../typed-client';
+import { toApiResponse } from '../compat';
+import type { ApiResponse, ScholarshipType } from '../../api.legacy';
 
-export function createScholarshipsApi(client: ApiClient) {
+export function createScholarshipsApi() {
   return {
     /**
      * Get scholarships eligible for current user
+     * Type-safe: Response array inferred from OpenAPI
      */
     getEligible: async (): Promise<ApiResponse<ScholarshipType[]>> => {
-      return client.request("/scholarships/eligible");
+      const response = await typedClient.raw.GET('/api/v1/scholarships/eligible');
+      return toApiResponse(response);
     },
 
     /**
      * Get scholarship by ID
+     * Type-safe: Path parameter validated against OpenAPI
      */
     getById: async (id: number): Promise<ApiResponse<ScholarshipType>> => {
-      return client.request(`/scholarships/${id}`);
+      const response = await typedClient.raw.GET('/api/v1/scholarships/{id}', {
+        params: { path: { id } },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Get all scholarships
+     * Type-safe: Response array inferred from OpenAPI
      */
     getAll: async (): Promise<ApiResponse<any[]>> => {
-      return client.request("/scholarships");
+      const response = await typedClient.raw.GET('/api/v1/scholarships');
+      return toApiResponse(response);
     },
 
     /**
      * Get combined scholarships
+     * Type-safe: Response array inferred from OpenAPI
      */
     getCombined: async (): Promise<ApiResponse<ScholarshipType[]>> => {
-      return client.request("/scholarships/combined/list");
+      const response = await (typedClient.raw.GET as any)('/api/v1/scholarships/combined/list', {});
+      return toApiResponse<ScholarshipType[]>(response);
     },
 
     /**
      * Create combined PhD scholarship with sub-scholarships
+     * Type-safe: Request body validated against OpenAPI
      */
     createCombinedPhd: async (data: {
       name: string;
@@ -63,10 +77,10 @@ export function createScholarshipsApi(client: ApiClient) {
         application_end_date?: string;
       }>;
     }): Promise<ApiResponse<ScholarshipType>> => {
-      return client.request("/scholarships/combined/phd", {
-        method: "POST",
-        body: JSON.stringify(data),
+      const response = await (typedClient.raw.POST as any)('/api/v1/scholarships/combined/phd', {
+        body: data,
       });
+      return toApiResponse<ScholarshipType>(response);
     },
   };
 }

@@ -469,7 +469,7 @@ async def update_matrix_quota(
                 "sub_type_total": sub_type_total,
                 "grand_total": grand_total,
                 "updated_by": current_user.id,
-                "config_id": config.id,
+                "id": config.id,
             },
         )
 
@@ -802,9 +802,9 @@ async def create_scholarship_configuration(
         )
 
 
-@router.get("/configurations/{config_id}", response_model=ApiResponse)
+@router.get("/configurations/{id}", response_model=ApiResponse)
 async def get_scholarship_configuration(
-    config_id: int,
+    id: int,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -819,7 +819,7 @@ async def get_scholarship_configuration(
             select(ScholarshipConfiguration)
             .where(
                 and_(
-                    ScholarshipConfiguration.id == config_id,
+                    ScholarshipConfiguration.id == id,
                     ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
                 )
             )
@@ -901,9 +901,9 @@ async def get_scholarship_configuration(
         )
 
 
-@router.put("/configurations/{config_id}", response_model=ApiResponse)
+@router.put("/configurations/{id}", response_model=ApiResponse)
 async def update_scholarship_configuration(
-    config_id: int,
+    id: int,
     config_data: Dict[str, Any] = Body(...),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -917,7 +917,7 @@ async def update_scholarship_configuration(
         # Get existing configuration
         stmt = select(ScholarshipConfiguration).where(
             and_(
-                ScholarshipConfiguration.id == config_id,
+                ScholarshipConfiguration.id == id,
                 ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
             )
         )
@@ -1044,9 +1044,9 @@ async def update_scholarship_configuration(
         )
 
 
-@router.delete("/configurations/{config_id}", response_model=ApiResponse)
+@router.delete("/configurations/{id}", response_model=ApiResponse)
 async def deactivate_scholarship_configuration(
-    config_id: int,
+    id: int,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1059,7 +1059,7 @@ async def deactivate_scholarship_configuration(
         # Get existing configuration
         stmt = select(ScholarshipConfiguration).where(
             and_(
-                ScholarshipConfiguration.id == config_id,
+                ScholarshipConfiguration.id == id,
                 ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
             )
         )
@@ -1095,9 +1095,9 @@ async def deactivate_scholarship_configuration(
         )
 
 
-@router.post("/configurations/{config_id}/duplicate", response_model=ApiResponse)
+@router.post("/configurations/{id}/duplicate", response_model=ApiResponse)
 async def duplicate_scholarship_configuration(
-    config_id: int,
+    id: int,
     target_data: Dict[str, Any] = Body(...),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -1111,7 +1111,7 @@ async def duplicate_scholarship_configuration(
         # Get source configuration
         stmt = select(ScholarshipConfiguration).where(
             and_(
-                ScholarshipConfiguration.id == config_id,
+                ScholarshipConfiguration.id == id,
                 ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
             )
         )
@@ -1318,9 +1318,9 @@ async def list_scholarship_configurations(
 # Whitelist Management Endpoints
 
 
-@router.get("/{config_id}/whitelist", response_model=ApiResponse[List[WhitelistResponse]])
+@router.get("/{id}/whitelist", response_model=ApiResponse[List[WhitelistResponse]])
 async def get_configuration_whitelist(
-    config_id: int,
+    id: int,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1330,12 +1330,12 @@ async def get_configuration_whitelist(
     Returns whitelist organized by sub-scholarship type with student details
     """
     # Get configuration
-    stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == config_id)
+    stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == id)
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
 
     if not config:
-        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {id} 的獎學金配置")
 
     # Get all whitelisted students organized by sub_type
     whitelist_data = config.get_all_whitelisted_students()  # Returns Dict[str, List[str]] - nycu_ids
@@ -1374,9 +1374,9 @@ async def get_configuration_whitelist(
     return ApiResponse(success=True, message="成功取得白名單", data=response_list)
 
 
-@router.post("/{config_id}/whitelist/batch", response_model=ApiResponse[dict])
+@router.post("/{id}/whitelist/batch", response_model=ApiResponse[dict])
 async def batch_add_whitelist(
-    config_id: int,
+    id: int,
     request: WhitelistBatchAddRequest,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -1396,13 +1396,13 @@ async def batch_add_whitelist(
     stmt = (
         select(ScholarshipConfiguration)
         .options(joinedload(ScholarshipConfiguration.scholarship_type))
-        .where(ScholarshipConfiguration.id == config_id)
+        .where(ScholarshipConfiguration.id == id)
     )
     result = await db.execute(stmt)
     config = result.unique().scalar_one_or_none()
 
     if not config:
-        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {id} 的獎學金配置")
 
     added_count = 0
     errors = []
@@ -1433,9 +1433,9 @@ async def batch_add_whitelist(
     )
 
 
-@router.delete("/{config_id}/whitelist/batch", response_model=ApiResponse[dict])
+@router.delete("/{id}/whitelist/batch", response_model=ApiResponse[dict])
 async def batch_remove_whitelist(
-    config_id: int,
+    id: int,
     request: WhitelistBatchRemoveRequest,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -1450,12 +1450,12 @@ async def batch_remove_whitelist(
     }
     """
     # Get configuration
-    stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == config_id)
+    stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == id)
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
 
     if not config:
-        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {id} 的獎學金配置")
 
     removed_count = 0
 
@@ -1477,9 +1477,9 @@ async def batch_remove_whitelist(
     )
 
 
-@router.post("/{config_id}/whitelist/import", response_model=ApiResponse[WhitelistImportResult])
+@router.post("/{id}/whitelist/import", response_model=ApiResponse[WhitelistImportResult])
 async def import_whitelist_excel(
-    config_id: int,
+    id: int,
     file: UploadFile = File(...),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -1498,13 +1498,13 @@ async def import_whitelist_excel(
     stmt = (
         select(ScholarshipConfiguration)
         .options(selectinload(ScholarshipConfiguration.scholarship_type))
-        .where(ScholarshipConfiguration.id == config_id)
+        .where(ScholarshipConfiguration.id == id)
     )
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
 
     if not config:
-        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {id} 的獎學金配置")
 
     # Get valid sub_types
     valid_sub_types = config.scholarship_type.sub_type_list or ["general"]
@@ -1548,9 +1548,9 @@ async def import_whitelist_excel(
     )
 
 
-@router.get("/{config_id}/whitelist/export")
+@router.get("/{id}/whitelist/export")
 async def export_whitelist_excel(
-    config_id: int,
+    id: int,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1561,13 +1561,13 @@ async def export_whitelist_excel(
     stmt = (
         select(ScholarshipConfiguration)
         .options(selectinload(ScholarshipConfiguration.scholarship_type))
-        .where(ScholarshipConfiguration.id == config_id)
+        .where(ScholarshipConfiguration.id == id)
     )
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
 
     if not config:
-        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {id} 的獎學金配置")
 
     # Get all whitelisted students with details
     whitelist_data = config.get_all_whitelisted_students()  # Dict[str, List[str]]
@@ -1611,9 +1611,9 @@ async def export_whitelist_excel(
     )
 
 
-@router.get("/{config_id}/whitelist/template")
+@router.get("/{id}/whitelist/template")
 async def download_whitelist_template(
-    config_id: int,
+    id: int,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1624,13 +1624,13 @@ async def download_whitelist_template(
     stmt = (
         select(ScholarshipConfiguration)
         .options(selectinload(ScholarshipConfiguration.scholarship_type))
-        .where(ScholarshipConfiguration.id == config_id)
+        .where(ScholarshipConfiguration.id == id)
     )
     result = await db.execute(stmt)
     config = result.scalar_one_or_none()
 
     if not config:
-        raise HTTPException(status_code=404, detail=f"找不到ID為 {config_id} 的獎學金配置")
+        raise HTTPException(status_code=404, detail=f"找不到ID為 {id} 的獎學金配置")
 
     # Get valid sub_types
     valid_sub_types = config.scholarship_type.sub_type_list or ["general"]

@@ -274,16 +274,25 @@ export function EmailTestModePanel() {
     return labels[eventType] || eventType;
   };
 
-  const getStatusBadgeVariant = (status: string): "default" | "success" | "destructive" | "secondary" => {
+  const getStatusBadgeVariant = (status: string): "default" | "destructive" | "secondary" => {
     switch (status.toLowerCase()) {
       case "sent":
-        return "success";
+        return "default";
       case "failed":
         return "destructive";
       case "pending":
         return "secondary";
       default:
         return "default";
+    }
+  };
+
+  const getStatusBadgeClass = (status: string): string => {
+    switch (status.toLowerCase()) {
+      case "sent":
+        return "bg-green-500 text-white hover:bg-green-600";
+      default:
+        return "";
     }
   };
 
@@ -339,7 +348,7 @@ export function EmailTestModePanel() {
                 )}
               </div>
             </div>
-            <Badge variant={status.enabled ? "warning" : "secondary"} className="flex-shrink-0">
+            <Badge variant={status.enabled ? "default" : "secondary"} className="flex-shrink-0 bg-yellow-500 text-white hover:bg-yellow-600">
               {status.enabled ? "啟用" : "停用"}
             </Badge>
           </div>
@@ -361,8 +370,8 @@ export function EmailTestModePanel() {
 
           {/* Warning when enabled */}
           {status.enabled && (
-            <Alert variant="warning">
-              <AlertCircle className="h-4 w-4" />
+            <Alert variant="default" className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+              <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
               <AlertTitle>注意</AlertTitle>
               <AlertDescription>
                 測試模式啟用期間，所有系統郵件將不會發送給實際收件人。
@@ -467,7 +476,7 @@ export function EmailTestModePanel() {
                           <TableCell className="font-mono text-sm">{email.recipient_email}</TableCell>
                           <TableCell className="max-w-xs truncate">{email.subject}</TableCell>
                           <TableCell>
-                            <Badge variant={getStatusBadgeVariant(email.status)}>
+                            <Badge variant={getStatusBadgeVariant(email.status)} className={getStatusBadgeClass(email.status)}>
                               {email.status}
                             </Badge>
                           </TableCell>
@@ -661,7 +670,7 @@ export function EmailTestModePanel() {
               auditLogs.map((log) => (
                 <div key={log.id} className="border rounded-lg p-3 space-y-1">
                   <div className="flex items-center justify-between">
-                    <Badge variant={log.event_type === "enabled" ? "warning" : "secondary"}>
+                    <Badge variant={log.event_type === "enabled" ? "default" : "secondary"} className={log.event_type === "enabled" ? "bg-yellow-500 text-white hover:bg-yellow-600" : ""}>
                       {getEventTypeLabel(log.event_type)}
                     </Badge>
                     <span className="text-xs text-muted-foreground">

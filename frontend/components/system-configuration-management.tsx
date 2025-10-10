@@ -114,7 +114,7 @@ export default function SystemConfigurationManagement() {
       setError(null);
       const response = await apiClient.system.getConfigurations(undefined, showSensitive);
       if (response.success && response.data) {
-        setConfigurations(response.data);
+        setConfigurations(response.data as SystemConfiguration[]);
       } else {
         setError(response.message || "無法載入配置");
       }
