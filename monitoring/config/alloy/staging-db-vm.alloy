@@ -12,22 +12,27 @@ discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 }
 
+// Relabel rules for container metadata
+loki.relabel "container_labels" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+}
+
 // Collect Docker container logs
 loki.source.docker "containers" {
   host             = "unix:///var/run/docker.sock"
   targets          = discovery.docker.containers.targets
   forward_to       = [loki.process.add_labels.receiver]
-
-  // Relabel container information
-  relabel_rules {
-    source_labels = ["__meta_docker_container_name"]
-    target_label  = "container"
-  }
-
-  relabel_rules {
-    source_labels = ["__meta_docker_container_log_stream"]
-    target_label  = "stream"
-  }
+  relabel_rules    = loki.relabel.container_labels.rules
 }
 
 // Add environment and host labels to logs
@@ -95,17 +100,7 @@ prometheus.scrape "postgres_exporter" {
   scrape_interval = "15s"
 }
 
-// Scrape Redis Exporter
-prometheus.scrape "redis_exporter" {
-  targets = [{
-    __address__ = "redis-exporter:9121",
-  }]
-
-  forward_to = [prometheus.relabel.add_labels.receiver]
-
-  job_name = "redis"
-  scrape_interval = "15s"
-}
+// Note: Redis Exporter removed - Redis is on AP-VM, not DB-VM
 
 // Scrape MinIO metrics
 prometheus.scrape "minio" {

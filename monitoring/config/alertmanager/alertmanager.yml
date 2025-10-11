@@ -3,7 +3,8 @@
 
 global:
   # The smarthost and SMTP sender used for mail notifications
-  smtp_smarthost: '${ALERT_SMTP_HOST:-smtp.gmail.com}:${ALERT_SMTP_PORT:-587}'
+  # Note: Using single env var to avoid nested expansion issues
+  smtp_smarthost: '${ALERT_SMTP_SMARTHOST:-smtp.gmail.com:587}'
   smtp_from: '${ALERT_EMAIL_FROM:-alerts@example.com}'
   smtp_auth_username: '${ALERT_SMTP_USER:-}'
   smtp_auth_password: '${ALERT_SMTP_PASSWORD:-}'
