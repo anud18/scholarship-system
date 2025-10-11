@@ -68,13 +68,10 @@ storage_config:
 compactor:
   working_directory: /loki/compactor
   compaction_interval: 10m
-  retention_enabled: true
-  retention_delete_delay: 2h
-  retention_delete_worker_count: 150
+  retention_enabled: false
 
-# Limits configuration with per-tenant overrides
+# Limits configuration
 limits_config:
-  # Default limits
   reject_old_samples: true
   reject_old_samples_max_age: 168h
   ingestion_rate_mb: 4
@@ -85,23 +82,14 @@ limits_config:
   max_cache_freshness_per_query: 10m
   split_queries_by_interval: 15m
 
-  # Retention period (default: 30 days)
-  retention_period: 720h
-
-  # Per-tenant overrides
-  per_tenant_override_config: /etc/loki/limits.yml
-  per_tenant_override_period: 10s
-
-# Ruler configuration (for alerts)
-ruler:
-  storage:
-    type: local
-    local:
-      directory: /loki/rules
-  rule_path: /loki/rules-temp
-  alertmanager_url: http://alertmanager:9093
-  ring:
-    kvstore:
-      store: inmemory
-  enable_api: true
-  enable_alertmanager_v2: true
+# Ruler configuration (disabled - no AlertManager)
+# ruler:
+#   storage:
+#     type: local
+#     local:
+#       directory: /loki/rules
+#   rule_path: /loki/rules-temp
+#   ring:
+#     kvstore:
+#       store: inmemory
+#   enable_api: false

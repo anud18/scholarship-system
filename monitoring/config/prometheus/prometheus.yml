@@ -9,18 +9,18 @@ global:
     cluster: 'scholarship-system'
     monitor: 'main-prometheus'
 
-# Alertmanager configuration
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-            - alertmanager:9093
-      timeout: 10s
+# Alertmanager removed - no alerting configured
+# If you need alerting, add AlertManager service and uncomment:
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#             - alertmanager:9093
 
-# Load alert rules
-rule_files:
-  - '/etc/prometheus/alerts/*.yml'
-  - '/etc/prometheus/recording-rules/*.yml'
+# Alert rules (disabled - no AlertManager)
+# rule_files:
+#   - '/etc/prometheus/alerts/*.yml'
+#   - '/etc/prometheus/recording-rules/*.yml'
 
 # Scrape configurations
 scrape_configs:
@@ -70,6 +70,20 @@ scrape_configs:
         target_label: instance
         replacement: 'staging-ap-vm'
 
+  # Redis Exporter - Cache metrics (Staging AP-VM)
+  - job_name: 'staging-ap-redis-exporter'
+    static_configs:
+      - targets:
+          - 'redis-exporter-staging-ap:9121'
+        labels:
+          environment: 'staging'
+          vm: 'ap-vm'
+          service: 'redis-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'staging-redis'
+
   # Backend Application Metrics (Staging AP-VM)
   - job_name: 'staging-ap-backend'
     static_configs:
@@ -117,19 +131,7 @@ scrape_configs:
         target_label: instance
         replacement: 'staging-postgres'
 
-  # Redis Exporter - Cache metrics (Staging DB-VM)
-  - job_name: 'staging-db-redis-exporter'
-    static_configs:
-      - targets:
-          - 'redis-exporter-staging:9121'
-        labels:
-          environment: 'staging'
-          vm: 'db-vm'
-          service: 'redis-exporter'
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'staging-redis'
+  # Note: Redis is on AP-VM, not DB-VM. See staging-ap-redis-exporter below.
 
   # MinIO Exporter - Object storage metrics (Staging DB-VM)
   - job_name: 'staging-db-minio'
@@ -300,15 +302,7 @@ scrape_configs:
           service: 'grafana'
     metrics_path: '/metrics'
 
-  # AlertManager metrics
-  - job_name: 'alertmanager'
-    static_configs:
-      - targets:
-          - 'alertmanager:9093'
-        labels:
-          environment: 'monitoring'
-          service: 'alertmanager'
-    metrics_path: '/metrics'
+  # Note: AlertManager removed - no longer monitoring AlertManager
 
 # Remote write configuration (for Grafana Alloy to push metrics)
 # Already enabled via --web.enable-remote-write-receiver flag in docker-compose

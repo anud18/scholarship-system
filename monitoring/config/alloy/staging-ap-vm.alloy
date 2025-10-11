@@ -129,6 +129,18 @@ prometheus.scrape "nginx_exporter" {
   scrape_interval = "15s"
 }
 
+// Scrape Redis Exporter
+prometheus.scrape "redis_exporter" {
+  targets = [{
+    __address__ = "redis-exporter:9121",
+  }]
+
+  forward_to = [prometheus.relabel.add_labels.receiver]
+
+  job_name = "redis"
+  scrape_interval = "15s"
+}
+
 // Scrape Backend application metrics (if exposed)
 prometheus.scrape "backend" {
   targets = [{

@@ -193,6 +193,26 @@ services:
         max-size: "5m"
         max-file: "3"
 
+  # Redis Exporter
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis_exporter_staging_ap
+    environment:
+      REDIS_ADDR: "redis:6379"
+    expose:
+      - "9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - scholarship_staging_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
 volumes:
   redis_staging_data:
     driver: local

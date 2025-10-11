@@ -136,32 +136,9 @@ services:
           cpus: '0.5'
 
   # =========================================================================
-  # ALERTMANAGER - Alert Routing & Management
+  # ALERTMANAGER - Removed (not needed for current setup)
   # =========================================================================
-  alertmanager:
-    image: prom/alertmanager:latest
-    container_name: monitoring_alertmanager
-    ports:
-      - "9093:9093"
-    volumes:
-      - alertmanager_data:/alertmanager
-      - ./config/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--storage.path=/alertmanager'
-    networks:
-      - monitoring_network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
+  # If you need alerting, uncomment and configure AlertManager service here
 
 volumes:
   grafana_data:
@@ -169,8 +146,6 @@ volumes:
   loki_data:
     driver: local
   prometheus_data:
-    driver: local
-  alertmanager_data:
     driver: local
 
 networks:
