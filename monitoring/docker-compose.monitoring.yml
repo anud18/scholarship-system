@@ -20,9 +20,9 @@ services:
       GF_SECURITY_SECRET_KEY: ${GRAFANA_SECRET_KEY}
       GF_USERS_ALLOW_SIGN_UP: "false"
 
-      # Server
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
-      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      # Server - configured for nginx reverse proxy at /monitoring/
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://ss.test.nycu.edu.tw/monitoring/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
 
       # Auth
       GF_AUTH_ANONYMOUS_ENABLED: "false"
