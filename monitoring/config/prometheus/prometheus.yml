@@ -1,0 +1,314 @@
+# Prometheus Configuration for Scholarship System Monitoring
+# Multi-environment setup: staging and production
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'scholarship-system'
+    monitor: 'main-prometheus'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+      timeout: 10s
+
+# Load alert rules
+rule_files:
+  - '/etc/prometheus/alerts/*.yml'
+  - '/etc/prometheus/recording-rules/*.yml'
+
+# Scrape configurations
+scrape_configs:
+  # =========================================================================
+  # STAGING ENVIRONMENT - Application VM (ap-vm)
+  # =========================================================================
+
+  # Node Exporter - System metrics (Staging AP-VM)
+  - job_name: 'staging-ap-node-exporter'
+    static_configs:
+      - targets:
+          - 'node-exporter-staging-ap:9100'
+        labels:
+          environment: 'staging'
+          vm: 'ap-vm'
+          service: 'node-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'staging-ap-vm'
+
+  # cAdvisor - Container metrics (Staging AP-VM)
+  - job_name: 'staging-ap-cadvisor'
+    static_configs:
+      - targets:
+          - 'cadvisor-staging-ap:8080'
+        labels:
+          environment: 'staging'
+          vm: 'ap-vm'
+          service: 'cadvisor'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'staging-ap-vm'
+
+  # Nginx Exporter - Web server metrics (Staging AP-VM)
+  - job_name: 'staging-ap-nginx-exporter'
+    static_configs:
+      - targets:
+          - 'nginx-exporter-staging-ap:9113'
+        labels:
+          environment: 'staging'
+          vm: 'ap-vm'
+          service: 'nginx-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'staging-ap-vm'
+
+  # Backend Application Metrics (Staging AP-VM)
+  - job_name: 'staging-ap-backend'
+    static_configs:
+      - targets:
+          - 'backend-staging:8000'
+        labels:
+          environment: 'staging'
+          vm: 'ap-vm'
+          service: 'backend'
+    metrics_path: '/metrics'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'staging-backend'
+
+  # =========================================================================
+  # STAGING ENVIRONMENT - Database VM (db-vm)
+  # =========================================================================
+
+  # Node Exporter - System metrics (Staging DB-VM)
+  - job_name: 'staging-db-node-exporter'
+    static_configs:
+      - targets:
+          - 'node-exporter-staging-db:9100'
+        labels:
+          environment: 'staging'
+          vm: 'db-vm'
+          service: 'node-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'staging-db-vm'
+
+  # PostgreSQL Exporter - Database metrics (Staging DB-VM)
+  - job_name: 'staging-db-postgres-exporter'
+    static_configs:
+      - targets:
+          - 'postgres-exporter-staging:9187'
+        labels:
+          environment: 'staging'
+          vm: 'db-vm'
+          service: 'postgres-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'staging-postgres'
+
+  # Redis Exporter - Cache metrics (Staging DB-VM)
+  - job_name: 'staging-db-redis-exporter'
+    static_configs:
+      - targets:
+          - 'redis-exporter-staging:9121'
+        labels:
+          environment: 'staging'
+          vm: 'db-vm'
+          service: 'redis-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'staging-redis'
+
+  # MinIO Exporter - Object storage metrics (Staging DB-VM)
+  - job_name: 'staging-db-minio'
+    static_configs:
+      - targets:
+          - 'minio-staging:9000'
+        labels:
+          environment: 'staging'
+          vm: 'db-vm'
+          service: 'minio'
+    metrics_path: '/minio/v2/metrics/cluster'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'staging-minio'
+
+  # =========================================================================
+  # PRODUCTION ENVIRONMENT - Application VM (ap-vm)
+  # =========================================================================
+
+  # Node Exporter - System metrics (Production AP-VM)
+  - job_name: 'prod-ap-node-exporter'
+    static_configs:
+      - targets:
+          - 'node-exporter-prod-ap:9100'
+        labels:
+          environment: 'prod'
+          vm: 'ap-vm'
+          service: 'node-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'prod-ap-vm'
+
+  # cAdvisor - Container metrics (Production AP-VM)
+  - job_name: 'prod-ap-cadvisor'
+    static_configs:
+      - targets:
+          - 'cadvisor-prod-ap:8080'
+        labels:
+          environment: 'prod'
+          vm: 'ap-vm'
+          service: 'cadvisor'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'prod-ap-vm'
+
+  # Nginx Exporter - Web server metrics (Production AP-VM)
+  - job_name: 'prod-ap-nginx-exporter'
+    static_configs:
+      - targets:
+          - 'nginx-exporter-prod-ap:9113'
+        labels:
+          environment: 'prod'
+          vm: 'ap-vm'
+          service: 'nginx-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'prod-ap-vm'
+
+  # Backend Application Metrics (Production AP-VM)
+  - job_name: 'prod-ap-backend'
+    static_configs:
+      - targets:
+          - 'backend-prod:8000'
+        labels:
+          environment: 'prod'
+          vm: 'ap-vm'
+          service: 'backend'
+    metrics_path: '/metrics'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'prod-backend'
+
+  # =========================================================================
+  # PRODUCTION ENVIRONMENT - Database VM (db-vm)
+  # =========================================================================
+
+  # Node Exporter - System metrics (Production DB-VM)
+  - job_name: 'prod-db-node-exporter'
+    static_configs:
+      - targets:
+          - 'node-exporter-prod-db:9100'
+        labels:
+          environment: 'prod'
+          vm: 'db-vm'
+          service: 'node-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'prod-db-vm'
+
+  # PostgreSQL Exporter - Database metrics (Production DB-VM)
+  - job_name: 'prod-db-postgres-exporter'
+    static_configs:
+      - targets:
+          - 'postgres-exporter-prod:9187'
+        labels:
+          environment: 'prod'
+          vm: 'db-vm'
+          service: 'postgres-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'prod-postgres'
+
+  # Redis Exporter - Cache metrics (Production DB-VM)
+  - job_name: 'prod-db-redis-exporter'
+    static_configs:
+      - targets:
+          - 'redis-exporter-prod:9121'
+        labels:
+          environment: 'prod'
+          vm: 'db-vm'
+          service: 'redis-exporter'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'prod-redis'
+
+  # MinIO Exporter - Object storage metrics (Production DB-VM)
+  - job_name: 'prod-db-minio'
+    static_configs:
+      - targets:
+          - 'minio-prod:9000'
+        labels:
+          environment: 'prod'
+          vm: 'db-vm'
+          service: 'minio'
+    metrics_path: '/minio/v2/metrics/cluster'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'prod-minio'
+
+  # =========================================================================
+  # SELF-MONITORING - Prometheus, Loki, Grafana
+  # =========================================================================
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets:
+          - 'localhost:9090'
+        labels:
+          environment: 'monitoring'
+          service: 'prometheus'
+
+  # Loki metrics
+  - job_name: 'loki'
+    static_configs:
+      - targets:
+          - 'loki:3100'
+        labels:
+          environment: 'monitoring'
+          service: 'loki'
+
+  # Grafana metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets:
+          - 'grafana:3000'
+        labels:
+          environment: 'monitoring'
+          service: 'grafana'
+    metrics_path: '/metrics'
+
+  # AlertManager metrics
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets:
+          - 'alertmanager:9093'
+        labels:
+          environment: 'monitoring'
+          service: 'alertmanager'
+    metrics_path: '/metrics'
+
+# Remote write configuration (for Grafana Alloy to push metrics)
+# Already enabled via --web.enable-remote-write-receiver flag in docker-compose

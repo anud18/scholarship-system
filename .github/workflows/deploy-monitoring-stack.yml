@@ -1,0 +1,245 @@
+name: Deploy Monitoring Stack
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'monitoring/**'
+      - '.github/workflows/deploy-monitoring-stack.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy-monitoring-server:
+    name: Deploy Monitoring Server (Staging AP-VM)
+    runs-on: self-hosted
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create monitoring directories
+        run: |
+          sudo mkdir -p /opt/scholarship/monitoring
+          sudo chown -R $USER:$USER /opt/scholarship/monitoring
+
+      - name: Deploy monitoring configuration
+        run: |
+          # Copy monitoring directory to /opt/scholarship/monitoring
+          cp -r ./monitoring/* /opt/scholarship/monitoring/
+
+      - name: Pull latest monitoring images
+        run: |
+          cd /opt/scholarship/monitoring
+          docker compose -f docker-compose.monitoring.yml pull
+
+      - name: Deploy monitoring stack
+        run: |
+          cd /opt/scholarship/monitoring
+
+          # Export required environment variables from GitHub secrets
+          export GRAFANA_ADMIN_USER="${{ secrets.GRAFANA_ADMIN_USER }}"
+          export GRAFANA_ADMIN_PASSWORD="${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
+          export GRAFANA_SECRET_KEY="${{ secrets.GRAFANA_SECRET_KEY }}"
+          export GRAFANA_ROOT_URL="${{ secrets.GRAFANA_ROOT_URL }}"
+
+          # Optional alert configuration
+          export ALERT_EMAIL_FROM="${{ secrets.ALERT_EMAIL_FROM }}"
+          export ALERT_SMTP_HOST="${{ secrets.ALERT_SMTP_HOST }}"
+          export ALERT_SMTP_PORT="${{ secrets.ALERT_SMTP_PORT }}"
+          export ALERT_SMTP_USER="${{ secrets.ALERT_SMTP_USER }}"
+          export ALERT_SMTP_PASSWORD="${{ secrets.ALERT_SMTP_PASSWORD }}"
+          export ALERT_SLACK_WEBHOOK="${{ secrets.ALERT_SLACK_WEBHOOK }}"
+
+          # Start/restart monitoring stack
+          docker compose -f docker-compose.monitoring.yml up -d
+
+          # Wait for services to be healthy
+          echo "Waiting for services to start..."
+          sleep 30
+
+      - name: Health check monitoring services
+        run: |
+          echo "Checking service health..."
+
+          # Check if all services are running
+          docker ps --filter "name=monitoring_" --format "table {{.Names}}\t{{.Status}}"
+
+          # Test Grafana (using docker exec since port 3000 is not exposed to host)
+          if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health; then
+            echo "✅ Grafana is healthy"
+          else
+            echo "❌ Grafana health check failed"
+            exit 1
+          fi
+
+          # Test Prometheus
+          if curl -f http://localhost:9090/-/healthy > /dev/null 2>&1; then
+            echo "✅ Prometheus is healthy"
+          else
+            echo "❌ Prometheus health check failed"
+            exit 1
+          fi
+
+          # Test Loki
+          if curl -f http://localhost:3100/ready > /dev/null 2>&1; then
+            echo "✅ Loki is healthy"
+          else
+            echo "❌ Loki health check failed"
+            exit 1
+          fi
+
+          # Test AlertManager
+          if curl -f http://localhost:9093/-/healthy > /dev/null 2>&1; then
+            echo "✅ AlertManager is healthy"
+          else
+            echo "❌ AlertManager health check failed"
+            exit 1
+          fi
+
+          echo "All monitoring services are healthy!"
+
+      - name: Deploy Alloy to Staging AP-VM (localhost)
+        run: |
+          # Copy Alloy config to monitoring directory
+          sudo mkdir -p /opt/scholarship/monitoring/config/alloy
+          cp ./monitoring/config/alloy/staging-ap-vm.alloy /opt/scholarship/monitoring/config/alloy/
+
+          # Restart Alloy service if it's running
+          cd /opt/scholarship
+          if docker ps -q -f name=alloy > /dev/null 2>&1; then
+            docker compose -f docker-compose.staging.yml restart alloy || true
+          fi
+
+  deploy-staging-db-monitoring:
+    name: Deploy Staging DB-VM Monitoring
+    runs-on: self-hosted
+    needs: deploy-monitoring-server
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key for DB-VM
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_DB_SSH_KEY }}" > ~/.ssh/staging_db
+          chmod 600 ~/.ssh/staging_db
+          ssh-keyscan -p 8822 -H ${{ secrets.STAGING_DB_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Export monitoring images for DB-VM
+        run: |
+          echo "Exporting Docker images for air-gapped DB-VM..."
+          mkdir -p /tmp/monitoring-images
+
+          # Export required monitoring images to tar files
+          # Note: Redis is on AP-VM, so redis-exporter is NOT needed on DB-VM
+          docker pull grafana/alloy:latest
+          docker pull prom/node-exporter:latest
+          docker pull prometheuscommunity/postgres-exporter:latest
+
+          docker save grafana/alloy:latest -o /tmp/monitoring-images/alloy.tar
+          docker save prom/node-exporter:latest -o /tmp/monitoring-images/node-exporter.tar
+          docker save prometheuscommunity/postgres-exporter:latest -o /tmp/monitoring-images/postgres-exporter.tar
+
+          echo "✅ Images exported successfully"
+          ls -lh /tmp/monitoring-images/
+
+      - name: Transfer monitoring images to DB-VM
+        run: |
+          echo "Transferring images to DB-VM (this may take a few minutes)..."
+
+          # Create remote directory
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
+            "mkdir -p /tmp/monitoring-images"
+
+          # Transfer tar files (using compression for faster transfer)
+          scp -P 8822 -i ~/.ssh/staging_db -C \
+            /tmp/monitoring-images/*.tar \
+            ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/tmp/monitoring-images/
+
+          echo "✅ Images transferred successfully"
+
+      - name: Import monitoring images on DB-VM
+        run: |
+          echo "Importing Docker images on DB-VM..."
+
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
+            cd /tmp/monitoring-images
+
+            # Import all images
+            docker load -i alloy.tar
+            docker load -i node-exporter.tar
+            docker load -i postgres-exporter.tar
+
+            # Verify images are loaded
+            echo "Imported images:"
+            docker images | grep -E "grafana/alloy|prom/node-exporter|postgres-exporter"
+
+            # Clean up tar files to save space
+            rm -rf /tmp/monitoring-images
+
+            echo "✅ Images imported successfully"
+          EOF
+
+      - name: Deploy Alloy to Staging DB-VM
+        run: |
+          # Copy Alloy config to DB-VM (using SSH port 8822)
+          scp -P 8822 -i ~/.ssh/staging_db \
+            ./monitoring/config/alloy/staging-db-vm.alloy \
+            ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/monitoring/config/alloy/
+
+          # Restart Alloy service on DB-VM (using SSH port 8822)
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
+            cd /opt/scholarship
+            docker compose -f docker-compose.staging-db.yml restart alloy || true
+          EOF
+
+      - name: Verify staging metrics
+        run: |
+          echo "Waiting for metrics to be collected..."
+          sleep 30
+
+          # Check if staging targets are UP in Prometheus
+          TARGETS_DOWN=$(curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")] | length')
+
+          if [ "$TARGETS_DOWN" -eq "0" ]; then
+            echo "✅ All staging targets are UP"
+          else
+            echo "⚠️  Warning: $TARGETS_DOWN staging targets are DOWN"
+            echo "Check Prometheus targets at http://localhost:9090/targets"
+          fi
+
+          # Show staging logs in Loki
+          echo "Checking Loki logs..."
+          if curl -f -H "X-Scope-OrgID: staging" -G "http://localhost:3100/loki/api/v1/query" \
+            --data-urlencode 'query={environment="staging"}' \
+            --data-urlencode 'limit=1' > /dev/null 2>&1; then
+            echo "✅ Loki is receiving staging logs"
+          else
+            echo "⚠️  Warning: No staging logs found in Loki yet"
+          fi
+
+      - name: Cleanup SSH keys
+        if: always()
+        run: |
+          rm -f ~/.ssh/staging_db
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "========================================="
+          echo "  Monitoring Stack Deployment Complete"
+          echo "========================================="
+          echo ""
+          echo "Access monitoring:"
+          echo "  Grafana:      https://ss.test.nycu.edu.tw/monitoring/ (via nginx)"
+          echo "  Prometheus:   http://localhost:9090"
+          echo "  Loki:         http://localhost:3100"
+          echo "  AlertManager: http://localhost:9093"
+          echo ""
+          echo "Note: Grafana is only accessible via HTTPS reverse proxy"
+          echo "Staging environment monitoring is active"
+          echo ""

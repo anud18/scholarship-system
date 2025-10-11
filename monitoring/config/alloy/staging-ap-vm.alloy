@@ -1,0 +1,192 @@
+// Grafana Alloy Configuration for Staging Application VM
+// Environment: staging
+// Host: ap-vm
+// Components: Backend (FastAPI), Frontend (Next.js), Nginx, Redis
+
+// =============================================================================
+// LOGGING PIPELINE
+// =============================================================================
+
+// Discover Docker containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Collect Docker container logs
+loki.source.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.docker.containers.targets
+  forward_to       = [loki.process.add_labels.receiver]
+
+  // Relabel container information
+  relabel_rules {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+  }
+
+  relabel_rules {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+}
+
+// Add environment and host labels to logs
+loki.process "add_labels" {
+  forward_to = [loki.write.default.receiver]
+
+  // Add static labels
+  stage.static_labels {
+    values = {
+      environment = "staging",
+      host        = "ap-vm",
+    }
+  }
+
+  // Parse JSON logs from Nginx
+  stage.json {
+    expressions = {
+      request_time     = "request_time",
+      upstream_time    = "upstream_response_time",
+      status           = "status",
+      request_method   = "request_method",
+      request_uri      = "request_uri",
+    }
+  }
+
+  // Drop health check logs to reduce noise
+  stage.drop {
+    expression  = ".*\\/health.*"
+    drop_counter_reason = "health_check"
+  }
+
+  // Drop nginx status logs
+  stage.drop {
+    expression  = ".*\\/nginx_status.*"
+    drop_counter_reason = "nginx_status"
+  }
+}
+
+// Write logs to Loki with multi-tenant header
+loki.write "default" {
+  endpoint {
+    url = "http://monitoring-server:3100/loki/api/v1/push"
+
+    // Multi-tenant identification
+    headers = {
+      "X-Scope-OrgID" = "staging",
+    }
+
+    // Basic auth if needed
+    // basic_auth {
+    //   username = "loki"
+    //   password = "password"
+    // }
+  }
+}
+
+// =============================================================================
+// METRICS PIPELINE
+// =============================================================================
+
+// Scrape Node Exporter (system metrics)
+prometheus.scrape "node_exporter" {
+  targets = [{
+    __address__ = "node-exporter:9100",
+  }]
+
+  forward_to = [prometheus.relabel.add_labels.receiver]
+
+  job_name = "node"
+  scrape_interval = "15s"
+}
+
+// Scrape cAdvisor (container metrics)
+prometheus.scrape "cadvisor" {
+  targets = [{
+    __address__ = "cadvisor:8080",
+  }]
+
+  forward_to = [prometheus.relabel.add_labels.receiver]
+
+  job_name = "cadvisor"
+  scrape_interval = "15s"
+}
+
+// Scrape Nginx Exporter
+prometheus.scrape "nginx_exporter" {
+  targets = [{
+    __address__ = "nginx-exporter:9113",
+  }]
+
+  forward_to = [prometheus.relabel.add_labels.receiver]
+
+  job_name = "nginx"
+  scrape_interval = "15s"
+}
+
+// Scrape Backend application metrics (if exposed)
+prometheus.scrape "backend" {
+  targets = [{
+    __address__ = "backend:8000",
+  }]
+
+  forward_to = [prometheus.relabel.add_labels.receiver]
+
+  job_name = "backend"
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+
+  // Skip if backend doesn't expose metrics endpoint
+  honor_labels = true
+}
+
+// Add environment and host labels to metrics
+prometheus.relabel "add_labels" {
+  forward_to = [prometheus.remote_write.default.receiver]
+
+  rule {
+    target_label = "environment"
+    replacement  = "staging"
+  }
+
+  rule {
+    target_label = "host"
+    replacement  = "ap-vm"
+  }
+}
+
+// Write metrics to Prometheus
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://monitoring-server:9090/api/v1/write"
+
+    // Add headers if needed
+    headers = {
+      "X-Environment" = "staging",
+    }
+
+    // Queue config for reliability
+    queue_config {
+      capacity = 10000
+      max_shards = 10
+      min_shards = 1
+      max_samples_per_send = 5000
+      batch_send_deadline = "5s"
+      min_backoff = "30ms"
+      max_backoff = "5s"
+    }
+  }
+}
+
+// =============================================================================
+// SELF-MONITORING
+// =============================================================================
+
+// Expose Alloy's own metrics
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy_self" {
+  targets = prometheus.exporter.self.alloy.targets
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name = "alloy"
+}

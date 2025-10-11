@@ -1,0 +1,223 @@
+# Recording Rules for Scholarship System
+# Pre-aggregated metrics for faster dashboard queries and reduced query load
+
+groups:
+  # =========================================================================
+  # NODE METRICS AGGREGATIONS
+  # =========================================================================
+  - name: node_aggregations
+    interval: 30s
+    rules:
+      # CPU usage percentage by instance
+      - record: instance:node_cpu_utilization:rate5m
+        expr: |
+          100 - (avg by(instance, environment) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      # Memory usage percentage by instance
+      - record: instance:node_memory_utilization:ratio
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+
+      # Disk usage percentage by instance and mountpoint
+      - record: instance:node_disk_utilization:ratio
+        expr: |
+          (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs|vfat"} / node_filesystem_size_bytes)) * 100
+
+      # Network receive bytes rate by instance
+      - record: instance:node_network_receive_bytes:rate5m
+        expr: |
+          sum by(instance, environment) (rate(node_network_receive_bytes_total[5m]))
+
+      # Network transmit bytes rate by instance
+      - record: instance:node_network_transmit_bytes:rate5m
+        expr: |
+          sum by(instance, environment) (rate(node_network_transmit_bytes_total[5m]))
+
+      # Disk I/O read bytes rate
+      - record: instance:node_disk_read_bytes:rate5m
+        expr: |
+          sum by(instance, environment) (rate(node_disk_read_bytes_total[5m]))
+
+      # Disk I/O write bytes rate
+      - record: instance:node_disk_write_bytes:rate5m
+        expr: |
+          sum by(instance, environment) (rate(node_disk_written_bytes_total[5m]))
+
+  # =========================================================================
+  # CONTAINER METRICS AGGREGATIONS
+  # =========================================================================
+  - name: container_aggregations
+    interval: 30s
+    rules:
+      # Container CPU usage percentage
+      - record: container:cpu_usage:rate5m
+        expr: |
+          sum by(name, instance, environment) (rate(container_cpu_usage_seconds_total{name!=""}[5m])) * 100
+
+      # Container memory usage percentage (of limit)
+      - record: container:memory_usage:ratio
+        expr: |
+          (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100
+
+      # Container network receive bytes rate
+      - record: container:network_receive_bytes:rate5m
+        expr: |
+          sum by(name, instance, environment) (rate(container_network_receive_bytes_total{name!=""}[5m]))
+
+      # Container network transmit bytes rate
+      - record: container:network_transmit_bytes:rate5m
+        expr: |
+          sum by(name, instance, environment) (rate(container_network_transmit_bytes_total{name!=""}[5m]))
+
+      # Container restart count
+      - record: container:restart_count:increase1h
+        expr: |
+          increase(container_last_seen{name!=""}[1h])
+
+  # =========================================================================
+  # DATABASE METRICS AGGREGATIONS
+  # =========================================================================
+  - name: database_aggregations
+    interval: 30s
+    rules:
+      # PostgreSQL connection utilization
+      - record: postgres:connection_utilization:ratio
+        expr: |
+          (sum by(instance, environment) (pg_stat_activity_count) / sum by(instance, environment) (pg_settings_max_connections)) * 100
+
+      # PostgreSQL transaction rate
+      - record: postgres:transactions:rate5m
+        expr: |
+          sum by(instance, environment) (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m]))
+
+      # PostgreSQL query duration 95th percentile
+      - record: postgres:query_duration:p95
+        expr: |
+          histogram_quantile(0.95, sum by(le, instance, environment) (rate(pg_stat_statements_mean_exec_time_bucket[5m])))
+
+      # Redis memory utilization
+      - record: redis:memory_utilization:ratio
+        expr: |
+          (redis_memory_used_bytes / redis_memory_max_bytes) * 100
+
+      # Redis operations rate
+      - record: redis:ops:rate5m
+        expr: |
+          sum by(instance, environment) (rate(redis_commands_processed_total[5m]))
+
+      # Redis keyspace hit rate
+      - record: redis:keyspace_hit_rate:ratio5m
+        expr: |
+          rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))
+
+  # =========================================================================
+  # APPLICATION METRICS AGGREGATIONS
+  # =========================================================================
+  - name: application_aggregations
+    interval: 30s
+    rules:
+      # HTTP request rate by status
+      - record: nginx:http_requests:rate5m
+        expr: |
+          sum by(instance, environment, status) (rate(nginx_http_requests_total[5m]))
+
+      # HTTP request rate total
+      - record: nginx:http_requests_total:rate5m
+        expr: |
+          sum by(instance, environment) (rate(nginx_http_requests_total[5m]))
+
+      # HTTP error rate (5xx errors)
+      - record: nginx:http_errors_5xx:rate5m
+        expr: |
+          sum by(instance, environment) (rate(nginx_http_requests_total{status=~"5.."}[5m]))
+
+      # HTTP error rate (4xx errors)
+      - record: nginx:http_errors_4xx:rate5m
+        expr: |
+          sum by(instance, environment) (rate(nginx_http_requests_total{status=~"4.."}[5m]))
+
+      # HTTP success rate (2xx + 3xx)
+      - record: nginx:http_success:rate5m
+        expr: |
+          sum by(instance, environment) (rate(nginx_http_requests_total{status=~"[23].."}[5m]))
+
+      # HTTP response time 50th percentile
+      - record: nginx:http_request_duration:p50
+        expr: |
+          histogram_quantile(0.50, sum by(le, instance, environment) (rate(nginx_http_request_duration_seconds_bucket[5m])))
+
+      # HTTP response time 95th percentile
+      - record: nginx:http_request_duration:p95
+        expr: |
+          histogram_quantile(0.95, sum by(le, instance, environment) (rate(nginx_http_request_duration_seconds_bucket[5m])))
+
+      # HTTP response time 99th percentile
+      - record: nginx:http_request_duration:p99
+        expr: |
+          histogram_quantile(0.99, sum by(le, instance, environment) (rate(nginx_http_request_duration_seconds_bucket[5m])))
+
+      # Active connections
+      - record: nginx:active_connections:current
+        expr: |
+          sum by(instance, environment) (nginx_connections_active)
+
+  # =========================================================================
+  # ENVIRONMENT-LEVEL AGGREGATIONS
+  # =========================================================================
+  - name: environment_aggregations
+    interval: 60s
+    rules:
+      # Total CPU usage by environment
+      - record: environment:cpu_utilization:avg
+        expr: |
+          avg by(environment) (instance:node_cpu_utilization:rate5m)
+
+      # Total memory usage by environment
+      - record: environment:memory_utilization:avg
+        expr: |
+          avg by(environment) (instance:node_memory_utilization:ratio)
+
+      # Total request rate by environment
+      - record: environment:http_requests:rate5m
+        expr: |
+          sum by(environment) (nginx:http_requests_total:rate5m)
+
+      # Total error rate by environment
+      - record: environment:http_errors:rate5m
+        expr: |
+          sum by(environment) (nginx:http_errors_5xx:rate5m + nginx:http_errors_4xx:rate5m)
+
+      # Average response time by environment
+      - record: environment:http_request_duration:p95
+        expr: |
+          avg by(environment) (nginx:http_request_duration:p95)
+
+  # =========================================================================
+  # SERVICE-LEVEL AGGREGATIONS (SLI/SLO)
+  # =========================================================================
+  - name: sli_slo_aggregations
+    interval: 60s
+    rules:
+      # Request success rate (for SLO: target 99.5%)
+      - record: slo:request_success_rate:ratio5m
+        expr: |
+          sum by(environment) (rate(nginx_http_requests_total{status=~"[23].."}[5m]))
+          /
+          sum by(environment) (rate(nginx_http_requests_total[5m]))
+
+      # Request error budget remaining (target: 0.5% error rate = 99.5% success)
+      - record: slo:error_budget:ratio5m
+        expr: |
+          (1 - slo:request_success_rate:ratio5m) / 0.005
+
+      # Availability (percentage of time service is up)
+      - record: slo:availability:ratio5m
+        expr: |
+          avg_over_time(up[5m])
+
+      # Latency SLO (percentage of requests under 2s)
+      - record: slo:latency_under_2s:ratio5m
+        expr: |
+          sum by(environment) (rate(nginx_http_request_duration_seconds_bucket{le="2"}[5m]))
+          /
+          sum by(environment) (rate(nginx_http_request_duration_seconds_count[5m]))

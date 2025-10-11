@@ -1,0 +1,53 @@
+# Grafana Dashboard Provisioning Configuration
+# Automatically loads dashboards from specified directories
+
+apiVersion: 1
+
+providers:
+  # Default dashboard provider
+  - name: 'Default'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/default
+      foldersFromFilesStructure: true
+
+  # System Monitoring dashboards
+  - name: 'System Monitoring'
+    orgId: 1
+    folder: 'System'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/system
+      foldersFromFilesStructure: false
+
+  # Application Monitoring dashboards
+  - name: 'Application Monitoring'
+    orgId: 1
+    folder: 'Application'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/application
+      foldersFromFilesStructure: false
+
+  # Database Monitoring dashboards
+  - name: 'Database Monitoring'
+    orgId: 1
+    folder: 'Database'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/database
+      foldersFromFilesStructure: false

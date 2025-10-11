@@ -1,0 +1,174 @@
+# AlertManager Configuration for Scholarship System
+# Handles alert routing, grouping, and notifications
+
+global:
+  # The smarthost and SMTP sender used for mail notifications
+  smtp_smarthost: '${ALERT_SMTP_HOST:-smtp.gmail.com}:${ALERT_SMTP_PORT:-587}'
+  smtp_from: '${ALERT_EMAIL_FROM:-alerts@example.com}'
+  smtp_auth_username: '${ALERT_SMTP_USER:-}'
+  smtp_auth_password: '${ALERT_SMTP_PASSWORD:-}'
+  smtp_require_tls: true
+
+  # Default notification timeout
+  resolve_timeout: 5m
+
+# The directory from which notification templates are read
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route tree for alert notifications
+route:
+  # Default receiver for all alerts
+  receiver: 'default-receiver'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'environment', 'severity']
+
+  # How long to wait before sending the first notification about a new group
+  group_wait: 30s
+
+  # How long to wait before sending notification about new alerts added to a group
+  group_interval: 5m
+
+  # How long to wait before re-sending a notification
+  repeat_interval: 4h
+
+  # Child routes
+  routes:
+    # Critical alerts - immediate notification
+    - receiver: 'critical-alerts'
+      match:
+        severity: critical
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 1h
+      continue: true  # Continue matching other routes
+
+    # Production environment alerts - higher priority
+    - receiver: 'production-alerts'
+      match:
+        environment: prod
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 2h
+
+    # Staging environment alerts - lower priority
+    - receiver: 'staging-alerts'
+      match:
+        environment: staging
+      group_wait: 1m
+      group_interval: 10m
+      repeat_interval: 8h
+
+    # Database alerts - specific handling
+    - receiver: 'database-alerts'
+      match:
+        category: database
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 3h
+
+    # Monitoring stack alerts - separate handling
+    - receiver: 'monitoring-alerts'
+      match:
+        category: monitoring
+      group_wait: 2m
+      group_interval: 10m
+      repeat_interval: 12h
+
+# Inhibition rules - suppress certain alerts when others are firing
+inhibit_rules:
+  # If a critical alert is firing, inhibit warning alerts with the same alertname
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+  # If a node is down, inhibit all other alerts from that instance
+  - source_match:
+      alertname: 'TargetDown'
+    target_match_re:
+      severity: '.*'
+    equal: ['instance']
+
+  # If a container is down, inhibit high CPU/memory alerts for that container
+  - source_match:
+      alertname: 'ContainerDown'
+    target_match_re:
+      alertname: 'Container.*'
+    equal: ['name', 'instance']
+
+# Notification receivers
+receivers:
+  # Default receiver - console logging only
+  - name: 'default-receiver'
+    # webhook_configs:
+    #   - url: 'http://localhost:5001/webhook'
+
+  # Critical alerts - multiple notification channels
+  - name: 'critical-alerts'
+    # Email notification
+    # email_configs:
+    #   - to: '${ALERT_EMAIL_TO:-admin@example.com}'
+    #     headers:
+    #       Subject: '[CRITICAL] Scholarship System Alert - {{ .GroupLabels.alertname }}'
+    #     html: |
+    #       <h2>Critical Alert</h2>
+    #       <p><strong>Alert:</strong> {{ .GroupLabels.alertname }}</p>
+    #       <p><strong>Environment:</strong> {{ .GroupLabels.environment }}</p>
+    #       <p><strong>Summary:</strong> {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}</p>
+    #       <p><strong>Description:</strong> {{ range .Alerts }}{{ .Annotations.description }}{{ end }}</p>
+
+    # Slack notification (uncomment to enable)
+    # slack_configs:
+    #   - api_url: '${ALERT_SLACK_WEBHOOK}'
+    #     channel: '#critical-alerts'
+    #     title: '[CRITICAL] {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+    #     color: 'danger'
+    #     send_resolved: true
+
+  # Production environment alerts
+  - name: 'production-alerts'
+    # email_configs:
+    #   - to: '${ALERT_EMAIL_TO:-admin@example.com}'
+    #     headers:
+    #       Subject: '[PRODUCTION] Scholarship System Alert - {{ .GroupLabels.alertname }}'
+
+    # Slack notification (uncomment to enable)
+    # slack_configs:
+    #   - api_url: '${ALERT_SLACK_WEBHOOK}'
+    #     channel: '#production-alerts'
+    #     title: '[{{ .GroupLabels.severity | toUpper }}] {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+    #     send_resolved: true
+
+  # Staging environment alerts
+  - name: 'staging-alerts'
+    # email_configs:
+    #   - to: '${ALERT_EMAIL_TO:-admin@example.com}'
+    #     headers:
+    #       Subject: '[STAGING] Scholarship System Alert - {{ .GroupLabels.alertname }}'
+
+    # Slack notification (uncomment to enable)
+    # slack_configs:
+    #   - api_url: '${ALERT_SLACK_WEBHOOK}'
+    #     channel: '#staging-alerts'
+    #     title: '[STAGING] {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+    #     send_resolved: true
+
+  # Database specific alerts
+  - name: 'database-alerts'
+    # email_configs:
+    #   - to: '${ALERT_EMAIL_TO:-admin@example.com}'
+    #     headers:
+    #       Subject: '[DATABASE] Scholarship System Alert - {{ .GroupLabels.alertname }}'
+
+  # Monitoring stack alerts
+  - name: 'monitoring-alerts'
+    # email_configs:
+    #   - to: '${ALERT_EMAIL_TO:-admin@example.com}'
+    #     headers:
+    #       Subject: '[MONITORING] Scholarship System Alert - {{ .GroupLabels.alertname }}'

@@ -1,0 +1,275 @@
+# Basic Alert Rules for Scholarship System
+# Covers system health, database, application, and container metrics
+
+groups:
+  # =========================================================================
+  # SYSTEM HEALTH ALERTS
+  # =========================================================================
+  - name: system_health
+    interval: 30s
+    rules:
+      # High CPU usage alert
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance, environment) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% on {{ $labels.instance }} ({{ $labels.environment }}) for more than 5 minutes. Current value: {{ $value | humanize }}%"
+
+      # High memory usage alert
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% on {{ $labels.instance }} ({{ $labels.environment }}). Current value: {{ $value | humanize }}%"
+
+      # Disk space running low
+      - alert: DiskSpaceLow
+        expr: |
+          (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs|vfat"} / node_filesystem_size_bytes)) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk usage is above 80% on {{ $labels.instance }} ({{ $labels.environment }}) at mount point {{ $labels.mountpoint }}. Current value: {{ $value | humanize }}%"
+
+      # Critical disk space
+      - alert: DiskSpaceCritical
+        expr: |
+          (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs|vfat"} / node_filesystem_size_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          category: system
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Disk usage is above 90% on {{ $labels.instance }} ({{ $labels.environment }}) at mount point {{ $labels.mountpoint }}. Immediate action required! Current value: {{ $value | humanize }}%"
+
+      # System load average high
+      - alert: HighSystemLoad
+        expr: |
+          node_load5 / count(node_cpu_seconds_total{mode="idle"}) without(cpu, mode) > 2
+        for: 10m
+        labels:
+          severity: warning
+          category: system
+        annotations:
+          summary: "High system load on {{ $labels.instance }}"
+          description: "5-minute load average is more than 2x the number of CPUs on {{ $labels.instance }} ({{ $labels.environment }}). Current value: {{ $value | humanize }}"
+
+  # =========================================================================
+  # CONTAINER HEALTH ALERTS
+  # =========================================================================
+  - name: container_health
+    interval: 30s
+    rules:
+      # Container down
+      - alert: ContainerDown
+        expr: |
+          time() - container_last_seen{name!=""} > 60
+        for: 2m
+        labels:
+          severity: critical
+          category: container
+        annotations:
+          summary: "Container {{ $labels.name }} is down"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) has been down for more than 2 minutes"
+
+      # High container CPU
+      - alert: ContainerHighCPU
+        expr: |
+          sum(rate(container_cpu_usage_seconds_total{name!=""}[5m])) by (name, instance, environment) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: container
+        annotations:
+          summary: "High CPU usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% CPU. Current value: {{ $value | humanize }}%"
+
+      # High container memory
+      - alert: ContainerHighMemory
+        expr: |
+          (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          category: container
+        annotations:
+          summary: "High memory usage in container {{ $labels.name }}"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 85% of its memory limit. Current value: {{ $value | humanize }}%"
+
+      # Container restarting frequently
+      - alert: ContainerRestartingFrequently
+        expr: |
+          rate(container_last_seen{name!=""}[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: container
+        annotations:
+          summary: "Container {{ $labels.name }} is restarting frequently"
+          description: "Container {{ $labels.name }} on {{ $labels.instance }} ({{ $labels.environment }}) has restarted multiple times in the last 15 minutes"
+
+  # =========================================================================
+  # DATABASE ALERTS
+  # =========================================================================
+  - name: database_health
+    interval: 30s
+    rules:
+      # PostgreSQL down
+      - alert: PostgreSQLDown
+        expr: |
+          pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "PostgreSQL is down on {{ $labels.instance }}"
+          description: "PostgreSQL database on {{ $labels.instance }} ({{ $labels.environment }}) is not responding"
+
+      # Too many connections
+      - alert: PostgreSQLTooManyConnections
+        expr: |
+          sum(pg_stat_activity_count) by (instance, environment) > sum(pg_settings_max_connections) by (instance, environment) * 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "PostgreSQL has too many connections"
+          description: "PostgreSQL on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% of max_connections. Current: {{ $value | humanize }}"
+
+      # High database connections
+      - alert: PostgreSQLHighConnections
+        expr: |
+          sum(pg_stat_activity_count) by (instance, environment) > sum(pg_settings_max_connections) by (instance, environment) * 0.9
+        for: 2m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "PostgreSQL connection limit critical"
+          description: "PostgreSQL on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 90% of max_connections. Immediate action required!"
+
+      # Redis down
+      - alert: RedisDown
+        expr: |
+          redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "Redis is down on {{ $labels.instance }}"
+          description: "Redis cache on {{ $labels.instance }} ({{ $labels.environment }}) is not responding"
+
+      # Redis high memory usage
+      - alert: RedisHighMemory
+        expr: |
+          (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Redis memory usage is high"
+          description: "Redis on {{ $labels.instance }} ({{ $labels.environment }}) is using more than 80% of its max memory. Current value: {{ $value | humanize }}%"
+
+  # =========================================================================
+  # APPLICATION ALERTS
+  # =========================================================================
+  - name: application_health
+    interval: 30s
+    rules:
+      # High HTTP error rate
+      - alert: HighHTTPErrorRate
+        expr: |
+          sum(rate(nginx_http_requests_total{status=~"5.."}[5m])) by (instance, environment)
+          /
+          sum(rate(nginx_http_requests_total[5m])) by (instance, environment) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: application
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "More than 5% of requests are returning 5xx errors on {{ $labels.instance }} ({{ $labels.environment }}). Current rate: {{ $value | humanizePercentage }}"
+
+      # Slow HTTP response time
+      - alert: SlowHTTPResponseTime
+        expr: |
+          histogram_quantile(0.95, sum(rate(nginx_http_request_duration_seconds_bucket[5m])) by (le, instance, environment)) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: application
+        annotations:
+          summary: "Slow HTTP response time"
+          description: "95th percentile response time is above 2 seconds on {{ $labels.instance }} ({{ $labels.environment }}). Current value: {{ $value | humanizeDuration }}"
+
+      # MinIO server down
+      - alert: MinIODown
+        expr: |
+          up{job="staging-db-minio"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: application
+        annotations:
+          summary: "MinIO object storage is down"
+          description: "MinIO server on {{ $labels.instance }} ({{ $labels.environment }}) is not responding"
+
+  # =========================================================================
+  # MONITORING STACK HEALTH
+  # =========================================================================
+  - name: monitoring_health
+    interval: 60s
+    rules:
+      # Prometheus target down
+      - alert: PrometheusTargetDown
+        expr: |
+          up == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} is down"
+          description: "Prometheus cannot scrape {{ $labels.job }} on {{ $labels.instance }} ({{ $labels.environment }})"
+
+      # Loki ingestion falling behind
+      - alert: LokiIngestionFallingBehind
+        expr: |
+          rate(loki_distributor_bytes_received_total[5m]) > rate(loki_ingester_chunks_flushed_total[5m]) * 1000
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Loki ingestion is falling behind"
+          description: "Loki is receiving logs faster than it can flush them. This may cause memory issues."
+
+      # Prometheus storage running low
+      - alert: PrometheusStorageLow
+        expr: |
+          (prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Prometheus storage usage is high"
+          description: "Prometheus is using more than 80% of its storage retention limit. Current value: {{ $value | humanizePercentage }}"

@@ -1,0 +1,172 @@
+// Grafana Alloy Configuration for Production Database VM
+// Environment: production
+// Host: db-vm
+// Components: PostgreSQL, MinIO, Redis
+
+// =============================================================================
+// LOGGING PIPELINE
+// =============================================================================
+
+// Discover Docker containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Collect Docker container logs
+loki.source.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.docker.containers.targets
+  forward_to       = [loki.process.add_labels.receiver]
+
+  // Relabel container information
+  relabel_rules {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+  }
+
+  relabel_rules {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+}
+
+// Add environment and host labels to logs
+loki.process "add_labels" {
+  forward_to = [loki.write.default.receiver]
+
+  // Add static labels
+  stage.static_labels {
+    values = {
+      environment = "prod",
+      host        = "db-vm",
+    }
+  }
+
+  // Parse PostgreSQL logs
+  stage.regex {
+    expression = "^(?P<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) (?P<level>\\w+):\\s+(?P<message>.*)"
+  }
+
+  // Label PostgreSQL log levels
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+}
+
+// Write logs to Loki with multi-tenant header
+loki.write "default" {
+  endpoint {
+    url = "http://monitoring-server:3100/loki/api/v1/push"
+
+    // Multi-tenant identification for production
+    headers = {
+      "X-Scope-OrgID" = "prod",
+    }
+  }
+}
+
+// =============================================================================
+// METRICS PIPELINE
+// =============================================================================
+
+// Scrape Node Exporter (system metrics)
+prometheus.scrape "node_exporter" {
+  targets = [{
+    __address__ = "node-exporter:9100",
+  }]
+
+  forward_to = [prometheus.relabel.add_labels.receiver]
+
+  job_name = "node"
+  scrape_interval = "15s"
+}
+
+// Scrape PostgreSQL Exporter
+prometheus.scrape "postgres_exporter" {
+  targets = [{
+    __address__ = "postgres-exporter:9187",
+  }]
+
+  forward_to = [prometheus.relabel.add_labels.receiver]
+
+  job_name = "postgres"
+  scrape_interval = "15s"
+}
+
+// Scrape Redis Exporter
+prometheus.scrape "redis_exporter" {
+  targets = [{
+    __address__ = "redis-exporter:9121",
+  }]
+
+  forward_to = [prometheus.relabel.add_labels.receiver]
+
+  job_name = "redis"
+  scrape_interval = "15s"
+}
+
+// Scrape MinIO metrics
+prometheus.scrape "minio" {
+  targets = [{
+    __address__ = "minio:9000",
+  }]
+
+  forward_to = [prometheus.relabel.add_labels.receiver]
+
+  job_name = "minio"
+  scrape_interval = "30s"
+  metrics_path = "/minio/v2/metrics/cluster"
+}
+
+// Add environment and host labels to metrics
+prometheus.relabel "add_labels" {
+  forward_to = [prometheus.remote_write.default.receiver]
+
+  rule {
+    target_label = "environment"
+    replacement  = "prod"
+  }
+
+  rule {
+    target_label = "host"
+    replacement  = "db-vm"
+  }
+}
+
+// Write metrics to Prometheus
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://monitoring-server:9090/api/v1/write"
+
+    // Add headers if needed
+    headers = {
+      "X-Environment" = "prod",
+    }
+
+    // Queue config for reliability
+    queue_config {
+      capacity = 10000
+      max_shards = 10
+      min_shards = 1
+      max_samples_per_send = 5000
+      batch_send_deadline = "5s"
+      min_backoff = "30ms"
+      max_backoff = "5s"
+    }
+  }
+}
+
+// =============================================================================
+// SELF-MONITORING
+// =============================================================================
+
+// Expose Alloy's own metrics
+prometheus.exporter.self "alloy" { }
+
+prometheus.scrape "alloy_self" {
+  targets = prometheus.exporter.self.alloy.targets
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  job_name = "alloy"
+}
