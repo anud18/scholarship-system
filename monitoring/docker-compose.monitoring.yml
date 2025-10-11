@@ -72,6 +72,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - monitoring_network
+      - scholarship_staging_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
@@ -114,6 +115,7 @@ services:
       - '--web.enable-remote-write-receiver'  # Enable remote write
     networks:
       - monitoring_network
+      - scholarship_staging_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
@@ -156,5 +158,5 @@ networks:
       config:
         - subnet: 172.30.0.0/16
   scholarship_staging_network:
-    driver: bridge
-    name: scholarship_staging_network
+    external: true
+    name: scholarship-staging_scholarship_staging_network
