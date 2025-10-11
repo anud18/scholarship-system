@@ -178,6 +178,15 @@ jobs:
             echo "✅ Images imported successfully"
           EOF
 
+      - name: Create monitoring directories on DB-VM
+        run: |
+          echo "Creating monitoring directory structure on DB-VM..."
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
+            sudo mkdir -p /opt/scholarship/monitoring/config/alloy
+            sudo chown -R $USER:$USER /opt/scholarship/monitoring
+            echo "✅ Directories created successfully"
+          EOF
+
       - name: Deploy Alloy to Staging DB-VM
         run: |
           # Copy Alloy config to DB-VM (using SSH port 8822)
