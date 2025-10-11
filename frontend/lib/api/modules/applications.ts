@@ -160,16 +160,23 @@ export function createApplicationsApi() {
     },
 
     /**
-     * Delete application
-     * Type-safe: Path parameter validated against OpenAPI
+     * Delete application (soft delete)
+     * Type-safe: Path parameter and query validated against OpenAPI
+     *
+     * @param applicationId - Application ID to delete
+     * @param reason - Optional deletion reason (required for staff users)
      */
     deleteApplication: async (
-      applicationId: number
-    ): Promise<ApiResponse<{ success: boolean; message: string }>> => {
+      applicationId: number,
+      reason?: string
+    ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.DELETE('/api/v1/applications/{id}', {
-        params: { path: { id: applicationId } },
+        params: {
+          path: { id: applicationId },
+          query: reason ? { reason } : undefined,
+        },
       });
-      return toApiResponse<{ success: boolean; message: string }>(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -265,6 +272,71 @@ export function createApplicationsApi() {
         } as any,
       });
       return toApiResponse<Application>(response);
+    },
+
+    /**
+     * Get audit trail for application
+     * Type-safe: Path and query parameters validated
+     */
+    getAuditTrail: async (
+      applicationId: number,
+      limit: number = 50,
+      offset: number = 0,
+      actionFilter?: string
+    ): Promise<ApiResponse<any[]>> => {
+      const response = await typedClient.raw.GET('/api/v1/applications/{id}/audit-trail', {
+        params: {
+          path: { id: applicationId },
+          query: {
+            limit,
+            offset,
+            ...(actionFilter ? { action_filter: actionFilter } : {}),
+          },
+        },
+      });
+      return toApiResponse<any[]>(response);
+    },
+
+    /**
+     * Create document request for application (staff only)
+     * Type-safe: Path parameter and body validated
+     */
+    createDocumentRequest: async (
+      applicationId: number,
+      requestData: {
+        requested_documents: string[];
+        reason: string;
+        notes?: string;
+      }
+    ): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.POST(
+        '/api/v1/applications/{application_id}/document-requests',
+        {
+          params: { path: { application_id: applicationId } },
+          body: requestData as any,
+        }
+      );
+      return toApiResponse<any>(response);
+    },
+
+    /**
+     * List document requests for application (staff only)
+     * Type-safe: Path and query parameters validated
+     */
+    listDocumentRequests: async (
+      applicationId: number,
+      status?: string
+    ): Promise<ApiResponse<any[]>> => {
+      const response = await typedClient.raw.GET(
+        '/api/v1/applications/{application_id}/document-requests',
+        {
+          params: {
+            path: { application_id: applicationId },
+            query: status ? { status } : undefined,
+          },
+        }
+      );
+      return toApiResponse<any[]>(response);
     },
   };
 }

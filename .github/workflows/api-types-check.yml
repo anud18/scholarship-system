@@ -41,6 +41,16 @@ jobs:
         ports:
           - 5432:5432
 
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -79,6 +89,7 @@ jobs:
         env:
           DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
           DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
+          REDIS_URL: "redis://localhost:6379/0"
           SECRET_KEY: test-secret-key-for-ci
           APP_ENV: test
           TESTING: true
@@ -90,7 +101,7 @@ jobs:
 
           # Wait for backend to be ready
           for i in {1..30}; do
-            if curl -sf http://localhost:8000/api/v1/health > /dev/null 2>&1; then
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
               echo "✅ Backend is ready"
               break
             fi

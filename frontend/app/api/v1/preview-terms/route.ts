@@ -4,11 +4,12 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const scholarshipType = searchParams.get("scholarshipType");
+    const queryToken = searchParams.get("token");
 
-    // Get token from Authorization header or cookie (for iframe/img requests)
+    // Get token from query params, Authorization header, or cookie (for iframe/img requests)
     const authHeader = request.headers.get("authorization");
-    const cookieToken = request.cookies.get("access_token")?.value;
-    const token = authHeader?.replace("Bearer ", "") || cookieToken;
+    const cookieToken = request.cookies.get("access_token")?.value || request.cookies.get("auth_token")?.value;
+    const token = queryToken || authHeader?.replace("Bearer ", "") || cookieToken;
 
     if (!scholarshipType) {
       return NextResponse.json(

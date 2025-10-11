@@ -512,23 +512,6 @@ async def seed_application_fields(session: AsyncSession):
             "created_by": admin_id,
             "updated_by": admin_id,
         },
-        {
-            "scholarship_type": "phd",
-            "field_name": "enroll_date",
-            "field_label": "註冊入學日期",
-            "field_label_en": "Enrollment Date",
-            "field_type": "date",
-            "is_required": True,
-            "placeholder": "請選擇日期",
-            "placeholder_en": "Please select date",
-            "max_length": None,
-            "display_order": 2,
-            "is_active": True,
-            "help_text": "請選擇您正式註冊入學的日期",
-            "help_text_en": "Please select your official enrollment date",
-            "created_by": admin_id,
-            "updated_by": admin_id,
-        },
     ]
 
     for field_data in direct_phd_fields:

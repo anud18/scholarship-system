@@ -10,10 +10,41 @@ import userEvent from "@testing-library/user-event";
 import { EnhancedStudentPortal } from "../enhanced-student-portal";
 import { useApplications } from "../../hooks/use-applications";
 import { useAuth } from "../../hooks/use-auth";
+import api from "../../lib/api";
 
 // Mock the hooks
 jest.mock("../../hooks/use-applications");
 jest.mock("../../hooks/use-auth");
+
+// Mock StudentApplicationWizard component
+jest.mock("../student-wizard/StudentApplicationWizard", () => ({
+  StudentApplicationWizard: ({ onApplicationComplete }: any) => (
+    <div data-testid="student-wizard">
+      <h2>Student Application Wizard</h2>
+      <button onClick={onApplicationComplete}>Complete Application</button>
+    </div>
+  ),
+}));
+
+// Mock the API client
+jest.mock("../../lib/api", () => ({
+  __esModule: true,
+  default: {
+    scholarships: {
+      getEligible: jest.fn(),
+    },
+    applicationFields: {
+      getFormConfig: jest.fn(),
+    },
+    applications: {
+      getApplicationById: jest.fn(),
+    },
+    documentRequests: {
+      getMyDocumentRequests: jest.fn(),
+      fulfillDocumentRequest: jest.fn(),
+    },
+  },
+}));
 
 const mockUseApplications = useApplications as jest.MockedFunction<
   typeof useApplications
@@ -26,14 +57,16 @@ const mockUser = {
   email: "test@example.com",
   role: "student" as const,
   full_name: "Test User",
-  name: "Test User", // Added for component compatibility
+  name: "Test User",
   is_active: true,
   created_at: "2025-01-01",
   updated_at: "2025-01-01",
+  studentType: "undergraduate" as const,
 };
 
 const mockApplication = {
   id: 1,
+  app_id: "APP-001",
   student_id: "student1",
   scholarship_type: "academic_excellence",
   status: "submitted" as const,
@@ -62,37 +95,41 @@ describe("EnhancedStudentPortal", () => {
     ...overrides,
   });
 
-  const mockScholarshipData = [
-    {
-      id: 1,
-      code: "academic_excellence",
-      name: "學術優秀獎學金",
-      name_en: "Academic Excellence Scholarship",
-      category: "undergraduate",
-      academic_year: "113",
-      semester: "first",
-      amount: "NT$ 50,000",
-      currency: "",
-      description: "優秀學術表現學生獎學金",
-      description_en: "For students with excellent academic performance",
-      requirements: {
-        gpa: 3.5,
-        credits: 12,
-      },
-      eligibility: "GPA ≥ 3.5",
-      is_active: true,
-      eligible_sub_types: [
-        {
-          id: 1,
-          value: "general",
-          label: "一般申請",
-          label_en: "General Application",
+  const mockScholarshipData = {
+    success: true,
+    message: "Request completed successfully",
+    data: [
+      {
+        id: 1,
+        code: "academic_excellence",
+        name: "學術優秀獎學金",
+        name_en: "Academic Excellence Scholarship",
+        category: "undergraduate",
+        academic_year: "113",
+        semester: "first",
+        amount: "NT$ 50,000",
+        currency: "",
+        description: "優秀學術表現學生獎學金",
+        description_en: "For students with excellent academic performance",
+        requirements: {
+          gpa: 3.5,
+          credits: 12,
         },
-      ],
-      passed: [],
-      errors: [],
-    },
-  ];
+        eligibility: "GPA ≥ 3.5",
+        is_active: true,
+        eligible_sub_types: [
+          {
+            id: 1,
+            value: "general",
+            label: "一般申請",
+            label_en: "General Application",
+          },
+        ],
+        passed: [],
+        errors: [],
+      },
+    ],
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -109,25 +146,24 @@ describe("EnhancedStudentPortal", () => {
 
     mockUseApplications.mockReturnValue(createApplicationsHook());
 
-    // Mock fetch to return scholarship data
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      headers: {
-        get: (key: string) =>
-          key === "content-type" ? "application/json" : null,
-        has: (key: string) => key === "content-type",
-        forEach: jest.fn(),
+    // Mock API responses
+    (api.scholarships.getEligible as jest.Mock).mockResolvedValue(mockScholarshipData);
+    (api.applicationFields.getFormConfig as jest.Mock).mockResolvedValue({
+      success: true,
+      data: {
+        fields: [],
+        documents: [],
       },
-      json: async () => mockScholarshipData,
-      text: async () => JSON.stringify(mockScholarshipData),
+    });
+    (api.documentRequests.getMyDocumentRequests as jest.Mock).mockResolvedValue({
+      success: true,
+      data: [],
     });
   });
 
   it("should render scholarship information", async () => {
     await act(async () => {
-      render(<EnhancedStudentPortal user={mockUser} locale="en" />);
+      render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="scholarship-list" />);
     });
 
     // Wait for data to load
@@ -142,7 +178,7 @@ describe("EnhancedStudentPortal", () => {
 
   it("should render scholarship information in Chinese", async () => {
     await act(async () => {
-      render(<EnhancedStudentPortal user={mockUser} locale="zh" />);
+      render(<EnhancedStudentPortal user={mockUser} locale="zh" initialTab="scholarship-list" />);
     });
 
     // Wait for scholarship data to load
@@ -153,14 +189,19 @@ describe("EnhancedStudentPortal", () => {
   });
 
   it("should show empty state when no applications exist", async () => {
+    mockUseApplications.mockReturnValue(
+      createApplicationsHook({ applications: [] })
+    );
+
     await act(async () => {
-      render(<EnhancedStudentPortal user={mockUser} locale="en" />);
+      render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="applications" />);
     });
 
-    const newApplicationTab = await screen.findByText("New Application");
-    expect(newApplicationTab).toHaveAttribute("data-state", "active");
-    const myApplicationsTab = await screen.findByText("My Applications");
-    expect(myApplicationsTab).toHaveAttribute("data-state", "inactive");
+    // Wait for applications view to load
+    await waitFor(() => {
+      expect(screen.getByText("No application records")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Click 'New Application' to start/)).toBeInTheDocument();
   });
 
   it("should display applications when they exist", async () => {
@@ -169,7 +210,7 @@ describe("EnhancedStudentPortal", () => {
     );
 
     await act(async () => {
-      render(<EnhancedStudentPortal user={mockUser} locale="en" />);
+      render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="applications" />);
     });
 
     // Wait for data to load
@@ -185,91 +226,41 @@ describe("EnhancedStudentPortal", () => {
     );
 
     await act(async () => {
-      render(<EnhancedStudentPortal user={mockUser} locale="en" />);
+      render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="applications" />);
     });
-
-    // Wait for scholarships to load, then check applications loading state
-    await waitFor(() => {
-      expect(
-        screen.getByText("Academic Excellence Scholarship")
-      ).toBeInTheDocument();
-    });
-
-    // Applications section should show loading spinner (Loader2 component)
-    const applicationTab = screen.getByText("My Applications");
-    await userEvent.setup().click(applicationTab);
 
     // Should show loading spinner in applications section
-    const spinner = document.querySelector(".animate-spin");
-    expect(spinner).toBeInTheDocument();
+    await waitFor(() => {
+      const spinner = document.querySelector(".animate-spin");
+      expect(spinner).toBeInTheDocument();
+    });
   });
 
   it("should show error state", async () => {
     const errorMessage = "Failed to fetch applications";
-    const user = userEvent.setup();
     mockUseApplications.mockReturnValue(
       createApplicationsHook({ error: errorMessage })
     );
 
     await act(async () => {
-      render(<EnhancedStudentPortal user={mockUser} locale="en" />);
+      render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="applications" />);
     });
 
-    await user.click(await screen.findByText("My Applications"));
     await waitFor(() => {
       expect(screen.getByText(errorMessage)).toBeInTheDocument();
     });
   });
 
-  it("should allow switching to new application tab", async () => {
-    const user = userEvent.setup();
+  it("should render new application wizard when initialTab is new-application", async () => {
+    await act(async () => {
+      render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="new-application" />);
+    });
 
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />);
-
-    // Wait for scholarships to load first
+    // Wait for wizard to render
     await waitFor(() => {
-      expect(
-        screen.getByText("Academic Excellence Scholarship")
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("student-wizard")).toBeInTheDocument();
+      expect(screen.getByText("Student Application Wizard")).toBeInTheDocument();
     });
-
-    // Find and click New Application tab
-    const newAppTab = await screen.findByText("New Application");
-    await user.click(newAppTab);
-
-    // Should show form elements
-    await waitFor(() => {
-      const scholarshipTypeLabel = screen.queryByText("Scholarship Type");
-      // If form is visible, check for it, otherwise tab switching works
-      expect(newAppTab).toBeInTheDocument();
-    });
-  });
-
-  it("should show form fields in new application tab", async () => {
-    const user = userEvent.setup();
-
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />);
-
-    // Wait for scholarships to load
-    await waitFor(() => {
-      expect(
-        screen.getByText("Academic Excellence Scholarship")
-      ).toBeInTheDocument();
-    });
-
-    // Find and click New Application tab
-    const newAppTab = await screen.findByText("New Application");
-    await user.click(newAppTab);
-
-    // Verify tab was clicked (basic check)
-    expect(newAppTab).toBeInTheDocument();
-
-    // Check if submit button exists
-    const submitButton = screen.queryByRole("button", {
-      name: /submit application/i,
-    });
-    // Just verify tab exists and is clickable
-    expect(newAppTab).toHaveAttribute("data-state");
   });
 
   it("should show Chinese text when locale is zh", async () => {
@@ -277,14 +268,12 @@ describe("EnhancedStudentPortal", () => {
       createApplicationsHook({ applications: [mockApplication] })
     );
 
-    render(<EnhancedStudentPortal user={mockUser} locale="zh" />);
+    render(<EnhancedStudentPortal user={mockUser} locale="zh" initialTab="applications" />);
 
     // Wait for data to load
     await waitFor(() => {
-      expect(screen.getByText("我的申請")).toBeInTheDocument();
+      expect(screen.getByText("申請記錄")).toBeInTheDocument();
     });
-    expect(screen.getByText("新增申請")).toBeInTheDocument();
-    expect(screen.getByText("申請記錄")).toBeInTheDocument();
   });
 
   it("should handle withdraw application action", async () => {
@@ -301,7 +290,7 @@ describe("EnhancedStudentPortal", () => {
       })
     );
 
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />);
+    render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="applications" />);
 
     // Wait for data to load
     await waitFor(() => {
@@ -326,7 +315,7 @@ describe("EnhancedStudentPortal", () => {
       createApplicationsHook({ applications: [mockApplication] })
     );
 
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />);
+    render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="applications" />);
 
     // Wait for data to load
     await waitFor(() => {
@@ -348,7 +337,7 @@ describe("EnhancedStudentPortal", () => {
       createApplicationsHook({ applications: [approvedApplication] })
     );
 
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />);
+    render(<EnhancedStudentPortal user={mockUser} locale="en" initialTab="applications" />);
 
     // Wait for data to load
     await waitFor(() => {

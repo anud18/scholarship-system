@@ -1293,11 +1293,11 @@ async def get_applications_by_scholarship(
         .where(Application.scholarship_type_id == scholarship.id)
     )
 
-    # Default: exclude draft applications for admin view
+    # Default: exclude draft and deleted applications for admin view
     if status:
         stmt = stmt.where(Application.status == status)
     else:
-        stmt = stmt.where(Application.status != ApplicationStatus.draft.value)
+        stmt = stmt.where(Application.status.notin_([ApplicationStatus.draft.value, ApplicationStatus.deleted.value]))
 
     if sub_type:
         # Filter by sub-type in scholarship_subtype_list
@@ -1434,6 +1434,65 @@ async def get_applications_by_scholarship(
         "success": True,
         "message": f"Applications for scholarship {scholarship.code} retrieved successfully",
         "data": response_list,
+    }
+
+
+@router.get("/scholarships/{scholarship_identifier}/audit-trail")
+async def get_scholarship_audit_trail(
+    scholarship_identifier: str,
+    action_filter: Optional[str] = Query(None, description="Filter by action type"),
+    limit: int = Query(500, le=1000, description="Maximum number of audit logs to return"),
+    offset: int = Query(0, ge=0, description="Number of audit logs to skip"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get audit trail for all applications of a specific scholarship type (staff only)
+
+    Returns all operations performed on applications of this scholarship type, including:
+    - Operations on deleted applications (which don't appear in the applications list)
+    - Who performed each action and when
+    - Application context (app_id, student name, etc.)
+    """
+    # Verify scholarship exists
+    scholarship_stmt: Select[tuple[ScholarshipType]]
+
+    try:
+        scholarship_id = int(scholarship_identifier)
+    except ValueError:
+        scholarship_id = None
+
+    if scholarship_id is not None:
+        scholarship_stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
+    else:
+        scholarship_stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_identifier)
+
+    result = await db.execute(scholarship_stmt)
+    scholarship = result.scalar_one_or_none()
+
+    if not scholarship:
+        raise HTTPException(status_code=404, detail="Scholarship not found")
+
+    # Get audit trail using the service
+    from app.services.application_audit_service import ApplicationAuditService
+
+    audit_service = ApplicationAuditService(db)
+    audit_logs = await audit_service.get_scholarship_audit_trail(
+        scholarship_type_id=scholarship.id, limit=limit, offset=offset, action_filter=action_filter
+    )
+
+    # Format timestamps for JSON response
+    formatted_logs = []
+    for log in audit_logs:
+        log_copy = dict(log)
+        if log_copy.get("created_at"):
+            log_copy["created_at"] = log_copy["created_at"].isoformat()
+        formatted_logs.append(log_copy)
+
+    return {
+        "success": True,
+        "message": f"Retrieved {len(formatted_logs)} audit log entries for scholarship {scholarship.code}",
+        "data": formatted_logs,
     }
 
 

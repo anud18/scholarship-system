@@ -302,6 +302,66 @@ class EmailAutomationService:
 
         await self.process_trigger(db, "final_result_decided", context)
 
+    async def trigger_college_review_submitted(
+        self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
+    ):
+        """Trigger emails when college submits review"""
+        context = {
+            "application_id": application_id,
+            "app_id": review_data.get("app_id", ""),
+            "student_name": review_data.get("student_name", ""),
+            "student_email": review_data.get("student_email", ""),
+            "college_name": review_data.get("college_name", ""),
+            "college_ranking_score": review_data.get("ranking_score"),
+            "college_recommendation": review_data.get("recommendation", ""),
+            "college_comments": review_data.get("comments", ""),
+            "reviewer_name": review_data.get("reviewer_name", ""),
+            "scholarship_type": review_data.get("scholarship_type", ""),
+            "scholarship_type_id": review_data.get("scholarship_type_id"),
+            "review_date": review_data.get("review_date", datetime.now().strftime("%Y-%m-%d")),
+            "system_url": "https://scholarship.nycu.edu.tw",
+        }
+
+        await self.process_trigger(db, "college_review_submitted", context)
+
+    async def trigger_supplement_requested(self, db: AsyncSession, application_id: int, request_data: Dict[str, Any]):
+        """Trigger emails when supplement documents are requested"""
+        context = {
+            "application_id": application_id,
+            "app_id": request_data.get("app_id", ""),
+            "student_name": request_data.get("student_name", ""),
+            "student_email": request_data.get("student_email", ""),
+            "requested_documents": ", ".join(request_data.get("requested_documents", [])),
+            "reason": request_data.get("reason", ""),
+            "notes": request_data.get("notes", ""),
+            "requester_name": request_data.get("requester_name", ""),
+            "deadline": request_data.get("deadline", ""),
+            "scholarship_type": request_data.get("scholarship_type", ""),
+            "scholarship_type_id": request_data.get("scholarship_type_id"),
+            "request_date": request_data.get("request_date", datetime.now().strftime("%Y-%m-%d")),
+            "system_url": "https://scholarship.nycu.edu.tw",
+        }
+
+        await self.process_trigger(db, "supplement_requested", context)
+
+    async def trigger_deadline_approaching(self, db: AsyncSession, application_id: int, deadline_data: Dict[str, Any]):
+        """Trigger emails when deadline is approaching"""
+        context = {
+            "application_id": application_id,
+            "app_id": deadline_data.get("app_id", ""),
+            "student_name": deadline_data.get("student_name", ""),
+            "student_email": deadline_data.get("student_email", ""),
+            "deadline": deadline_data.get("deadline", ""),
+            "days_remaining": deadline_data.get("days_remaining", ""),
+            "deadline_type": deadline_data.get("deadline_type", ""),  # e.g., "submission", "supplement"
+            "scholarship_name": deadline_data.get("scholarship_name", ""),
+            "scholarship_type": deadline_data.get("scholarship_type", ""),
+            "scholarship_type_id": deadline_data.get("scholarship_type_id"),
+            "system_url": "https://scholarship.nycu.edu.tw",
+        }
+
+        await self.process_trigger(db, "deadline_approaching", context)
+
     async def process_scheduled_emails(self, db: AsyncSession):
         """Process and send scheduled emails that are due"""
         try:

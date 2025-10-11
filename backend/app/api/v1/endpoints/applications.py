@@ -5,7 +5,7 @@ Application management API endpoints
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, Request, UploadFile, status
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,7 @@ from app.schemas.application import (
     ProfessorReviewCreate,
     StudentDataSchema,
 )
+from app.services.application_audit_service import ApplicationAuditService
 from app.services.application_service import ApplicationService
 
 router = APIRouter()
@@ -102,6 +103,73 @@ async def create_application(
                     "received_form_data": str(application_data.form_data),
                 },
             )
+
+        # Get scholarship configuration to extract scholarship_type_id, academic_year, semester
+        logger.debug(f"Fetching scholarship configuration: {application_data.configuration_id}")
+        from sqlalchemy import and_, select
+
+        from app.models.application import Application, ApplicationStatus
+        from app.models.scholarship import ScholarshipConfiguration
+
+        config_stmt = select(ScholarshipConfiguration).where(
+            ScholarshipConfiguration.id == application_data.configuration_id
+        )
+        config_result = await db.execute(config_stmt)
+        scholarship_config = config_result.scalar_one_or_none()
+
+        if not scholarship_config:
+            logger.error(f"Invalid configuration_id: {application_data.configuration_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "message": "Invalid scholarship configuration",
+                    "error_code": "INVALID_CONFIGURATION_ID",
+                    "configuration_id": application_data.configuration_id,
+                },
+            )
+
+        # Check for duplicate applications (同一獎學金類型、學年度、學期只能有一個申請)
+        logger.debug("Checking for duplicate applications")
+
+        # 排除已撤回/拒絕/取消/刪除的申請
+        excluded_statuses = [
+            ApplicationStatus.withdrawn.value,
+            ApplicationStatus.rejected.value,
+            ApplicationStatus.cancelled.value,
+            ApplicationStatus.deleted.value,  # 允許刪除後重新申請
+        ]
+
+        # 查詢是否已有申請 - using values from scholarship configuration
+        duplicate_check_stmt = select(Application).where(
+            and_(
+                Application.user_id == current_user.id,
+                Application.scholarship_type_id == scholarship_config.scholarship_type_id,
+                Application.academic_year == scholarship_config.academic_year,
+                Application.semester == scholarship_config.semester,
+                Application.status.notin_(excluded_statuses),
+            )
+        )
+        duplicate_result = await db.execute(duplicate_check_stmt)
+        existing_application = duplicate_result.scalar_one_or_none()
+
+        if existing_application:
+            logger.warning(
+                f"Duplicate application detected: user_id={current_user.id}, "
+                f"scholarship_type_id={scholarship_config.scholarship_type_id}, "
+                f"existing_app_id={existing_application.app_id}, "
+                f"status={existing_application.status}"
+            )
+            return {
+                "success": False,
+                "message": f"您已有此獎學金的申請記錄（{existing_application.app_id}），無法重複申請",
+                "data": {
+                    "error_code": "DUPLICATE_APPLICATION",
+                    "existing_application_id": existing_application.id,
+                    "existing_app_id": existing_application.app_id,
+                    "existing_status": existing_application.status,
+                    "scholarship_name": existing_application.scholarship_name,
+                },
+            }
 
         logger.debug(f"Creating application (draft: {is_draft})")
         result = await service.create_application(
@@ -189,10 +257,21 @@ async def get_application(
     id: int = Path(..., description="Application ID"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Get application by ID"""
     service = ApplicationService(db)
     result = await service.get_application_by_id(id, current_user)
+
+    # Log audit trail for viewing application
+    audit_service = ApplicationAuditService(db)
+    await audit_service.log_view_application(
+        application_id=id,
+        app_id=result.app_id if hasattr(result, "app_id") else f"APP-{id}",
+        user=current_user,
+        request=request,
+    )
+
     return {
         "success": True,
         "message": "查詢成功",
@@ -222,10 +301,21 @@ async def submit_application(
     id: int = Path(..., description="Application ID"),
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Submit application for review"""
     service = ApplicationService(db)
     result = await service.submit_application(id, current_user)
+
+    # Log audit trail for application submission
+    audit_service = ApplicationAuditService(db)
+    await audit_service.log_application_submit(
+        application_id=id,
+        app_id=result.app_id if hasattr(result, "app_id") else f"APP-{id}",
+        user=current_user,
+        request=request,
+    )
+
     return {
         "success": True,
         "message": "申請已提交",
@@ -236,24 +326,48 @@ async def submit_application(
 @router.delete("/{id}")
 async def delete_application(
     id: int = Path(..., description="Application ID"),
+    reason: Optional[str] = Query(None, description="Reason for deletion (required for staff)"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
-    """Delete application (only draft applications can be deleted)"""
-    service = ApplicationService(db)
-    success = await service.delete_application(id, current_user)
+    """
+    Soft delete an application
 
-    if success:
+    Permission Control:
+    - Students: Can only delete their own draft applications (no reason required)
+    - Staff (professor/college/admin): Can delete any application (reason required)
+
+    The application status will be set to 'deleted' and deletion metadata will be tracked.
+    """
+    service = ApplicationService(db)
+
+    try:
+        # Perform soft delete
+        deleted_app = await service.delete_application(id, current_user, reason)
+
+        # Log audit trail for deletion
+        audit_service = ApplicationAuditService(db)
+        await audit_service.log_delete_application(
+            application_id=id,
+            app_id=deleted_app.app_id if hasattr(deleted_app, "app_id") else f"APP-{id}",
+            user=current_user,
+            reason=reason,
+            request=request,
+        )
+
         return {
             "success": True,
             "message": "申請已刪除",
-            "data": {"id": id},
+            "data": deleted_app.dict()
+            if hasattr(deleted_app, "dict")
+            else deleted_app.model_dump()
+            if hasattr(deleted_app, "model_dump")
+            else {"id": id},
         }
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete application",
-        )
+    except Exception as e:
+        logger.error(f"Error deleting application {id}: {str(e)}")
+        raise
 
 
 @router.post("/{id}/withdraw")
@@ -320,10 +434,26 @@ async def upload_file(
     file_type: str = Query("other", description="File type"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Upload file for application using MinIO"""
     service = ApplicationService(db)
     result = await service.upload_application_file_minio(id, current_user, file, file_type)
+
+    # Log audit trail for document upload
+    audit_service = ApplicationAuditService(db)
+    # Get application to fetch app_id
+    app = await service.get_application_by_id(id, current_user)
+    await audit_service.log_document_upload(
+        application_id=id,
+        app_id=app.app_id if hasattr(app, "app_id") else f"APP-{id}",
+        file_type=file_type,
+        filename=file.filename or "unknown",
+        file_size=file.size if hasattr(file, "size") else 0,
+        user=current_user,
+        request=request,
+    )
+
     return {
         "success": True,
         "message": "檔案上傳成功",
@@ -371,10 +501,29 @@ async def update_application_status(
     status_update: ApplicationStatusUpdate = ...,
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Update application status (staff only)"""
+    # Get application before update to capture old status
     service = ApplicationService(db)
+    app_before = await service.get_application_by_id(id, current_user)
+    old_status = app_before.status if hasattr(app_before, "status") else "unknown"
+
+    # Update status
     result = await service.update_application_status(id, current_user, status_update)
+
+    # Log audit trail for status update
+    audit_service = ApplicationAuditService(db)
+    await audit_service.log_status_update(
+        application_id=id,
+        app_id=result.app_id if hasattr(result, "app_id") else f"APP-{id}",
+        old_status=old_status,
+        new_status=status_update.status,
+        user=current_user,
+        reason=status_update.comments if hasattr(status_update, "comments") else None,
+        request=request,
+    )
+
     return {
         "success": True,
         "message": "狀態已更新",
@@ -497,4 +646,63 @@ async def get_student_data(
         "success": True,
         "message": "查詢成功",
         "data": response_data.model_dump(),
+    }
+
+
+@router.get("/{id}/audit-trail")
+async def get_application_audit_trail(
+    id: int = Path(..., description="Application ID"),
+    limit: int = Query(50, le=200, description="Maximum number of audit logs to return"),
+    offset: int = Query(0, ge=0, description="Number of audit logs to skip"),
+    action_filter: Optional[str] = Query(None, description="Filter by action type"),
+    current_user: User = Depends(require_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get audit trail for a specific application (staff only)
+
+    Returns a list of all operations performed on this application, including:
+    - View, update, submit, approve, reject actions
+    - Who performed each action and when
+    - Old and new values for status changes
+    - IP addresses and request details
+    """
+    # Verify application exists and user has access
+    service = ApplicationService(db)
+    try:
+        await service.get_application_by_id(id, current_user)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    # Get audit trail
+    audit_service = ApplicationAuditService(db)
+    audit_logs = await audit_service.get_application_audit_trail(
+        application_id=id, limit=limit, offset=offset, action_filter=action_filter
+    )
+
+    # Format response with user information
+    formatted_logs = []
+    for log in audit_logs:
+        log_dict = {
+            "id": log.id,
+            "action": log.action,
+            "user_id": log.user_id,
+            "user_name": log.user.name if log.user else "Unknown",
+            "description": log.description,
+            "old_values": log.old_values,
+            "new_values": log.new_values,
+            "ip_address": log.ip_address,
+            "request_method": log.request_method,
+            "request_url": log.request_url,
+            "status": log.status,
+            "error_message": log.error_message,
+            "meta_data": log.meta_data,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        }
+        formatted_logs.append(log_dict)
+
+    return {
+        "success": True,
+        "message": f"Retrieved {len(formatted_logs)} audit log entries",
+        "data": formatted_logs,
     }

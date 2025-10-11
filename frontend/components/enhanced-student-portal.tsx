@@ -27,7 +27,9 @@ import { FileUpload } from "@/components/file-upload";
 import { DynamicApplicationForm } from "@/components/dynamic-application-form";
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
-import UserProfileManagement from "@/components/user-profile-management";
+import { StudentApplicationWizard } from "@/components/student-wizard/StudentApplicationWizard";
+import { DocumentRequestAlert } from "@/components/document-request-alert";
+import type { StudentDocumentRequest } from "@/lib/api/modules/document-requests";
 import {
   Edit,
   Eye,
@@ -42,6 +44,7 @@ import {
   Loader2,
   Check,
   ClipboardList,
+  Award,
 } from "lucide-react";
 import {
   Dialog,
@@ -83,6 +86,7 @@ interface EnhancedStudentPortalProps {
     studentType: "phd" | "master" | "undergraduate" | "other";
   };
   locale: Locale;
+  initialTab?: "scholarship-list" | "new-application" | "applications";
 }
 
 type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
@@ -90,6 +94,7 @@ type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 export function EnhancedStudentPortal({
   user,
   locale,
+  initialTab = "scholarship-list",
 }: EnhancedStudentPortalProps) {
   const t = (key: string) => getTranslation(locale, key);
   const validator = useMemo(() => new FormValidator(locale), [locale]);
@@ -108,7 +113,7 @@ export function EnhancedStudentPortal({
     deleteApplication,
   } = useApplications();
 
-  const [activeTab, setActiveTab] = useState("new-application");
+  const [activeTab, setActiveTab] = useState("scholarship-list");
   const [editingApplication, setEditingApplication] =
     useState<Application | null>(null);
   const [selectedSubTypes, setSelectedSubTypes] = useState<
@@ -194,9 +199,7 @@ export function EnhancedStudentPortal({
   // Update active tab based on applications
   useEffect(() => {
     if (!applicationsLoading && !applicationsError) {
-      if (!applications || applications.length === 0) {
-        setActiveTab("new-application");
-      } else if (activeTab === "new-application") {
+      if (applications && applications.length > 0 && activeTab === "scholarship-list") {
         setActiveTab("applications");
       }
     }
@@ -234,6 +237,10 @@ export function EnhancedStudentPortal({
       error: string | null;
     };
   }>({});
+
+  // State for document requests
+  const [documentRequests, setDocumentRequests] = useState<StudentDocumentRequest[]>([]);
+  const [isLoadingDocumentRequests, setIsLoadingDocumentRequests] = useState(false);
 
   // Fetch eligible scholarships on component mount
   useEffect(() => {
@@ -293,6 +300,58 @@ export function EnhancedStudentPortal({
 
     fetchEligibleScholarships();
   }, []);
+
+  // Fetch document requests on component mount
+  useEffect(() => {
+    const fetchDocumentRequests = async () => {
+      try {
+        setIsLoadingDocumentRequests(true);
+        const response = await api.documentRequests.getMyDocumentRequests("pending");
+
+        if (response.success && response.data) {
+          setDocumentRequests(response.data);
+        } else {
+          console.error("Failed to fetch document requests:", response.message);
+          setDocumentRequests([]);
+        }
+      } catch (error) {
+        console.error("Error fetching document requests:", error);
+        setDocumentRequests([]);
+      } finally {
+        setIsLoadingDocumentRequests(false);
+      }
+    };
+
+    fetchDocumentRequests();
+  }, []);
+
+  // Handler for fulfilling document requests
+  const handleFulfillDocumentRequest = async (requestId: number) => {
+    try {
+      const response = await api.documentRequests.fulfillDocumentRequest(requestId);
+
+      if (response.success) {
+        // Remove fulfilled request from the list
+        setDocumentRequests(prev => prev.filter(req => req.id !== requestId));
+        alert(
+          locale === "zh"
+            ? "文件補件已標記為完成"
+            : "Document request marked as fulfilled"
+        );
+      } else {
+        alert(
+          response.message ||
+            (locale === "zh" ? "操作失敗" : "Operation failed")
+        );
+      }
+    } catch (error: any) {
+      console.error("Failed to fulfill document request:", error);
+      alert(
+        error?.response?.data?.message ||
+          (locale === "zh" ? "標記完成時發生錯誤" : "Error marking as fulfilled")
+      );
+    }
+  };
 
   // 獲取獎學金申請資訊（表單欄位和文件要求）
   const fetchScholarshipApplicationInfo = async (scholarshipType: string) => {
@@ -916,6 +975,20 @@ export function EnhancedStudentPortal({
     setTermsPreviewFile(null);
   };
 
+
+  // Handle application completion - switch to applications tab and refresh
+  const handleApplicationComplete = () => {
+    setActiveTab("applications");
+    fetchApplications();
+
+    // Optionally show a success message
+    // You can use a toast library if available
+    alert(
+      locale === "zh"
+        ? "申請提交成功！請在「我的申請」查看進度"
+        : "Application submitted successfully! View progress in 'My Applications'"
+    );
+  };
   const handleEditApplication = async (application: Application) => {
     // 設置編輯模式
     setEditingApplication(application);
@@ -1166,1079 +1239,582 @@ export function EnhancedStudentPortal({
 
   return (
     <div className="space-y-6">
-      {/* Scholarship Info Cards */}
-      {eligibleScholarships.map(scholarship => {
-        const applicationInfo = scholarshipApplicationInfo[scholarship.code];
-        // Check if scholarship has eligible sub-types AND no common errors
-        const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
-        const isEligible =
-          Array.isArray(scholarship.eligible_sub_types) &&
-          scholarship.eligible_sub_types.length > 0 &&
-          !hasCommonErrors;  // If there are common errors, student is not eligible
+      {/* Document Request Alert - Show pending document requests */}
+      {!isLoadingDocumentRequests && documentRequests.length > 0 && (
+        <DocumentRequestAlert
+          documentRequests={documentRequests}
+          locale={locale}
+          onFulfill={handleFulfillDocumentRequest}
+        />
+      )}
 
-        return (
-          <Card
-            key={scholarship.id}
-            className={clsx(
-              "border border-gray-100",
-              isEligible
-                ? "bg-white hover:border-primary/30 transition-colors"
-                : "bg-gray-50/50 border-gray-100 hover:bg-gray-50/80 transition-colors"
-            )}
-          >
-            <CardHeader className="pb-4">
-              {/* Title and Status Badge */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-xl">
-                    {locale === "zh"
-                      ? scholarship.name
-                      : scholarship.name_en || scholarship.name}
-                  </CardTitle>
-                </div>
-                {isEligible ? (
-                  <Badge
-                    variant="outline"
-                    className="bg-emerald-50 text-emerald-600 border-emerald-100 text-base px-4 py-1"
-                  >
-                    <Check className="h-4 w-4 mr-1.5" />
-                    {t("messages.eligible")}
-                  </Badge>
-                ) : (
-                  <Badge
-                    variant="outline"
-                    className="bg-amber-50 text-amber-600 border-amber-100 text-base px-4 py-1"
-                  >
-                    <AlertTriangle className="h-4 w-4 mr-1.5" />
-                    {t("messages.not_eligible")}
-                  </Badge>
-                )}
+      {/* Conditional rendering based on initialTab */}
+      {initialTab === "applications" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("portal.application_records")}</CardTitle>
+            <CardDescription>
+              {locale === "zh"
+                ? "查看您的獎學金申請狀態與進度"
+                : "View your scholarship application status and progress"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {applicationsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin" />
               </div>
-
-              {/* Eligible Programs Section - only show if student is eligible */}
-              {isEligible &&
-                scholarship.eligible_sub_types &&
-                scholarship.eligible_sub_types.length > 0 &&
-                scholarship.eligible_sub_types[0]?.value !== "general" &&
-                scholarship.eligible_sub_types[0]?.value !== null && (
-                  <div className="mt-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50 divide-y divide-indigo-100/50">
-                    <div className="px-3 py-2">
-                      <p className="text-sm font-medium text-indigo-900">
-                        {getTranslation(
-                          locale,
-                          "scholarship_sections.eligible_programs"
-                        )}
-                      </p>
-                    </div>
-                    <div className="px-3 py-2 flex flex-wrap gap-1.5">
-                      {scholarship.eligible_sub_types.map((subType, index) => (
-                        <Badge
-                          key={subType.value || index}
-                          variant="outline"
-                          className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
-                        >
-                          {locale === "zh" ? subType.label : subType.label_en}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-            </CardHeader>
-
-            <CardContent>
-              <div className="grid grid-cols-2 gap-6">
-                {/* Left Column - Eligibility & Period */}
-                <div className="space-y-4">
-                  {/* 申請資格 */}
-                  <div className="rounded-lg border border-gray-100 overflow-hidden">
-                    <div className="bg-sky-50/50 px-3 py-2 border-b border-gray-100">
-                      <div className="flex items-center gap-2">
-                        <Info className="h-4 w-4 text-sky-500" />
-                        <p className="text-sm font-medium text-sky-700">
-                          {getTranslation(
-                            locale,
-                            "scholarship_sections.eligibility"
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="p-3 space-y-4">
-                      {/* Get common rules */}
-                      {(() => {
-                        const commonPassedRules = scholarship.passed?.filter(rule => !rule.sub_type) || [];
-                        const commonErrorRules = scholarship.errors?.filter(rule => !rule.sub_type) || [];
-
-                        const hasSubTypes = scholarship.eligible_sub_types &&
-                          scholarship.eligible_sub_types.some(st => st.value && st.value !== "general");
-
-                        // If no subtypes (general scholarship), show common rules directly
-                        if (!hasSubTypes && (commonPassedRules.length > 0 || commonErrorRules.length > 0)) {
-                          return (
-                            <div>
-                              <div className="flex flex-wrap gap-1">
-                                {/* Passed rules */}
-                                {commonPassedRules.map(rule => (
-                                  <Badge
-                                    key={rule.rule_id}
-                                    variant="outline"
-                                    className="bg-emerald-50 text-emerald-600 border-emerald-100"
-                                  >
-                                    {getTranslation(
-                                      locale,
-                                      `eligibility_tags.${rule.tag}`
-                                    )}
-                                  </Badge>
-                                ))}
-                                {/* Error rules */}
-                                {commonErrorRules.map(rule => {
-                                  // Determine color and icon based on status
-                                  const isDataUnavailable = rule.status === 'data_unavailable';
-                                  const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
-                                  const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
-                                  const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
-                                  const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
-                                  const displayMessage = rule.system_message || rule.message;
-
-                                  return (
-                                    <Badge
-                                      key={rule.rule_id}
-                                      variant="outline"
-                                      className={`${bgColor} ${textColor} ${borderColor}`}
-                                      title={displayMessage} // tooltip
-                                    >
-                                      <Icon className="h-3 w-3 mr-1" />
-                                      {getTranslation(
-                                        locale,
-                                        `eligibility_tags.${rule.tag}`
-                                      )}
-                                    </Badge>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        // Sub-type specific sections with common rules appended
-                        return scholarship.eligible_sub_types?.map((subTypeInfo) => {
-                          const subType = subTypeInfo.value;
-                          if (!subType || subType === "general") return null;
-
-                          const passedRulesForType = scholarship.passed?.filter(
-                            rule => rule.sub_type === subType
-                          ) || [];
-                          const errorRulesForType = scholarship.errors?.filter(
-                            rule => rule.sub_type === subType
-                          ) || [];
-
-                          // Combine common rules with subtype-specific rules
-                          const allPassedRules = [...commonPassedRules, ...passedRulesForType];
-                          const allErrorRules = [...commonErrorRules, ...errorRulesForType];
-
-                          // Only show subtype section if there are any rules for it
-                          if (allPassedRules.length === 0 && allErrorRules.length === 0)
-                            return null;
-
-                          return (
-                            <div key={subType}>
-                              <p className="text-sm font-medium text-gray-800 mb-2">
-                                {locale === "zh" ? subTypeInfo.label : subTypeInfo.label_en || subTypeInfo.label}
-                              </p>
-                              <div className="flex flex-wrap gap-1">
-                                {/* Passed rules (common + subtype-specific) */}
-                                {allPassedRules.map(rule => (
-                                  <Badge
-                                    key={rule.rule_id}
-                                    variant="outline"
-                                    className="bg-emerald-50 text-emerald-600 border-emerald-100"
-                                  >
-                                    {getTranslation(
-                                      locale,
-                                      `eligibility_tags.${rule.tag}`
-                                    )}
-                                  </Badge>
-                                ))}
-                                {/* Error rules (common + subtype-specific) */}
-                                {allErrorRules.map(rule => {
-                                  // Determine color and icon based on status
-                                  const isDataUnavailable = rule.status === 'data_unavailable';
-                                  const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
-                                  const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
-                                  const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
-                                  const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
-                                  const displayMessage = rule.system_message || rule.message;
-
-                                  return (
-                                    <Badge
-                                      key={rule.rule_id}
-                                      variant="outline"
-                                      className={`${bgColor} ${textColor} ${borderColor}`}
-                                      title={displayMessage} // tooltip
-                                    >
-                                      <Icon className="h-3 w-3 mr-1" />
-                                      {getTranslation(
-                                        locale,
-                                        `eligibility_tags.${rule.tag}`
-                                      )}
-                                    </Badge>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-
-                      {/* Warnings - keep at the end */}
-                      {scholarship.warnings &&
-                        scholarship.warnings.length > 0 && (
-                          <div>
-                            <p className="text-sm font-medium text-amber-700 mb-2">
-                              {locale === "zh" ? "注意事項" : "Warnings"}
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {scholarship.warnings?.map(rule => (
-                                <Badge
-                                  key={rule.rule_id}
-                                  variant="outline"
-                                  className="bg-amber-50 text-amber-600 border-amber-100"
-                                >
-                                  <AlertTriangle className="h-3 w-3 mr-1" />
-                                  {getTranslation(
-                                    locale,
-                                    `eligibility_tags.${rule.tag}`
-                                  )}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                    </div>
-                  </div>
-
-                  {/* 申請期間 */}
-                  {scholarship.application_start_date &&
-                    scholarship.application_end_date && (
-                      <div className="rounded-lg border border-gray-100 overflow-hidden">
-                        <div className="bg-amber-50/50 px-3 py-2 border-b border-gray-100">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-amber-500" />
-                            <p className="text-sm font-medium text-amber-700">
-                              {getTranslation(
-                                locale,
-                                "scholarship_sections.period"
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="p-3">
-                          <p className="text-sm text-gray-600">
-                            {new Date(
-                              scholarship.application_start_date
-                            ).toLocaleDateString()}{" "}
-                            -{" "}
-                            {new Date(
-                              scholarship.application_end_date
-                            ).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                    )}
+            ) : applicationsError ? (
+              <div className="text-destructive text-center py-4">
+                {applicationsError}
+              </div>
+            ) : applications.length === 0 ? (
+              <div className="text-center py-8" data-testid="applications-empty-state">
+                <div className="flex flex-col items-center gap-2">
+                  <FileText className="h-12 w-12 text-muted-foreground" />
+                  <p className="text-lg font-medium text-muted-foreground">
+                    {locale === "zh"
+                      ? "尚無申請記錄"
+                      : "No application records"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {locale === "zh"
+                      ? "您可以點擊「新增申請」開始申請獎學金"
+                      : "Click 'New Application' to start your scholarship application"}
+                  </p>
                 </div>
-
-                {/* Right Column - Application Fields & Documents */}
-                <div className="space-y-4">
-                  {/* Loading State */}
-                  {applicationInfo?.isLoading && (
-                    <div className="rounded-lg border border-gray-100 p-3">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
-                        <p className="text-sm font-medium">
-                          {locale === "zh" ? "申請資訊" : "Application Info"}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {applications.map(app => (
+                  <div key={app.id} className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium">
+                          {getScholarshipTypeName(app.scholarship_type)}
+                        </h4>
+                        <p className="text-sm text-muted-foreground">
+                          {locale === "zh" ? "申請編號" : "Application ID"}:{" "}
+                          {app.app_id || `APP-${app.id}`}
                         </p>
                       </div>
-                      <p className="text-sm text-gray-600 mt-2">
-                        {t("applications.loading")}
-                      </p>
+                      <Badge
+                        variant={getStatusColor(
+                          app.status as ApplicationStatus
+                        )}
+                      >
+                        {getStatusName(
+                          app.status as ApplicationStatus,
+                          locale
+                        )}
+                      </Badge>
                     </div>
-                  )}
 
-                  {/* Error State */}
-                  {applicationInfo?.error && (
-                    <div className="rounded-lg border border-rose-100 bg-rose-50/50 p-3">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-rose-500" />
-                        <p className="text-sm font-medium text-rose-700">
-                          {t("applications.load_error")}
-                        </p>
-                      </div>
-                      <p className="text-sm text-rose-600 mt-2">
-                        {applicationInfo.error}
-                      </p>
+                    {/* Progress Timeline */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Calendar className="h-4 w-4" />
+                          {locale === "zh" ? "審核進度" : "Review Progress"}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ProgressTimeline
+                          steps={getApplicationTimeline(app, locale)}
+                          orientation="horizontal"
+                        />
+                      </CardContent>
+                    </Card>
+
+                    <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          fetchScholarshipApplicationInfo(scholarship.code)
-                        }
-                        className="mt-2"
+                        onClick={() => handleViewDetails(app)}
                       >
-                        {t("applications.retry")}
+                        <Eye className="h-4 w-4 mr-1" />
+                        {locale === "zh" ? "查看詳情" : "View Details"}
                       </Button>
+                      {app.status === "draft" && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEditApplication(app)}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            {locale === "zh" ? "編輯" : "Edit"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteApplication(app.id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            {locale === "zh" ? "刪除草稿" : "Delete Draft"}
+                          </Button>
+                        </>
+                      )}
                     </div>
-                  )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-                  {/* Application Fields */}
-                  {applicationInfo &&
-                    !applicationInfo.isLoading &&
-                    !applicationInfo.error && (
-                      <div className="rounded-lg border border-gray-100 overflow-hidden">
-                        <div className="bg-violet-50/50 px-3 py-2 border-b border-gray-100">
-                          <div className="flex items-center gap-2">
-                            <Edit className="h-4 w-4 text-violet-500" />
-                            <p className="text-sm font-medium text-violet-700">
-                              {getTranslation(
-                                locale,
-                                "scholarship_sections.fields"
-                              )}
-                            </p>
-                          </div>
+      {initialTab === "new-application" && (
+        <StudentApplicationWizard
+          user={user}
+          locale={locale}
+          onApplicationComplete={handleApplicationComplete}
+        />
+      )}
+
+      {initialTab === "scholarship-list" && (
+        <>
+          {/* Scholarship Info Cards */}
+          {eligibleScholarships.map(scholarship => {
+            const applicationInfo = scholarshipApplicationInfo[scholarship.code];
+            // Check if scholarship has eligible sub-types AND no common errors
+            const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
+            const isEligible =
+              Array.isArray(scholarship.eligible_sub_types) &&
+              scholarship.eligible_sub_types.length > 0 &&
+              !hasCommonErrors;  // If there are common errors, student is not eligible
+
+            return (
+              <Card
+                key={scholarship.id}
+                className={clsx(
+                  "border border-gray-100",
+                  isEligible
+                    ? "bg-white hover:border-primary/30 transition-colors"
+                    : "bg-gray-50/50 border-gray-100 hover:bg-gray-50/80 transition-colors"
+                )}
+              >
+                <CardHeader className="pb-4">
+                  {/* Title and Status Badge */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-xl">
+                        {locale === "zh"
+                          ? scholarship.name
+                          : scholarship.name_en || scholarship.name}
+                      </CardTitle>
+                    </div>
+                    {isEligible ? (
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-50 text-emerald-600 border-emerald-100 text-base px-4 py-1"
+                      >
+                        <Check className="h-4 w-4 mr-1.5" />
+                        {t("messages.eligible")}
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="bg-amber-50 text-amber-600 border-amber-100 text-base px-4 py-1"
+                      >
+                        <AlertTriangle className="h-4 w-4 mr-1.5" />
+                        {t("messages.not_eligible")}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Eligible Programs Section - only show if student is eligible */}
+                  {isEligible &&
+                    scholarship.eligible_sub_types &&
+                    scholarship.eligible_sub_types.length > 0 &&
+                    scholarship.eligible_sub_types[0]?.value !== "general" &&
+                    scholarship.eligible_sub_types[0]?.value !== null && (
+                      <div className="mt-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50 divide-y divide-indigo-100/50">
+                        <div className="px-3 py-2">
+                          <p className="text-sm font-medium text-indigo-900">
+                            {getTranslation(
+                              locale,
+                              "scholarship_sections.eligible_programs"
+                            )}
+                          </p>
                         </div>
-                        <div className="p-3">
-                          <div className="flex flex-wrap gap-1.5">
-                            {applicationInfo.fields
-                              .filter(field => field.is_active)
-                              .map((field, index) => (
-                                <Badge
-                                  key={`${scholarship.id}-field-${field.id}-${index}`}
-                                  variant="outline"
-                                  className="text-xs bg-white text-gray-600 border-gray-200"
-                                >
-                                  {locale === "zh"
-                                    ? field.field_label
-                                    : field.field_label_en || field.field_label}
-                                </Badge>
-                              ))}
-                          </div>
+                        <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                          {scholarship.eligible_sub_types.map((subType, index) => (
+                            <Badge
+                              key={subType.value || index}
+                              variant="outline"
+                              className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
+                            >
+                              {locale === "zh" ? subType.label : subType.label_en}
+                            </Badge>
+                          ))}
                         </div>
                       </div>
                     )}
+                </CardHeader>
 
-                  {/* Required Documents */}
-                  {applicationInfo &&
-                    !applicationInfo.isLoading &&
-                    !applicationInfo.error && (
-                      <div className="rounded-lg border border-gray-100 overflow-hidden">
-                        <div className="bg-emerald-50/50 px-3 py-2 border-b border-gray-100">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-emerald-500" />
-                            <p className="text-sm font-medium text-emerald-700">
-                              {getTranslation(
-                                locale,
-                                "scholarship_sections.required_docs"
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="p-3">
-                          <div className="flex flex-wrap gap-1.5">
-                            {applicationInfo.documents
-                              .filter(doc => doc.is_required && doc.is_active)
-                              .map((doc, index) => (
-                                <Badge
-                                  key={`${scholarship.id}-req-doc-${doc.id}-${index}`}
-                                  variant="outline"
-                                  className="text-xs bg-white text-gray-600 border-gray-200"
-                                >
-                                  {locale === "zh"
-                                    ? doc.document_name
-                                    : doc.document_name_en || doc.document_name}
-                                </Badge>
-                              ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                  {/* Optional Documents */}
-                  {applicationInfo &&
-                    !applicationInfo.isLoading &&
-                    !applicationInfo.error &&
-                    applicationInfo.documents.filter(
-                      doc => !doc.is_required && doc.is_active
-                    ).length > 0 && (
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Left Column - Eligibility & Period */}
+                    <div className="space-y-4">
+                      {/* 申請資格 */}
                       <div className="rounded-lg border border-gray-100 overflow-hidden">
                         <div className="bg-sky-50/50 px-3 py-2 border-b border-gray-100">
                           <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-sky-500" />
+                            <Info className="h-4 w-4 text-sky-500" />
                             <p className="text-sm font-medium text-sky-700">
                               {getTranslation(
                                 locale,
-                                "scholarship_sections.optional_docs"
+                                "scholarship_sections.eligibility"
                               )}
                             </p>
                           </div>
                         </div>
-                        <div className="p-3">
-                          <div className="flex flex-wrap gap-1.5">
-                            {applicationInfo.documents
-                              .filter(doc => !doc.is_required && doc.is_active)
-                              .map((doc, index) => (
-                                <Badge
-                                  key={`${scholarship.id}-opt-doc-${doc.id}-${index}`}
-                                  variant="outline"
-                                  className="text-xs bg-white text-gray-600 border-gray-200"
-                                >
-                                  {locale === "zh"
-                                    ? doc.document_name
-                                    : doc.document_name_en || doc.document_name}
-                                </Badge>
-                              ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+                        <div className="p-3 space-y-4">
+                          {/* Get common rules */}
+                          {(() => {
+                            const commonPassedRules = scholarship.passed?.filter(rule => !rule.sub_type) || [];
+                            const commonErrorRules = scholarship.errors?.filter(rule => !rule.sub_type) || [];
 
-      <Tabs
-        value={activeTab}
-        onValueChange={setActiveTab}
-        className="space-y-4"
-      >
-        <TabsList>
-          {applications.length === 0 ? (
-            // 沒有申請時：新增申請 > 我的申請 > 個人資料
-            <>
-              <TabsTrigger value="new-application">
-                <FileText className="h-4 w-4 mr-2" />
-                {t("applications.new_application")}
-              </TabsTrigger>
-              <TabsTrigger value="applications">
-                <ClipboardList className="h-4 w-4 mr-2" />
-                {t("portal.my_applications")}
-              </TabsTrigger>
-              <TabsTrigger value="profile">
-                <UserIcon className="h-4 w-4 mr-2" />
-                {t("nav.profile")}
-              </TabsTrigger>
-            </>
-          ) : (
-            // 有申請時：我的申請 > 新增申請 > 個人資料
-            <>
-              <TabsTrigger value="applications">
-                <ClipboardList className="h-4 w-4 mr-2" />
-                {t("portal.my_applications")}
-              </TabsTrigger>
-              <TabsTrigger value="new-application">
-                <FileText className="h-4 w-4 mr-2" />
-                {t("applications.new_application")}
-              </TabsTrigger>
-              <TabsTrigger value="profile">
-                <UserIcon className="h-4 w-4 mr-2" />
-                {t("nav.profile")}
-              </TabsTrigger>
-            </>
-          )}
-        </TabsList>
+                            const hasSubTypes = scholarship.eligible_sub_types &&
+                              scholarship.eligible_sub_types.some(st => st.value && st.value !== "general");
 
-        <TabsContent value="applications" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("portal.application_records")}</CardTitle>
-              <CardDescription>
-                {locale === "zh"
-                  ? "查看您的獎學金申請狀態與進度"
-                  : "View your scholarship application status and progress"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {applicationsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
-              ) : applicationsError ? (
-                <div className="text-destructive text-center py-4">
-                  {applicationsError}
-                </div>
-              ) : applications.length === 0 ? (
-                <div className="text-center py-8" data-testid="applications-empty-state">
-                  <div className="flex flex-col items-center gap-2">
-                    <FileText className="h-12 w-12 text-muted-foreground" />
-                    <p className="text-lg font-medium text-muted-foreground">
-                      {locale === "zh"
-                        ? "尚無申請記錄"
-                        : "No application records"}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {locale === "zh"
-                        ? "您可以點擊「新增申請」開始申請獎學金"
-                        : "Click 'New Application' to start your scholarship application"}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {applications.map(app => (
-                    <div key={app.id} className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-medium">
-                            {getScholarshipTypeName(app.scholarship_type)}
-                          </h4>
-                          <p className="text-sm text-muted-foreground">
-                            {locale === "zh" ? "申請編號" : "Application ID"}:{" "}
-                            {app.app_id || `APP-${app.id}`}
-                          </p>
-                        </div>
-                        <Badge
-                          variant={getStatusColor(
-                            app.status as ApplicationStatus
-                          )}
-                        >
-                          {getStatusName(
-                            app.status as ApplicationStatus,
-                            locale
-                          )}
-                        </Badge>
-                      </div>
+                            // If no subtypes (general scholarship), show common rules directly
+                            if (!hasSubTypes && (commonPassedRules.length > 0 || commonErrorRules.length > 0)) {
+                              return (
+                                <div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {/* Passed rules */}
+                                    {commonPassedRules.map(rule => (
+                                      <Badge
+                                        key={rule.rule_id}
+                                        variant="outline"
+                                        className="bg-emerald-50 text-emerald-600 border-emerald-100"
+                                      >
+                                        {getTranslation(
+                                          locale,
+                                          `eligibility_tags.${rule.tag}`
+                                        )}
+                                      </Badge>
+                                    ))}
+                                    {/* Error rules */}
+                                    {commonErrorRules.map(rule => {
+                                      // Determine color and icon based on status
+                                      const isDataUnavailable = rule.status === 'data_unavailable';
+                                      const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
+                                      const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
+                                      const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
+                                      const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
+                                      const displayMessage = rule.system_message || rule.message;
 
-                      {/* Progress Timeline */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-base flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            {locale === "zh" ? "審核進度" : "Review Progress"}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ProgressTimeline
-                            steps={getApplicationTimeline(app, locale)}
-                            orientation="horizontal"
-                          />
-                        </CardContent>
-                      </Card>
-
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleViewDetails(app)}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          {locale === "zh" ? "查看詳情" : "View Details"}
-                        </Button>
-                        {app.status === "draft" && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleEditApplication(app)}
-                            >
-                              <Edit className="h-4 w-4 mr-1" />
-                              {locale === "zh" ? "編輯" : "Edit"}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDeleteApplication(app.id)}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4 mr-1" />
-                              {locale === "zh" ? "刪除草稿" : "Delete Draft"}
-                            </Button>
-                          </>
-                        )}
-                        {/* TODO enable winthdraw application function if needed */}
-                        {/* {app.status === "submitted" && (
-                          <Button variant="outline" size="sm" onClick={() => handleWithdrawApplication(app.id)}>
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            {locale === "zh" ? "撤回申請" : "Withdraw"}
-                          </Button>
-                        )} */}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="new-application" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                {editingApplication ? (
-                  <>
-                    <Edit className="h-5 w-5" />
-                    {locale === "zh" ? "編輯申請" : "Edit Application"}
-                  </>
-                ) : (
-                  <>
-                    <FileText className="h-5 w-5" />
-                    {locale === "zh" ? `申請獎學金` : `Apply for Scholarship`}
-                  </>
-                )}
-              </CardTitle>
-              <CardDescription>
-                {editingApplication
-                  ? locale === "zh"
-                    ? `正在編輯申請編號: ${editingApplication.app_id || `APP-${editingApplication.id}`}`
-                    : `Editing Application ID: ${editingApplication.app_id || `APP-${editingApplication.id}`}`
-                  : locale === "zh"
-                    ? "選擇獎學金類型後，請填寫完整資料並上傳相關文件"
-                    : "Please select a scholarship type, complete all information and upload required documents"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Form fields */}
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="scholarship_type">
-                    {locale === "zh" ? "獎學金類型" : "Scholarship Type"} *
-                  </Label>
-                  <Select
-                    value={newApplicationData.scholarship_type}
-                    onValueChange={value => {
-                      const scholarship = eligibleScholarships.find(
-                        s => s.code === value
-                      );
-                      console.log("Debug: Selected scholarship:", scholarship);
-                      console.log(
-                        "Debug: Configuration ID from scholarship:",
-                        scholarship?.configuration_id
-                      );
-
-                      const configId = scholarship?.configuration_id || 0;
-                      console.log(
-                        "Debug: Setting configuration_id to:",
-                        configId
-                      );
-
-                      setNewApplicationData(prev => ({
-                        ...prev,
-                        scholarship_type: value,
-                        configuration_id: configId,
-                      }));
-                      setSelectedScholarship(scholarship || null);
-
-                      // Initialize selected sub-types based on selection mode
-                      if (
-                        scholarship?.eligible_sub_types &&
-                        scholarship.eligible_sub_types.length > 0 &&
-                        scholarship.eligible_sub_types[0]?.value !==
-                          "general" &&
-                        scholarship.eligible_sub_types[0]?.value !== null
-                      ) {
-                        const selectionMode =
-                          scholarship.sub_type_selection_mode || "multiple";
-                        let initialSelection: string[] = [];
-
-                        switch (selectionMode) {
-                          case "hierarchical":
-                            // Hierarchical: start with empty selection
-                            initialSelection = [];
-                            break;
-                          case "single":
-                            // Single: start with empty selection
-                            initialSelection = [];
-                            break;
-                          case "multiple":
-                          default:
-                            // Multiple: could start empty or pre-select all (keeping current behavior for backward compatibility)
-                            initialSelection = [];
-                            break;
-                        }
-
-                        setSelectedSubTypes(prev => ({
-                          ...prev,
-                          [value]: initialSelection,
-                        }));
-                      }
-
-                      // Reset dynamic form data when scholarship type changes
-                      setDynamicFormData({});
-                      setDynamicFileData({});
-
-                      // Clear legacy uploaded files
-                      setUploadedFiles({});
-
-                      // Reset terms agreement when scholarship type changes
-                      setAgreeTerms(false);
-                    }}
-                    disabled={editingApplication !== null}
-                  >
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={
-                          locale === "zh"
-                            ? "選擇獎學金類型"
-                            : "Select scholarship type"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(() => {
-                        const filteredScholarships = eligibleScholarships.filter(scholarship => {
-                          const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
-                          return Array.isArray(scholarship.eligible_sub_types) &&
-                            scholarship.eligible_sub_types.length > 0 &&
-                            !hasCommonErrors;  // Exclude scholarships with common errors
-                        });
-
-                        if (filteredScholarships.length === 0) {
-                          return (
-                            <SelectItem value="no-eligible" disabled>
-                              {locale === "zh"
-                                ? "目前沒有符合資格的獎學金"
-                                : "No eligible scholarships available"}
-                            </SelectItem>
-                          );
-                        }
-
-                        return filteredScholarships.map(scholarship => (
-                          <SelectItem
-                            key={scholarship.id}
-                            value={scholarship.code}
-                          >
-                            {scholarship.name}
-                          </SelectItem>
-                        ));
-                      })()}
-                    </SelectContent>
-                  </Select>
-                  {(() => {
-                    const filteredScholarships = eligibleScholarships.filter(scholarship => {
-                      const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
-                      return Array.isArray(scholarship.eligible_sub_types) &&
-                        scholarship.eligible_sub_types.length > 0 &&
-                        !hasCommonErrors;
-                    });
-
-                    if (filteredScholarships.length === 0 && !editingApplication) {
-                      return (
-                        <p className="text-sm text-amber-600 ml-1 my-1">
-                          {locale === "zh"
-                            ? "目前沒有符合資格的獎學金，請檢查您的申請資格"
-                            : "No eligible scholarships available, please check your eligibility"}
-                        </p>
-                      );
-                    }
-                    return null;
-                  })()}
-                  {editingApplication && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {locale === "zh"
-                        ? "編輯模式下無法更改獎學金類型"
-                        : "Cannot change scholarship type in edit mode"}
-                    </p>
-                  )}
-                </div>
-
-                {/* Sub-type selection UI */}
-                {newApplicationData.scholarship_type &&
-                  eligibleSubTypes.length > 0 &&
-                  eligibleSubTypes[0]?.value !== "general" &&
-                  eligibleSubTypes[0]?.value !== null && (
-                    <div className="space-y-2">
-                      <Label>
-                        {locale === "zh" ? "申請項目" : "Application Items"} *
-                      </Label>
-
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {eligibleSubTypes.map((subType, index) => {
-                          const subTypeValue = subType.value;
-                          const isSelected = subTypeValue
-                            ? (selectedSubTypes[
-                                newApplicationData.scholarship_type
-                              ]?.includes(subTypeValue) ?? false)
-                            : false;
-                          // For hierarchical mode, determine if this option is selectable
-                          const isSelectable = (() => {
-                            // Remove the editing restriction to allow sub-type reselection in edit mode
-                            if (!subTypeValue) return false;
-
-                            if (selectionMode === "hierarchical") {
-                              const currentSelected =
-                                selectedSubTypes[
-                                  newApplicationData.scholarship_type
-                                ] || [];
-                              const validSubTypes = eligibleSubTypes.filter(
-                                st => st.value && st.value !== "general"
+                                      return (
+                                        <Badge
+                                          key={rule.rule_id}
+                                          variant="outline"
+                                          className={`${bgColor} ${textColor} ${borderColor}`}
+                                          title={displayMessage} // tooltip
+                                        >
+                                          <Icon className="h-3 w-3 mr-1" />
+                                          {getTranslation(
+                                            locale,
+                                            `eligibility_tags.${rule.tag}`
+                                          )}
+                                        </Badge>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               );
-                              const expectedIndex = currentSelected.length;
-
-                              // Can select if it's already selected OR it's the next in sequence
-                              return isSelected || index === expectedIndex;
                             }
 
-                            return true; // For single/multiple modes, all are selectable
-                          })();
+                            // Sub-type specific sections with common rules appended
+                            return scholarship.eligible_sub_types?.map((subTypeInfo) => {
+                              const subType = subTypeInfo.value;
+                              if (!subType || subType === "general") return null;
 
-                          return (
-                            <Card
-                              key={subType.value || subType.label}
-                              className={clsx(
-                                "relative cursor-pointer transition-all duration-200",
-                                isSelectable && "hover:border-primary/50",
-                                isSelected && "border-primary bg-primary/5",
-                                !isSelectable &&
-                                  "opacity-50 cursor-not-allowed bg-gray-50"
-                              )}
-                              onClick={() => {
-                                if (isSelectable && subTypeValue) {
-                                  handleSubTypeSelection(
-                                    newApplicationData.scholarship_type,
-                                    subTypeValue,
-                                    selectionMode
-                                  );
-                                }
-                              }}
-                            >
-                              <div className="absolute top-2 right-2 w-4 h-4 rounded-full border-2 flex items-center justify-center">
-                                {isSelected && (
-                                  <div className="w-2 h-2 rounded-full bg-primary" />
-                                )}
-                              </div>
-                              <CardContent className="p-4">
-                                <p className="text-sm font-medium">
-                                  {locale === "zh"
-                                    ? subType.label
-                                    : subType.label_en}
-                                </p>
+                              const passedRulesForType = scholarship.passed?.filter(
+                                rule => rule.sub_type === subType
+                              ) || [];
+                              const errorRulesForType = scholarship.errors?.filter(
+                                rule => rule.sub_type === subType
+                              ) || [];
 
-                                {/* Show selection mode indicators */}
-                                <div className="text-xs text-gray-500 mt-1 space-y-1">
-                                  {selectionMode === "single" && (
-                                    <p>
-                                      {locale === "zh"
-                                        ? "單選模式"
-                                        : "Single selection"}
-                                    </p>
-                                  )}
-                                  {selectionMode === "hierarchical" &&
-                                    !isSelectable &&
-                                    !isSelected && (
-                                      <p>
-                                        {locale === "zh"
-                                          ? "請先選擇前面的項目"
-                                          : "Select previous items first"}
-                                      </p>
-                                    )}
-                                  {selectionMode === "hierarchical" &&
-                                    index === 0 && (
-                                      <p>
-                                        {locale === "zh"
-                                          ? "階層式選擇"
-                                          : "Hierarchical selection"}
-                                      </p>
-                                    )}
+                              // Combine common rules with subtype-specific rules
+                              const allPassedRules = [...commonPassedRules, ...passedRulesForType];
+                              const allErrorRules = [...commonErrorRules, ...errorRulesForType];
+
+                              // Only show subtype section if there are any rules for it
+                              if (allPassedRules.length === 0 && allErrorRules.length === 0)
+                                return null;
+
+                              return (
+                                <div key={subType}>
+                                  <p className="text-sm font-medium text-gray-800 mb-2">
+                                    {locale === "zh" ? subTypeInfo.label : subTypeInfo.label_en || subTypeInfo.label}
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {/* Passed rules (common + subtype-specific) */}
+                                    {allPassedRules.map(rule => (
+                                      <Badge
+                                        key={rule.rule_id}
+                                        variant="outline"
+                                        className="bg-emerald-50 text-emerald-600 border-emerald-100"
+                                      >
+                                        {getTranslation(
+                                          locale,
+                                          `eligibility_tags.${rule.tag}`
+                                        )}
+                                      </Badge>
+                                    ))}
+                                    {/* Error rules (common + subtype-specific) */}
+                                    {allErrorRules.map(rule => {
+                                      // Determine color and icon based on status
+                                      const isDataUnavailable = rule.status === 'data_unavailable';
+                                      const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
+                                      const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
+                                      const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
+                                      const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
+                                      const displayMessage = rule.system_message || rule.message;
+
+                                      return (
+                                        <Badge
+                                          key={rule.rule_id}
+                                          variant="outline"
+                                          className={`${bgColor} ${textColor} ${borderColor}`}
+                                          title={displayMessage} // tooltip
+                                        >
+                                          <Icon className="h-3 w-3 mr-1" />
+                                          {getTranslation(
+                                            locale,
+                                            `eligibility_tags.${rule.tag}`
+                                          )}
+                                        </Badge>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
+                              );
+                            });
+                          })()}
+
+                          {/* Warnings - keep at the end */}
+                          {scholarship.warnings &&
+                            scholarship.warnings.length > 0 && (
+                              <div>
+                                <p className="text-sm font-medium text-amber-700 mb-2">
+                                  {locale === "zh" ? "注意事項" : "Warnings"}
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {scholarship.warnings?.map(rule => (
+                                    <Badge
+                                      key={rule.rule_id}
+                                      variant="outline"
+                                      className="bg-amber-50 text-amber-600 border-amber-100"
+                                    >
+                                      <AlertTriangle className="h-3 w-3 mr-1" />
+                                      {getTranslation(
+                                        locale,
+                                        `eligibility_tags.${rule.tag}`
+                                      )}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                        </div>
                       </div>
 
-                      {/* Selection mode description */}
-                      <div className="mt-2 text-xs text-gray-600">
-                        {selectionMode === "single"
-                          ? locale === "zh"
-                            ? "請選擇一個項目"
-                            : "Please select one item"
-                          : selectionMode === "hierarchical"
-                            ? locale === "zh"
-                              ? "請依序選擇項目（需按順序選取）"
-                              : "Please select items in order (sequential selection required)"
-                            : locale === "zh"
-                              ? "可選擇多個項目"
-                              : "Multiple selections allowed"}
-                      </div>
-
-                      {selectedSubTypes[newApplicationData.scholarship_type]
-                        ?.length === 0 && (
-                        <p className="text-sm text-destructive">
-                          {locale === "zh"
-                            ? "請至少選擇一個申請項目"
-                            : "Please select at least one item"}
-                        </p>
-                      )}
+                      {/* 申請期間 */}
+                      {scholarship.application_start_date &&
+                        scholarship.application_end_date && (
+                          <div className="rounded-lg border border-gray-100 overflow-hidden">
+                            <div className="bg-amber-50/50 px-3 py-2 border-b border-gray-100">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-amber-500" />
+                                <p className="text-sm font-medium text-amber-700">
+                                  {getTranslation(
+                                    locale,
+                                    "scholarship_sections.period"
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="p-3">
+                              <p className="text-sm text-gray-600">
+                                {new Date(
+                                  scholarship.application_start_date
+                                ).toLocaleDateString()}{" "}
+                                -{" "}
+                                {new Date(
+                                  scholarship.application_end_date
+                                ).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                     </div>
-                  )}
 
-                {/* Dynamic Application Form */}
-                {newApplicationData.scholarship_type && (
-                  <DynamicApplicationForm
-                    scholarshipType={newApplicationData.scholarship_type}
-                    locale={locale}
-                    onFieldChange={(fieldName, value) => {
-                      setDynamicFormData(prev => ({
-                        ...prev,
-                        [fieldName]: value,
-                      }));
-                    }}
-                    onFileChange={(documentType, files) => {
-                      setDynamicFileData(prev => ({
-                        ...prev,
-                        [documentType]: files,
-                      }));
-                    }}
-                    initialValues={dynamicFormData}
-                    initialFiles={dynamicFileData}
-                    selectedSubTypes={
-                      selectedSubTypes[newApplicationData.scholarship_type] ||
-                      []
-                    }
-                    currentUserId={parseInt(user.id) || 1}
-                  />
-                )}
-              </div>
+                    {/* Right Column - Application Fields & Documents */}
+                    <div className="space-y-4">
+                      {/* Loading State */}
+                      {applicationInfo?.isLoading && (
+                        <div className="rounded-lg border border-gray-100 p-3">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
+                            <p className="text-sm font-medium">
+                              {locale === "zh" ? "申請資訊" : "Application Info"}
+                            </p>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-2">
+                            {t("applications.loading")}
+                          </p>
+                        </div>
+                      )}
 
-              {/* Progress indicator */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>{locale === "zh" ? "完成進度" : "Progress"}</span>
-                  <span>{formProgress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${formProgress}%` }}
-                  ></div>
-                </div>
-              </div>
+                      {/* Error State */}
+                      {applicationInfo?.error && (
+                        <div className="rounded-lg border border-rose-100 bg-rose-50/50 p-3">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-rose-500" />
+                            <p className="text-sm font-medium text-rose-700">
+                              {t("applications.load_error")}
+                            </p>
+                          </div>
+                          <p className="text-sm text-rose-600 mt-2">
+                            {applicationInfo.error}
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              fetchScholarshipApplicationInfo(scholarship.code)
+                            }
+                            className="mt-2"
+                          >
+                            {t("applications.retry")}
+                          </Button>
+                        </div>
+                      )}
 
-              {/* Terms Agreement */}
-              <div className="pt-4">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="agree_terms"
-                    checked={agreeTerms}
-                    onCheckedChange={checked => setAgreeTerms(checked as boolean)}
-                  />
-                  <Label htmlFor="agree_terms" className="text-sm">
-                    {locale === "zh"
-                      ? "我已閱讀並同意相關條款與規定"
-                      : "I have read and agree to the terms and conditions"
-                    }
-                  </Label>
+                      {/* Application Fields */}
+                      {applicationInfo &&
+                        !applicationInfo.isLoading &&
+                        !applicationInfo.error && (
+                          <div className="rounded-lg border border-gray-100 overflow-hidden">
+                            <div className="bg-violet-50/50 px-3 py-2 border-b border-gray-100">
+                              <div className="flex items-center gap-2">
+                                <Edit className="h-4 w-4 text-violet-500" />
+                                <p className="text-sm font-medium text-violet-700">
+                                  {getTranslation(
+                                    locale,
+                                    "scholarship_sections.fields"
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="p-3">
+                              <div className="flex flex-wrap gap-1.5">
+                                {applicationInfo.fields
+                                  .filter(field => field.is_active)
+                                  .map((field, index) => (
+                                    <Badge
+                                      key={`${scholarship.id}-field-${field.id}-${index}`}
+                                      variant="outline"
+                                      className="text-xs bg-white text-gray-600 border-gray-200"
+                                    >
+                                      {locale === "zh"
+                                        ? field.field_label
+                                        : field.field_label_en || field.field_label}
+                                    </Badge>
+                                  ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
-                  {/* Terms Preview Button */}
-                  {selectedScholarship?.terms_document_url && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        const token = localStorage.getItem("auth_token");
-                        // Token is now sent via cookie, not URL, to prevent exposure in logs
-                        const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}`;
+                      {/* Required Documents */}
+                      {applicationInfo &&
+                        !applicationInfo.isLoading &&
+                        !applicationInfo.error && (
+                          <div className="rounded-lg border border-gray-100 overflow-hidden">
+                            <div className="bg-emerald-50/50 px-3 py-2 border-b border-gray-100">
+                              <div className="flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-emerald-500" />
+                                <p className="text-sm font-medium text-emerald-700">
+                                  {getTranslation(
+                                    locale,
+                                    "scholarship_sections.required_docs"
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="p-3">
+                              <div className="flex flex-wrap gap-1.5">
+                                {applicationInfo.documents
+                                  .filter(doc => doc.is_required && doc.is_active)
+                                  .map((doc, index) => (
+                                    <Badge
+                                      key={`${scholarship.id}-req-doc-${doc.id}-${index}`}
+                                      variant="outline"
+                                      className="text-xs bg-white text-gray-600 border-gray-200"
+                                    >
+                                      {locale === "zh"
+                                        ? doc.document_name
+                                        : doc.document_name_en || doc.document_name}
+                                    </Badge>
+                                  ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
-                        setTermsPreviewFile({
-                          url: previewUrl,
-                          filename: `${selectedScholarship.name || "獎學金"}_申請條款.pdf`,
-                          type: "application/pdf",
-                        });
-                        setShowTermsPreview(true);
-                      }}
-                      className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium whitespace-nowrap ml-1"
-                    >
-                      <Eye className="h-4 w-4" />
-                      {locale === "zh" ? "預覽申請條款" : "Preview Terms"}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex gap-3 pt-4">
-                {editingApplication && (
-                  <Button
-                    variant="outline"
-                    onClick={handleCancelEdit}
-                    disabled={isSubmitting}
-                    className="flex-1"
-                  >
-                    {locale === "zh" ? "取消編輯" : "Cancel Edit"}
-                  </Button>
-                )}
-
-                <Button
-                  variant="outline"
-                  onClick={handleSaveDraft}
-                  disabled={isSubmitting}
-                  className="flex-1"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      {locale === "zh" ? "儲存中..." : "Saving..."}
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      {editingApplication
-                        ? locale === "zh"
-                          ? "更新草稿"
-                          : "Update Draft"
-                        : locale === "zh"
-                          ? "儲存草稿"
-                          : "Save Draft"}
-                    </>
-                  )}
-                </Button>
-
-                <Button
-                  onClick={handleSubmitApplication}
-                  disabled={isSubmitting || formProgress < 100}
-                  className="flex-1 nycu-gradient text-white"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      {editingApplication
-                        ? locale === "zh"
-                          ? "更新中..."
-                          : "Updating..."
-                        : locale === "zh"
-                          ? "提交中..."
-                          : "Submitting..."}
-                    </>
-                  ) : editingApplication ? (
-                    locale === "zh" ? (
-                      "更新申請"
-                    ) : (
-                      "Update Application"
-                    )
-                  ) : locale === "zh" ? (
-                    "提交申請"
-                  ) : (
-                    "Submit Application"
-                  )}
-                </Button>
-              </div>
-
-              {formProgress < 100 && (
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground">
-                    {locale === "zh"
-                      ? `請完成所有必填項目 (${formProgress}%)`
-                      : `Please complete all required fields (${formProgress}%)`}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="profile" className="space-y-4">
-          <UserProfileManagement />
-        </TabsContent>
-      </Tabs>
+                      {/* Optional Documents */}
+                      {applicationInfo &&
+                        !applicationInfo.isLoading &&
+                        !applicationInfo.error &&
+                        applicationInfo.documents.filter(
+                          doc => !doc.is_required && doc.is_active
+                        ).length > 0 && (
+                          <div className="rounded-lg border border-gray-100 overflow-hidden">
+                            <div className="bg-sky-50/50 px-3 py-2 border-b border-gray-100">
+                              <div className="flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-sky-500" />
+                                <p className="text-sm font-medium text-sky-700">
+                                  {getTranslation(
+                                    locale,
+                                    "scholarship_sections.optional_docs"
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="p-3">
+                              <div className="flex flex-wrap gap-1.5">
+                                {applicationInfo.documents
+                                  .filter(doc => !doc.is_required && doc.is_active)
+                                  .map((doc, index) => (
+                                    <Badge
+                                      key={`${scholarship.id}-opt-doc-${doc.id}-${index}`}
+                                      variant="outline"
+                                      className="text-xs bg-white text-gray-600 border-gray-200"
+                                    >
+                                      {locale === "zh"
+                                        ? doc.document_name
+                                        : doc.document_name_en || doc.document_name}
+                                    </Badge>
+                                  ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </>
+      )}
 
       {/* 申請詳情對話框 */}
       <ApplicationDetailDialog

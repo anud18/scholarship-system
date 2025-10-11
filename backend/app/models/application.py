@@ -47,6 +47,7 @@ class ApplicationStatus(enum.Enum):
     manual_excluded = "manual_excluded"
     professor_review = "professor_review"
     withdrawn = "withdrawn"
+    deleted = "deleted"  # Soft delete status
 
 
 class ScholarshipMainType(enum.Enum):
@@ -169,6 +170,11 @@ class Application(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # 刪除追蹤 (Deletion tracking for soft delete)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    deletion_reason = Column(Text, nullable=True)
+
     # 批次匯入相關 (Batch Import)
     imported_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # 匯入者
     batch_import_id = Column(Integer, ForeignKey("batch_imports.id"), nullable=True)  # 批次匯入紀錄
@@ -184,6 +190,7 @@ class Application(Base):
     professor = relationship("User", foreign_keys=[professor_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     final_approver = relationship("User", foreign_keys=[final_approver_id])
+    deleted_by = relationship("User", foreign_keys=[deleted_by_id])  # Who deleted this application
 
     # Enhanced relationships for issue #10
     scholarship_type_ref = relationship(
@@ -202,6 +209,7 @@ class Application(Base):
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
     professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
+    document_requests = relationship("DocumentRequest", back_populates="application", cascade="all, delete-orphan")
     # college_review = relationship("CollegeReview", back_populates="application", uselist=False, cascade="all, delete-orphan")  # Temporarily commented for testing
 
     # Batch import relationships

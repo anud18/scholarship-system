@@ -40,6 +40,9 @@ import { NationalityFlag } from "@/components/nationality-flag";
 import { CollegeRankingTable } from "@/components/college-ranking-table";
 import { SemesterSelector } from "@/components/semester-selector";
 import { ScholarshipTypeSelector } from "@/components/ui/scholarship-type-selector";
+import { ApplicationAuditTrail } from "@/components/application-audit-trail";
+import { DeleteApplicationDialog } from "@/components/delete-application-dialog";
+import { DocumentRequestForm } from "@/components/document-request-form";
 import { getTranslation } from "@/lib/i18n";
 import {
   Search,
@@ -61,6 +64,8 @@ import {
   Send,
   Plus,
   RefreshCw,
+  Trash2,
+  FileText,
 } from "lucide-react";
 import { useCollegeApplications } from "@/hooks/use-admin";
 import { User } from "@/types/user";
@@ -229,6 +234,10 @@ export function CollegeDashboard({
   const [academicConfig, setAcademicConfig] = useState<AcademicConfig | null>(
     null
   );
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [applicationToDelete, setApplicationToDelete] = useState<any>(null);
+  const [showDocumentRequestDialog, setShowDocumentRequestDialog] = useState(false);
+  const [applicationToRequestDocs, setApplicationToRequestDocs] = useState<any>(null);
 
   // 學期選擇相關狀態
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>();
@@ -1029,7 +1038,7 @@ export function CollegeDashboard({
                                           <Eye className="h-4 w-4" />
                                         </Button>
                                       </DialogTrigger>
-                                      <DialogContent className="max-w-2xl">
+                                      <DialogContent className="max-w-4xl max-h-[90vh]">
                                         <DialogHeader>
                                           <DialogTitle>
                                             學院審核 -{" "}
@@ -1046,42 +1055,93 @@ export function CollegeDashboard({
                                           </DialogDescription>
                                         </DialogHeader>
                                         {selectedApplication && (
-                                          <div className="space-y-4">
-                                            <div>
-                                              <label className="text-sm font-medium">
-                                                學院審核意見
-                                              </label>
-                                              <Textarea
-                                                placeholder="請輸入學院審核意見..."
-                                                className="mt-1"
+                                          <Tabs defaultValue="review" className="w-full">
+                                            <TabsList className="grid w-full grid-cols-3">
+                                              <TabsTrigger value="review">
+                                                審核
+                                              </TabsTrigger>
+                                              <TabsTrigger value="documents">
+                                                文件
+                                              </TabsTrigger>
+                                              <TabsTrigger value="audit">
+                                                操作紀錄
+                                              </TabsTrigger>
+                                            </TabsList>
+
+                                            <TabsContent value="review" className="space-y-4 mt-4">
+                                              <div>
+                                                <label className="text-sm font-medium">
+                                                  學院審核意見
+                                                </label>
+                                                <Textarea
+                                                  placeholder="請輸入學院審核意見..."
+                                                  className="mt-1"
+                                                />
+                                              </div>
+                                              <div className="space-y-2 pt-4">
+                                                <div className="flex gap-2">
+                                                  <Button
+                                                    onClick={() =>
+                                                      handleApprove(
+                                                        selectedApplication.id
+                                                      )
+                                                    }
+                                                    className="flex-1"
+                                                  >
+                                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                                    學院核准
+                                                  </Button>
+                                                  <Button
+                                                    variant="destructive"
+                                                    onClick={() =>
+                                                      handleReject(
+                                                        selectedApplication.id
+                                                      )
+                                                    }
+                                                    className="flex-1"
+                                                  >
+                                                    <XCircle className="h-4 w-4 mr-1" />
+                                                    學院駁回
+                                                  </Button>
+                                                </div>
+                                                <Button
+                                                  variant="outline"
+                                                  onClick={() => {
+                                                    setApplicationToRequestDocs(selectedApplication);
+                                                    setShowDocumentRequestDialog(true);
+                                                  }}
+                                                  className="w-full border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                                                >
+                                                  <FileText className="h-4 w-4 mr-1" />
+                                                  要求補件
+                                                </Button>
+                                                <Button
+                                                  variant="outline"
+                                                  onClick={() => {
+                                                    setApplicationToDelete(selectedApplication);
+                                                    setShowDeleteDialog(true);
+                                                  }}
+                                                  className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                                >
+                                                  <Trash2 className="h-4 w-4 mr-1" />
+                                                  刪除申請
+                                                </Button>
+                                              </div>
+                                            </TabsContent>
+
+                                            <TabsContent value="documents" className="mt-4">
+                                              <div className="text-center py-8 text-gray-500">
+                                                文件列表功能開發中...
+                                              </div>
+                                            </TabsContent>
+
+                                            <TabsContent value="audit" className="mt-4">
+                                              <ApplicationAuditTrail
+                                                applicationId={selectedApplication.id}
+                                                locale={locale}
                                               />
-                                            </div>
-                                            <div className="flex gap-2 pt-4">
-                                              <Button
-                                                onClick={() =>
-                                                  handleApprove(
-                                                    selectedApplication.id
-                                                  )
-                                                }
-                                                className="flex-1"
-                                              >
-                                                <CheckCircle className="h-4 w-4 mr-1" />
-                                                學院核准
-                                              </Button>
-                                              <Button
-                                                variant="destructive"
-                                                onClick={() =>
-                                                  handleReject(
-                                                    selectedApplication.id
-                                                  )
-                                                }
-                                                className="flex-1"
-                                              >
-                                                <XCircle className="h-4 w-4 mr-1" />
-                                                學院駁回
-                                              </Button>
-                                            </div>
-                                          </div>
+                                            </TabsContent>
+                                          </Tabs>
                                         )}
                                       </DialogContent>
                                     </Dialog>
@@ -1335,6 +1395,49 @@ export function CollegeDashboard({
           </TabsContent>
         ))}
       </Tabs>
+
+      {/* Delete Application Dialog */}
+      {applicationToDelete && (
+        <DeleteApplicationDialog
+          open={showDeleteDialog}
+          onOpenChange={setShowDeleteDialog}
+          applicationId={applicationToDelete.id}
+          applicationName={applicationToDelete.app_id || `APP-${applicationToDelete.id}`}
+          locale={locale}
+          requireReason={true}
+          onSuccess={() => {
+            // Refresh applications list
+            fetchCollegeApplications(
+              selectedAcademicYear,
+              selectedSemester,
+              activeScholarshipTab
+            );
+            // Reset delete state
+            setApplicationToDelete(null);
+          }}
+        />
+      )}
+
+      {/* Document Request Dialog */}
+      {applicationToRequestDocs && (
+        <DocumentRequestForm
+          open={showDocumentRequestDialog}
+          onOpenChange={setShowDocumentRequestDialog}
+          applicationId={applicationToRequestDocs.id}
+          applicationName={applicationToRequestDocs.app_id || `APP-${applicationToRequestDocs.id}`}
+          locale={locale}
+          onSuccess={() => {
+            // Refresh applications list
+            fetchCollegeApplications(
+              selectedAcademicYear,
+              selectedSemester,
+              activeScholarshipTab
+            );
+            // Reset document request state
+            setApplicationToRequestDocs(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     auth,
     batch_import,
     college_review,
+    document_requests,
     email_automation,
     email_management,
     files,
@@ -37,6 +38,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(applications.router, prefix="/applications", tags=["Applications"])
+api_router.include_router(document_requests.router, prefix="", tags=["Document Requests"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Administration"])
 api_router.include_router(scholarships.router, prefix="/scholarships", tags=["Scholarships"])
 api_router.include_router(

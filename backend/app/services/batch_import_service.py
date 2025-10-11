@@ -154,6 +154,13 @@ class BatchImportService:
                         "student_id": student_id,
                         "student_name": str(row.get("學生姓名", "")).strip(),
                         "postal_account": (str(row.get("郵局帳號", "")).strip() if pd.notna(row.get("郵局帳號")) else None),
+                        "advisor_name": (str(row.get("指導教授姓名", "")).strip() if pd.notna(row.get("指導教授姓名")) else None),
+                        "advisor_email": (
+                            str(row.get("指導教授Email", "")).strip() if pd.notna(row.get("指導教授Email")) else None
+                        ),
+                        "advisor_nycu_id": (
+                            str(row.get("指導教授本校人事編號", "")).strip() if pd.notna(row.get("指導教授本校人事編號")) else None
+                        ),
                         "sub_types": [],
                         "custom_fields": {},
                     }
@@ -180,6 +187,17 @@ class BatchImportService:
                         "student_name": str(row.get("student_name", "")).strip(),
                         "postal_account": (
                             str(row.get("postal_account", "")).strip() if pd.notna(row.get("postal_account")) else None
+                        ),
+                        "advisor_name": (
+                            str(row.get("advisor_name", "")).strip() if pd.notna(row.get("advisor_name")) else None
+                        ),
+                        "advisor_email": (
+                            str(row.get("advisor_email", "")).strip() if pd.notna(row.get("advisor_email")) else None
+                        ),
+                        "advisor_nycu_id": (
+                            str(row.get("advisor_nycu_id", "")).strip()
+                            if pd.notna(row.get("advisor_nycu_id"))
+                            else None
                         ),
                         "sub_types": [],
                         "custom_fields": {},
@@ -559,6 +577,9 @@ class BatchImportService:
                     student_data={"nycu_id": student_id, "name": row_data["student_name"]},
                     submitted_form_data={
                         "postal_account": row_data.get("postal_account"),
+                        "advisor_name": row_data.get("advisor_name"),
+                        "advisor_email": row_data.get("advisor_email"),
+                        "advisor_nycu_id": row_data.get("advisor_nycu_id"),
                         "custom_fields": row_data.get("custom_fields", {}),
                     },
                 )

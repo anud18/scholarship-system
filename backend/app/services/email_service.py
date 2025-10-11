@@ -769,6 +769,57 @@ class EmailService:
             **metadata,
         )
 
+    async def send_document_request_notification(
+        self, db: AsyncSession, application_data: dict, document_request_data: dict
+    ):
+        """Send document request notification to student"""
+        context = {
+            "student_name": application_data.get("student_name", ""),
+            "app_id": application_data.get("app_id", ""),
+            "scholarship_type": application_data.get("scholarship_type", ""),
+            "requested_documents": ", ".join(document_request_data.get("requested_documents", [])),
+            "reason": document_request_data.get("reason", ""),
+            "notes": document_request_data.get("notes", ""),
+            "requested_by": document_request_data.get("requested_by_name", ""),
+            "system_url": "https://scholarship.nycu.edu.tw",
+        }
+
+        default_subject = (
+            f"文件補件要求 - {application_data.get('scholarship_type', '')} ({application_data.get('app_id', '')})"
+        )
+        default_body = f"""親愛的 {context['student_name']} 同學您好：
+
+您的獎學金申請（{context['app_id']}）需要補充下列文件：
+
+需補文件：{context['requested_documents']}
+
+補件原因：{context['reason']}
+
+{f"補充說明：{context['notes']}" if context['notes'] else ""}
+
+請至系統上傳所需文件。若有任何問題，請與我們聯繫。
+
+國立陽明交通大學 獎學金系統
+{context['system_url']}"""
+
+        metadata = {
+            "email_category": EmailCategory.supplement_student,
+            "application_id": application_data.get("id"),
+            "scholarship_type_id": application_data.get("scholarship_type_id"),
+            "sent_by_system": False,  # Manual document requests from staff
+            "sent_by_user_id": document_request_data.get("requested_by_id"),
+        }
+
+        await self.send_with_template(
+            db,
+            "document_request_notification",
+            application_data.get("student_email", ""),
+            context,
+            default_subject,
+            default_body,
+            **metadata,
+        )
+
     async def send_result_notifications(self, db: AsyncSession, application_data: dict, result_data: dict):
         """Send result notifications to student, professor, and college"""
         base_context = {

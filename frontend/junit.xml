@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="377" failures="58" errors="0" time="4.257">
-  <testsuite name="useApplications Hook" errors="0" failures="0" skipped="16" timestamp="2025-10-10T14:45:04" time="0.601" tests="16">
+<testsuites name="jest tests" tests="377" failures="0" errors="0" time="4.125">
+  <testsuite name="useApplications Hook" errors="0" failures="0" skipped="16" timestamp="2025-10-10T16:07:41" time="0.576" tests="16">
     <testcase classname="useApplications Hook › fetchApplications" name="should fetch applications successfully" time="0">
       <skipped/>
     </testcase>
@@ -50,7 +50,7 @@
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="FileUpload Component" errors="0" failures="0" skipped="12" timestamp="2025-10-10T14:45:05" time="0.26" tests="12">
+  <testsuite name="FileUpload Component" errors="0" failures="0" skipped="12" timestamp="2025-10-10T16:07:41" time="0.246" tests="12">
     <testcase classname="FileUpload Component" name="should render upload area correctly" time="0">
       <skipped/>
     </testcase>
@@ -88,7 +88,7 @@
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="DevLoginPage Component" errors="0" failures="0" skipped="9" timestamp="2025-10-10T14:45:05" time="0.189" tests="9">
+  <testsuite name="DevLoginPage Component" errors="0" failures="0" skipped="9" timestamp="2025-10-10T16:07:42" time="0.202" tests="9">
     <testcase classname="DevLoginPage Component" name="should render development login interface correctly" time="0">
       <skipped/>
     </testcase>
@@ -117,7 +117,7 @@
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="AdminConfigurationManagement Component" errors="0" failures="0" skipped="20" timestamp="2025-10-10T14:45:04" time="1.25" tests="20">
+  <testsuite name="AdminConfigurationManagement Component" errors="0" failures="0" skipped="20" timestamp="2025-10-10T16:07:41" time="1.275" tests="20">
     <testcase classname="AdminConfigurationManagement Component" name="should render component with loading state initially" time="0">
       <skipped/>
     </testcase>
@@ -179,630 +179,7 @@
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="Modular API Structure" errors="0" failures="53" skipped="0" timestamp="2025-10-10T14:45:06" time="0.243" tests="90">
-    <testcase classname="Modular API Structure › Exports" name="should export api singleton" time="0.004">
-    </testcase>
-    <testcase classname="Modular API Structure › Exports" name="should export apiClient singleton" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Exports" name="api and apiClient should reference the same instance" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Exports" name="should have auth module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have login method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have logout method" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have register method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have getCurrentUser method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have refreshToken method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have getMockUsers method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module" name="should have mockSSOLogin method" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module - Login Functionality" name="should call login and set token on success" time="0.008">
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module - Login Functionality" name="should handle login failure" time="0.012">
-      <failure>Error: expect(received).rejects.toThrow()
-
-Received promise resolved instead of rejected
-Resolved to value: {&quot;data&quot;: undefined, &quot;message&quot;: &quot;Invalid credentials&quot;, &quot;success&quot;: false}
-    at expect (/home/jotp/scholarship-system/frontend/node_modules/expect/build/index.js:113:15)
-    at Object.expect (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:166:13)
-    at Promise.then.completed (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:298:28)
-    at new Promise (&lt;anonymous&gt;)
-    at callAsyncCircusFn (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/utils.js:231:10)
-    at _callCircusTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:316:40)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)
-    at _runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:252:3)
-    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:126:9)
-    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
-    at _runTestsForDescribeBlock (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:121:9)
-    at run (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/run.js:71:3)
-    at runAndTransformResultsToJestFormat (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
-    at jestAdapter (/home/jotp/scholarship-system/frontend/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
-    at runTestInternal (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:367:16)
-    at runTest (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/runTest.js:444:34)
-    at Object.worker (/home/jotp/scholarship-system/frontend/node_modules/jest-runner/build/testWorker.js:106:12)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Auth Module - Logout Functionality" name="should clear token on logout" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Token Management" name="should set token correctly" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Token Management" name="should clear token correctly" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Request Method" name="should make authenticated requests" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Request Method" name="should handle query parameters" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Users Module" name="should have users module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Users Module" name="should get user profile" time="0.002">
-      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-Expected: &quot;/api/v1/users/me&quot;, Any&lt;Object&gt;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/users/me&quot;}, undefined
-
-Number of calls: 1
-    at Object.toHaveBeenCalledWith (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:276:25)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Users Module" name="should update user profile" time="0.002">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/users/me&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;name\&quot;:\&quot;Updated Name\&quot;}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;name\&quot;:\&quot;Updated Name\&quot;}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;PUT&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/users/me&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:296:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Users Module" name="should get all users with pagination" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/users?page=1&amp;size=10&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/users?page=1&amp;size=10&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:319:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should have scholarships module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should get eligible scholarships" time="0.001">
-      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-Expected: &quot;/api/v1/scholarships/eligible&quot;, Any&lt;Object&gt;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarships/eligible&quot;}, undefined
-
-Number of calls: 1
-    at Object.toHaveBeenCalledWith (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:349:25)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should get scholarship by ID" time="0.001">
-      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-Expected: &quot;/api/v1/scholarships/1&quot;, Any&lt;Object&gt;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarships/1&quot;}, undefined
-
-Number of calls: 1
-    at Object.toHaveBeenCalledWith (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:369:25)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should get all scholarships" time="0.001">
-      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-Expected: &quot;/api/v1/scholarships&quot;, Any&lt;Object&gt;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarships&quot;}, undefined
-
-Number of calls: 1
-    at Object.toHaveBeenCalledWith (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:392:25)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Scholarships Module" name="should create combined PhD scholarship" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/scholarships/combined/phd&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;name\&quot;:\&quot;Combined PhD\&quot;,\&quot;name_en\&quot;:\&quot;Combined PhD\&quot;,\&quot;description\&quot;:\&quot;Test description\&quot;,\&quot;description_en\&quot;:\&quot;Test description\&quot;,\&quot;sub_scholarships\&quot;:[{\&quot;code\&quot;:\&quot;PHD001\&quot;,\&quot;name\&quot;:\&quot;Sub Scholarship\&quot;,\&quot;name_en\&quot;:\&quot;Sub Scholarship\&quot;,\&quot;description\&quot;:\&quot;Sub description\&quot;,\&quot;description_en\&quot;:\&quot;Sub description\&quot;,\&quot;sub_type\&quot;:\&quot;nstc\&quot;,\&quot;amount\&quot;:50000}]}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;name\&quot;:\&quot;Combined PhD\&quot;,\&quot;name_en\&quot;:\&quot;Combined PhD\&quot;,\&quot;description\&quot;:\&quot;Test description\&quot;,\&quot;description_en\&quot;:\&quot;Test description\&quot;,\&quot;sub_scholarships\&quot;:[{\&quot;code\&quot;:\&quot;PHD001\&quot;,\&quot;name\&quot;:\&quot;Sub Scholarship\&quot;,\&quot;name_en\&quot;:\&quot;Sub Scholarship\&quot;,\&quot;description\&quot;:\&quot;Sub description\&quot;,\&quot;description_en\&quot;:\&quot;Sub description\&quot;,\&quot;sub_type\&quot;:\&quot;nstc\&quot;,\&quot;amount\&quot;:50000}]}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarships/combined/phd&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:428:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Applications Module" name="should have applications module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Applications Module" name="should get my applications" time="0.001">
-      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-Expected: &quot;/api/v1/applications&quot;, Any&lt;Object&gt;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/applications&quot;}, undefined
-
-Number of calls: 1
-    at Object.toHaveBeenCalledWith (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:459:25)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Applications Module" name="should create application" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/applications&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;scholarship_type\&quot;:\&quot;academic_excellence\&quot;,\&quot;personal_statement\&quot;:\&quot;Test statement\&quot;}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;scholarship_type\&quot;:\&quot;academic_excellence\&quot;,\&quot;personal_statement\&quot;:\&quot;Test statement\&quot;}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/applications&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:482:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Applications Module" name="should submit application" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/applications/1/submit&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/applications/1/submit&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:498:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Notifications Module" name="should have notifications module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Notifications Module" name="should get notifications" time="0.002">
-      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-Expected: &quot;/api/v1/notifications&quot;, Any&lt;Object&gt;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/notifications&quot;}, undefined
-
-Number of calls: 1
-    at Object.toHaveBeenCalledWith (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:529:25)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Notifications Module" name="should get unread count" time="0.001">
-      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-Expected: &quot;/api/v1/notifications/unread-count&quot;, Any&lt;Object&gt;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/notifications/unread-count&quot;}, undefined
-
-Number of calls: 1
-    at Object.toHaveBeenCalledWith (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:547:25)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Notifications Module" name="should mark notification as read" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/notifications/1/read&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;PATCH&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/notifications/1/read&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:565:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Quota Module" name="should have quota module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Quota Module" name="should get available semesters" time="0.001">
-      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-Expected: &quot;/api/v1/scholarship-configurations/available-semesters&quot;, Any&lt;Object&gt;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarship-configurations/available-semesters&quot;}, undefined
-
-Number of calls: 1
-    at Object.toHaveBeenCalledWith (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:596:25)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Quota Module" name="should get quota overview" time="0.001">
-      <failure>Error: expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-Expected: &quot;/api/v1/scholarship-configurations/overview/2024-1&quot;, Any&lt;Object&gt;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarship-configurations/overview/2024-1&quot;}, undefined
-
-Number of calls: 1
-    at Object.toHaveBeenCalledWith (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:618:25)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Quota Module" name="should update matrix quota" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/scholarship-configurations/matrix-quota&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;academic_year\&quot;:\&quot;2024-1\&quot;,\&quot;sub_type\&quot;:\&quot;nstc\&quot;,\&quot;college\&quot;:\&quot;engineering\&quot;,\&quot;total_quota\&quot;:50}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;academic_year\&quot;:\&quot;2024-1\&quot;,\&quot;sub_type\&quot;:\&quot;nstc\&quot;,\&quot;college\&quot;:\&quot;engineering\&quot;,\&quot;total_quota\&quot;:50}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;PUT&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarship-configurations/matrix-quota&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:643:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Professor Module" name="should have professor module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Professor Module" name="should get applications for review" time="0.006">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/professor/applications?status_filter=pending&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/professor/applications?status_filter=pending&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:669:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Professor Module" name="should get professor stats" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/professor/stats&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/professor/stats&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:688:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Professor Module" name="should submit professor review" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/professor/applications/1/review&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;recommendation\&quot;:\&quot;Approved\&quot;,\&quot;items\&quot;:[{\&quot;sub_type_code\&quot;:\&quot;A\&quot;,\&quot;is_recommended\&quot;:true}]}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;recommendation\&quot;:\&quot;Approved\&quot;,\&quot;items\&quot;:[{\&quot;sub_type_code\&quot;:\&quot;A\&quot;,\&quot;is_recommended\&quot;:true}]}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/professor/applications/1/review&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:707:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should have college module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should get applications for college review" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/college/applications?status=pending&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/college-review/applications&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:729:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should get college rankings" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/college/rankings?academic_year=113&amp;semester=first&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/college-review/rankings?academic_year=113&amp;semester=first&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:744:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should create college ranking" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/college/rankings&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;scholarship_type_id\&quot;:1,\&quot;sub_type_code\&quot;:\&quot;A\&quot;,\&quot;academic_year\&quot;:113,\&quot;semester\&quot;:\&quot;first\&quot;}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;scholarship_type_id\&quot;:1,\&quot;sub_type_code\&quot;:\&quot;A\&quot;,\&quot;academic_year\&quot;:113,\&quot;semester\&quot;:\&quot;first\&quot;}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/college-review/rankings&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:765:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › College Module" name="should get college statistics" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/college/statistics?academic_year=113&amp;semester=first&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/college-review/statistics?academic_year=113&amp;semester=first&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:781:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Whitelist Module" name="should have whitelist module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Whitelist Module" name="should toggle scholarship whitelist" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/scholarships/1/whitelist&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;enabled\&quot;:true}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;enabled\&quot;:true}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;PATCH&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarships/1/whitelist&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:802:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Whitelist Module" name="should get configuration whitelist" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/scholarship-configurations/1/whitelist?page=1&amp;size=10&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarship-configurations/1/whitelist?page=1&amp;size=10&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:818:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Whitelist Module" name="should batch add to whitelist" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/scholarship-configurations/1/whitelist/batch&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;students\&quot;:[{\&quot;nycu_id\&quot;:\&quot;001\&quot;,\&quot;sub_type\&quot;:\&quot;A\&quot;}]}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;students\&quot;:[{\&quot;nycu_id\&quot;:\&quot;001\&quot;,\&quot;sub_type\&quot;:\&quot;A\&quot;}]}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarship-configurations/1/whitelist/batch&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:839:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › System Settings Module" name="should have systemSettings module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › System Settings Module" name="should get all configurations" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/system-settings?category=email&amp;include_sensitive=true&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/system-settings/?category=email&amp;include_sensitive=true&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:861:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › System Settings Module" name="should validate configuration" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/system-settings/validate&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;key\&quot;:\&quot;test_key\&quot;,\&quot;value\&quot;:\&quot;test_value\&quot;,\&quot;data_type\&quot;:\&quot;string\&quot;}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;key\&quot;:\&quot;test_key\&quot;,\&quot;value\&quot;:\&quot;test_value\&quot;,\&quot;data_type\&quot;:\&quot;string\&quot;}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/system-settings/validate&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:884:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Bank Verification Module" name="should have bankVerification module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Bank Verification Module" name="should verify single bank account" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/admin/bank-verification&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;application_id\&quot;:1,\&quot;force_recheck\&quot;:false}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;application_id\&quot;:1,\&quot;force_recheck\&quot;:false}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/admin/bank-verification&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:910:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Bank Verification Module" name="should verify batch bank accounts" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/admin/bank-verification/batch&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;application_ids\&quot;:[1,2,3],\&quot;force_recheck\&quot;:false}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;application_ids\&quot;:[1,2,3],\&quot;force_recheck\&quot;:false}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/admin/bank-verification/batch&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:930:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Professor-Student Module" name="should have professorStudent module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Professor-Student Module" name="should get professor-student relationships" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/professor-student?professor_id=1&amp;status=active&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/professor-student?professor_id=1&amp;status=active&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:955:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Professor-Student Module" name="should create professor-student relationship" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/professor-student&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/professor-student?professor_id=1&amp;student_id=2&amp;relationship_type=advisor&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:974:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Email Automation Module" name="should have emailAutomation module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Automation Module" name="should get automation rules" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/email-automation?is_active=true&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/email-automation?is_active=true&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:996:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Email Automation Module" name="should toggle automation rule" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/email-automation/1/toggle&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;PATCH&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/email-automation/1/toggle&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1011:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Batch Import Module" name="should have batchImport module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Batch Import Module" name="should get batch import history" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/college/batch-import/history?limit=10&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/college-review/batch-import/history?limit=10&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1037:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Batch Import Module" name="should confirm batch import" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/college/batch-import/batch-123/confirm&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;batch_id\&quot;:\&quot;batch-123\&quot;,\&quot;confirm\&quot;:true}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;batch_id\&quot;:\&quot;batch-123\&quot;,\&quot;confirm\&quot;:true}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/college-review/batch-import/batch-123/confirm&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1056:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Reference Data Module" name="should have referenceData module" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Reference Data Module" name="should get all academies" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/reference-data/academies&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/reference-data/academies&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1082:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Reference Data Module" name="should get all reference data" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/reference-data/all&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/reference-data/all&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1109:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Reference Data Module" name="should get scholarship periods" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/reference-data/scholarship-periods?scholarship_id=1&amp;application_cycle=semester&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/reference-data/scholarship-periods?scholarship_id=1&amp;application_cycle=semester&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1137:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Application Fields Module" name="should have applicationFields module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Application Fields Module" name="should get form config" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/application-fields/form-config/test?include_inactive=false&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/application-fields/form-config/test?include_inactive=false&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1162:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Application Fields Module" name="should create field" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/application-fields/fields&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;scholarship_type\&quot;:\&quot;test\&quot;,\&quot;field_name\&quot;:\&quot;custom_field\&quot;,\&quot;field_label\&quot;:\&quot;Custom Field\&quot;,\&quot;field_type\&quot;:\&quot;text\&quot;,\&quot;required\&quot;:false,\&quot;display_order\&quot;:1,\&quot;is_active\&quot;:true}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;scholarship_type\&quot;:\&quot;test\&quot;,\&quot;field_name\&quot;:\&quot;custom_field\&quot;,\&quot;field_label\&quot;:\&quot;Custom Field\&quot;,\&quot;field_type\&quot;:\&quot;text\&quot;,\&quot;required\&quot;:false,\&quot;display_order\&quot;:1,\&quot;is_active\&quot;:true}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/application-fields/fields&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1198:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Application Fields Module" name="should get documents" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/application-fields/documents/test&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/application-fields/documents/test&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1218:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › User Profiles Module" name="should have userProfiles module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › User Profiles Module" name="should get my profile" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/user-profiles/me&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/user-profiles/me&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1248:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › User Profiles Module" name="should update bank info" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/user-profiles/me/bank-info&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;bank_account\&quot;:\&quot;1234567890\&quot;,\&quot;bank_name\&quot;:\&quot;Test Bank\&quot;,\&quot;bank_branch\&quot;:\&quot;Main Branch\&quot;}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;bank_account\&quot;:\&quot;1234567890\&quot;,\&quot;bank_name\&quot;:\&quot;Test Bank\&quot;,\&quot;bank_branch\&quot;:\&quot;Main Branch\&quot;}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;PUT&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/user-profiles/me/bank-info&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1271:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › User Profiles Module" name="should get incomplete profiles (admin)" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/user-profiles/admin/incomplete&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/user-profiles/admin/incomplete&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1291:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should have emailManagement module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should get email history" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should approve scheduled email" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/email-management/scheduled/1/approve&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;approval_notes\&quot;:\&quot;Looks good\&quot;}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;approval_notes\&quot;:\&quot;Looks good\&quot;}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;PATCH&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/email-management/scheduled/1/approve&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1340:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should get test mode status" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/email-management/test-mode/status&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/email-management/test-mode/status&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1364:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Email Management Module" name="should enable test mode" time="0.001">
-    </testcase>
-    <testcase classname="Modular API Structure › Admin Module" name="should have admin module" time="0">
-    </testcase>
-    <testcase classname="Modular API Structure › Admin Module" name="should get dashboard stats" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/admin/dashboard/stats&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/admin/dashboard/stats&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1420:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Admin Module" name="should get all applications" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/admin/applications?page=1&amp;size=10&amp;status=pending&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/admin/applications?page=1&amp;size=10&amp;status=pending&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1439:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Admin Module" name="should create announcement" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/admin/announcements&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;title\&quot;:\&quot;Test\&quot;,\&quot;content\&quot;:\&quot;Test content\&quot;}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;title\&quot;:\&quot;Test\&quot;,\&quot;content\&quot;:\&quot;Test content\&quot;}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/admin/announcements&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1458:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Admin Module" name="should get scholarship rules" time="0">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/admin/scholarship-rules?scholarship_type_id=1&quot;
-Received: {&quot;_bodyInit&quot;: undefined, &quot;_bodyText&quot;: &quot;&quot;, &quot;_noBody&quot;: true, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;}}, &quot;method&quot;: &quot;GET&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/admin/scholarship-rules?scholarship_type_id=1&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1478:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="Modular API Structure › Admin Module" name="should create scholarship configuration" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;/api/v1/scholarship-configurations/configurations&quot;
-Received: {&quot;_bodyInit&quot;: &quot;{\&quot;scholarship_type_id\&quot;:1,\&quot;academic_year\&quot;:113,\&quot;semester\&quot;:\&quot;first\&quot;}&quot;, &quot;_bodyText&quot;: &quot;{\&quot;scholarship_type_id\&quot;:1,\&quot;academic_year\&quot;:113,\&quot;semester\&quot;:\&quot;first\&quot;}&quot;, &quot;bodyUsed&quot;: false, &quot;credentials&quot;: &quot;same-origin&quot;, &quot;headers&quot;: {&quot;map&quot;: {&quot;authorization&quot;: &quot;Bearer test-token&quot;, &quot;content-type&quot;: &quot;application/json&quot;}}, &quot;method&quot;: &quot;POST&quot;, &quot;mode&quot;: null, &quot;referrer&quot;: null, &quot;signal&quot;: {}, &quot;url&quot;: &quot;/api/v1/scholarship-configurations/configurations&quot;}
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/api/__tests__/modular-api.test.ts:1501:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-  </testsuite>
-  <testsuite name="API Client" errors="0" failures="5" skipped="0" timestamp="2025-10-10T14:45:06" time="0.163" tests="24">
-    <testcase classname="API Client › Authentication" name="should include auth token in requests" time="0.006">
-    </testcase>
-    <testcase classname="API Client › Authentication" name="should handle requests without auth token" time="0">
-    </testcase>
-    <testcase classname="API Client › Authentication" name="should clear token on 401 response" time="0.007">
-    </testcase>
-    <testcase classname="API Client › Error Handling" name="should handle network errors" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Error Handling" name="should handle HTTP error responses" time="0.004">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-- Expected  - 1
-+ Received  + 4
-
-- Server error
-+ expect(received).toBe(expected) // Object.is equality
-+
-+ Expected: false
-+ Received: true
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/__tests__/api-comprehensive.test.ts:156:31)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="API Client › Error Handling" name="should handle malformed JSON responses" time="0">
-      <failure>SyntaxError: Unexpected end of JSON input
-    at parse (&lt;anonymous&gt;)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)
-    at coreFetch (/home/jotp/scholarship-system/frontend/node_modules/openapi-fetch/src/index.js:240:22)
-    at Object.getAll (/home/jotp/scholarship-system/frontend/lib/api/modules/scholarships.ts:43:24)
-    at Object.&lt;anonymous&gt; (/home/jotp/scholarship-system/frontend/lib/__tests__/api-comprehensive.test.ts:168:22)</failure>
-    </testcase>
-    <testcase classname="API Client › Scholarship APIs" name="should get all scholarships" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Scholarship APIs" name="should get eligible scholarships" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Scholarship APIs" name="should get scholarship by ID" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Application APIs" name="should create application" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Application APIs" name="should get user applications" time="0">
-    </testcase>
-    <testcase classname="API Client › Application APIs" name="should update application" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Application APIs" name="should delete application" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Admin APIs" name="should get dashboard stats" time="0">
-    </testcase>
-    <testcase classname="API Client › Admin APIs" name="should get all applications with filters" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Admin APIs" name="should update application status" time="0">
-    </testcase>
-    <testcase classname="API Client › File APIs" name="should upload document" time="0.002">
-      <failure>Error: expect(received).toBeInstanceOf(expected)
-
-Expected constructor: FormData
-
-Received value has no prototype
-Received value: undefined
-    at Object.toBeInstanceOf (/home/jotp/scholarship-system/frontend/lib/__tests__/api-comprehensive.test.ts:299:59)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="API Client › File APIs" name="should get files by application ID" time="0">
-    </testcase>
-    <testcase classname="API Client › Request Configuration" name="should set correct Content-Type for JSON requests" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Request Configuration" name="should handle FormData without explicit Content-Type header" time="0.001">
-      <failure>Error: expect(received).toBeInstanceOf(expected)
-
-Expected constructor: FormData
-
-Received value has no prototype
-Received value: undefined
-    at Object.toBeInstanceOf (/home/jotp/scholarship-system/frontend/lib/__tests__/api-comprehensive.test.ts:344:59)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="API Client › Request Configuration" name="should include Accept header" time="0.001">
-      <failure>Error: expect(received).toBe(expected) // Object.is equality
-
-Expected: &quot;application/json&quot;
-Received: null
-    at Object.toBe (/home/jotp/scholarship-system/frontend/lib/__tests__/api-comprehensive.test.ts:360:28)
-    at processTicksAndRejections (node:internal/process/task_queues:105:5)</failure>
-    </testcase>
-    <testcase classname="API Client › Response Processing" name="should parse successful JSON responses" time="0.001">
-    </testcase>
-    <testcase classname="API Client › Response Processing" name="should handle empty responses" time="0">
-    </testcase>
-    <testcase classname="API Client › Response Processing" name="should handle text responses" time="0.001">
-    </testcase>
-  </testsuite>
-  <testsuite name="FileUpload Component" errors="0" failures="0" skipped="18" timestamp="2025-10-10T14:45:06" time="0.127" tests="18">
+  <testsuite name="FileUpload Component" errors="0" failures="0" skipped="18" timestamp="2025-10-10T16:07:42" time="0.165" tests="18">
     <testcase classname="FileUpload Component" name="should render file upload area" time="0">
       <skipped/>
     </testcase>
@@ -858,7 +235,7 @@ Received: null
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="FileUpload Component - Simple Tests" errors="0" failures="0" skipped="11" timestamp="2025-10-10T14:45:06" time="0.145" tests="11">
+  <testsuite name="FileUpload Component - Simple Tests" errors="0" failures="0" skipped="11" timestamp="2025-10-10T16:07:42" time="0.162" tests="11">
     <testcase classname="FileUpload Component - Simple Tests" name="should render without crashing" time="0">
       <skipped/>
     </testcase>
@@ -893,142 +270,378 @@ Received: null
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="NotificationButton" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:06" time="0.448" tests="10">
-    <testcase classname="NotificationButton" name="renders notification button" time="0.072">
+  <testsuite name="NotificationButton" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:42" time="0.486" tests="10">
+    <testcase classname="NotificationButton" name="renders notification button" time="0.075">
     </testcase>
-    <testcase classname="NotificationButton" name="shows unread indicator when unread count is greater than 0" time="0.011">
+    <testcase classname="NotificationButton" name="shows unread indicator when unread count is greater than 0" time="0.008">
     </testcase>
-    <testcase classname="NotificationButton" name="shows badge when unread count is greater than 3" time="0.006">
+    <testcase classname="NotificationButton" name="shows badge when unread count is greater than 3" time="0.009">
     </testcase>
-    <testcase classname="NotificationButton" name="shows 99+ when unread count exceeds 99" time="0.005">
+    <testcase classname="NotificationButton" name="shows 99+ when unread count exceeds 99" time="0.004">
     </testcase>
     <testcase classname="NotificationButton" name="does not show indicator when unread count is 0" time="0.004">
     </testcase>
-    <testcase classname="NotificationButton" name="opens notification panel when button is clicked" time="0.066">
+    <testcase classname="NotificationButton" name="opens notification panel when button is clicked" time="0.071">
     </testcase>
-    <testcase classname="NotificationButton" name="notifies context when panel is opened" time="0.043">
+    <testcase classname="NotificationButton" name="notifies context when panel is opened" time="0.047">
     </testcase>
-    <testcase classname="NotificationButton" name="passes locale to notification panel" time="0.038">
+    <testcase classname="NotificationButton" name="passes locale to notification panel" time="0.044">
     </testcase>
-    <testcase classname="NotificationButton" name="applies custom className" time="0.005">
+    <testcase classname="NotificationButton" name="applies custom className" time="0.006">
     </testcase>
-    <testcase classname="NotificationButton" name="handles notification click callback" time="0.04">
+    <testcase classname="NotificationButton" name="handles notification click callback" time="0.045">
     </testcase>
   </testsuite>
-  <testsuite name="ScholarshipTimeline Component" errors="0" failures="0" skipped="3" timestamp="2025-10-10T14:45:07" time="0.304" tests="6">
+  <testsuite name="ScholarshipTimeline Component" errors="0" failures="0" skipped="3" timestamp="2025-10-10T16:07:43" time="0.3" tests="6">
     <testcase classname="ScholarshipTimeline Component" name="should show all scholarships for super admin" time="0">
       <skipped/>
     </testcase>
     <testcase classname="ScholarshipTimeline Component" name="should filter scholarships based on admin permissions" time="0">
       <skipped/>
     </testcase>
-    <testcase classname="ScholarshipTimeline Component" name="should show no permissions message for admin with no permissions" time="0.048">
+    <testcase classname="ScholarshipTimeline Component" name="should show no permissions message for admin with no permissions" time="0.033">
     </testcase>
-    <testcase classname="ScholarshipTimeline Component" name="should not render for student role" time="0.005">
+    <testcase classname="ScholarshipTimeline Component" name="should not render for student role" time="0.032">
     </testcase>
-    <testcase classname="ScholarshipTimeline Component" name="should show loading state while permissions are loading" time="0.007">
+    <testcase classname="ScholarshipTimeline Component" name="should show loading state while permissions are loading" time="0.005">
     </testcase>
     <testcase classname="ScholarshipTimeline Component" name="should handle API errors gracefully" time="0">
       <skipped/>
     </testcase>
   </testsuite>
-  <testsuite name="ApplicationFormDataDisplay" errors="0" failures="0" skipped="1" timestamp="2025-10-10T14:45:07" time="0.185" tests="11">
-    <testcase classname="ApplicationFormDataDisplay" name="should render form data with Chinese labels" time="0.018">
+  <testsuite name="ApplicationFormDataDisplay" errors="0" failures="0" skipped="1" timestamp="2025-10-10T16:07:43" time="0.175" tests="11">
+    <testcase classname="ApplicationFormDataDisplay" name="should render form data with Chinese labels" time="0.02">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should render form data with English labels" time="0.006">
+    <testcase classname="ApplicationFormDataDisplay" name="should render form data with English labels" time="0.005">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should handle direct form_data structure" time="0.007">
+    <testcase classname="ApplicationFormDataDisplay" name="should handle direct form_data structure" time="0.005">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should handle flat object structure" time="0.007">
+    <testcase classname="ApplicationFormDataDisplay" name="should handle flat object structure" time="0.005">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should skip empty and excluded fields" time="0.006">
+    <testcase classname="ApplicationFormDataDisplay" name="should skip empty and excluded fields" time="0.005">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should use static field names when dynamic labels not provided" time="0.008">
+    <testcase classname="ApplicationFormDataDisplay" name="should use static field names when dynamic labels not provided" time="0.004">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should fallback to Chinese when English label not available" time="0.005">
+    <testcase classname="ApplicationFormDataDisplay" name="should fallback to Chinese when English label not available" time="0.003">
     </testcase>
     <testcase classname="ApplicationFormDataDisplay" name="should handle nested object values" time="0">
       <skipped/>
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should handle array values" time="0.005">
+    <testcase classname="ApplicationFormDataDisplay" name="should handle array values" time="0.004">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should show loading state initially" time="0.003">
+    <testcase classname="ApplicationFormDataDisplay" name="should show loading state initially" time="0.002">
     </testcase>
-    <testcase classname="ApplicationFormDataDisplay" name="should handle malformed form data gracefully" time="0.007">
+    <testcase classname="ApplicationFormDataDisplay" name="should handle malformed form data gracefully" time="0.003">
     </testcase>
   </testsuite>
-  <testsuite name="EnhancedStudentPortal" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:06" time="1.204" tests="12">
+  <testsuite name="EnhancedStudentPortal" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:42" time="1.191" tests="12">
     <testcase classname="EnhancedStudentPortal" name="should render scholarship information" time="0.139">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should render scholarship information in Chinese" time="0.039">
+    <testcase classname="EnhancedStudentPortal" name="should render scholarship information in Chinese" time="0.038">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show empty state when no applications exist" time="0.042">
+    <testcase classname="EnhancedStudentPortal" name="should show empty state when no applications exist" time="0.043">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should display applications when they exist" time="0.054">
+    <testcase classname="EnhancedStudentPortal" name="should display applications when they exist" time="0.051">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show loading state" time="0.205">
+    <testcase classname="EnhancedStudentPortal" name="should show loading state" time="0.253">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show error state" time="0.057">
+    <testcase classname="EnhancedStudentPortal" name="should show error state" time="0.052">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should allow switching to new application tab" time="0.055">
+    <testcase classname="EnhancedStudentPortal" name="should allow switching to new application tab" time="0.052">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show form fields in new application tab" time="0.076">
+    <testcase classname="EnhancedStudentPortal" name="should show form fields in new application tab" time="0.075">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show Chinese text when locale is zh" time="0.038">
+    <testcase classname="EnhancedStudentPortal" name="should show Chinese text when locale is zh" time="0.042">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should handle withdraw application action" time="0.041">
+    <testcase classname="EnhancedStudentPortal" name="should handle withdraw application action" time="0.043">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should show progress timeline for applications" time="0.042">
+    <testcase classname="EnhancedStudentPortal" name="should show progress timeline for applications" time="0.039">
     </testcase>
-    <testcase classname="EnhancedStudentPortal" name="should handle different application statuses" time="0.038">
-    </testcase>
-  </testsuite>
-  <testsuite name="useAuth Hook" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:07" time="0.16" tests="3">
-    <testcase classname="useAuth Hook" name="should provide auth context" time="0.005">
-    </testcase>
-    <testcase classname="useAuth Hook" name="should initialize with correct default state" time="0.003">
-    </testcase>
-    <testcase classname="useAuth Hook" name="should throw error when used outside provider" time="0.018">
+    <testcase classname="EnhancedStudentPortal" name="should handle different application statuses" time="0.025">
     </testcase>
   </testsuite>
-  <testsuite name="Application Helpers" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:08" time="0.114" tests="27">
-    <testcase classname="Application Helpers › formatDate" name="should format date for Chinese locale" time="0.016">
+  <testsuite name="useAuth Hook" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:43" time="0.166" tests="3">
+    <testcase classname="useAuth Hook" name="should provide auth context" time="0.004">
     </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should format date for English locale" time="0.001">
+    <testcase classname="useAuth Hook" name="should initialize with correct default state" time="0.001">
     </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should return empty string for null date" time="0.001">
+    <testcase classname="useAuth Hook" name="should throw error when used outside provider" time="0.028">
+    </testcase>
+  </testsuite>
+  <testsuite name="useScholarshipPermissions" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.144" tests="5">
+    <testcase classname="useScholarshipPermissions" name="should allow access for admin user" time="0.006">
+    </testcase>
+    <testcase classname="useScholarshipPermissions" name="should check permissions correctly" time="0.002">
+    </testcase>
+    <testcase classname="useScholarshipPermissions" name="should deny access for unauthenticated users" time="0.001">
+    </testcase>
+    <testcase classname="useScholarshipPermissions" name="should handle invalid scholarship IDs" time="0.002">
+    </testcase>
+    <testcase classname="useScholarshipPermissions" name="should get allowed scholarships for admin user" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="Modular API Structure" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.133" tests="90">
+    <testcase classname="Modular API Structure › Exports" name="should export api singleton" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Exports" name="should export apiClient singleton" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Exports" name="api and apiClient should reference the same instance" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Exports" name="should have auth module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have login method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have logout method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have register method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have getCurrentUser method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have refreshToken method" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have getMockUsers method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module" name="should have mockSSOLogin method" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module - Login Functionality" name="should call login and set token on success" time="0.002">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module - Login Functionality" name="should handle login failure" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Auth Module - Logout Functionality" name="should clear token on logout" time="0.004">
+    </testcase>
+    <testcase classname="Modular API Structure › Token Management" name="should set token correctly" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Token Management" name="should clear token correctly" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Request Method" name="should make authenticated requests" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Request Method" name="should handle query parameters" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Users Module" name="should have users module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Users Module" name="should get user profile" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Users Module" name="should update user profile" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Users Module" name="should get all users with pagination" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should have scholarships module" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should get eligible scholarships" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should get scholarship by ID" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should get all scholarships" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Scholarships Module" name="should create combined PhD scholarship" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Applications Module" name="should have applications module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Applications Module" name="should get my applications" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Applications Module" name="should create application" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Applications Module" name="should submit application" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Notifications Module" name="should have notifications module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Notifications Module" name="should get notifications" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Notifications Module" name="should get unread count" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Notifications Module" name="should mark notification as read" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Quota Module" name="should have quota module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Quota Module" name="should get available semesters" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Quota Module" name="should get quota overview" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Quota Module" name="should update matrix quota" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor Module" name="should have professor module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor Module" name="should get applications for review" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor Module" name="should get professor stats" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor Module" name="should submit professor review" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should have college module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should get applications for college review" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should get college rankings" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should create college ranking" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › College Module" name="should get college statistics" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Whitelist Module" name="should have whitelist module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Whitelist Module" name="should toggle scholarship whitelist" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Whitelist Module" name="should get configuration whitelist" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Whitelist Module" name="should batch add to whitelist" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › System Settings Module" name="should have systemSettings module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › System Settings Module" name="should get all configurations" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › System Settings Module" name="should validate configuration" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Bank Verification Module" name="should have bankVerification module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Bank Verification Module" name="should verify single bank account" time="0.002">
+    </testcase>
+    <testcase classname="Modular API Structure › Bank Verification Module" name="should verify batch bank accounts" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor-Student Module" name="should have professorStudent module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor-Student Module" name="should get professor-student relationships" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Professor-Student Module" name="should create professor-student relationship" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Automation Module" name="should have emailAutomation module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Automation Module" name="should get automation rules" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Automation Module" name="should toggle automation rule" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Batch Import Module" name="should have batchImport module" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Batch Import Module" name="should get batch import history" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Batch Import Module" name="should confirm batch import" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Reference Data Module" name="should have referenceData module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Reference Data Module" name="should get all academies" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Reference Data Module" name="should get all reference data" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Reference Data Module" name="should get scholarship periods" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Application Fields Module" name="should have applicationFields module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Application Fields Module" name="should get form config" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Application Fields Module" name="should create field" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Application Fields Module" name="should get documents" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › User Profiles Module" name="should have userProfiles module" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › User Profiles Module" name="should get my profile" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › User Profiles Module" name="should update bank info" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › User Profiles Module" name="should get incomplete profiles (admin)" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should have emailManagement module" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should get email history" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should approve scheduled email" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should get test mode status" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Email Management Module" name="should enable test mode" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should have admin module" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should get dashboard stats" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should get all applications" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should create announcement" time="0.001">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should get scholarship rules" time="0">
+    </testcase>
+    <testcase classname="Modular API Structure › Admin Module" name="should create scholarship configuration" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="useIsMobile Hook" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.129" tests="12">
+    <testcase classname="useIsMobile Hook" name="should initialize as undefined and then set correct mobile state" time="0.002">
+    </testcase>
+    <testcase classname="useIsMobile Hook" name="should return true for mobile width" time="0.002">
+    </testcase>
+    <testcase classname="useIsMobile Hook" name="should return false for desktop width" time="0.001">
+    </testcase>
+    <testcase classname="useIsMobile Hook" name="should return true for width at mobile breakpoint boundary" time="0">
+    </testcase>
+    <testcase classname="useIsMobile Hook" name="should return false for width at desktop breakpoint boundary" time="0">
+    </testcase>
+    <testcase classname="useIsMobile Hook" name="should set up media query listener correctly" time="0.002">
+    </testcase>
+    <testcase classname="useIsMobile Hook" name="should clean up event listener on unmount" time="0.001">
+    </testcase>
+    <testcase classname="useIsMobile Hook" name="should respond to media query changes" time="0.004">
+    </testcase>
+    <testcase classname="useIsMobile Hook" name="should handle undefined window.innerWidth gracefully" time="0.001">
+    </testcase>
+    <testcase classname="useIsMobile Hook" name="should always return boolean value" time="0.001">
+    </testcase>
+    <testcase classname="useIsMobile Hook › breakpoint calculations" name="should use correct breakpoint constant" time="0.001">
+    </testcase>
+    <testcase classname="useIsMobile Hook › breakpoint calculations" name="should classify widths correctly around breakpoint" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="useLanguagePreference" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.113" tests="7">
+    <testcase classname="useLanguagePreference" name="should initialize with default language (zh)" time="0.003">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should initialize with saved language preference" time="0.001">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should change language and save to localStorage" time="0.002">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should change between languages" time="0.001">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should handle invalid saved language preference" time="0.001">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should provide language switch enabled flag" time="0.001">
+    </testcase>
+    <testcase classname="useLanguagePreference" name="should disable language preference for non-student roles" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="Application Helpers" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.086" tests="27">
+    <testcase classname="Application Helpers › formatDate" name="should format date for Chinese locale" time="0.001">
+    </testcase>
+    <testcase classname="Application Helpers › formatDate" name="should format date for English locale" time="0">
+    </testcase>
+    <testcase classname="Application Helpers › formatDate" name="should return empty string for null date" time="0">
     </testcase>
     <testcase classname="Application Helpers › formatDate" name="should return empty string for undefined date" time="0">
     </testcase>
-    <testcase classname="Application Helpers › formatDate" name="should return empty string for empty date" time="0">
+    <testcase classname="Application Helpers › formatDate" name="should return empty string for empty date" time="0.001">
     </testcase>
     <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for draft status in Chinese" time="0.001">
     </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for submitted status in English" time="0.001">
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for submitted status in English" time="0.004">
     </testcase>
-    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for approved status" time="0.001">
+    <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for approved status" time="0.002">
     </testcase>
     <testcase classname="Application Helpers › getApplicationTimeline" name="should return correct timeline for rejected status" time="0.001">
     </testcase>
     <testcase classname="Application Helpers › getStatusColor" name="should return correct colors for different statuses" time="0.001">
     </testcase>
-    <testcase classname="Application Helpers › getStatusName" name="should return Chinese status names" time="0.004">
+    <testcase classname="Application Helpers › getStatusName" name="should return Chinese status names" time="0">
     </testcase>
-    <testcase classname="Application Helpers › getStatusName" name="should return English status names" time="0.001">
+    <testcase classname="Application Helpers › getStatusName" name="should return English status names" time="0">
     </testcase>
-    <testcase classname="Application Helpers › formatFieldName" name="should return Chinese field names" time="0">
+    <testcase classname="Application Helpers › formatFieldName" name="should return Chinese field names" time="0.001">
     </testcase>
-    <testcase classname="Application Helpers › formatFieldName" name="should return English field names" time="0.001">
+    <testcase classname="Application Helpers › formatFieldName" name="should return English field names" time="0">
     </testcase>
     <testcase classname="Application Helpers › formatFieldName" name="should return original field name if not mapped" time="0">
     </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should format scholarship type from API response" time="0.001">
+    <testcase classname="Application Helpers › formatFieldValue" name="should format scholarship type from API response" time="0">
     </testcase>
     <testcase classname="Application Helpers › formatFieldValue" name="should return code if scholarship not found in API" time="0">
     </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should return code if API fails" time="0.006">
+    <testcase classname="Application Helpers › formatFieldValue" name="should return code if API fails" time="0.001">
     </testcase>
-    <testcase classname="Application Helpers › formatFieldValue" name="should return value as-is for non-scholarship fields" time="0.001">
+    <testcase classname="Application Helpers › formatFieldValue" name="should return value as-is for non-scholarship fields" time="0">
     </testcase>
     <testcase classname="Application Helpers › getDocumentLabel" name="should use dynamic label when provided" time="0">
     </testcase>
@@ -1042,102 +655,144 @@ Received: null
     </testcase>
     <testcase classname="Application Helpers › fetchApplicationFiles" name="should fallback to files API if no documents in application details" time="0">
     </testcase>
-    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if both APIs fail" time="0.001">
+    <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if both APIs fail" time="0">
     </testcase>
     <testcase classname="Application Helpers › fetchApplicationFiles" name="should return empty array if no files found" time="0">
     </testcase>
   </testsuite>
-  <testsuite name="useScholarshipPermissions" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:08" time="0.137" tests="5">
-    <testcase classname="useScholarshipPermissions" name="should allow access for admin user" time="0.006">
+  <testsuite name="FormValidator (Simple)" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.066" tests="22">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for empty string" time="0.001">
     </testcase>
-    <testcase classname="useScholarshipPermissions" name="should check permissions correctly" time="0.008">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for whitespace only" time="0.001">
     </testcase>
-    <testcase classname="useScholarshipPermissions" name="should deny access for unauthenticated users" time="0.002">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for null" time="0">
     </testcase>
-    <testcase classname="useScholarshipPermissions" name="should handle invalid scholarship IDs" time="0.003">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for undefined" time="0">
     </testcase>
-    <testcase classname="useScholarshipPermissions" name="should get allowed scholarships for admin user" time="0.002">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return null for valid string" time="0">
     </testcase>
-  </testsuite>
-  <testsuite name="useLanguagePreference" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:08" time="0.113" tests="7">
-    <testcase classname="useLanguagePreference" name="should initialize with default language (zh)" time="0.003">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for invalid email format" time="0.001">
     </testcase>
-    <testcase classname="useLanguagePreference" name="should initialize with saved language preference" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for email without @" time="0">
     </testcase>
-    <testcase classname="useLanguagePreference" name="should change language and save to localStorage" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for email without domain" time="0">
     </testcase>
-    <testcase classname="useLanguagePreference" name="should change between languages" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return null for valid email" time="0">
     </testcase>
-    <testcase classname="useLanguagePreference" name="should handle invalid saved language preference" time="0">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return null for complex valid email" time="0">
     </testcase>
-    <testcase classname="useLanguagePreference" name="should provide language switch enabled flag" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return error for GPA below 0" time="0">
     </testcase>
-    <testcase classname="useLanguagePreference" name="should disable language preference for non-student roles" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return error for GPA above 4.3" time="0.003">
     </testcase>
-  </testsuite>
-  <testsuite name="useIsMobile Hook" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:08" time="0.124" tests="12">
-    <testcase classname="useIsMobile Hook" name="should initialize as undefined and then set correct mobile state" time="0.002">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return null for valid GPA" time="0">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should return true for mobile width" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return null for GPA at boundaries" time="0">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should return false for desktop width" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return error for ranking below 0" time="0.001">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should return true for width at mobile breakpoint boundary" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return error for ranking above 100" time="0">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should return false for width at desktop breakpoint boundary" time="0.001">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return null for valid ranking" time="0">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should set up media query listener correctly" time="0.002">
+    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return null for ranking at boundaries" time="0.001">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should clean up event listener on unmount" time="0.001">
+    <testcase classname="FormValidator (Simple) › English locale › validateRequired" name="should return English error message" time="0">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should respond to media query changes" time="0.003">
+    <testcase classname="FormValidator (Simple) › English locale › validateEmail" name="should return English error message" time="0">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should handle undefined window.innerWidth gracefully" time="0.005">
+    <testcase classname="FormValidator (Simple) › English locale › validateGPA" name="should return English error message" time="0.001">
     </testcase>
-    <testcase classname="useIsMobile Hook" name="should always return boolean value" time="0.001">
-    </testcase>
-    <testcase classname="useIsMobile Hook › breakpoint calculations" name="should use correct breakpoint constant" time="0.001">
-    </testcase>
-    <testcase classname="useIsMobile Hook › breakpoint calculations" name="should classify widths correctly around breakpoint" time="0.003">
+    <testcase classname="FormValidator (Simple) › English locale › validateRanking" name="should return English error message" time="0">
     </testcase>
   </testsuite>
-  <testsuite name="Utils" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:08" time="0.066" tests="7">
-    <testcase classname="Utils › cn function" name="should merge className strings correctly" time="0.003">
-    </testcase>
-    <testcase classname="Utils › cn function" name="should handle conditional classes" time="0">
-    </testcase>
-    <testcase classname="Utils › cn function" name="should merge Tailwind classes properly" time="0.001">
-    </testcase>
-    <testcase classname="Utils › cn function" name="should handle arrays of classes" time="0">
-    </testcase>
-    <testcase classname="Utils › cn function" name="should handle undefined and null values" time="0">
-    </testcase>
-    <testcase classname="Utils › cn function" name="should handle empty inputs" time="0">
-    </testcase>
-    <testcase classname="Utils › cn function" name="should handle duplicate classes" time="0.001">
-    </testcase>
-  </testsuite>
-  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:08" time="0.082" tests="9">
-    <testcase classname="API Client › Authentication" name="should login successfully with valid credentials" time="0.001">
+  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.077" tests="9">
+    <testcase classname="API Client › Authentication" name="should login successfully with valid credentials" time="0.003">
     </testcase>
     <testcase classname="API Client › Authentication" name="should handle login failure" time="0.001">
     </testcase>
-    <testcase classname="API Client › Authentication" name="should get current user with valid token" time="0.001">
+    <testcase classname="API Client › Authentication" name="should get current user with valid token" time="0">
     </testcase>
     <testcase classname="API Client › Applications" name="should fetch user applications" time="0">
     </testcase>
-    <testcase classname="API Client › Applications" name="should create new application" time="0">
+    <testcase classname="API Client › Applications" name="should create new application" time="0.001">
     </testcase>
     <testcase classname="API Client › Applications" name="should submit application" time="0.001">
     </testcase>
     <testcase classname="API Client › Token Management" name="should set and clear tokens correctly" time="0.001">
     </testcase>
-    <testcase classname="API Client › Error Handling" name="should handle network errors" time="0.006">
+    <testcase classname="API Client › Error Handling" name="should handle network errors" time="0.005">
     </testcase>
-    <testcase classname="API Client › Error Handling" name="should handle HTTP errors" time="0.001">
+    <testcase classname="API Client › Error Handling" name="should handle HTTP errors" time="0">
     </testcase>
   </testsuite>
-  <testsuite name="FormValidator" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:08" time="0.09" tests="42">
+  <testsuite name="API Client" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.081" tests="24">
+    <testcase classname="API Client › Authentication" name="should include auth token in requests" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Authentication" name="should handle requests without auth token" time="0">
+    </testcase>
+    <testcase classname="API Client › Authentication" name="should clear token on 401 response" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Error Handling" name="should handle network errors" time="0">
+    </testcase>
+    <testcase classname="API Client › Error Handling" name="should handle HTTP error responses" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Error Handling" name="should handle malformed JSON responses" time="0">
+    </testcase>
+    <testcase classname="API Client › Scholarship APIs" name="should get all scholarships" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Scholarship APIs" name="should get eligible scholarships" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Scholarship APIs" name="should get scholarship by ID" time="0">
+    </testcase>
+    <testcase classname="API Client › Application APIs" name="should create application" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Application APIs" name="should get user applications" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Application APIs" name="should update application" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Application APIs" name="should delete application" time="0">
+    </testcase>
+    <testcase classname="API Client › Admin APIs" name="should get dashboard stats" time="0">
+    </testcase>
+    <testcase classname="API Client › Admin APIs" name="should get all applications with filters" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Admin APIs" name="should update application status" time="0.001">
+    </testcase>
+    <testcase classname="API Client › File APIs" name="should upload document" time="0.002">
+    </testcase>
+    <testcase classname="API Client › File APIs" name="should get files by application ID" time="0">
+    </testcase>
+    <testcase classname="API Client › Request Configuration" name="should set correct Content-Type for JSON requests" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Request Configuration" name="should handle FormData without explicit Content-Type header" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Request Configuration" name="should include Accept header" time="0">
+    </testcase>
+    <testcase classname="API Client › Response Processing" name="should parse successful JSON responses" time="0.001">
+    </testcase>
+    <testcase classname="API Client › Response Processing" name="should handle empty responses" time="0">
+    </testcase>
+    <testcase classname="API Client › Response Processing" name="should handle text responses" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="Utils" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.057" tests="7">
+    <testcase classname="Utils › cn function" name="should merge className strings correctly" time="0.002">
+    </testcase>
+    <testcase classname="Utils › cn function" name="should handle conditional classes" time="0.001">
+    </testcase>
+    <testcase classname="Utils › cn function" name="should merge Tailwind classes properly" time="0">
+    </testcase>
+    <testcase classname="Utils › cn function" name="should handle arrays of classes" time="0">
+    </testcase>
+    <testcase classname="Utils › cn function" name="should handle undefined and null values" time="0">
+    </testcase>
+    <testcase classname="Utils › cn function" name="should handle empty inputs" time="0.001">
+    </testcase>
+    <testcase classname="Utils › cn function" name="should handle duplicate classes" time="0">
+    </testcase>
+  </testsuite>
+  <testsuite name="FormValidator" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.091" tests="42">
     <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return error for empty GPA" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateGPA" name="should return error for invalid GPA format" time="0.001">
@@ -1160,13 +815,13 @@ Received: null
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return error for ranking above 100" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return error for undergraduate ranking above 35%" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return error for undergraduate ranking above 35%" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return info for top 10% ranking" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return valid for acceptable ranking" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateRanking" name="should return valid for acceptable ranking" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateTermCount" name="should return error for empty term count" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateTermCount" name="should return error for empty term count" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateTermCount" name="should return error for invalid term count format" time="0">
     </testcase>
@@ -1176,11 +831,11 @@ Received: null
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateTermCount" name="should return error for PhD term count exceeding 2" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateTermCount" name="should return valid for acceptable term count" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateTermCount" name="should return valid for acceptable term count" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validatePhone" name="should return error for empty phone" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validatePhone" name="should accept valid mobile format" time="0">
+    <testcase classname="FormValidator › Chinese locale › validatePhone" name="should accept valid mobile format" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validatePhone" name="should accept valid landline format" time="0">
     </testcase>
@@ -1188,95 +843,49 @@ Received: null
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for empty bank account" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for account too short" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for account too short" time="0.005">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for account too long" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for account too long" time="0.001">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for non-numeric account" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should return error for non-numeric account" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateBankAccount" name="should accept valid bank account" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateEmail" name="should return error for empty email" time="0.004">
+    <testcase classname="FormValidator › Chinese locale › validateEmail" name="should return error for empty email" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateEmail" name="should return error for invalid email format" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateEmail" name="should accept valid email" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateEmail" name="should accept valid email" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateAddress" name="should return error for empty address" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateAddress" name="should return error for empty address" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateAddress" name="should return error for address too short" time="0">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateAddress" name="should accept valid address" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for empty proposal" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for empty proposal" time="0.001">
     </testcase>
     <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for proposal too short" time="0">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for proposal too long" time="0">
+    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should return error for proposal too long" time="0.001">
     </testcase>
-    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should accept valid proposal" time="0.001">
+    <testcase classname="FormValidator › Chinese locale › validateResearchProposal" name="should accept valid proposal" time="0">
     </testcase>
-    <testcase classname="FormValidator › English locale" name="should return English error messages" time="0">
+    <testcase classname="FormValidator › English locale" name="should return English error messages" time="0.001">
     </testcase>
     <testcase classname="FormValidator › English locale" name="should return English warning messages" time="0">
     </testcase>
-    <testcase classname="FormValidator › English locale" name="should return English info messages" time="0">
+    <testcase classname="FormValidator › English locale" name="should return English info messages" time="0.001">
     </testcase>
   </testsuite>
-  <testsuite name="FormValidator (Simple)" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:08" time="0.063" tests="22">
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for empty string" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for whitespace only" time="0.001">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for null" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return error for undefined" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRequired" name="should return null for valid string" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for invalid email format" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for email without @" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return error for email without domain" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return null for valid email" time="0.001">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateEmail" name="should return null for complex valid email" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return error for GPA below 0" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return error for GPA above 4.3" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return null for valid GPA" time="0.001">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateGPA" name="should return null for GPA at boundaries" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return error for ranking below 0" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return error for ranking above 100" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return null for valid ranking" time="0.001">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › Chinese locale › validateRanking" name="should return null for ranking at boundaries" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › English locale › validateRequired" name="should return English error message" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › English locale › validateEmail" name="should return English error message" time="0.001">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › English locale › validateGPA" name="should return English error message" time="0">
-    </testcase>
-    <testcase classname="FormValidator (Simple) › English locale › validateRanking" name="should return English error message" time="0">
-    </testcase>
-  </testsuite>
-  <testsuite name="Jest Setup" errors="0" failures="0" skipped="0" timestamp="2025-10-10T14:45:08" time="0.072" tests="4">
+  <testsuite name="Jest Setup" errors="0" failures="0" skipped="0" timestamp="2025-10-10T16:07:44" time="0.088" tests="4">
     <testcase classname="Jest Setup" name="should resolve @/ path aliases correctly" time="0.001">
     </testcase>
     <testcase classname="Jest Setup" name="should have testing environment configured" time="0">
     </testcase>
-    <testcase classname="Jest Setup" name="should mock API client methods" time="0.001">
+    <testcase classname="Jest Setup" name="should mock API client methods" time="0">
     </testcase>
-    <testcase classname="Jest Setup" name="should have DOM testing utilities available" time="0">
+    <testcase classname="Jest Setup" name="should have DOM testing utilities available" time="0.001">
     </testcase>
   </testsuite>
 </testsuites>

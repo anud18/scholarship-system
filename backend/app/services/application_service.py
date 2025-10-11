@@ -470,6 +470,9 @@ class ApplicationService:
 
         if status:
             stmt = stmt.where(Application.status == status)
+        else:
+            # 預設不顯示已刪除的申請
+            stmt = stmt.where(Application.status != ApplicationStatus.deleted.value)
 
         stmt = stmt.order_by(desc(Application.created_at))
         result = await self.db.execute(stmt)
@@ -488,10 +491,11 @@ class ApplicationService:
 
     async def get_student_dashboard_stats(self, user: User) -> Dict[str, Any]:
         """Get dashboard statistics for student"""
-        # Count applications by status
+        # Count applications by status (排除已刪除的申請)
         stmt = (
             select(Application.status, func.count(Application.id).label("count"))
             .where(Application.user_id == user.id)
+            .where(Application.status != ApplicationStatus.deleted.value)
             .group_by(Application.status)
         )
 
@@ -504,11 +508,12 @@ class ApplicationService:
             status_counts[row[0]] = count_value  # status is the first column
             total_applications += count_value
 
-        # Get recent applications with files loaded
+        # Get recent applications with files loaded (排除已刪除的申請)
         stmt = (
             select(Application)
             .options(selectinload(Application.files), selectinload(Application.scholarship))
             .where(Application.user_id == user.id)
+            .where(Application.status != ApplicationStatus.deleted.value)
             .order_by(desc(Application.created_at))
             .limit(5)
         )
@@ -1321,11 +1326,40 @@ class ApplicationService:
 
         await self.db.commit()
 
-        # 自動寄信通知學院審查人員
+        # 觸發教授審查提交事件（會觸發自動化郵件規則）
         try:
-            await self.emailService.send_to_college_reviewers(application, db=self.db)
+            from app.services.email_automation_service import email_automation_service
+
+            # Fetch student and scholarship info for email context
+            stmt_student = select(User).where(User.id == application.user_id)
+            result_student = await self.db.execute(stmt_student)
+            student = result_student.scalar_one_or_none()
+
+            stmt_scholarship = select(ScholarshipType).where(ScholarshipType.id == application.scholarship_type_id)
+            result_scholarship = await self.db.execute(stmt_scholarship)
+            scholarship = result_scholarship.scalar_one_or_none()
+
+            await email_automation_service.trigger_professor_review_submitted(
+                db=self.db,
+                application_id=application.id,
+                review_data={
+                    "app_id": application.app_id,
+                    "student_name": student.name if student else "Unknown",
+                    "professor_name": user.name,
+                    "professor_email": user.email,
+                    "scholarship_type": scholarship.name if scholarship else "Unknown",
+                    "scholarship_type_id": application.scholarship_type_id,
+                    "review_result": review.review_status,
+                    "review_date": review.reviewed_at.strftime("%Y-%m-%d")
+                    if review.reviewed_at
+                    else datetime.utcnow().strftime("%Y-%m-%d"),
+                    "professor_recommendation": review.recommendation,
+                    "college_name": application.college_name if hasattr(application, "college_name") else "",
+                    "review_deadline": "",  # Add if available from scholarship config
+                },
+            )
         except Exception as e:
-            logger.error(f"Failed to send college reviewer notification email: {e}")
+            logger.error(f"Failed to trigger professor review automation: {e}")
 
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id)
@@ -1542,8 +1576,24 @@ class ApplicationService:
 
         return response_applications
 
-    async def delete_application(self, application_id: int, current_user: User) -> bool:
-        """Delete an application (only draft applications can be deleted)"""
+    async def delete_application(
+        self, application_id: int, current_user: User, reason: Optional[str] = None
+    ) -> Application:
+        """
+        Soft delete an application
+
+        Permission Control:
+        - Students: Can only delete their own draft applications
+        - Staff (professor/college/admin): Can delete any application (reason required)
+
+        Args:
+            application_id: ID of application to delete
+            current_user: User performing the deletion
+            reason: Reason for deletion (required for staff)
+
+        Returns:
+            Deleted application object
+        """
         # Get application
         stmt = select(Application).where(Application.id == application_id)
         result = await self.db.execute(stmt)
@@ -1552,43 +1602,34 @@ class ApplicationService:
         if not application:
             raise NotFoundError("Application", application_id)
 
+        # Check if already deleted
+        if application.status == ApplicationStatus.deleted.value:
+            raise ValidationError("Application is already deleted")
+
         # Check if user has permission to delete this application
         if current_user.role == UserRole.student:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only delete your own applications")
             # Students can only delete draft applications
             if application.status != ApplicationStatus.draft.value:
-                raise ValidationError("Only draft applications can be deleted")
-        elif current_user.role == UserRole.college:
-            # College users can delete batch-imported applications they created
-            if application.import_source == "batch_import" and application.imported_by_id == current_user.id:
-                # Can delete batch-imported applications
-                pass
-            else:
-                raise AuthorizationError("College users can only delete batch-imported applications they created")
-        elif current_user.role not in [UserRole.admin, UserRole.super_admin]:
+                raise ValidationError("Only draft applications can be deleted by students")
+        elif current_user.role in [UserRole.professor, UserRole.college, UserRole.admin, UserRole.super_admin]:
+            # Staff can delete any application but must provide a reason
+            if not reason:
+                raise ValidationError("Deletion reason is required for staff users")
+        else:
             raise AuthorizationError("You don't have permission to delete applications")
-        # Admin and super_admin can delete any application (no status restriction)
 
-        # Delete associated files from MinIO if they exist
-        if application.submitted_form_data and "documents" in application.submitted_form_data:
-            for doc in application.submitted_form_data["documents"]:
-                if "file_path" in doc and doc["file_path"]:
-                    try:
-                        # Extract object name from file path
-                        # Assuming file_path format: applications/{application_id}/{file_type}/{filename}
-                        object_name = doc["file_path"]
-                        if object_name.startswith("applications/"):
-                            minio_service.delete_file(object_name)
-                    except Exception as e:
-                        # Log error but continue with deletion
-                        logger.error(f"Error deleting file {doc['file_path']}: {e}")
+        # Perform soft delete
+        application.status = ApplicationStatus.deleted.value
+        application.deleted_at = datetime.now(timezone.utc)
+        application.deleted_by_id = current_user.id
+        application.deletion_reason = reason or "Student deleted draft application"
 
-        # Delete the application
-        await self.db.delete(application)
         await self.db.commit()
+        await self.db.refresh(application)
 
-        return True
+        return application
 
     async def _clone_user_profile_documents(self, application: Application, user: User):
         """
@@ -1670,7 +1711,6 @@ class ApplicationService:
                 new_object_name = minio_service.clone_file_to_application(
                     source_object_name=source_object_name,
                     application_id=application.app_id,
-                    file_type=doc_config["file_type"],
                 )
 
                 logger.debug(f"File cloned from {source_object_name} to {new_object_name}")

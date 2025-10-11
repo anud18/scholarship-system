@@ -643,7 +643,13 @@ export interface paths {
         post?: never;
         /**
          * Delete Application
-         * @description Delete application (only draft applications can be deleted)
+         * @description Soft delete an application
+         *
+         *     Permission Control:
+         *     - Students: Can only delete their own draft applications (no reason required)
+         *     - Staff (professor/college/admin): Can delete any application (reason required)
+         *
+         *     The application status will be set to 'deleted' and deletion metadata will be tracked.
          */
         delete: operations["delete_application_api_v1_applications__id__delete"];
         options?: never;
@@ -837,6 +843,131 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/applications/{id}/audit-trail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Application Audit Trail
+         * @description Get audit trail for a specific application (staff only)
+         *
+         *     Returns a list of all operations performed on this application, including:
+         *     - View, update, submit, approve, reject actions
+         *     - Who performed each action and when
+         *     - Old and new values for status changes
+         *     - IP addresses and request details
+         */
+        get: operations["get_application_audit_trail_api_v1_applications__id__audit_trail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/applications/{application_id}/document-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Application Document Requests
+         * @description List all document requests for an application (staff only)
+         *
+         *     Returns all document requests made for the specified application,
+         *     optionally filtered by status (pending, fulfilled, cancelled).
+         */
+        get: operations["list_application_document_requests_api_v1_applications__application_id__document_requests_get"];
+        put?: never;
+        /**
+         * Create Document Request
+         * @description Create a document request for an application (staff only)
+         *
+         *     Staff members can request additional documents from students for their applications.
+         *     The student will be notified via email and can fulfill the request by uploading documents.
+         */
+        post: operations["create_document_request_api_v1_applications__application_id__document_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/document-requests/my-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Document Requests
+         * @description Get all document requests for the current student (student only)
+         *
+         *     Returns all pending document requests across all of the student's applications.
+         *     Students can use this to see what additional documents they need to upload.
+         */
+        get: operations["get_my_document_requests_api_v1_document_requests_my_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/document-requests/{request_id}/fulfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Fulfill Document Request
+         * @description Mark a document request as fulfilled (student only)
+         *
+         *     Students can mark a document request as fulfilled after they have uploaded
+         *     the requested documents. This updates the request status and timestamps.
+         */
+        patch: operations["fulfill_document_request_api_v1_document_requests__request_id__fulfill_patch"];
+        trace?: never;
+    };
+    "/api/v1/document-requests/{request_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Cancel Document Request
+         * @description Cancel a document request (staff only)
+         *
+         *     Staff members can cancel a pending document request if it's no longer needed
+         *     (e.g., application was rejected, or documents were uploaded through another channel).
+         */
+        patch: operations["cancel_document_request_api_v1_document_requests__request_id__cancel_patch"];
         trace?: never;
     };
     "/api/v1/admin/applications": {
@@ -1131,6 +1262,31 @@ export interface paths {
          * @description Get applications for a specific scholarship type
          */
         get: operations["get_applications_by_scholarship_api_v1_admin_scholarships__scholarship_identifier__applications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/scholarships/{scholarship_identifier}/audit-trail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Scholarship Audit Trail
+         * @description Get audit trail for all applications of a specific scholarship type (staff only)
+         *
+         *     Returns all operations performed on applications of this scholarship type, including:
+         *     - Operations on deleted applications (which don't appear in the applications list)
+         *     - Who performed each action and when
+         *     - Application context (app_id, student name, etc.)
+         */
+        get: operations["get_scholarship_audit_trail_api_v1_admin_scholarships__scholarship_identifier__audit_trail_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7202,6 +7358,57 @@ export interface components {
             mime_type?: string | null;
         };
         /**
+         * DocumentRequestCancel
+         * @description Schema for cancelling a document request
+         */
+        DocumentRequestCancel: {
+            /**
+             * Cancellation Reason
+             * @description Reason for cancelling the request
+             * @example 申請已被駁回，無需補件
+             */
+            cancellation_reason: string;
+        };
+        /**
+         * DocumentRequestCreate
+         * @description Schema for creating a document request
+         */
+        DocumentRequestCreate: {
+            /**
+             * Requested Documents
+             * @description List of document types/categories needed
+             * @example [
+             *       "transcript",
+             *       "recommendation_letter",
+             *       "research_plan"
+             *     ]
+             */
+            requested_documents: string[];
+            /**
+             * Reason
+             * @description Why these documents are needed
+             * @example 需要補充成績單以確認學業成績
+             */
+            reason: string;
+            /**
+             * Notes
+             * @description Additional notes or instructions for the student
+             * @example 請於一週內上傳，並確保文件清晰可讀
+             */
+            notes?: string | null;
+        };
+        /**
+         * DocumentRequestFulfill
+         * @description Schema for fulfilling a document request
+         */
+        DocumentRequestFulfill: {
+            /**
+             * Notes
+             * @description Notes when marking request as fulfilled
+             */
+            notes?: string | null;
+        };
+        /**
          * DynamicFormField
          * @description 動態表單欄位
          */
@@ -10408,7 +10615,10 @@ export interface operations {
     };
     delete_application_api_v1_applications__id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Reason for deletion (required for staff) */
+                reason?: string | null;
+            };
             header?: never;
             path: {
                 /** @description Application ID */
@@ -10798,6 +11008,220 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StudentDataSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_audit_trail_api_v1_applications__id__audit_trail_get: {
+        parameters: {
+            query?: {
+                /** @description Maximum number of audit logs to return */
+                limit?: number;
+                /** @description Number of audit logs to skip */
+                offset?: number;
+                /** @description Filter by action type */
+                action_filter?: string | null;
+            };
+            header?: never;
+            path: {
+                /** @description Application ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_application_document_requests_api_v1_applications__application_id__document_requests_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by status */
+                status?: string | null;
+            };
+            header?: never;
+            path: {
+                /** @description Application ID */
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_document_request_api_v1_applications__application_id__document_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Application ID */
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_document_requests_api_v1_document_requests_my_requests_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by status */
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fulfill_document_request_api_v1_document_requests__request_id__fulfill_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Document request ID */
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DocumentRequestFulfill"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_document_request_api_v1_document_requests__request_id__cancel_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Document request ID */
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentRequestCancel"];
             };
         };
         responses: {
@@ -11398,6 +11822,44 @@ export interface operations {
                 sub_type?: string | null;
                 /** @description Filter by status */
                 status?: string | null;
+            };
+            header?: never;
+            path: {
+                scholarship_identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scholarship_audit_trail_api_v1_admin_scholarships__scholarship_identifier__audit_trail_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by action type */
+                action_filter?: string | null;
+                /** @description Maximum number of audit logs to return */
+                limit?: number;
+                /** @description Number of audit logs to skip */
+                offset?: number;
             };
             header?: never;
             path: {

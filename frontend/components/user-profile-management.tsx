@@ -1120,7 +1120,7 @@ export default function UserProfileManagement() {
                       advisorErrors.some(
                         error =>
                           error.toLowerCase().includes("id") ||
-                          error.includes("學校工號")
+                          error.includes("本校人事編號")
                       )
                         ? "border-red-500"
                         : ""

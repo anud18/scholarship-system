@@ -142,6 +142,43 @@ class CollegeReviewService:
         await self.db.flush()  # Ensure changes are written to DB within transaction
         await self.db.refresh(college_review)
 
+        # 觸發學院審查提交事件（會觸發自動化郵件規則）
+        try:
+            from app.models.user import User
+
+            # Fetch reviewer and student info for email context
+            stmt_reviewer = select(User).where(User.id == reviewer_id)
+            result_reviewer = await self.db.execute(stmt_reviewer)
+            reviewer = result_reviewer.scalar_one_or_none()
+
+            stmt_student = select(User).where(User.id == application.user_id)
+            result_student = await self.db.execute(stmt_student)
+            student = result_student.scalar_one_or_none()
+
+            await email_automation_service.trigger_college_review_submitted(
+                db=self.db,
+                application_id=application.id,
+                review_data={
+                    "app_id": application.app_id,
+                    "student_name": student.name if student else "Unknown",
+                    "student_email": student.email if student else "",
+                    "college_name": reviewer.college if reviewer and hasattr(reviewer, "college") else "",
+                    "ranking_score": college_review.ranking_score,
+                    "recommendation": review_data.get("recommendation", ""),
+                    "comments": review_data.get("comments", ""),
+                    "reviewer_name": reviewer.name if reviewer else "Unknown",
+                    "scholarship_type": application.scholarship_type_ref.name
+                    if application.scholarship_type_ref
+                    else "Unknown",
+                    "scholarship_type_id": application.scholarship_type_id,
+                    "review_date": college_review.reviewed_at.strftime("%Y-%m-%d")
+                    if college_review.reviewed_at
+                    else datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                },
+            )
+        except Exception as e:
+            logger.error(f"Failed to trigger college review automation: {e}")
+
         return college_review
 
     def _calculate_ranking_score(self, review_data: Dict[str, Any]) -> float:

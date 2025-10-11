@@ -1338,6 +1338,29 @@ async def download_batch_import_template(
         "郵局帳號": "postal_account",
     }
 
+    # Check if scholarship requires professor recommendation for advisor fields
+    from app.services.application_field_service import ApplicationFieldService
+
+    field_service = ApplicationFieldService(db)
+    requires_advisor = await field_service.check_requires_professor_recommendation(scholarship.code)
+
+    # Add advisor fixed fields if required (after postal_account, before sub_types)
+    if requires_advisor:
+        columns.extend(
+            [
+                "指導教授姓名",  # advisor_name
+                "指導教授Email",  # advisor_email
+                "指導教授本校人事編號",  # advisor_nycu_id
+            ]
+        )
+        column_mapping.update(
+            {
+                "指導教授姓名": "advisor_name",
+                "指導教授Email": "advisor_email",
+                "指導教授本校人事編號": "advisor_nycu_id",
+            }
+        )
+
     # Sub-type label mapping
     sub_type_labels = {
         "nstc": "國科會",
@@ -1380,6 +1403,23 @@ async def download_batch_import_template(
             "郵局帳號": "9876543210987",
         },
     ]
+
+    # Add advisor field sample values if required
+    if requires_advisor:
+        sample_data[0].update(
+            {
+                "指導教授姓名": "張教授",
+                "指導教授Email": "professor.chang@nycu.edu.tw",
+                "指導教授本校人事編號": "P001234",
+            }
+        )
+        sample_data[1].update(
+            {
+                "指導教授姓名": "李教授",
+                "指導教授Email": "professor.lee@nycu.edu.tw",
+                "指導教授本校人事編號": "P005678",
+            }
+        )
 
     # Add sub_type sample values if applicable
     if scholarship.sub_type_list:

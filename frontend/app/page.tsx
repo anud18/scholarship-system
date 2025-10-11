@@ -237,8 +237,8 @@ export default function ScholarshipManagementSystem() {
     // console.log(" User role detected:", user.role);
       // Set each role to their first available tab (index 0)
       if (user.role === "student") {
-        // console.log('🎒 Student role - setting tab to "main"');
-        setActiveTab("main");
+        // console.log('🎒 Student role - setting tab to "scholarship-list"');
+        setActiveTab("scholarship-list");
       } else if (user.role === "professor") {
         // console.log('🎓 Professor role - setting tab to "main"');
         setActiveTab("main");
@@ -294,13 +294,27 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "student") {
       return (
-        <TabsList className="grid w-full grid-cols-1 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-3 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
-            value="main"
+            value="scholarship-list"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <Award className="h-4 w-4" />
+            {locale === "zh" ? "獎學金列表" : "Scholarship List"}
+          </TabsTrigger>
+          <TabsTrigger
+            value="new-application"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <FileText className="h-4 w-4" />
+            {locale === "zh" ? "學生申請" : "New Application"}
+          </TabsTrigger>
+          <TabsTrigger
+            value="applications"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
           >
             <BookOpen className="h-4 w-4" />
-            {t("nav.applications")}
+            {locale === "zh" ? "我的申請" : "My Applications"}
           </TabsTrigger>
         </TabsList>
       );
@@ -501,21 +515,52 @@ export default function ScholarshipManagementSystem() {
             </TabsContent>
           )}
 
-          {/* 主要功能頁面 */}
-          <TabsContent value="main" className="space-y-4">
-            {user.role === "student" && (
-              <>
+          {/* 學生角色的三個 tabs */}
+          {user.role === "student" && (
+            <>
+              <TabsContent value="scholarship-list" className="space-y-4">
                 <EnhancedStudentPortal
                   user={
                     {
                       ...user,
-                      studentType: "undergraduate", // 默認值，實際應該從用戶數據中獲取
+                      studentType: "undergraduate",
                     } as User & { studentType: "undergraduate" }
                   }
                   locale={locale}
+                  initialTab="scholarship-list"
                 />
-              </>
-            )}
+              </TabsContent>
+
+              <TabsContent value="new-application" className="space-y-4">
+                <EnhancedStudentPortal
+                  user={
+                    {
+                      ...user,
+                      studentType: "undergraduate",
+                    } as User & { studentType: "undergraduate" }
+                  }
+                  locale={locale}
+                  initialTab="new-application"
+                />
+              </TabsContent>
+
+              <TabsContent value="applications" className="space-y-4">
+                <EnhancedStudentPortal
+                  user={
+                    {
+                      ...user,
+                      studentType: "undergraduate",
+                    } as User & { studentType: "undergraduate" }
+                  }
+                  locale={locale}
+                  initialTab="applications"
+                />
+              </TabsContent>
+            </>
+          )}
+
+          {/* 主要功能頁面 */}
+          <TabsContent value="main" className="space-y-4">
             {user.role === "professor" && (
               <>
                 <ProfessorReviewComponent user={user} />

@@ -442,6 +442,23 @@ async def init_scheduler():
     except Exception as e:
         logger.error(f"Failed to add batch import cleanup job: {e}")
 
+    # Add deadline checker job (runs at 9 AM daily)
+    try:
+        from app.tasks.deadline_checker import run_deadline_check
+
+        roster_scheduler.scheduler.add_job(
+            run_deadline_check,
+            "cron",
+            hour=9,
+            minute=0,
+            id="deadline_checker",
+            replace_existing=True,
+            name="Deadline Checker",
+        )
+        logger.info("Added deadline checker job (runs daily at 9 AM)")
+    except Exception as e:
+        logger.error(f"Failed to add deadline checker job: {e}")
+
 
 async def shutdown_scheduler():
     """關閉排程器"""

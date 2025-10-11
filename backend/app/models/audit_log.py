@@ -14,17 +14,18 @@ from app.db.base_class import Base
 class AuditAction(enum.Enum):
     """Audit action enum"""
 
-    CREATE = "create"
-    UPDATE = "update"
-    DELETE = "delete"
-    VIEW = "view"
-    SUBMIT = "submit"
-    APPROVE = "approve"
-    REJECT = "reject"
-    LOGIN = "login"
-    LOGOUT = "logout"
-    EXPORT = "export"
-    IMPORT = "import"
+    create = "create"
+    update = "update"
+    delete = "delete"
+    view = "view"
+    submit = "submit"
+    approve = "approve"
+    reject = "reject"
+    login = "login"
+    logout = "logout"
+    export = "export"
+    import_ = "import"  # Use import_ to avoid Python keyword conflict
+    request_documents = "request_documents"  # Request missing documents from student
 
 
 class AuditLog(Base):

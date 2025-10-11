@@ -65,7 +65,7 @@ export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
 
   // Validate advisor NYCU ID (optional, max 20 chars)
   if (data.advisor_nycu_id && data.advisor_nycu_id.length > 20) {
-    errors.push("指導教授學校工號不能超過20個字符");
+    errors.push("指導教授本校人事編號不能超過20個字符");
   }
 
   return { isValid: errors.length === 0, errors };

@@ -46,11 +46,13 @@ type BankInfoUpdate = {
   bank_account?: string;
   bank_name?: string;
   bank_branch?: string;
+  change_reason?: string;
 };
 
 type AdvisorInfoUpdate = {
   advisor_name?: string;
   advisor_email?: string;
+  change_reason?: string;
 };
 
 type ProfileHistory = {

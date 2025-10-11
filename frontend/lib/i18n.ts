@@ -114,7 +114,7 @@ export const translations = {
       advisor_name: "指導教授 姓名",
       advisor_name_placeholder: "例：王小明",
       advisor_email: "指導教授 Email",
-      advisor_id: "指導教授 學校工號",
+      advisor_id: "指導教授 本校人事編號",
       advisor_id_placeholder: "例：professor123",
       save_advisor_info: "儲存指導教授資訊",
 

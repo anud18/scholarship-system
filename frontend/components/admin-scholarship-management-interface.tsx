@@ -862,8 +862,8 @@ export function AdminScholarshipManagementInterface({
                   size="sm"
                   onClick={() => {
                     const token = localStorage.getItem("auth_token");
-                    // Token is now sent via cookie, not URL, to prevent exposure in logs
-                    const previewUrl = `/api/v1/preview-terms?scholarshipType=${type}`;
+                    // Append token as query parameter for iframe authentication
+                    const previewUrl = `/api/v1/preview-terms?scholarshipType=${type}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
 
                     // 設定預覽文件資訊並打開 Modal
                     setTermsPreviewFile({
@@ -958,7 +958,7 @@ export function AdminScholarshipManagementInterface({
         <TabsContent value="fields" className="space-y-4">
           {/* Fixed Fields Card */}
           <Card className="border-2 border-blue-100 shadow-sm">
-            <CardHeader className="pb-4 bg-blue-50">
+            <CardHeader className="pb-4 bg-gradient-to-b from-blue-50 to-white">
               <div>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <FormInput className="h-5 w-5 text-blue-600" />
@@ -1207,7 +1207,7 @@ export function AdminScholarshipManagementInterface({
         <TabsContent value="documents" className="space-y-4">
           {/* Fixed Documents Card */}
           <Card className="border-2 border-green-100 shadow-sm">
-            <CardHeader className="pb-4 bg-green-50">
+            <CardHeader className="pb-4 bg-gradient-to-b from-green-50 to-white">
               <div>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <FileText className="h-5 w-5 text-green-600" />

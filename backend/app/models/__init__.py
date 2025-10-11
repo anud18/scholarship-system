@@ -16,6 +16,7 @@ from app.models.application_field import ApplicationDocument, ApplicationField, 
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.batch_import import BatchImport
 from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview, QuotaDistribution
+from app.models.document_request import DocumentRequest, DocumentRequestStatus
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail, ScheduleStatus
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
 from app.models.notification import Notification, NotificationType
@@ -85,6 +86,9 @@ __all__ = [
     "AuditLog",
     "AuditAction",
     "SystemSetting",
+    # Document request models
+    "DocumentRequest",
+    "DocumentRequestStatus",
     # Batch import models
     "BatchImport",
     # User profile models

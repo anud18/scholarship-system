@@ -2,6 +2,8 @@
 
 import { AdminScholarshipManagementInterface } from "@/components/admin-scholarship-management-interface";
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog";
+import { ApplicationAuditTrail } from "@/components/application-audit-trail";
+import { DeleteApplicationDialog } from "@/components/delete-application-dialog";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
 import { SemesterSelector } from "@/components/semester-selector";
 import { Badge } from "@/components/ui/badge";
@@ -14,8 +16,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -40,6 +50,7 @@ import {
   FileText,
   Filter,
   GraduationCap,
+  History,
   Loader2,
   Minus,
   RefreshCw,
@@ -47,6 +58,7 @@ import {
   Shield,
   ShieldCheck,
   ShieldX,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -305,6 +317,16 @@ export function AdminScholarshipDashboard({
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>();
   const [selectedSemester, setSelectedSemester] = useState<string>();
   const [selectedCombination, setSelectedCombination] = useState<string>();
+
+  // 刪除申請相關狀態
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [applicationToDelete, setApplicationToDelete] =
+    useState<DashboardApplication | null>(null);
+
+  // 操作紀錄相關狀態
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   // 檢查用戶是否可以指派教授
   const canAssignProfessor =
@@ -631,6 +653,54 @@ export function AdminScholarshipDashboard({
     setSelectedCombination(combination);
     setSelectedAcademicYear(academicYear);
     setSelectedSemester(semester || undefined);
+  };
+
+  // 取得當前獎學金類型的所有申請操作紀錄（包含已刪除申請的記錄）
+  const fetchAuditLogsForCurrentType = async () => {
+    if (!activeTab) return;
+
+    setAuditLoading(true);
+    try {
+      // 使用新的獎學金稽核軌跡端點，一次性獲取所有日誌（包含已刪除申請）
+      const response = await apiClient.admin.getScholarshipAuditTrail(activeTab);
+
+      if (response.success && response.data) {
+        setAuditLogs(response.data);
+        setShowAuditModal(true);
+      } else {
+        toast({
+          title: "載入操作紀錄失敗",
+          description: response.message || "無法載入操作紀錄",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch audit logs:", error);
+      toast({
+        title: "載入操作紀錄失敗",
+        description: "無法載入操作紀錄，請稍後再試",
+        variant: "destructive",
+      });
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  // 處理刪除申請成功
+  const handleDeleteSuccess = () => {
+    setApplicationToDelete(null);
+    setShowDeleteDialog(false);
+    refetch();
+
+    // 如果操作紀錄 Modal 是開啟的，重新載入
+    if (showAuditModal) {
+      fetchAuditLogsForCurrentType();
+    }
+
+    toast({
+      title: "刪除成功",
+      description: "申請已成功刪除",
+    });
   };
 
   // 渲染統計卡片
@@ -1083,6 +1153,7 @@ export function AdminScholarshipDashboard({
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        {/* 1️⃣ 查看按鈕（最左邊） */}
                         <Button
                           variant="outline"
                           size="sm"
@@ -1093,6 +1164,8 @@ export function AdminScholarshipDashboard({
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+
+                        {/* 2️⃣ 核准/拒絕按鈕（中間） */}
                         {app.status === "submitted" && (
                           <>
                             <Button
@@ -1116,6 +1189,21 @@ export function AdminScholarshipDashboard({
                               <XCircle className="h-4 w-4" />
                             </Button>
                           </>
+                        )}
+
+                        {/* 3️⃣ 刪除按鈕（最右邊） */}
+                        {(app.status === "draft" || app.status === "submitted") && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setApplicationToDelete(app);
+                              setShowDeleteDialog(true);
+                            }}
+                            className="hover:bg-red-50 hover:border-red-300 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         )}
                       </div>
                     </TableCell>
@@ -1330,11 +1418,70 @@ export function AdminScholarshipDashboard({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="flex items-center gap-3">
-          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent"></div>
-          <span className="text-gray-600">載入獎學金資料中...</span>
+      <div className="space-y-6">
+        {/* Header 區塊（立即顯示） */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">獎學金申請管理</h2>
+            <p className="text-muted-foreground">
+              載入獎學金資料中...
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-28" /> {/* 操作紀錄按鈕 */}
+            <Skeleton className="h-10 w-28" /> {/* 重新整理按鈕 */}
+          </div>
         </div>
+
+        {/* Tabs 區塊（skeleton） */}
+        <Skeleton className="h-12 w-full rounded-lg" />
+
+        {/* 學期篩選卡片（skeleton） */}
+        <Card className="bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
+          <CardHeader>
+            <div className="space-y-3">
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+          </CardHeader>
+        </Card>
+
+        {/* 統計卡片（skeleton，保持 4 欄網格） */}
+        <div className="grid gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map(i => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-3 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* 申請列表表格（skeleton） */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-32 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* 搜尋列 */}
+            <div className="flex gap-4">
+              <Skeleton className="h-10 flex-1" />
+              <Skeleton className="h-10 w-32" />
+            </div>
+            {/* 表格列（8 個 skeleton 行） */}
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -1381,12 +1528,31 @@ export function AdminScholarshipDashboard({
                     : "未知角色"}
           </p>
         </div>
-        <Button onClick={refetch} variant="outline" disabled={isLoading}>
-          <RefreshCw
-            className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-          />
-          重新整理
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={fetchAuditLogsForCurrentType}
+            variant="outline"
+            disabled={auditLoading || !activeTab}
+          >
+            {auditLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                載入中...
+              </>
+            ) : (
+              <>
+                <History className="h-4 w-4 mr-2" />
+                操作紀錄
+              </>
+            )}
+          </Button>
+          <Button onClick={refetch} variant="outline" disabled={isLoading}>
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
+            />
+            重新整理
+          </Button>
+        </div>
       </div>
 
       {/* 獎學金類型標籤頁 */}
@@ -1491,6 +1657,87 @@ export function AdminScholarshipDashboard({
         locale={locale}
         user={user}
       />
+
+      {/* 操作紀錄 Modal */}
+      <Dialog open={showAuditModal} onOpenChange={setShowAuditModal}>
+        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-blue-600" />
+              操作紀錄
+            </DialogTitle>
+            <DialogDescription>
+              查看當前獎學金類型的所有申請操作記錄
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {auditLogs.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>時間</TableHead>
+                    <TableHead>操作人員</TableHead>
+                    <TableHead>申請編號</TableHead>
+                    <TableHead>學生姓名</TableHead>
+                    <TableHead>操作類型</TableHead>
+                    <TableHead>說明</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {auditLogs.map((log, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="text-sm">
+                        {new Date(log.created_at || log.timestamp).toLocaleString("zh-TW")}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {log.user_name || log.user?.name || "系統"}
+                      </TableCell>
+                      <TableCell className="text-sm font-mono">
+                        {log.app_id}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {log.student_name || "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {log.action}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-600">
+                        {log.description || "無說明"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <History className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium">尚無操作記錄</p>
+                <p className="text-sm mt-2">目前沒有任何操作記錄</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 刪除申請 Dialog */}
+      {applicationToDelete && (
+        <DeleteApplicationDialog
+          open={showDeleteDialog}
+          onOpenChange={(open) => {
+            setShowDeleteDialog(open);
+            if (!open) {
+              setApplicationToDelete(null);
+            }
+          }}
+          applicationId={applicationToDelete.id}
+          applicationName={`${applicationToDelete.app_id || 'N/A'} - ${applicationToDelete.student_name || '未知'}`}
+          onSuccess={handleDeleteSuccess}
+          locale="zh"
+          requireReason={true}
+        />
+      )}
 
       {/* 獎學金管理面板 */}
       {activeTab && (

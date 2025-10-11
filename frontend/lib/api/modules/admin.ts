@@ -400,6 +400,29 @@ export function createAdminApi() {
       return toApiResponse(response) as ApiResponse<Record<string, Record<string, string>>>;
     },
 
+    /**
+     * Get audit trail for all applications of a scholarship type
+     * Includes audit logs for deleted applications
+     * Type-safe: Path parameter and query parameters validated against OpenAPI
+     */
+    getScholarshipAuditTrail: async (
+      scholarshipIdentifier: string,
+      actionFilter?: string,
+      limit?: number,
+      offset?: number
+    ): Promise<ApiResponse<any[]>> => {
+      const response = await (typedClient.raw.GET as any)(`/api/v1/admin/scholarships/${scholarshipIdentifier}/audit-trail`, {
+        params: {
+          query: {
+            action_filter: actionFilter,
+            limit,
+            offset,
+          },
+        },
+      });
+      return toApiResponse(response) as ApiResponse<any[]>;
+    },
+
     // ========== Workflows (Not Implemented) ==========
 
     getWorkflows: async (): Promise<ApiResponse<any[]>> => {
