@@ -161,6 +161,7 @@ jobs:
       - name: Create deployment directory
         run: |
           mkdir -p ~/scholarship-staging
+          mkdir -p ~/scholarship-staging/logs/nginx
           cd ~/scholarship-staging
 
       - name: Prepare deployment files
@@ -169,6 +170,10 @@ jobs:
           if [ -d nginx ]; then
             cp -r nginx ~/scholarship-staging/
             echo "Nginx config copied"
+          fi
+          if [ -d monitoring ]; then
+            cp -r monitoring ~/scholarship-staging/
+            echo "Monitoring config copied"
           fi
           cd ~/scholarship-staging
           echo "Deployment files prepared"
