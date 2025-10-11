@@ -159,4 +159,4 @@ networks:
         - subnet: 172.30.0.0/16
   scholarship_staging_network:
     external: true
-    name: scholarship-staging_scholarship_staging_network
+    name: scholarship_staging_network
