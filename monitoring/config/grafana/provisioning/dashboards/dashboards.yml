@@ -41,13 +41,14 @@ providers:
       foldersFromFilesStructure: false
 
   # Database Monitoring dashboards
-  - name: 'Database Monitoring'
-    orgId: 1
-    folder: 'Database'
-    type: file
-    disableDeletion: false
-    updateIntervalSeconds: 30
-    allowUiUpdates: true
-    options:
-      path: /etc/grafana/provisioning/dashboards/database
-      foldersFromFilesStructure: false
+  # TODO: Add back when database dashboards are created
+  # - name: 'Database Monitoring'
+  #   orgId: 1
+  #   folder: 'Database'
+  #   type: file
+  #   disableDeletion: false
+  #   updateIntervalSeconds: 30
+  #   allowUiUpdates: true
+  #   options:
+  #     path: /etc/grafana/provisioning/dashboards/database
+  #     foldersFromFilesStructure: false
