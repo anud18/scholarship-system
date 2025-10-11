@@ -24,17 +24,6 @@ jobs:
           sudo mkdir -p /opt/scholarship/monitoring
           sudo chown -R $USER:$USER /opt/scholarship/monitoring
 
-      - name: Ensure application network exists
-        run: |
-          # Check if scholarship_staging_network exists
-          if ! docker network ls | grep -q scholarship_staging_network; then
-            echo "Creating scholarship_staging_network..."
-            docker network create scholarship_staging_network
-            echo "✅ Network created"
-          else
-            echo "✅ scholarship_staging_network already exists"
-          fi
-
       - name: Deploy monitoring configuration
         run: |
           # Copy monitoring directory to /opt/scholarship/monitoring

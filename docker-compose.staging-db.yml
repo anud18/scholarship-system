@@ -117,3 +117,4 @@ volumes:
 networks:
   scholarship_staging_network:
     external: true
+    name: scholarship_staging_network

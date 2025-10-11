@@ -181,4 +181,5 @@ networks:
       config:
         - subnet: 172.30.0.0/16
   scholarship_staging_network:
-    external: true
+    driver: bridge
+    name: scholarship_staging_network

@@ -199,4 +199,5 @@ volumes:
 
 networks:
   scholarship_staging_network:
-    driver: bridge
+    external: true
+    name: scholarship_staging_network

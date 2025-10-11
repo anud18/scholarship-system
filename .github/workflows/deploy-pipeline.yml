@@ -172,6 +172,8 @@ jobs:
             echo "Nginx config copied"
           fi
           if [ -d monitoring ]; then
+            # Remove old monitoring directory if it exists (may have wrong permissions)
+            sudo rm -rf ~/scholarship-staging/monitoring
             cp -r monitoring ~/scholarship-staging/
             echo "Monitoring config copied"
           fi
