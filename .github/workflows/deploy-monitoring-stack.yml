@@ -57,7 +57,7 @@ jobs:
 
           # Wait for services to be healthy
           echo "Waiting for services to start..."
-          sleep 30
+          sleep 60
 
       - name: Health check monitoring services
         run: |
@@ -90,15 +90,9 @@ jobs:
             exit 1
           fi
 
-          # Test AlertManager
-          if curl -f http://localhost:9093/-/healthy > /dev/null 2>&1; then
-            echo "✅ AlertManager is healthy"
-          else
-            echo "❌ AlertManager health check failed"
-            exit 1
-          fi
+          # Note: AlertManager has been removed from the monitoring stack
 
-          echo "All monitoring services are healthy!"
+          echo "All monitoring services are healthy! (Grafana, Prometheus, Loki)"
 
       - name: Deploy Alloy to Staging AP-VM (localhost)
         run: |
@@ -238,8 +232,8 @@ jobs:
           echo "  Grafana:      https://ss.test.nycu.edu.tw/monitoring/ (via nginx)"
           echo "  Prometheus:   http://localhost:9090"
           echo "  Loki:         http://localhost:3100"
-          echo "  AlertManager: http://localhost:9093"
           echo ""
           echo "Note: Grafana is only accessible via HTTPS reverse proxy"
+          echo "Note: AlertManager has been removed from the monitoring stack"
           echo "Staging environment monitoring is active"
           echo ""
