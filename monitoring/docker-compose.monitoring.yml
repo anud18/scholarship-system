@@ -6,10 +6,10 @@ version: '3.8'
 
 services:
   # =========================================================================
-  # GRAFANA - Visualization Platform
+  # GRAFANA - Visualization Platform (Enterprise Edition)
   # =========================================================================
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana-enterprise:latest
     container_name: monitoring_grafana
     expose:
       - "3000"
