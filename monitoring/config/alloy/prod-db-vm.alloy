@@ -53,6 +53,8 @@ loki.process "add_labels" {
   }
 
   // Label PostgreSQL log levels
+  // Empty string ("") means use the value from the named capture group 'level'
+  // This extracts log levels (INFO, WARNING, ERROR, etc.) as Loki labels
   stage.labels {
     values = {
       level = "",
