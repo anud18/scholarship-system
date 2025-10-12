@@ -165,10 +165,6 @@ class EmailAutomationService:
             logger.info(f"   To: {recipient_email}")
             logger.info(f"   Category: {email_category}")
 
-            # Prepare default subject and body (fallbacks)
-            default_subject = f"Automated notification - {template_key}"
-            default_body = "This is an automated notification from the scholarship system."
-
             # Email metadata for logging
             metadata = {
                 "email_category": email_category,
@@ -178,18 +174,50 @@ class EmailAutomationService:
                 "template_key": template_key,
             }
 
-            logger.info("   Calling EmailService.send_with_template()...")
-            await self.email_service.send_with_template(
-                db=db,
-                key=template_key,
-                to=recipient_email,
-                context=context,
-                default_subject=default_subject,
-                default_body=default_body,
-                **metadata,
-            )
+            # Get database template for subject
+            template = await EmailTemplateService.get_template(db, template_key)
+            if not template:
+                logger.warning(f"Template not found in database: {template_key}, using defaults")
+                subject = f"Automated notification - {template_key}"
+            else:
+                # Format subject with context
+                subject = template.subject_template.format(**context)
 
-            logger.info(f"✓ Successfully sent automated email using template {template_key} to {recipient_email}")
+            # Check if React Email template exists
+            react_template_name = self._get_react_email_template_name(template_key)
+
+            if react_template_name:
+                # Use React Email template (HTML)
+                logger.info(f"   Using React Email template: {react_template_name}")
+                await self.email_service.send_with_react_template(
+                    template_name=react_template_name,
+                    to=recipient_email,
+                    context=context,
+                    subject=subject,
+                    db=db,
+                    **metadata,
+                )
+                logger.info(
+                    f"✓ Successfully sent HTML email using React template {react_template_name} to {recipient_email}"
+                )
+            else:
+                # Fall back to database template (plain text)
+                logger.info("   No React Email template found, falling back to database template")
+                default_subject = f"Automated notification - {template_key}"
+                default_body = "This is an automated notification from the scholarship system."
+
+                await self.email_service.send_with_template(
+                    db=db,
+                    key=template_key,
+                    to=recipient_email,
+                    context=context,
+                    default_subject=default_subject,
+                    default_body=default_body,
+                    **metadata,
+                )
+                logger.info(
+                    f"✓ Successfully sent plain text email using database template {template_key} to {recipient_email}"
+                )
 
         except Exception as e:
             logger.error(f"❌ Failed to send automated email: {e}")
@@ -262,6 +290,20 @@ class EmailAutomationService:
         }
 
         return category_mapping.get(template_key, EmailCategory.system)
+
+    def _get_react_email_template_name(self, template_key: str) -> str | None:
+        """Map database template keys to React Email template names"""
+        mapping = {
+            "application_submitted_student": "application-submitted",
+            "professor_review_notification": "professor-review-request",
+            "college_review_notification": "college-review-request",
+            "application_deadline_reminder": "deadline-reminder",
+            "document_request_notification": "document-request",
+            "result_notification_student": "result-notification",
+            "roster_notification": "roster-notification",
+            "whitelist_notification": "whitelist-notification",
+        }
+        return mapping.get(template_key)
 
     # Trigger methods for common events
     async def trigger_application_submitted(

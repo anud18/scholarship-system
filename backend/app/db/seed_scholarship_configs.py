@@ -766,7 +766,6 @@ async def seed_email_templates(session: AsyncSession) -> None:
 - 申請時間：{submission_date}
 - 獎學金名稱：{scholarship_name}
 - 申請學期：{semester}
-- 獎學金金額：{scholarship_amount}
 
 我們會儘快處理您的申請，如有任何問題請隨時聯繫我們。
 
@@ -861,7 +860,6 @@ async def seed_email_templates(session: AsyncSession) -> None:
 
 申請期間：{application_period}
 申請資格：{eligibility_criteria}
-獎學金金額：{scholarship_amount}
 
 申請方式：
 請至獎學金管理系統線上申請
