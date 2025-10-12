@@ -420,8 +420,15 @@ class ApplicationAuditService:
 
     def _fallback_log(self, application_id: int, action: AuditAction, user: User, error: str):
         """當資料庫稽核失敗時的fallback logging"""
+        # Safely extract user identifier without triggering lazy loading
+        # which would fail if session is aborted
+        try:
+            user_identifier = f"{user.nycu_id} (ID: {user.id})"
+        except Exception:
+            user_identifier = "Unknown"
+
         fallback_message = (
             f"[AUDIT FALLBACK] application_id={application_id}, action={action.value}, "
-            f"user={user.name or user.nycu_id}, db_error={error}"
+            f"user={user_identifier}, db_error={error}"
         )
         logger.error(fallback_message)
