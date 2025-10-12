@@ -273,19 +273,46 @@ class EmailAutomationService:
         logger.info(f"   Student: {application_data.get('student_name')} ({application_data.get('student_email')})")
         logger.info(f"   Scholarship: {application_data.get('scholarship_type')}")
 
+        # Extract student ID from student_data JSON
+        student_data = application_data.get("student_data", {})
+        if isinstance(student_data, str):
+            import json
+
+            student_data = json.loads(student_data) if student_data else {}
+
+        # Prepare common values
         scholarship_type_value = application_data.get("scholarship_type", "")
+        app_id_value = application_data.get("app_id", "")
+        submit_date_value = application_data.get("submit_date", datetime.now().strftime("%Y-%m-%d"))
+        system_url_value = "https://scholarship.nycu.edu.tw"
+
         context = {
-            "application_id": application_id,
-            "app_id": application_data.get("app_id", ""),
+            # Basic information
+            "application_id": app_id_value,  # Templates expect APP-xxx format, not numeric ID
+            "app_id": app_id_value,
             "student_name": application_data.get("student_name", ""),
+            "student_id": student_data.get("std_id", ""),  # Extract from student_data
             "student_email": application_data.get("student_email", ""),
             "professor_name": application_data.get("professor_name", ""),
             "professor_email": application_data.get("professor_email", ""),
+            # Scholarship information
             "scholarship_type": scholarship_type_value,
-            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
+            "scholarship_name": scholarship_type_value,  # Alias for templates
             "scholarship_type_id": application_data.get("scholarship_type_id"),
-            "submit_date": application_data.get("submit_date", datetime.now().strftime("%Y-%m-%d")),
-            "system_url": "https://scholarship.nycu.edu.tw",  # Replace with actual URL
+            "scholarship_amount": application_data.get("scholarship_amount", ""),  # Optional
+            # Date information (provide both aliases)
+            "submit_date": submit_date_value,
+            "submission_date": submit_date_value,  # Alias for templates
+            # Semester information (optional)
+            "semester": application_data.get("semester", ""),
+            # URL information
+            "system_url": system_url_value,
+            "review_url": f"{system_url_value}/applications/{app_id_value}",
+            "admin_portal_url": f"{system_url_value}/admin/applications",
+            # Review-related fields (defaults to avoid KeyError)
+            "review_deadline": application_data.get("review_deadline", ""),
+            "professor_recommendation": "",
+            "review_result": "",
         }
 
         await self.process_trigger(db, "application_submitted", context)
