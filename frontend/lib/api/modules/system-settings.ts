@@ -65,7 +65,7 @@ export function createSystemSettingsApi() {
       category?: string,
       includeSensitive?: boolean
     ): Promise<ApiResponse<SystemConfiguration[]>> => {
-      const response = await (typedClient.raw.GET as any)('/api/v1/system-settings/', {
+      const response = await (typedClient.raw.GET as any)('/api/v1/system-settings', {
         params: {
           query: {
             category,
@@ -102,7 +102,7 @@ export function createSystemSettingsApi() {
     createConfiguration: async (
       configData: SystemConfigurationCreate
     ): Promise<ApiResponse<SystemConfiguration>> => {
-      const response = await (typedClient.raw.POST as any)('/api/v1/system-settings/', {
+      const response = await (typedClient.raw.POST as any)('/api/v1/system-settings', {
         body: configData,
       });
       return toApiResponse<SystemConfiguration>(response);

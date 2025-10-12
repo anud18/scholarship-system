@@ -471,6 +471,107 @@ class EmailService:
 
         await self.send_email(to, subject, body, cc=cc_list, bcc=bcc_list, db=db, **metadata)
 
+    async def send_with_react_template(
+        self,
+        template_name: str,
+        to: str | List[str],
+        context: dict,
+        subject: str,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
+        db: Optional[AsyncSession] = None,
+        **metadata,
+    ):
+        """
+        Send email using React Email template (HTML from exported templates).
+
+        This method loads pre-exported React Email templates from frontend/public/email-templates
+        and performs variable substitution with the provided context.
+
+        Args:
+            template_name: Name of the React Email template (e.g., 'application-submitted')
+            to: Recipient email(s)
+            context: Dictionary of variables to substitute in template (e.g., {'studentName': '王小明'})
+            subject: Email subject line
+            cc: CC recipients
+            bcc: BCC recipients
+            db: Database session for logging
+            **metadata: Additional metadata for logging (email_category, application_id, etc.)
+
+        Example:
+            >>> await email_service.send_with_react_template(
+            ...     template_name='application-submitted',
+            ...     to='student@nycu.edu.tw',
+            ...     context={
+            ...         'studentName': '王小明',
+            ...         'appId': 'APP-001',
+            ...         'scholarshipType': '學術優秀獎學金',
+            ...         'submitDate': '2025-10-12',
+            ...         'professorName': '李教授',
+            ...         'systemUrl': 'https://scholarship.nycu.edu.tw'
+            ...     },
+            ...     subject='申請已成功送出 - 學術優秀獎學金 (APP-001)',
+            ...     db=db,
+            ...     email_category=EmailCategory.application_student
+            ... )
+        """
+        from app.services.email_template_loader import email_template_loader
+
+        try:
+            # Render template with variable substitution
+            html_content = email_template_loader.render(template_name, context)
+
+            # Generate plain text fallback from HTML
+            plain_body = self._html_to_text(html_content)
+
+            # Add template name to metadata for logging
+            metadata["template_key"] = f"react:{template_name}"
+
+            # Send email with HTML content
+            await self.send_email(
+                to=to,
+                subject=subject,
+                body=plain_body,
+                html_content=html_content,
+                cc=cc,
+                bcc=bcc,
+                db=db,
+                **metadata,
+            )
+
+            logger.info(
+                f"Sent React Email template '{template_name}' to {to if isinstance(to, str) else ', '.join(to)}"
+            )
+
+        except FileNotFoundError as e:
+            logger.error(f"React Email template not found: {template_name}. Error: {e}")
+            logger.warning("Falling back to plain text email")
+
+            # Fallback: send plain text email with minimal formatting
+            fallback_body = f"""
+此郵件因模板載入失敗，以純文字格式發送。
+
+{chr(10).join(f'{key}: {value}' for key, value in context.items())}
+
+請聯繫系統管理員以解決此問題。
+
+國立陽明交通大學 獎學金系統
+            """.strip()
+
+            await self.send_email(
+                to=to,
+                subject=f"{subject} [系統通知]",
+                body=fallback_body,
+                cc=cc,
+                bcc=bcc,
+                db=db,
+                **metadata,
+            )
+
+        except Exception as e:
+            logger.error(f"Error sending React Email template '{template_name}': {e}")
+            raise
+
     async def schedule_email(
         self,
         db: AsyncSession,

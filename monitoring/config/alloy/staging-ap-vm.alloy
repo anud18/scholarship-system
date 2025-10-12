@@ -43,7 +43,7 @@ loki.process "add_labels" {
   stage.static_labels {
     values = {
       environment = "staging",
-      host        = "ap-vm",
+      vm          = "ap-vm",
     }
   }
 
@@ -167,7 +167,7 @@ prometheus.relabel "add_labels" {
   }
 
   rule {
-    target_label = "host"
+    target_label = "vm"
     replacement  = "ap-vm"
   }
 }

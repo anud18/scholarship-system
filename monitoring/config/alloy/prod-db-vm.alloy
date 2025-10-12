@@ -43,7 +43,7 @@ loki.process "add_labels" {
   stage.static_labels {
     values = {
       environment = "prod",
-      host        = "db-vm",
+      vm          = "db-vm",
     }
   }
 
@@ -53,6 +53,8 @@ loki.process "add_labels" {
   }
 
   // Label PostgreSQL log levels
+  // Empty string ("") means use the value from the named capture group 'level'
+  // This extracts log levels (INFO, WARNING, ERROR, etc.) as Loki labels
   stage.labels {
     values = {
       level = "",
@@ -61,9 +63,10 @@ loki.process "add_labels" {
 }
 
 // Write logs to Loki with multi-tenant header
+// Uses environment variable MONITORING_SERVER_URL to connect to AP-VM
 loki.write "default" {
   endpoint {
-    url = "http://monitoring-server:3100/loki/api/v1/push"
+    url = env("MONITORING_SERVER_URL") + ":3100/loki/api/v1/push"
 
     // Multi-tenant identification for production
     headers = {
@@ -73,105 +76,22 @@ loki.write "default" {
 }
 
 // =============================================================================
-// METRICS PIPELINE
+// METRICS PIPELINE - PULL MODE
 // =============================================================================
-
-// Scrape Node Exporter (system metrics)
-prometheus.scrape "node_exporter" {
-  targets = [{
-    __address__ = "node-exporter:9100",
-  }]
-
-  forward_to = [prometheus.relabel.add_labels.receiver]
-
-  job_name = "node"
-  scrape_interval = "15s"
-}
-
-// Scrape PostgreSQL Exporter
-prometheus.scrape "postgres_exporter" {
-  targets = [{
-    __address__ = "postgres-exporter:9187",
-  }]
-
-  forward_to = [prometheus.relabel.add_labels.receiver]
-
-  job_name = "postgres"
-  scrape_interval = "15s"
-}
-
-// Scrape Redis Exporter
-prometheus.scrape "redis_exporter" {
-  targets = [{
-    __address__ = "redis-exporter:9121",
-  }]
-
-  forward_to = [prometheus.relabel.add_labels.receiver]
-
-  job_name = "redis"
-  scrape_interval = "15s"
-}
-
-// Scrape MinIO metrics
-prometheus.scrape "minio" {
-  targets = [{
-    __address__ = "minio:9000",
-  }]
-
-  forward_to = [prometheus.relabel.add_labels.receiver]
-
-  job_name = "minio"
-  scrape_interval = "30s"
-  metrics_path = "/minio/v2/metrics/cluster"
-}
-
-// Add environment and host labels to metrics
-prometheus.relabel "add_labels" {
-  forward_to = [prometheus.remote_write.default.receiver]
-
-  rule {
-    target_label = "environment"
-    replacement  = "prod"
-  }
-
-  rule {
-    target_label = "host"
-    replacement  = "db-vm"
-  }
-}
-
-// Write metrics to Prometheus
-prometheus.remote_write "default" {
-  endpoint {
-    url = "http://monitoring-server:9090/api/v1/write"
-
-    // Add headers if needed
-    headers = {
-      "X-Environment" = "prod",
-    }
-
-    // Queue config for reliability
-    queue_config {
-      capacity = 10000
-      max_shards = 10
-      min_shards = 1
-      max_samples_per_send = 5000
-      batch_send_deadline = "5s"
-      min_backoff = "30ms"
-      max_backoff = "5s"
-    }
-  }
-}
+// Metrics are exposed via exporters and scraped directly by Prometheus on AP-VM:
+// - Node Exporter: exposed on port 9100
+// - PostgreSQL Exporter: exposed on port 9187
+// - Alloy Self-Monitoring: exposed on port 12345
+//
+// Prometheus on AP-VM will add environment/vm labels during scrape using
+// relabel_configs in its prometheus.yml configuration.
+//
+// Note: Redis is on AP-VM, not DB-VM
 
 // =============================================================================
 // SELF-MONITORING
 // =============================================================================
 
-// Expose Alloy's own metrics
+// Expose Alloy's own metrics for Prometheus to scrape
+// Metrics available at http://alloy:12345/metrics
 prometheus.exporter.self "alloy" { }
-
-prometheus.scrape "alloy_self" {
-  targets = prometheus.exporter.self.alloy.targets
-  forward_to = [prometheus.relabel.add_labels.receiver]
-  job_name = "alloy"
-}
