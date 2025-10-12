@@ -273,6 +273,7 @@ class EmailAutomationService:
         logger.info(f"   Student: {application_data.get('student_name')} ({application_data.get('student_email')})")
         logger.info(f"   Scholarship: {application_data.get('scholarship_type')}")
 
+        scholarship_type_value = application_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
             "app_id": application_data.get("app_id", ""),
@@ -280,7 +281,8 @@ class EmailAutomationService:
             "student_email": application_data.get("student_email", ""),
             "professor_name": application_data.get("professor_name", ""),
             "professor_email": application_data.get("professor_email", ""),
-            "scholarship_type": application_data.get("scholarship_type", ""),
+            "scholarship_type": scholarship_type_value,
+            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
             "scholarship_type_id": application_data.get("scholarship_type_id"),
             "submit_date": application_data.get("submit_date", datetime.now().strftime("%Y-%m-%d")),
             "system_url": "https://scholarship.nycu.edu.tw",  # Replace with actual URL
@@ -293,13 +295,15 @@ class EmailAutomationService:
         self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
     ):
         """Trigger emails when professor submits review"""
+        scholarship_type_value = review_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
             "app_id": review_data.get("app_id", ""),
             "student_name": review_data.get("student_name", ""),
             "professor_name": review_data.get("professor_name", ""),
             "professor_email": review_data.get("professor_email", ""),
-            "scholarship_type": review_data.get("scholarship_type", ""),
+            "scholarship_type": scholarship_type_value,
+            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
             "scholarship_type_id": review_data.get("scholarship_type_id"),
             "review_result": review_data.get("review_result", ""),
             "review_date": review_data.get("review_date", datetime.now().strftime("%Y-%m-%d")),
@@ -313,6 +317,7 @@ class EmailAutomationService:
 
     async def trigger_final_result_decided(self, db: AsyncSession, application_id: int, result_data: Dict[str, Any]):
         """Trigger emails when final result is decided"""
+        scholarship_type_value = result_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
             "app_id": result_data.get("app_id", ""),
@@ -321,7 +326,8 @@ class EmailAutomationService:
             "professor_name": result_data.get("professor_name", ""),
             "professor_email": result_data.get("professor_email", ""),
             "college_name": result_data.get("college_name", ""),
-            "scholarship_type": result_data.get("scholarship_type", ""),
+            "scholarship_type": scholarship_type_value,
+            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
             "scholarship_type_id": result_data.get("scholarship_type_id"),
             "result_status": result_data.get("result_status", ""),
             "approved_amount": result_data.get("approved_amount", ""),
@@ -336,6 +342,7 @@ class EmailAutomationService:
         self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
     ):
         """Trigger emails when college submits review"""
+        scholarship_type_value = review_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
             "app_id": review_data.get("app_id", ""),
@@ -346,7 +353,8 @@ class EmailAutomationService:
             "college_recommendation": review_data.get("recommendation", ""),
             "college_comments": review_data.get("comments", ""),
             "reviewer_name": review_data.get("reviewer_name", ""),
-            "scholarship_type": review_data.get("scholarship_type", ""),
+            "scholarship_type": scholarship_type_value,
+            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
             "scholarship_type_id": review_data.get("scholarship_type_id"),
             "review_date": review_data.get("review_date", datetime.now().strftime("%Y-%m-%d")),
             "system_url": "https://scholarship.nycu.edu.tw",
@@ -356,6 +364,7 @@ class EmailAutomationService:
 
     async def trigger_supplement_requested(self, db: AsyncSession, application_id: int, request_data: Dict[str, Any]):
         """Trigger emails when supplement documents are requested"""
+        scholarship_type_value = request_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
             "app_id": request_data.get("app_id", ""),
@@ -366,7 +375,8 @@ class EmailAutomationService:
             "notes": request_data.get("notes", ""),
             "requester_name": request_data.get("requester_name", ""),
             "deadline": request_data.get("deadline", ""),
-            "scholarship_type": request_data.get("scholarship_type", ""),
+            "scholarship_type": scholarship_type_value,
+            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
             "scholarship_type_id": request_data.get("scholarship_type_id"),
             "request_date": request_data.get("request_date", datetime.now().strftime("%Y-%m-%d")),
             "system_url": "https://scholarship.nycu.edu.tw",
@@ -376,6 +386,7 @@ class EmailAutomationService:
 
     async def trigger_deadline_approaching(self, db: AsyncSession, application_id: int, deadline_data: Dict[str, Any]):
         """Trigger emails when deadline is approaching"""
+        scholarship_type_value = deadline_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
             "app_id": deadline_data.get("app_id", ""),
@@ -384,8 +395,8 @@ class EmailAutomationService:
             "deadline": deadline_data.get("deadline", ""),
             "days_remaining": deadline_data.get("days_remaining", ""),
             "deadline_type": deadline_data.get("deadline_type", ""),  # e.g., "submission", "supplement"
-            "scholarship_name": deadline_data.get("scholarship_name", ""),
-            "scholarship_type": deadline_data.get("scholarship_type", ""),
+            "scholarship_type": scholarship_type_value,
+            "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
             "scholarship_type_id": deadline_data.get("scholarship_type_id"),
             "system_url": "https://scholarship.nycu.edu.tw",
         }
