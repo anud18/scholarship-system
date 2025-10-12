@@ -288,8 +288,8 @@ class EmailAutomationService:
 
         context = {
             # Basic information
-            "application_id": app_id_value,  # Templates expect APP-xxx format, not numeric ID
-            "app_id": app_id_value,
+            "application_id": application_id,  # Numeric ID for SQL queries (e.g., 5)
+            "app_id": app_id_value,  # Formatted ID for templates (e.g., APP-2025-379885)
             "student_name": application_data.get("student_name", ""),
             "student_id": student_data.get("std_stdcode", ""),  # Extract student number from student_data
             "student_email": application_data.get("student_email", ""),
