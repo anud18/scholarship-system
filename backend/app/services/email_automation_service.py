@@ -291,7 +291,7 @@ class EmailAutomationService:
             "application_id": app_id_value,  # Templates expect APP-xxx format, not numeric ID
             "app_id": app_id_value,
             "student_name": application_data.get("student_name", ""),
-            "student_id": student_data.get("std_id", ""),  # Extract from student_data
+            "student_id": student_data.get("std_stdcode", ""),  # Extract student number from student_data
             "student_email": application_data.get("student_email", ""),
             "professor_name": application_data.get("professor_name", ""),
             "professor_email": application_data.get("professor_email", ""),
