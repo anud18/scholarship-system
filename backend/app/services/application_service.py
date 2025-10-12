@@ -18,6 +18,7 @@ from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFound
 from app.models.application import Application, ApplicationStatus, ProfessorReview, ProfessorReviewItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
+from app.models.user_profile import UserProfile
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationFormData,
@@ -951,19 +952,37 @@ class ApplicationService:
         application.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
-        await self.db.refresh(application, ["files", "reviews", "professor_reviews", "scholarship"])
+        await self.db.refresh(application, ["files", "reviews", "professor_reviews", "scholarship", "student"])
 
         # 發送自動化通知
         try:
             logger.info(f"=== STARTING EMAIL AUTOMATION for application {application.id} ===")
+
+            # Extract student data from JSON field
+            student_data = application.student_data or {}
+
+            # Extract professor information from user profile
+            professor_name = ""
+            professor_email = ""
+            if application.student:
+                # Access user profile for advisor information
+                user_profile_stmt = select(UserProfile).where(UserProfile.user_id == application.user_id)
+                user_profile_result = await self.db.execute(user_profile_stmt)
+                user_profile = user_profile_result.scalar_one_or_none()
+
+                if user_profile:
+                    professor_name = user_profile.advisor_name or ""
+                    professor_email = user_profile.advisor_email or ""
+
             # Prepare application data for email automation
             application_data = {
                 "id": application.id,
                 "app_id": application.app_id,
-                "student_name": getattr(application, "student_name", ""),
-                "student_email": getattr(application, "student_email", ""),
-                "professor_name": getattr(application, "professor_name", ""),
-                "professor_email": getattr(application, "professor_email", ""),
+                "student_data": student_data,  # Pass complete student_data JSON
+                "student_name": student_data.get("std_cname", ""),  # Extract from student_data
+                "student_email": student_data.get("com_email", ""),  # Extract from student_data
+                "professor_name": professor_name,  # From user profile
+                "professor_email": professor_email,  # From user profile
                 "scholarship_type": getattr(application.scholarship, "name", "") if application.scholarship else "",
                 "scholarship_type_id": application.scholarship_type_id,
                 "submit_date": application.submitted_at.strftime("%Y-%m-%d") if application.submitted_at else "",
