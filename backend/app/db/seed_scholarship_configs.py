@@ -933,6 +933,25 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             "template_key": "application_submitted_student",
             "delay_hours": 0,
             "is_active": False,
+            "condition_query": """
+                SELECT email FROM (
+                    SELECT applications.student_data->>'com_email' as email
+                    FROM applications
+                    WHERE applications.id = {application_id}
+                    AND applications.student_data->>'com_email' IS NOT NULL
+                    AND applications.student_data->>'com_email' != ''
+
+                    UNION
+
+                    SELECT users.email
+                    FROM applications
+                    JOIN users ON applications.user_id = users.id
+                    WHERE applications.id = {application_id}
+                    AND users.email IS NOT NULL
+                    AND users.email != ''
+                ) emails
+                WHERE email IS NOT NULL
+            """,
         },
         {
             "name": "教授審核通知",
@@ -941,6 +960,14 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             "template_key": "professor_review_notification",
             "delay_hours": 0,
             "is_active": False,
+            "condition_query": """
+                SELECT user_profiles.advisor_email as email
+                FROM applications
+                JOIN user_profiles ON applications.user_id = user_profiles.user_id
+                WHERE applications.id = {application_id}
+                AND user_profiles.advisor_email IS NOT NULL
+                AND user_profiles.advisor_email != ''
+            """,
         },
         {
             "name": "學院審核通知",
