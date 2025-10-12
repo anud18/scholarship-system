@@ -18,6 +18,8 @@ loki.relabel "container_labels" {
 
   rule {
     source_labels = ["__meta_docker_container_name"]
+    regex         = "^/(.*)"
+    replacement   = "$1"
     target_label  = "container"
   }
 

@@ -18,6 +18,8 @@ loki.relabel "container_labels" {
 
   rule {
     source_labels = ["__meta_docker_container_name"]
+    regex         = "^/(.*)"
+    replacement   = "$1"
     target_label  = "container"
   }
 
@@ -47,14 +49,18 @@ loki.process "add_labels" {
     }
   }
 
-  // Parse JSON logs from Nginx
-  stage.json {
-    expressions = {
-      request_time     = "request_time",
-      upstream_time    = "upstream_response_time",
-      status           = "status",
-      request_method   = "request_method",
-      request_uri      = "request_uri",
+  // Parse JSON logs ONLY from Nginx containers
+  stage.match {
+    selector = "{container=~\".*nginx.*\"}"
+
+    stage.json {
+      expressions = {
+        request_time     = "request_time",
+        upstream_time    = "upstream_response_time",
+        status           = "status",
+        request_method   = "request_method",
+        request_uri      = "request_uri",
+      }
     }
   }
 
