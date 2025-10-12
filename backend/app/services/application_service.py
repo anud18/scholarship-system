@@ -955,6 +955,7 @@ class ApplicationService:
 
         # 發送自動化通知
         try:
+            logger.info(f"=== STARTING EMAIL AUTOMATION for application {application.id} ===")
             # Prepare application data for email automation
             application_data = {
                 "id": application.id,
@@ -967,11 +968,14 @@ class ApplicationService:
                 "scholarship_type_id": application.scholarship_type_id,
                 "submit_date": application.submitted_at.strftime("%Y-%m-%d") if application.submitted_at else "",
             }
+            logger.info(f"Application data prepared: {application_data}")
 
             # Trigger email automation for application submission
+            logger.info("Calling email_automation_service.trigger_application_submitted()...")
             await email_automation_service.trigger_application_submitted(self.db, application.id, application_data)
+            logger.info(f"=== EMAIL AUTOMATION COMPLETED for application {application.id} ===")
         except Exception as e:
-            logger.error(f"Failed to trigger automated submission emails: {e}")
+            logger.error(f"❌ Failed to trigger automated submission emails: {e}", exc_info=True)
 
         # 整合文件資訊到 submitted_form_data.documents
         integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}

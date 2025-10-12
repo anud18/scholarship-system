@@ -25,6 +25,7 @@ class EmailAutomationService:
     async def get_automation_rules(self, db: AsyncSession, trigger_event: str) -> List[EmailAutomationRule]:
         """Get active automation rules for a specific trigger event"""
         try:
+            logger.info(f"🔍 Fetching automation rules for trigger event: '{trigger_event}'")
             # Use ORM query with enum value
             stmt = (
                 select(EmailAutomationRule)
@@ -35,10 +36,14 @@ class EmailAutomationService:
             result = await db.execute(stmt)
             rules = result.scalars().all()
 
+            logger.info(f"✓ Found {len(rules)} active rules for '{trigger_event}'")
+            for rule in rules:
+                logger.info(f"  - Rule: {rule.name}, template: {rule.template_key}, delay: {rule.delay_hours}h")
+
             return list(rules)
 
         except Exception as e:
-            logger.error(f"Error fetching automation rules for trigger '{trigger_event}': {e}")
+            logger.error(f"❌ Error fetching automation rules for trigger '{trigger_event}': {e}")
             return []
 
     async def process_trigger(self, db: AsyncSession, trigger_event: str, context: Dict[str, Any]):
@@ -113,11 +118,15 @@ class EmailAutomationService:
     ) -> List[Dict[str, Any]]:
         """Get email recipients based on the rule's condition query"""
         if not rule.condition_query:
+            logger.warning(f"⚠️  No condition_query defined for rule {rule.template_key}")
             return []
 
         try:
             # Replace placeholders in the query with context values
             formatted_query = rule.condition_query.format(**context)
+            logger.info(f"📧 Executing recipient query for {rule.template_key}:")
+            logger.info(f"   Query: {formatted_query[:200]}...")
+
             result = await db.execute(text(formatted_query))
 
             recipients = []
@@ -126,10 +135,12 @@ class EmailAutomationService:
                 if row:
                     recipients.append({"email": row[0]})
 
+            logger.info(f"✓ Found {len(recipients)} recipients: {[r['email'] for r in recipients]}")
             return recipients
 
         except Exception as e:
-            logger.error(f"Failed to execute condition query for rule {rule.template_key}: {e}")
+            logger.error(f"❌ Failed to execute condition query for rule {rule.template_key}: {e}")
+            logger.error(f"   Context: {context}")
             return []
 
     async def _send_automated_email(
@@ -143,6 +154,11 @@ class EmailAutomationService:
     ):
         """Send an automated email immediately"""
         try:
+            logger.info("📨 Sending automated email:")
+            logger.info(f"   Template: {template_key}")
+            logger.info(f"   To: {recipient_email}")
+            logger.info(f"   Category: {email_category}")
+
             # Prepare default subject and body (fallbacks)
             default_subject = f"Automated notification - {template_key}"
             default_body = "This is an automated notification from the scholarship system."
@@ -156,6 +172,7 @@ class EmailAutomationService:
                 "template_key": template_key,
             }
 
+            logger.info("   Calling EmailService.send_with_template()...")
             await self.email_service.send_with_template(
                 db=db,
                 key=template_key,
@@ -166,10 +183,11 @@ class EmailAutomationService:
                 **metadata,
             )
 
-            logger.info(f"Sent automated email using template {template_key} to {recipient_email}")
+            logger.info(f"✓ Successfully sent automated email using template {template_key} to {recipient_email}")
 
         except Exception as e:
-            logger.error(f"Failed to send automated email: {e}")
+            logger.error(f"❌ Failed to send automated email: {e}")
+            logger.error(f"   Template: {template_key}, Recipient: {recipient_email}")
             raise
 
     async def _schedule_automated_email(
@@ -244,6 +262,11 @@ class EmailAutomationService:
         self, db: AsyncSession, application_id: int, application_data: Dict[str, Any]
     ):
         """Trigger emails when an application is submitted"""
+        logger.info("🚀 EMAIL AUTOMATION TRIGGERED: application_submitted")
+        logger.info(f"   Application ID: {application_id}")
+        logger.info(f"   Student: {application_data.get('student_name')} ({application_data.get('student_email')})")
+        logger.info(f"   Scholarship: {application_data.get('scholarship_type')}")
+
         context = {
             "application_id": application_id,
             "app_id": application_data.get("app_id", ""),
@@ -258,6 +281,7 @@ class EmailAutomationService:
         }
 
         await self.process_trigger(db, "application_submitted", context)
+        logger.info(f"✓ Email automation trigger completed for application {application_id}")
 
     async def trigger_professor_review_submitted(
         self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
