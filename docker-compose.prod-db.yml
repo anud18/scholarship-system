@@ -78,36 +78,7 @@ services:
           memory: 512M
           cpus: '0.25'
 
-  # Redis Cache for Database Layer (Optional)
-  redis:
-    image: redis:7-alpine
-    container_name: scholarship_redis_prod_db
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_prod_data:/data
-      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
-    networks:
-      - scholarship_prod_db_network
-    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.25'
+  # Note: Redis moved to AP-VM to maintain consistent architecture with staging
 
   # Database Backup Service
   postgres-backup:
@@ -141,88 +112,10 @@ services:
         max-file: "3"
 
   # =========================================================================
-  # MONITORING SERVICES
+  # MONITORING SERVICES - Moved to docker-compose.prod-db-monitoring.yml
   # =========================================================================
-
-  # Grafana Alloy - Unified telemetry collector
-  alloy:
-    image: grafana/alloy:latest
-    container_name: scholarship_alloy_prod_db
-    volumes:
-      - ./monitoring/config/alloy/prod-db-vm.alloy:/etc/alloy/config.alloy:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - scholarship_prod_db_network
-    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
-    restart: unless-stopped
-    depends_on:
-      - postgres
-      - minio
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
-
-  # Node Exporter - System metrics
-  node-exporter:
-    image: prom/node-exporter:latest
-    container_name: node_exporter_prod_db
-    command:
-      - '--path.rootfs=/host'
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-    volumes:
-      - /:/host:ro,rslave
-    expose:
-      - "9100"
-    networks:
-      - scholarship_prod_db_network
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
-
-  # PostgreSQL Exporter
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
-    container_name: postgres_exporter_prod
-    environment:
-      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-scholarship_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-scholarship_db}?sslmode=disable"
-    expose:
-      - "9187"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - scholarship_prod_db_network
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
-
-  # Redis Exporter
-  redis-exporter:
-    image: oliver006/redis_exporter:latest
-    container_name: redis_exporter_prod
-    environment:
-      REDIS_ADDR: "redis:6379"
-      REDIS_PASSWORD: "${REDIS_PASSWORD}"
-    expose:
-      - "9121"
-    networks:
-      - scholarship_prod_db_network
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "3"
+  # Run monitoring services separately with:
+  # docker-compose -f docker-compose.prod-db-monitoring.yml up -d
 
 volumes:
   postgres_prod_data:
@@ -249,12 +142,6 @@ volumes:
       type: none
       o: bind
       device: /opt/scholarship/minio/config
-  redis_prod_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /opt/scholarship/redis/data
 
 networks:
   scholarship_prod_db_network:

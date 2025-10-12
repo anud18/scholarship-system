@@ -6,6 +6,8 @@
 .env.development.local
 .env.test.local
 .env.production.local
+.env.staging-db-monitoring
+.env.prod-db-monitoring
 
 # Python
 __pycache__/

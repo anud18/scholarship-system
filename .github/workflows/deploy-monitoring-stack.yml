@@ -184,20 +184,50 @@ jobs:
           ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
             sudo mkdir -p /opt/scholarship/monitoring/config/alloy
             sudo chown -R $USER:$USER /opt/scholarship/monitoring
+            sudo chown -R $USER:$USER /opt/scholarship
             echo "✅ Directories created successfully"
           EOF
 
-      - name: Deploy Alloy to Staging DB-VM
+      - name: Create .env.staging-db-monitoring file on DB-VM
         run: |
-          # Copy Alloy config to DB-VM (using SSH port 8822)
+          echo "Creating environment file for DB-VM monitoring..."
+          MONITORING_URL="${{ secrets.STAGING_MONITORING_SERVER_URL }}"
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << EOF
+            echo "MONITORING_SERVER_URL=${MONITORING_URL}" > /opt/scholarship/.env.staging-db-monitoring
+            echo "Environment file created with MONITORING_SERVER_URL"
+          EOF
+
+      - name: Transfer docker-compose.staging-db-monitoring.yml to DB-VM
+        run: |
+          echo "Transferring monitoring docker-compose file..."
+          scp -P 8822 -i ~/.ssh/staging_db \
+            ./docker-compose.staging-db-monitoring.yml \
+            ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
+          echo "✅ docker-compose.staging-db-monitoring.yml transferred"
+
+      - name: Deploy monitoring stack to Staging DB-VM
+        run: |
+          echo "Deploying monitoring services on DB-VM..."
+
+          # Copy Alloy config to DB-VM
           scp -P 8822 -i ~/.ssh/staging_db \
             ./monitoring/config/alloy/staging-db-vm.alloy \
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/monitoring/config/alloy/
 
-          # Restart Alloy service on DB-VM (using SSH port 8822)
+          # Deploy monitoring stack using docker-compose
           ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
             cd /opt/scholarship
-            docker compose -f docker-compose.staging-db.yml restart alloy || true
+
+            # Stop existing monitoring services if any
+            docker compose -f docker-compose.staging-db-monitoring.yml down || true
+
+            # Start monitoring stack
+            docker compose -f docker-compose.staging-db-monitoring.yml up -d
+
+            echo "✅ Monitoring stack deployed successfully"
+
+            # Show running containers
+            docker ps --filter "name=staging_db" --format "table {{.Names}}\t{{.Status}}"
           EOF
 
       - name: Verify staging metrics

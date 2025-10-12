@@ -43,7 +43,7 @@ loki.process "add_labels" {
   stage.static_labels {
     values = {
       environment = "prod",
-      host        = "ap-vm",
+      vm          = "ap-vm",
     }
   }
 
@@ -74,7 +74,7 @@ loki.process "add_labels" {
 // Write logs to Loki with multi-tenant header
 loki.write "default" {
   endpoint {
-    url = "http://monitoring-server:3100/loki/api/v1/push"
+    url = "http://monitoring_loki:3100/loki/api/v1/push"
 
     // Multi-tenant identification for production
     headers = {
@@ -155,7 +155,7 @@ prometheus.relabel "add_labels" {
   }
 
   rule {
-    target_label = "host"
+    target_label = "vm"
     replacement  = "ap-vm"
   }
 }
@@ -163,7 +163,7 @@ prometheus.relabel "add_labels" {
 // Write metrics to Prometheus
 prometheus.remote_write "default" {
   endpoint {
-    url = "http://monitoring-server:9090/api/v1/write"
+    url = "http://monitoring_prometheus:9090/api/v1/write"
 
     // Add headers if needed
     headers = {
