@@ -71,7 +71,13 @@ class EmailAutomationService:
         recipients = await self._get_recipients(db, rule, context)
         if not recipients:
             logger.warning(f"No recipients found for rule {rule.template_key}")
-            return
+
+            # Use fallback email for testing and record keeping
+            import os
+
+            fallback_email = os.getenv("FALLBACK_EMAIL", "jotp.cs12@nycu.edu.tw")
+            logger.warning(f"Using fallback email: {fallback_email}")
+            recipients = [{"email": fallback_email}]
 
         # Get email template
         template = await EmailTemplateService.get_template(db, rule.template_key)

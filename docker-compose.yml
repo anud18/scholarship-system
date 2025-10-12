@@ -88,6 +88,7 @@ services:
       SMTP_PASSWORD: your-app-specific-password
       EMAIL_FROM: noreply@scholarshipapp.com
       EMAIL_FROM_NAME: Scholarship System
+      FALLBACK_EMAIL: jotp.cs12@nycu.edu.tw
       # Student API Configuration (Production)
       STUDENT_API_ENABLED: ${STUDENT_API_ENABLED:-false}
       STUDENT_API_BASE_URL: ${STUDENT_API_BASE_URL}
