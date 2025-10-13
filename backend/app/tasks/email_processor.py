@@ -15,15 +15,28 @@ Manual Usage:
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from app.db.session import AsyncSessionLocal
 from app.services.email_automation_service import email_automation_service
 
 logger = logging.getLogger(__name__)
 
+# Track when the module was initialized
+_module_start_time = datetime.now(timezone.utc)
+_MIN_STARTUP_DELAY_SECONDS = 5  # Minimum seconds to wait after startup before processing
+
 
 async def run_email_processor():
     """Process scheduled emails that are due"""
+    # Skip processing if we're still in the startup grace period
+    time_since_start = (datetime.now(timezone.utc) - _module_start_time).total_seconds()
+    if time_since_start < _MIN_STARTUP_DELAY_SECONDS:
+        logger.debug(
+            f"Skipping email processing - too soon after startup ({time_since_start:.1f}s < {_MIN_STARTUP_DELAY_SECONDS}s)"
+        )
+        return
+
     async with AsyncSessionLocal() as db:
         try:
             await email_automation_service.process_scheduled_emails(db)

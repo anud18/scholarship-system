@@ -460,6 +460,7 @@ async def init_scheduler():
         logger.error(f"Failed to add deadline checker job: {e}")
 
     # Add email processor job (runs every 15 seconds)
+    # Note: The job itself has startup delay protection (see email_processor.py)
     try:
         from app.tasks.email_processor import run_email_processor
 
@@ -471,7 +472,7 @@ async def init_scheduler():
             replace_existing=True,
             name="Email Processor",
         )
-        logger.info("Added email processor job (runs every 15 seconds)")
+        logger.info("Added email processor job (runs every 15 seconds with startup protection)")
     except Exception as e:
         logger.error(f"Failed to add email processor job: {e}")
 
