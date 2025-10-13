@@ -82,6 +82,14 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
             "description": "寄件者顯示名稱",
             "is_sensitive": False,
         },
+        {
+            "key": "email_processor_interval_seconds",
+            "value": "60",
+            "category": ConfigCategory.email,
+            "data_type": ConfigDataType.integer,
+            "description": "郵件處理器執行間隔（秒）- 控制自動發送郵件的檢查頻率",
+            "is_sensitive": False,
+        },
         # OCR/Gemini API Settings
         {
             "key": "ocr_service_enabled",

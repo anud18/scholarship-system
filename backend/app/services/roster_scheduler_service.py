@@ -459,20 +459,37 @@ async def init_scheduler():
     except Exception as e:
         logger.error(f"Failed to add deadline checker job: {e}")
 
-    # Add email processor job (runs every 15 seconds)
+    # Add email processor job with configurable interval
     # Note: The job itself has startup delay protection (see email_processor.py)
     try:
+        from app.services.config_management_service import ConfigurationService
         from app.tasks.email_processor import run_email_processor
+
+        # Get email processor interval from system settings (default 60 seconds)
+        interval_seconds = 60  # Default fallback
+        try:
+            async with get_db_session() as db:
+                config_service = ConfigurationService(db)
+                interval_config = await config_service.get_configuration("email_processor_interval_seconds")
+                if interval_config and interval_config.value:
+                    interval_seconds = int(interval_config.value)
+                    logger.info(f"Email processor interval configured to {interval_seconds} seconds")
+                else:
+                    logger.info(f"Using default email processor interval: {interval_seconds} seconds")
+        except Exception as e:
+            logger.warning(
+                f"Failed to read email processor interval from settings, using default {interval_seconds}s: {e}"
+            )
 
         roster_scheduler.scheduler.add_job(
             run_email_processor,
             "interval",
-            seconds=15,
+            seconds=interval_seconds,
             id="email_processor",
             replace_existing=True,
             name="Email Processor",
         )
-        logger.info("Added email processor job (runs every 15 seconds with startup protection)")
+        logger.info(f"Added email processor job (runs every {interval_seconds} seconds with startup protection)")
     except Exception as e:
         logger.error(f"Failed to add email processor job: {e}")
 
