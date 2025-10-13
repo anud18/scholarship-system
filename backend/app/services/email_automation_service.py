@@ -88,36 +88,34 @@ class EmailAutomationService:
         # Determine email category from template key
         email_category = self._get_email_category_from_template_key(rule.template_key)
 
-        # Send emails (immediate or scheduled based on delay)
+        # Schedule all emails (immediate or delayed) - async processing
         for recipient in recipients:
             try:
                 recipient_context = {**context, **recipient}
 
+                # Calculate scheduled time based on delay_hours
+                scheduled_for = datetime.now(timezone.utc)
                 if rule.delay_hours > 0:
-                    # Schedule email for later
-                    scheduled_for = datetime.now(timezone.utc) + timedelta(hours=rule.delay_hours)
-                    await self._schedule_automated_email(
-                        db,
-                        rule.template_key,
-                        recipient["email"],
-                        recipient_context,
-                        scheduled_for,
-                        email_category,
-                        context,
+                    scheduled_for += timedelta(hours=rule.delay_hours)
+                    logger.info(
+                        f"Scheduling email for {recipient['email']} at {scheduled_for} ({rule.delay_hours}h delay)"
                     )
                 else:
-                    # Send immediately
-                    await self._send_automated_email(
-                        db,
-                        rule.template_key,
-                        recipient["email"],
-                        recipient_context,
-                        email_category,
-                        context,
-                    )
+                    logger.info(f"Scheduling email for immediate processing: {recipient['email']}")
+
+                # Always use scheduled_emails table for async processing
+                await self._schedule_automated_email(
+                    db,
+                    rule.template_key,
+                    recipient["email"],
+                    recipient_context,
+                    scheduled_for,
+                    email_category,
+                    context,
+                )
 
             except Exception as e:
-                logger.error(f"Failed to send email to {recipient.get('email', 'unknown')}: {e}")
+                logger.error(f"Failed to schedule email to {recipient.get('email', 'unknown')}: {e}")
 
     async def _get_recipients(
         self, db: AsyncSession, rule: EmailAutomationRule, context: Dict[str, Any]
@@ -244,6 +242,9 @@ class EmailAutomationService:
             subject = template.subject_template.format(**context)
             body = template.body_template.format(**context)
 
+            # Check if React Email template exists
+            react_template_name = self._get_react_email_template_name(template_key)
+
             # Email metadata for logging
             metadata = {
                 "email_category": email_category,
@@ -252,6 +253,14 @@ class EmailAutomationService:
                 "template_key": template_key,
                 "created_by_user_id": 1,  # System user ID
             }
+
+            # If React Email template exists, store it for background processing
+            if react_template_name:
+                import json
+
+                metadata["react_template_name"] = react_template_name
+                metadata["react_context"] = json.dumps(context)  # Store context for React template rendering
+                logger.info(f"Storing React Email template metadata: {react_template_name}")
 
             scheduled_email = await self.email_service.schedule_email(
                 db=db,
@@ -492,7 +501,7 @@ class EmailAutomationService:
             result = await db.execute(query)
             scheduled_emails = result.fetchall()
 
-            logger.info(f"Processing {len(scheduled_emails)} scheduled emails")
+            logger.info(f"📬 Processing {len(scheduled_emails)} scheduled emails")
 
             for email_row in scheduled_emails:
                 try:
@@ -502,7 +511,7 @@ class EmailAutomationService:
                     cc_emails = json.loads(email_row.cc_emails) if email_row.cc_emails else None
                     bcc_emails = json.loads(email_row.bcc_emails) if email_row.bcc_emails else None
 
-                    # Send the email
+                    # Prepare metadata
                     metadata = {
                         "email_category": EmailCategory(email_row.email_category)
                         if email_row.email_category
@@ -513,15 +522,101 @@ class EmailAutomationService:
                         "template_key": email_row.template_key,
                     }
 
-                    await self.email_service.send_email(
-                        to=email_row.recipient_email,
-                        subject=email_row.subject,
-                        body=email_row.body,
-                        cc=cc_emails,
-                        bcc=bcc_emails,
-                        db=db,
-                        **metadata,
+                    # Check if React Email template exists for this template_key
+                    react_template_name = (
+                        self._get_react_email_template_name(email_row.template_key) if email_row.template_key else None
                     )
+
+                    if react_template_name and email_row.application_id:
+                        # Use React Email template with fresh application data
+                        logger.info(f"   Using React Email template '{react_template_name}' for email {email_row.id}")
+
+                        try:
+                            # Re-query application data for fresh context
+                            from sqlalchemy import select
+
+                            from app.models.application import Application
+
+                            app_query = select(Application).where(Application.id == email_row.application_id)
+                            app_result = await db.execute(app_query)
+                            application = app_result.scalar_one_or_none()
+
+                            if application:
+                                # Build context from application data
+                                student_data = application.student_data if application.student_data else {}
+                                context = {
+                                    "app_id": application.app_id,
+                                    "student_name": student_data.get("std_cname", ""),
+                                    "student_id": student_data.get("std_stdcode", ""),
+                                    "scholarship_type": application.main_scholarship_type or "",
+                                    "scholarship_name": application.main_scholarship_type or "",
+                                    "submit_date": (
+                                        application.submitted_at.strftime("%Y-%m-%d")
+                                        if application.submitted_at
+                                        else ""
+                                    ),
+                                    "submission_date": (
+                                        application.submitted_at.strftime("%Y-%m-%d")
+                                        if application.submitted_at
+                                        else ""
+                                    ),
+                                    "professor_name": application.professor.name if application.professor else "",
+                                    "system_url": "https://scholarship.nycu.edu.tw",
+                                }
+
+                                # Send with React template
+                                await self.email_service.send_with_react_template(
+                                    template_name=react_template_name,
+                                    to=email_row.recipient_email,
+                                    context=context,
+                                    subject=email_row.subject,
+                                    cc=cc_emails,
+                                    bcc=bcc_emails,
+                                    db=db,
+                                    **metadata,
+                                )
+                                logger.info(
+                                    f"✓ Sent React Email {email_row.id} to {email_row.recipient_email} using {react_template_name}"
+                                )
+                            else:
+                                # Application not found, fall back to plain text
+                                logger.warning(
+                                    f"Application {email_row.application_id} not found, falling back to plain text"
+                                )
+                                await self.email_service.send_email(
+                                    to=email_row.recipient_email,
+                                    subject=email_row.subject,
+                                    body=email_row.body,
+                                    cc=cc_emails,
+                                    bcc=bcc_emails,
+                                    db=db,
+                                    **metadata,
+                                )
+
+                        except Exception as react_error:
+                            logger.error(f"Failed to send React Email, falling back to plain text: {react_error}")
+                            # Fall back to plain text if React template fails
+                            await self.email_service.send_email(
+                                to=email_row.recipient_email,
+                                subject=email_row.subject,
+                                body=email_row.body,
+                                cc=cc_emails,
+                                bcc=bcc_emails,
+                                db=db,
+                                **metadata,
+                            )
+                    else:
+                        # No React template available, use plain text
+                        logger.info(f"   Sending plain text email {email_row.id} (no React template)")
+                        await self.email_service.send_email(
+                            to=email_row.recipient_email,
+                            subject=email_row.subject,
+                            body=email_row.body,
+                            cc=cc_emails,
+                            bcc=bcc_emails,
+                            db=db,
+                            **metadata,
+                        )
 
                     # Mark as sent
                     update_query = text(
@@ -532,8 +627,6 @@ class EmailAutomationService:
                     """
                     )
                     await db.execute(update_query, {"email_id": email_row.id})
-
-                    logger.info(f"Sent scheduled email {email_row.id} to {email_row.recipient_email}")
 
                 except Exception as e:
                     logger.error(f"Failed to send scheduled email {email_row.id}: {e}")
@@ -549,6 +642,7 @@ class EmailAutomationService:
                     await db.execute(fail_query, {"email_id": email_row.id, "error": str(e)})
 
             await db.commit()
+            logger.info(f"✓ Completed processing {len(scheduled_emails)} scheduled emails")
 
         except Exception as e:
             logger.error(f"Failed to process scheduled emails: {e}")

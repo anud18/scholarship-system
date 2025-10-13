@@ -459,6 +459,22 @@ async def init_scheduler():
     except Exception as e:
         logger.error(f"Failed to add deadline checker job: {e}")
 
+    # Add email processor job (runs every 15 seconds)
+    try:
+        from app.tasks.email_processor import run_email_processor
+
+        roster_scheduler.scheduler.add_job(
+            run_email_processor,
+            "interval",
+            seconds=15,
+            id="email_processor",
+            replace_existing=True,
+            name="Email Processor",
+        )
+        logger.info("Added email processor job (runs every 15 seconds)")
+    except Exception as e:
+        logger.error(f"Failed to add email processor job: {e}")
+
 
 async def shutdown_scheduler():
     """關閉排程器"""
