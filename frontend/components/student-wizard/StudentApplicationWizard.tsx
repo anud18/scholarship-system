@@ -102,6 +102,11 @@ export function StudentApplicationWizard({
     });
   }, [agreedToTerms, studentDataConfirmed, personalInfoCompleted]);
 
+  // Auto-scroll to top when step changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentStepIndex]);
+
   const goToStep = (stepIndex: number) => {
     if (stepIndex >= 0 && stepIndex < steps.length && steps[stepIndex].isAccessible) {
       setCurrentStepIndex(stepIndex);

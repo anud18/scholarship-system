@@ -235,7 +235,7 @@ class EmailManagementService:
         total_count = len((await db.execute(count_query)).scalars().all())
 
         # Apply pagination and ordering
-        query = query.order_by(asc(ScheduledEmail.scheduled_for)).offset(skip).limit(limit)
+        query = query.order_by(desc(ScheduledEmail.scheduled_for)).offset(skip).limit(limit)
 
         result = await db.execute(query)
         scheduled_emails = result.scalars().all()
