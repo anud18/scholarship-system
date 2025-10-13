@@ -48,7 +48,6 @@ import { getTranslation } from "@/lib/i18n";
 interface UserProfile {
   id: number;
   user_id: number;
-  bank_code?: string;
   account_number?: string;
   bank_document_photo_url?: string;
   advisor_name?: string;
@@ -219,7 +218,6 @@ export default function UserProfileManagement() {
 
   const validateBankData = () => {
     const bankData = {
-      bank_code: editingProfile.bank_code,
       account_number: editingProfile.account_number,
     };
 
@@ -279,7 +277,6 @@ export default function UserProfileManagement() {
         case "bank":
           endpoint = "/user-profiles/me/bank-info";
           const bankData = sanitizeBankInfo({
-            bank_code: editingProfile.bank_code,
             account_number: editingProfile.account_number,
           });
           data = {
@@ -853,67 +850,37 @@ export default function UserProfileManagement() {
                 </Alert>
               )}
 
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="bank_code">
-                    {t("profile_management.bank_code")}
-                  </Label>
-                  <Input
-                    id="bank_code"
-                    placeholder={t("profile_management.bank_code_placeholder")}
-                    value={editingProfile.bank_code || ""}
-                    onChange={e => {
-                      setEditingProfile({
-                        ...editingProfile,
-                        bank_code: e.target.value,
-                      });
-                      // Clear bank errors when user starts typing
-                      if (bankErrors.length > 0) {
-                        setBankErrors([]);
-                      }
-                    }}
-                    className={
-                      bankErrors.some(
-                        error =>
-                          error.toLowerCase().includes("bank") ||
-                          error.includes("銀行代碼")
-                      )
-                        ? "border-red-500"
-                        : ""
+              <div className="space-y-2">
+                <Label htmlFor="account_number">
+                  {t("profile_management.account_number")}
+                </Label>
+                <Input
+                  id="account_number"
+                  placeholder={t(
+                    "profile_management.account_number_placeholder"
+                  )}
+                  value={editingProfile.account_number || ""}
+                  onChange={e => {
+                    setEditingProfile({
+                      ...editingProfile,
+                      account_number: e.target.value,
+                    });
+                    // Clear bank errors when user starts typing
+                    if (bankErrors.length > 0) {
+                      setBankErrors([]);
                     }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="account_number">
-                    {t("profile_management.account_number")}
-                  </Label>
-                  <Input
-                    id="account_number"
-                    placeholder={t(
-                      "profile_management.account_number_placeholder"
-                    )}
-                    value={editingProfile.account_number || ""}
-                    onChange={e => {
-                      setEditingProfile({
-                        ...editingProfile,
-                        account_number: e.target.value,
-                      });
-                      // Clear bank errors when user starts typing
-                      if (bankErrors.length > 0) {
-                        setBankErrors([]);
-                      }
-                    }}
-                    className={
-                      bankErrors.some(
-                        error =>
-                          error.toLowerCase().includes("account") ||
-                          error.includes("帳戶號碼")
-                      )
-                        ? "border-red-500"
-                        : ""
-                    }
-                  />
-                </div>
+                  }}
+                  className={
+                    bankErrors.some(
+                      error =>
+                        error.toLowerCase().includes("account") ||
+                        error.includes("帳") ||
+                        error.includes("郵局")
+                    )
+                      ? "border-red-500"
+                      : ""
+                  }
+                />
               </div>
 
               {/* Bank Document Upload */}

@@ -14,9 +14,8 @@ from app.models.application import ApplicationStatus
 class StudentFinancialInfo(BaseModel):
     """Student financial information schema"""
 
-    bank_postal_account: Optional[str] = Field(None, description="銀行或郵局帳號")
-    bank_book_photo_url: Optional[str] = Field(None, description="銀行或郵局帳簿封面照片URL")
-    bank_name: Optional[str] = Field(None, description="銀行或郵局名稱")
+    bank_postal_account: Optional[str] = Field(None, description="郵局帳號")
+    bank_book_photo_url: Optional[str] = Field(None, description="郵局帳簿封面照片URL")
     account_holder_name: Optional[str] = Field(None, description="帳戶戶名")
 
 

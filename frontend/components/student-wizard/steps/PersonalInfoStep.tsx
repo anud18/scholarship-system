@@ -58,7 +58,6 @@ export function PersonalInfoStep({
   const [advisorName, setAdvisorName] = useState("");
   const [advisorEmail, setAdvisorEmail] = useState("");
   const [advisorNycuId, setAdvisorNycuId] = useState("");
-  const [bankCode, setBankCode] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [bankDocumentFiles, setBankDocumentFiles] = useState<File[]>([]);
   const [existingBankDocument, setExistingBankDocument] = useState<string | null>(null);
@@ -90,10 +89,8 @@ export function PersonalInfoStep({
       advisorId: "指導教授本校人事編號",
       advisorIdPlaceholder: "請輸入指導教授本校人事編號",
       bankInfo: "郵局帳號資訊",
-      bankCode: "銀行代碼",
-      bankCodePlaceholder: "例如：700（郵局代碼）",
-      accountNumber: "帳戶號碼",
-      accountNumberPlaceholder: "請輸入完整帳戶號碼",
+      accountNumber: "郵局帳號",
+      accountNumberPlaceholder: "請輸入完整郵局帳號",
       bankDocument: "存摺封面照片",
       uploadBankDocument: "上傳存摺封面",
       documentUploaded: "已上傳文件",
@@ -118,7 +115,7 @@ export function PersonalInfoStep({
       requiredFields: "必填欄位",
       optionalFields: "選填欄位",
       advisorInfoDesc: "請提供您的指導教授資訊",
-      bankInfoDesc: "請提供用於獎學金撥款的郵局帳號",
+      bankInfoDesc: "請提供用於獎學金撥款的郵局帳號資訊",
     },
     en: {
       title: "Fill Personal Information",
@@ -130,11 +127,9 @@ export function PersonalInfoStep({
       advisorEmailPlaceholder: "professor@nycu.edu.tw",
       advisorId: "Advisor ID",
       advisorIdPlaceholder: "Enter advisor's NYCU ID",
-      bankInfo: "Bank Account Information",
-      bankCode: "Bank Code",
-      bankCodePlaceholder: "e.g., 700 (Postal code)",
-      accountNumber: "Account Number",
-      accountNumberPlaceholder: "Enter complete account number",
+      bankInfo: "Post Office Account Information",
+      accountNumber: "Post Office Account Number",
+      accountNumberPlaceholder: "Enter complete post office account number",
       bankDocument: "Passbook Cover Photo",
       uploadBankDocument: "Upload Passbook Cover",
       documentUploaded: "Document Uploaded",
@@ -159,7 +154,7 @@ export function PersonalInfoStep({
       requiredFields: "Required Fields",
       optionalFields: "Optional Fields",
       advisorInfoDesc: "Please provide your advisor's information",
-      bankInfoDesc: "Please provide bank account for scholarship disbursement",
+      bankInfoDesc: "Please provide post office account for scholarship disbursement",
     },
   };
 
@@ -178,7 +173,6 @@ export function PersonalInfoStep({
         setAdvisorName(profile.advisor_name || "");
         setAdvisorEmail(profile.advisor_email || "");
         setAdvisorNycuId(profile.advisor_nycu_id || "");
-        setBankCode(profile.bank_code || "");
         setAccountNumber(profile.account_number || "");
         setExistingBankDocument(profile.bank_document_photo_url || null);
       }
@@ -203,7 +197,6 @@ export function PersonalInfoStep({
 
   const validateBankData = () => {
     const bankData = {
-      bank_code: bankCode,
       account_number: accountNumber,
     };
 
@@ -263,7 +256,6 @@ export function PersonalInfoStep({
 
       // Save bank info
       const bankData = sanitizeBankInfo({
-        bank_code: bankCode,
         account_number: accountNumber,
       });
 
@@ -360,13 +352,12 @@ export function PersonalInfoStep({
 
   // Calculate completion percentage
   const calculateCompletion = () => {
-    let total = 6; // advisor_name, advisor_email, advisor_nycu_id, bank_code, account_number, bank_document
+    let total = 5; // advisor_name, advisor_email, advisor_nycu_id, account_number, bank_document
     let completed = 0;
 
     if (advisorName) completed++;
     if (advisorEmail) completed++;
     if (advisorNycuId) completed++;
-    if (bankCode) completed++;
     if (accountNumber) completed++;
     if (existingBankDocument || bankDocumentFiles.length > 0) completed++;
 
@@ -516,40 +507,21 @@ export function PersonalInfoStep({
             </Alert>
           )}
 
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* Bank Code */}
-            <div className="space-y-2">
-              <Label htmlFor="bank_code">
-                {text.bankCode} <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="bank_code"
-                placeholder={text.bankCodePlaceholder}
-                value={bankCode}
-                onChange={(e) => {
-                  setBankCode(e.target.value);
-                  if (bankErrors.length > 0) setBankErrors([]);
-                }}
-                className={bankErrors.some(e => e.includes("銀行") || e.includes("bank")) ? "border-red-500" : ""}
-              />
-            </div>
-
-            {/* Account Number */}
-            <div className="space-y-2">
-              <Label htmlFor="account_number">
-                {text.accountNumber} <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="account_number"
-                placeholder={text.accountNumberPlaceholder}
-                value={accountNumber}
-                onChange={(e) => {
-                  setAccountNumber(e.target.value);
-                  if (bankErrors.length > 0) setBankErrors([]);
-                }}
-                className={bankErrors.some(e => e.includes("帳戶") || e.includes("account")) ? "border-red-500" : ""}
-              />
-            </div>
+          {/* Post Office Account Number */}
+          <div className="space-y-2">
+            <Label htmlFor="account_number">
+              {text.accountNumber} <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="account_number"
+              placeholder={text.accountNumberPlaceholder}
+              value={accountNumber}
+              onChange={(e) => {
+                setAccountNumber(e.target.value);
+                if (bankErrors.length > 0) setBankErrors([]);
+              }}
+              className={bankErrors.some(e => e.includes("帳") || e.includes("account")) ? "border-red-500" : ""}
+            />
           </div>
 
           {/* Bank Document Upload */}

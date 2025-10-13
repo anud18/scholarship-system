@@ -55,11 +55,8 @@ class BankVerificationService:
 
         # Common field mappings (adjust based on your form structure)
         field_mappings = {
-            "bank_name": ["bank_name", "銀行名稱"],
-            "bank_code": ["bank_code", "銀行代碼"],
-            "account_number": ["bank_account", "account_number", "帳戶號碼", "帳號"],
+            "account_number": ["bank_account", "account_number", "帳戶號碼", "帳號", "郵局帳號"],
             "account_holder": ["account_holder", "account_name", "戶名", "帳戶名稱"],
-            "branch_name": ["branch_name", "分行名稱", "分行"],
         }
 
         for standard_field, possible_keys in field_mappings.items():
@@ -145,13 +142,10 @@ class BankVerificationService:
             # Replace this with actual OCR when file reading is implemented
             ocr_result = {
                 "success": True,
-                "bank_name": "模擬銀行",
-                "bank_code": "004",
                 "account_number": "123456789012",
                 "account_holder": "測試用戶",
-                "branch_name": "台北分行",
                 "confidence": 0.95,
-                "note": "OCR extraction from passbook - implementation pending file reading",
+                "note": "OCR extraction from post office passbook - implementation pending file reading",
             }
 
         except OCRError as e:
@@ -170,11 +164,8 @@ class BankVerificationService:
         compared_fields = 0
 
         field_mappings = {
-            "bank_name": "銀行名稱",
-            "bank_code": "銀行代碼",
-            "account_number": "帳戶號碼",
+            "account_number": "郵局帳號",
             "account_holder": "戶名",
-            "branch_name": "分行名稱",
         }
 
         for field_key, field_name in field_mappings.items():
@@ -236,11 +227,11 @@ class BankVerificationService:
         recommendations = []
 
         if status == "verified":
-            recommendations.append("✅ 銀行資訊驗證通過，資料一致性良好")
+            recommendations.append("✅ 郵局帳號資訊驗證通過，資料一致性良好")
         elif status == "likely_verified":
-            recommendations.append("⚠️ 銀行資訊基本一致，建議人工核對細節")
+            recommendations.append("⚠️ 郵局帳號資訊基本一致，建議人工核對細節")
         elif status == "verification_failed":
-            recommendations.append("❌ 銀行資訊不一致，需要人工審核")
+            recommendations.append("❌ 郵局帳號資訊不一致，需要人工審核")
 
             # Add specific field recommendations
             for field_key, comparison in comparisons.items():

@@ -6868,13 +6868,8 @@ export interface components {
          */
         BankInfoUpdate: {
             /**
-             * Bank Code
-             * @description 銀行代碼
-             */
-            bank_code?: string | null;
-            /**
              * Account Number
-             * @description 帳戶號碼
+             * @description 郵局帳號
              */
             account_number?: string | null;
             /**
@@ -9128,19 +9123,14 @@ export interface components {
         StudentFinancialInfo: {
             /**
              * Bank Postal Account
-             * @description 銀行或郵局帳號
+             * @description 郵局帳號
              */
             bank_postal_account?: string | null;
             /**
              * Bank Book Photo Url
-             * @description 銀行或郵局帳簿封面照片URL
+             * @description 郵局帳簿封面照片URL
              */
             bank_book_photo_url?: string | null;
-            /**
-             * Bank Name
-             * @description 銀行或郵局名稱
-             */
-            bank_name?: string | null;
             /**
              * Account Holder Name
              * @description 帳戶戶名
@@ -9320,8 +9310,6 @@ export interface components {
          * @description User profile creation schema
          */
         UserProfileCreate: {
-            /** Bank Code */
-            bank_code?: string | null;
             /** Account Number */
             account_number?: string | null;
             /** Advisor Name */
@@ -9345,8 +9333,6 @@ export interface components {
          * @description User profile update schema
          */
         UserProfileUpdate: {
-            /** Bank Code */
-            bank_code?: string | null;
             /** Account Number */
             account_number?: string | null;
             /** Advisor Name */

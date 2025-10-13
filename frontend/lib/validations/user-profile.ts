@@ -14,7 +14,6 @@ export interface AdvisorInfo {
 }
 
 export interface BankInfo {
-  bank_code?: string;
   account_number?: string;
 }
 
@@ -72,20 +71,15 @@ export function validateAdvisorInfo(data: AdvisorInfo): ValidationResult {
 }
 
 /**
- * Validate bank information
+ * Validate post office account information
  * Aligns with backend BankInfoUpdate schema
  */
 export function validateBankInfo(data: BankInfo): ValidationResult {
   const errors: string[] = [];
 
-  // Validate bank code (optional, max 20 chars)
-  if (data.bank_code && data.bank_code.length > 20) {
-    errors.push("銀行代碼不能超過20個字符");
-  }
-
   // Validate account number (optional, max 50 chars)
   if (data.account_number && data.account_number.length > 50) {
-    errors.push("帳戶號碼不能超過50個字符");
+    errors.push("郵局帳號不能超過50個字符");
   }
 
   return { isValid: errors.length === 0, errors };
@@ -117,11 +111,10 @@ export function sanitizeAdvisorInfo(data: AdvisorInfo): AdvisorInfo {
 }
 
 /**
- * Sanitize bank data for API submission
+ * Sanitize post office account data for API submission
  */
 export function sanitizeBankInfo(data: BankInfo): BankInfo {
   return {
-    bank_code: data.bank_code?.trim() || undefined,
     account_number: data.account_number?.trim() || undefined,
   };
 }

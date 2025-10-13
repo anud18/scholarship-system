@@ -19,11 +19,10 @@ class UserProfile(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
 
-    # Bank account information (simplified)
-    bank_code = Column(String(20))
-    account_number = Column(String(50))
-    bank_document_photo_url = Column(String(500))  # URL or file path to bank document photo
-    bank_document_object_name = Column(String(500))  # MinIO object name for the bank document
+    # Post office account information (simplified)
+    account_number = Column(String(50))  # 郵局帳號
+    bank_document_photo_url = Column(String(500))  # URL or file path to account document photo
+    bank_document_object_name = Column(String(500))  # MinIO object name for the account document
 
     # Advisor information (simplified)
     advisor_name = Column(String(100))  # Professor name
@@ -54,8 +53,8 @@ class UserProfile(Base):
 
     @property
     def has_complete_bank_info(self) -> bool:
-        """Check if user has complete bank account information"""
-        return all([self.bank_code, self.account_number])
+        """Check if user has complete post office account information"""
+        return bool(self.account_number)
 
     @property
     def has_advisor_info(self) -> bool:
@@ -69,7 +68,7 @@ class UserProfile(Base):
         completed_sections = 0
         total_sections = 2
 
-        # Bank info section (both fields required)
+        # Post office account info section (account number required)
         if self.has_complete_bank_info:
             completed_sections += 1
 

@@ -176,10 +176,8 @@ class PaymentRosterItem(Base):
     student_name = Column(String(100), nullable=False)  # 姓名
     student_email = Column(String(255))  # Email
 
-    # 銀行資訊
-    bank_account = Column(String(20))  # 帳號
-    bank_code = Column(String(10))  # 銀行代碼
-    bank_name = Column(String(100))  # 銀行名稱
+    # 郵局帳號資訊
+    bank_account = Column(String(20))  # 郵局帳號
 
     # 地址資訊
     permanent_address = Column(String(500))  # 戶籍地址
@@ -231,12 +229,7 @@ class PaymentRosterItem(Base):
     @property
     def is_qualified(self) -> bool:
         """檢查是否合格"""
-        return (
-            self.verification_status == StudentVerificationStatus.VERIFIED
-            and self.is_included
-            and self.bank_account
-            and self.bank_code
-        )
+        return self.verification_status == StudentVerificationStatus.VERIFIED and self.is_included and self.bank_account
 
     def generate_excel_remarks(self, period_label: str, scholarship_code: str) -> str:
         """產生Excel說明欄內容"""
@@ -246,8 +239,8 @@ class PaymentRosterItem(Base):
             remarks.append(f"排除原因: {self.exclusion_reason}")
         elif self.verification_status != StudentVerificationStatus.VERIFIED:
             remarks.append(f"學籍狀態: {self.verification_status.value}")
-        elif not self.bank_account or not self.bank_code:
-            remarks.append("缺少銀行資訊")
+        elif not self.bank_account:
+            remarks.append("缺少郵局帳號資訊")
         else:
             remarks.append("合格")
 

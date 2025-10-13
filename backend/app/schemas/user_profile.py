@@ -10,10 +10,9 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class BankInfoBase(BaseModel):
-    """Base bank information schema"""
+    """Base post office account information schema"""
 
-    bank_code: Optional[str] = Field(None, max_length=20, description="銀行代碼")
-    account_number: Optional[str] = Field(None, max_length=50, description="帳戶號碼")
+    account_number: Optional[str] = Field(None, max_length=50, description="郵局帳號")
 
 
 class AdvisorInfoBase(BaseModel):
@@ -42,8 +41,7 @@ class AdvisorInfoBase(BaseModel):
 class UserProfileCreate(BaseModel):
     """User profile creation schema"""
 
-    # Bank information
-    bank_code: Optional[str] = None
+    # Post office account information
     account_number: Optional[str] = None
 
     # Advisor information
@@ -77,8 +75,7 @@ class UserProfileCreate(BaseModel):
 class UserProfileUpdate(BaseModel):
     """User profile update schema"""
 
-    # Bank information
-    bank_code: Optional[str] = Field(None, max_length=20)
+    # Post office account information
     account_number: Optional[str] = Field(None, max_length=50)
 
     # Advisor information
@@ -115,10 +112,9 @@ class UserProfileResponse(BaseModel):
     id: int
     user_id: int
 
-    # Bank information
-    bank_code: Optional[str] = None
+    # Post office account information
     account_number: Optional[str] = None
-    bank_document_photo_url: Optional[str] = None  # Bank document photo
+    bank_document_photo_url: Optional[str] = None  # Post office account document photo
 
     # Advisor information
     advisor_name: Optional[str] = None
