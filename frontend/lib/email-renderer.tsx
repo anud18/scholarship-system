@@ -95,7 +95,7 @@ export async function renderEmailTemplate(
  */
 export function emailToPlainText(html: string): string {
   // Remove script/style blocks
-  let text = html.replace(/<(script|style)[^>]*>.*?<\/\1>/gis, '');
+  let text = html.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '');
 
   // Strip HTML tags
   text = text.replace(/<[^>]+>/g, ' ');

@@ -287,5 +287,66 @@ export function createEmailManagementApi() {
       });
       return toApiResponse(response);
     },
+
+    /**
+     * Get all React Email templates
+     * NOTE: Using base client until OpenAPI schema is regenerated
+     */
+    getReactEmailTemplates: async (): Promise<ApiResponse<any[]>> => {
+      const { ApiClient } = await import('../client');
+      const client = new ApiClient();
+      return client.request('/email-management/react-email-templates', {
+        method: 'GET',
+      });
+    },
+
+    /**
+     * Get specific React Email template
+     * NOTE: Using base client until OpenAPI schema is regenerated
+     */
+    getReactEmailTemplate: async (templateName: string): Promise<ApiResponse<any>> => {
+      const { ApiClient } = await import('../client');
+      const client = new ApiClient();
+      return client.request(`/email-management/react-email-templates/${templateName}`, {
+        method: 'GET',
+      });
+    },
+
+    /**
+     * Get React Email template source code
+     * NOTE: Using base client until OpenAPI schema is regenerated
+     */
+    getReactEmailTemplateSource: async (templateName: string): Promise<ApiResponse<any>> => {
+      const { ApiClient } = await import('../client');
+      const client = new ApiClient();
+      return client.request(`/email-management/react-email-templates/${templateName}/source`, {
+        method: 'GET',
+      });
+    },
+
+    /**
+     * Get all email templates (database templates)
+     * NOTE: Using base client until OpenAPI schema is regenerated
+     */
+    getEmailTemplates: async (): Promise<ApiResponse<any[]>> => {
+      const { ApiClient } = await import('../client');
+      const client = new ApiClient();
+      return client.request('/email-management/templates', {
+        method: 'GET',
+      });
+    },
+
+    /**
+     * Update email template (database template)
+     * NOTE: Using base client until OpenAPI schema is regenerated
+     */
+    updateEmailTemplate: async (templateId: number, data: any): Promise<ApiResponse<any>> => {
+      const { ApiClient } = await import('../client');
+      const client = new ApiClient();
+      return client.request(`/email-management/templates/${templateId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
   };
 }

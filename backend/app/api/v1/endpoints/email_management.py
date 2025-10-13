@@ -3,6 +3,7 @@ Email management API endpoints for viewing email history and scheduled emails
 """
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -30,6 +31,7 @@ from app.schemas.email_management import (
 from app.services.config_management_service import ConfigurationService
 from app.services.email_management_service import EmailManagementService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 email_service = EmailManagementService()
 
@@ -770,3 +772,105 @@ async def get_email_templates(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"獲取郵件模板失敗: {str(e)}")
+
+
+# ========== React Email Template Endpoints ==========
+
+
+@router.get("/react-email-templates")
+async def get_react_email_templates(
+    *,
+    current_user: User = Depends(require_admin),
+):
+    """
+    獲取所有 React Email 模板列表
+
+    Returns:
+        模板列表，包含模板名稱、描述、變數等元數據
+    """
+    try:
+        from app.services.react_email_template_service import ReactEmailTemplateService
+
+        templates = ReactEmailTemplateService.scan_templates()
+
+        return ApiResponse(
+            success=True,
+            message=f"成功獲取 {len(templates)} 個 React Email 模板",
+            data=templates,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to scan React Email templates: {e}")
+        raise HTTPException(status_code=500, detail=f"獲取 React Email 模板失敗: {str(e)}")
+
+
+@router.get("/react-email-templates/{template_name}")
+async def get_react_email_template(
+    *,
+    template_name: str,
+    current_user: User = Depends(require_admin),
+):
+    """
+    獲取特定 React Email 模板的詳細資訊
+
+    Args:
+        template_name: 模板名稱 (e.g., "application-submitted")
+
+    Returns:
+        模板詳細資訊
+    """
+    try:
+        from app.services.react_email_template_service import ReactEmailTemplateService
+
+        template = ReactEmailTemplateService.get_template(template_name)
+
+        if not template:
+            raise HTTPException(status_code=404, detail=f"模板 '{template_name}' 不存在")
+
+        return ApiResponse(
+            success=True,
+            message="成功獲取模板資訊",
+            data=template,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get React Email template {template_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"獲取模板失敗: {str(e)}")
+
+
+@router.get("/react-email-templates/{template_name}/source")
+async def get_react_email_template_source(
+    *,
+    template_name: str,
+    current_user: User = Depends(require_admin),
+):
+    """
+    獲取 React Email 模板的源碼（僅供查看，不可編輯）
+
+    Args:
+        template_name: 模板名稱 (e.g., "application-submitted")
+
+    Returns:
+        模板源碼 (TypeScript/React)
+    """
+    try:
+        from app.services.react_email_template_service import ReactEmailTemplateService
+
+        source = ReactEmailTemplateService.get_template_source(template_name)
+
+        if source is None:
+            raise HTTPException(status_code=404, detail=f"模板 '{template_name}' 不存在")
+
+        return ApiResponse(
+            success=True,
+            message="成功獲取模板源碼",
+            data={"source": source, "language": "typescript", "read_only": True},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get React Email template source {template_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"獲取模板源碼失敗: {str(e)}")
