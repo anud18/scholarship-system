@@ -5,27 +5,27 @@ import { NYCUButton } from './_components/NYCUButton';
 import { InfoBox } from './_components/InfoBox';
 
 interface DeadlineReminderProps {
-  studentName?: string;
-  scholarshipType?: string;
+  student_name?: string;
+  scholarship_type?: string;
   deadline?: string;
-  daysRemaining?: string;
-  systemUrl?: string;
+  days_remaining?: string;
+  system_url?: string;
 }
 
 export default function DeadlineReminder({
-  studentName = '{{studentName}}',
-  scholarshipType = '{{scholarshipType}}',
+  student_name = '{{student_name}}',
+  scholarship_type = '{{scholarship_type}}',
   deadline = '{{deadline}}',
-  daysRemaining = '3',
-  systemUrl = '{{systemUrl}}',
+  days_remaining = '3',
+  system_url = '{{system_url}}',
 }: DeadlineReminderProps) {
   return (
-    <BaseTemplate previewText={`申請截止提醒 - ${scholarshipType}`}>
+    <BaseTemplate previewText={`申請截止提醒 - ${scholarship_type}`}>
       <Heading className="text-2xl font-bold text-gray-900 mb-4 mt-0">
         ⏰ 申請截止提醒
       </Heading>
 
-      <Text className="text-gray-700 mb-4">親愛的 {studentName} 同學您好：</Text>
+      <Text className="text-gray-700 mb-4">親愛的 {student_name} 同學您好：</Text>
 
       <div
         className="bg-red-50 p-6 rounded-md mb-6"
@@ -43,13 +43,13 @@ export default function DeadlineReminder({
           您的獎學金申請草稿尚未送出
         </Text>
         <Text className="text-center font-bold text-red-900 text-2xl m-0">
-          剩餘 {daysRemaining} 天
+          剩餘 {days_remaining} 天
         </Text>
       </div>
 
       <InfoBox>
         <Text className="font-semibold text-gray-900 m-0 mb-2">
-          🎓 獎學金類型：{scholarshipType}
+          🎓 獎學金類型：{scholarship_type}
         </Text>
         <Text className="text-gray-700 m-0">📅 申請截止日期：{deadline}</Text>
       </InfoBox>
@@ -82,7 +82,7 @@ export default function DeadlineReminder({
       </div>
 
       <div className="mb-6">
-        <NYCUButton href={`${systemUrl}/applications/draft`} text="立即完成申請" />
+        <NYCUButton href={`${system_url}/applications/draft`} text="立即完成申請" />
       </div>
 
       <Hr className="border-gray-300 my-6" />

@@ -42,7 +42,9 @@ services:
       PORTAL_JWT_SERVER_URL: "https://portal.test.nycu.edu.tw/jwt/portal"
       PORTAL_TEST_MODE: "false"
       PORTAL_SSO_TIMEOUT: "10.0"
-      FRONTEND_URL: ${FRONTEND_URL:-https://ss.test.nycu.edu.tw}
+      # Frontend URLs
+      FRONTEND_URL: ${FRONTEND_URL:-https://ss.test.nycu.edu.tw}  # External URL (for user redirects)
+      FRONTEND_INTERNAL_URL: http://frontend:3000  # Internal Docker network URL (for API calls)
       # Security Configuration
       BYPASS_TIME_RESTRICTIONS: "false"
       # Student API Configuration (Real NYCU API)

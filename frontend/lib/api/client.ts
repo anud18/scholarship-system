@@ -180,10 +180,28 @@ export class ApiClient {
         if (response.status === 401) {
           console.error("Authentication failed - clearing token");
           this.clearToken();
+
+          // Emit session expired event for global handling
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("session-expired", {
+                detail: { type: "token_expired", status: 401, endpoint }
+              })
+            );
+          }
         } else if (response.status === 403) {
           console.error(
             "Authorization denied - user may not have proper permissions"
           );
+
+          // Emit unauthorized event
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("session-expired", {
+                detail: { type: "forbidden", status: 403, endpoint }
+              })
+            );
+          }
         } else if (response.status === 429) {
           console.warn("Rate limit exceeded - request throttled");
         }

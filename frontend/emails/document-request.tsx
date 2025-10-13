@@ -5,33 +5,33 @@ import { NYCUButton } from './_components/NYCUButton';
 import { InfoBox } from './_components/InfoBox';
 
 interface DocumentRequestProps {
-  studentName?: string;
-  appId?: string;
-  scholarshipType?: string;
-  requestedDocuments?: string;
+  student_name?: string;
+  app_id?: string;
+  scholarship_type?: string;
+  requested_documents?: string;
   reason?: string;
   notes?: string;
-  requestedBy?: string;
-  systemUrl?: string;
+  requested_by?: string;
+  system_url?: string;
 }
 
 export default function DocumentRequest({
-  studentName = '{{studentName}}',
-  appId = '{{appId}}',
-  scholarshipType = '{{scholarshipType}}',
-  requestedDocuments = '{{requestedDocuments}}',
+  student_name = '{{student_name}}',
+  app_id = '{{app_id}}',
+  scholarship_type = '{{scholarship_type}}',
+  requested_documents = '{{requested_documents}}',
   reason = '{{reason}}',
   notes = '{{notes}}',
-  requestedBy = '{{requestedBy}}',
-  systemUrl = '{{systemUrl}}',
+  requested_by = '{{requested_by}}',
+  system_url = '{{system_url}}',
 }: DocumentRequestProps) {
   return (
-    <BaseTemplate previewText={`文件補件要求 - ${scholarshipType}`}>
+    <BaseTemplate previewText={`文件補件要求 - ${scholarship_type}`}>
       <Heading className="text-2xl font-bold text-gray-900 mb-4 mt-0">
         文件補件要求 📎
       </Heading>
 
-      <Text className="text-gray-700 mb-4">親愛的 {studentName} 同學您好：</Text>
+      <Text className="text-gray-700 mb-4">親愛的 {student_name} 同學您好：</Text>
 
       <Text className="text-gray-700 mb-4">
         您的獎學金申請需要補充下列文件，以便繼續審核作業。
@@ -39,10 +39,10 @@ export default function DocumentRequest({
 
       <InfoBox>
         <Text className="font-semibold text-gray-900 m-0 mb-2">
-          📋 申請編號：{appId}
+          📋 申請編號：{app_id}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          🎓 獎學金類型：{scholarshipType}
+          🎓 獎學金類型：{scholarship_type}
         </Text>
       </InfoBox>
 
@@ -59,7 +59,7 @@ export default function DocumentRequest({
           📌 需補文件
         </Text>
         <Text className="text-sm text-red-700 m-0 font-medium">
-          {requestedDocuments}
+          {requested_documents}
         </Text>
       </div>
 
@@ -99,7 +99,7 @@ export default function DocumentRequest({
 
       <div className="mb-6">
         <NYCUButton
-          href={`${systemUrl}/applications/${appId}/documents`}
+          href={`${system_url}/applications/${app_id}/documents`}
           text="前往上傳文件"
         />
       </div>
@@ -116,7 +116,7 @@ export default function DocumentRequest({
         • 單一檔案大小不超過 10MB
         <br />
         <br />
-        審核人員：{requestedBy}
+        審核人員：{requested_by}
         <br />
         如有任何問題，歡迎隨時與我們聯繫。
       </Text>

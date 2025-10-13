@@ -325,10 +325,11 @@ export enum NotificationPriority {
 }
 
 export enum EmailStatus {
+  PENDING = "pending",
   SENT = "sent",
+  CANCELLED = "cancelled",
   FAILED = "failed",
   BOUNCED = "bounced",
-  PENDING = "pending",
 }
 
 export enum EmailCategory {
@@ -485,6 +486,48 @@ export const getStudentVerificationStatusLabel = (
     },
   };
   return labels[locale][status];
+};
+
+// Email Status Label Functions
+export const getEmailStatusLabel = (
+  status: EmailStatus,
+  locale: "zh" | "en" = "zh"
+): string => {
+  const labels = {
+    zh: {
+      [EmailStatus.PENDING]: "待發送",
+      [EmailStatus.SENT]: "已發送",
+      [EmailStatus.CANCELLED]: "已取消",
+      [EmailStatus.FAILED]: "發送失敗",
+      [EmailStatus.BOUNCED]: "退信",
+    },
+    en: {
+      [EmailStatus.PENDING]: "Pending",
+      [EmailStatus.SENT]: "Sent",
+      [EmailStatus.CANCELLED]: "Cancelled",
+      [EmailStatus.FAILED]: "Failed",
+      [EmailStatus.BOUNCED]: "Bounced",
+    },
+  };
+  return labels[locale][status];
+};
+
+export const getEmailStatusVariant = (
+  status: EmailStatus
+): "default" | "secondary" | "destructive" | "outline" => {
+  switch (status) {
+    case EmailStatus.PENDING:
+      return "outline";
+    case EmailStatus.SENT:
+      return "default";
+    case EmailStatus.CANCELLED:
+      return "secondary";
+    case EmailStatus.FAILED:
+    case EmailStatus.BOUNCED:
+      return "destructive";
+    default:
+      return "outline";
+  }
 };
 
 export const getRosterAuditActionLabel = (

@@ -95,6 +95,9 @@ services:
       STUDENT_API_ENCODE_TYPE: "UTF-8"
       # Portal SSO - disabled in dev
       PORTAL_SSO_ENABLED: "false"
+      # Frontend URLs
+      FRONTEND_URL: http://localhost:3000  # External URL (for user redirects)
+      FRONTEND_INTERNAL_URL: http://frontend:3000  # Internal Docker network URL (for API calls)
     volumes:
       - ./backend:/app
     depends_on:

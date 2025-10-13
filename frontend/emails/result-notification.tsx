@@ -5,35 +5,35 @@ import { NYCUButton } from './_components/NYCUButton';
 import { InfoBox } from './_components/InfoBox';
 
 interface ResultNotificationProps {
-  studentName?: string;
-  appId?: string;
-  scholarshipType?: string;
-  resultStatus?: string;
-  approvedAmount?: string;
-  resultMessage?: string;
-  nextSteps?: string;
-  systemUrl?: string;
+  student_name?: string;
+  app_id?: string;
+  scholarship_type?: string;
+  result_status?: string;
+  approved_amount?: string;
+  result_message?: string;
+  next_steps?: string;
+  system_url?: string;
 }
 
 export default function ResultNotification({
-  studentName = '{{studentName}}',
-  appId = '{{appId}}',
-  scholarshipType = '{{scholarshipType}}',
-  resultStatus = '{{resultStatus}}',
-  approvedAmount = '{{approvedAmount}}',
-  resultMessage = '{{resultMessage}}',
-  nextSteps = '{{nextSteps}}',
-  systemUrl = '{{systemUrl}}',
+  student_name = '{{student_name}}',
+  app_id = '{{app_id}}',
+  scholarship_type = '{{scholarship_type}}',
+  result_status = '{{result_status}}',
+  approved_amount = '{{approved_amount}}',
+  result_message = '{{result_message}}',
+  next_steps = '{{next_steps}}',
+  system_url = '{{system_url}}',
 }: ResultNotificationProps) {
-  const isApproved = resultStatus.includes('核准') || resultStatus.includes('通過');
+  const isApproved = result_status.includes('核准') || result_status.includes('通過');
 
   return (
-    <BaseTemplate previewText={`獎學金審核結果通知 - ${scholarshipType}`}>
+    <BaseTemplate previewText={`獎學金審核結果通知 - ${scholarship_type}`}>
       <Heading className="text-2xl font-bold text-gray-900 mb-4 mt-0">
         獎學金審核結果通知
       </Heading>
 
-      <Text className="text-gray-700 mb-4">親愛的 {studentName} 同學您好：</Text>
+      <Text className="text-gray-700 mb-4">親愛的 {student_name} 同學您好：</Text>
 
       <Text className="text-gray-700 mb-4">
         您的獎學金申請審核已完成，結果如下：
@@ -41,10 +41,10 @@ export default function ResultNotification({
 
       <InfoBox>
         <Text className="font-semibold text-gray-900 m-0 mb-2">
-          📋 申請編號：{appId}
+          📋 申請編號：{app_id}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          🎓 獎學金類型：{scholarshipType}
+          🎓 獎學金類型：{scholarship_type}
         </Text>
       </InfoBox>
 
@@ -61,16 +61,16 @@ export default function ResultNotification({
           {isApproved ? '🎉 恭喜您！' : '審核結果'}
         </Text>
         <Text className="text-center font-semibold text-2xl m-0 mb-2" style={{ color: isApproved ? '#15803d' : '#4b5563' }}>
-          {resultStatus}
+          {result_status}
         </Text>
-        {isApproved && approvedAmount && approvedAmount !== '{{approvedAmount}}' && (
+        {isApproved && approved_amount && approved_amount !== '{{approved_amount}}' && (
           <Text className="text-center font-bold text-3xl m-0" style={{ color: '#15803d' }}>
-            {approvedAmount}
+            {approved_amount}
           </Text>
         )}
       </div>
 
-      {resultMessage && resultMessage !== '{{resultMessage}}' && (
+      {result_message && result_message !== '{{result_message}}' && (
         <div
           className="bg-blue-50 p-4 rounded-md mb-6"
           style={{
@@ -82,11 +82,11 @@ export default function ResultNotification({
           <Text className="text-sm font-semibold text-blue-800 m-0 mb-2">
             📝 審核意見
           </Text>
-          <Text className="text-sm text-blue-700 m-0">{resultMessage}</Text>
+          <Text className="text-sm text-blue-700 m-0">{result_message}</Text>
         </div>
       )}
 
-      {nextSteps && nextSteps !== '{{nextSteps}}' && (
+      {next_steps && next_steps !== '{{next_steps}}' && (
         <div
           className="bg-amber-50 p-4 rounded-md mb-6"
           style={{
@@ -98,12 +98,12 @@ export default function ResultNotification({
           <Text className="text-sm font-semibold text-amber-800 m-0 mb-2">
             📌 後續事項
           </Text>
-          <Text className="text-sm text-amber-700 m-0">{nextSteps}</Text>
+          <Text className="text-sm text-amber-700 m-0">{next_steps}</Text>
         </div>
       )}
 
       <div className="mb-6">
-        <NYCUButton href={`${systemUrl}/applications/${appId}`} text="查看詳細結果" />
+        <NYCUButton href={`${system_url}/applications/${app_id}`} text="查看詳細結果" />
       </div>
 
       <Hr className="border-gray-300 my-6" />

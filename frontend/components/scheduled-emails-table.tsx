@@ -41,6 +41,11 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import apiClient from "@/lib/api";
+import {
+  EmailStatus,
+  getEmailStatusLabel,
+  getEmailStatusVariant,
+} from "@/lib/enums";
 
 interface ScheduledEmailsTableProps {
   className?: string;
@@ -177,33 +182,6 @@ export function ScheduledEmailsTable({
   useEffect(() => {
     loadScheduledEmails();
   }, [pagination.skip, filters]);
-
-  const getStatusLabel = (status: string) => {
-    const statusLabels: Record<string, string> = {
-      PENDING: "待發送",
-      SENT: "已發送",
-      CANCELLED: "已取消",
-      FAILED: "發送失敗",
-    };
-    return statusLabels[status] || status;
-  };
-
-  const getStatusVariant = (
-    status: string
-  ): "default" | "secondary" | "destructive" | "outline" => {
-    switch (status) {
-      case "PENDING":
-        return "outline";
-      case "SENT":
-        return "default";
-      case "CANCELLED":
-        return "secondary";
-      case "FAILED":
-        return "destructive";
-      default:
-        return "outline";
-    }
-  };
 
   const getPriorityLabel = (priority: number) => {
     if (priority <= 3) return "高";
@@ -345,10 +323,10 @@ export function ScheduledEmailsTable({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部</SelectItem>
-                  <SelectItem value="PENDING">待發送</SelectItem>
-                  <SelectItem value="SENT">已發送</SelectItem>
-                  <SelectItem value="CANCELLED">已取消</SelectItem>
-                  <SelectItem value="FAILED">發送失敗</SelectItem>
+                  <SelectItem value={EmailStatus.PENDING}>待發送</SelectItem>
+                  <SelectItem value={EmailStatus.SENT}>已發送</SelectItem>
+                  <SelectItem value={EmailStatus.CANCELLED}>已取消</SelectItem>
+                  <SelectItem value={EmailStatus.FAILED}>發送失敗</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -473,8 +451,8 @@ export function ScheduledEmailsTable({
                         {email.subject}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getStatusVariant(email.status)}>
-                          {getStatusLabel(email.status)}
+                        <Badge variant={getEmailStatusVariant(email.status as EmailStatus)}>
+                          {getEmailStatusLabel(email.status as EmailStatus)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -586,11 +564,11 @@ export function ScheduledEmailsTable({
                                     </Label>
                                     <div>
                                       <Badge
-                                        variant={getStatusVariant(
-                                          selectedEmail.status
+                                        variant={getEmailStatusVariant(
+                                          selectedEmail.status as EmailStatus
                                         )}
                                       >
-                                        {getStatusLabel(selectedEmail.status)}
+                                        {getEmailStatusLabel(selectedEmail.status as EmailStatus)}
                                       </Badge>
                                     </div>
                                   </div>
@@ -655,7 +633,7 @@ export function ScheduledEmailsTable({
                                       主旨
                                     </Label>
                                     {currentUserRole === "super_admin" &&
-                                      selectedEmail.status === "PENDING" &&
+                                      selectedEmail.status === EmailStatus.PENDING &&
                                       !isEditMode && (
                                         <Button
                                           size="sm"
@@ -736,7 +714,7 @@ export function ScheduledEmailsTable({
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          {email.status === "PENDING" &&
+                          {email.status === EmailStatus.PENDING &&
                             email.requires_approval &&
                             !email.approved_by_user_id &&
                             currentUserRole === "super_admin" && (
@@ -750,7 +728,7 @@ export function ScheduledEmailsTable({
                                 審核通過
                               </Button>
                             )}
-                          {email.status === "PENDING" && (
+                          {email.status === EmailStatus.PENDING && (
                             <Button
                               size="sm"
                               variant="destructive"

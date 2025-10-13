@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.email_management import EmailAutomationRule, EmailCategory, TriggerEvent
 from app.services.email_service import EmailService
+from app.services.frontend_email_renderer import render_email_via_frontend
 from app.services.system_setting_service import EmailTemplateService
 
 logger = logging.getLogger(__name__)
@@ -254,13 +255,35 @@ class EmailAutomationService:
                 "created_by_user_id": 1,  # System user ID
             }
 
-            # If React Email template exists, store it for background processing
+            # Render HTML via frontend if React Email template exists
+            html_content = None
             if react_template_name:
-                import json
+                try:
+                    # Get frontend INTERNAL URL for API calls (Docker network)
+                    from app.core.config import settings
 
-                metadata["react_template_name"] = react_template_name
-                metadata["react_context"] = json.dumps(context)  # Store context for React template rendering
-                logger.info(f"Storing React Email template metadata: {react_template_name}")
+                    frontend_url = settings.frontend_internal_url
+
+                    logger.info(f"Rendering email via frontend: {react_template_name}")
+                    logger.debug(f"Frontend internal URL: {frontend_url}")
+                    logger.debug(f"Context keys: {list(context.keys())}")
+
+                    # Call frontend API to render email
+                    html_content = await render_email_via_frontend(
+                        frontend_url=frontend_url, template_name=react_template_name, context=context
+                    )
+
+                    if html_content:
+                        logger.info(
+                            f"✓ Successfully rendered HTML for template '{react_template_name}' ({len(html_content)} chars)"
+                        )
+                    else:
+                        logger.warning(f"⚠️  Frontend rendering returned no HTML for template '{react_template_name}'")
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to render email via frontend: {e}")
+                    # Continue without HTML - will fall back to plain text
+                    html_content = None
 
             scheduled_email = await self.email_service.schedule_email(
                 db=db,
@@ -272,6 +295,7 @@ class EmailAutomationService:
                 bcc=template.bcc.split(",") if template.bcc else None,
                 requires_approval=False,  # Automated emails don't need approval
                 priority=3,  # Medium priority for automated emails
+                html_content=html_content,  # Pass rendered HTML
                 **metadata,
             )
 

@@ -5,29 +5,29 @@ import { NYCUButton } from './_components/NYCUButton';
 import { InfoBox } from './_components/InfoBox';
 
 interface RosterNotificationProps {
-  studentName?: string;
-  scholarshipType?: string;
-  academicYear?: string;
+  student_name?: string;
+  scholarship_type?: string;
+  academic_year?: string;
   semester?: string;
-  approvedAmount?: string;
-  rosterNumber?: string;
-  followUpItems?: string;
-  systemUrl?: string;
+  approved_amount?: string;
+  roster_number?: string;
+  follow_up_items?: string;
+  system_url?: string;
 }
 
 export default function RosterNotification({
-  studentName = '{{studentName}}',
-  scholarshipType = '{{scholarshipType}}',
-  academicYear = '{{academicYear}}',
+  student_name = '{{student_name}}',
+  scholarship_type = '{{scholarship_type}}',
+  academic_year = '{{academic_year}}',
   semester = '{{semester}}',
-  approvedAmount = '{{approvedAmount}}',
-  rosterNumber = '{{rosterNumber}}',
-  followUpItems = '{{followUpItems}}',
-  systemUrl = '{{systemUrl}}',
+  approved_amount = '{{approved_amount}}',
+  roster_number = '{{roster_number}}',
+  follow_up_items = '{{follow_up_items}}',
+  system_url = '{{system_url}}',
 }: RosterNotificationProps) {
   return (
     <BaseTemplate
-      previewText={`獲獎名冊確認通知 - ${scholarshipType} (${academicYear}學年度${semester}學期)`}
+      previewText={`獲獎名冊確認通知 - ${scholarship_type} (${academic_year}學年度${semester}學期)`}
     >
       <div
         className="bg-gradient-to-r from-yellow-400 to-yellow-500 p-6 -mx-8 -mt-6 mb-6 rounded-t-lg"
@@ -46,7 +46,7 @@ export default function RosterNotification({
         </Text>
       </div>
 
-      <Text className="text-gray-700 mb-4">親愛的 {studentName} 同學您好：</Text>
+      <Text className="text-gray-700 mb-4">親愛的 {student_name} 同學您好：</Text>
 
       <Text className="text-gray-700 mb-4">
         恭喜您！您已列入本學期獎學金獲獎名冊，詳細資訊如下：
@@ -54,16 +54,16 @@ export default function RosterNotification({
 
       <InfoBox>
         <Text className="font-semibold text-gray-900 m-0 mb-2">
-          🎓 獎學金名稱：{scholarshipType}
+          🎓 獎學金名稱：{scholarship_type}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          📅 學年度：{academicYear} 學年度 {semester}學期
+          📅 學年度：{academic_year} 學年度 {semester}學期
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          📋 名冊編號：{rosterNumber}
+          📋 名冊編號：{roster_number}
         </Text>
         <Text className="font-bold text-green-700 text-xl m-0 mt-3">
-          💰 獎學金金額：{approvedAmount}
+          💰 獎學金金額：{approved_amount}
         </Text>
       </InfoBox>
 
@@ -85,7 +85,7 @@ export default function RosterNotification({
         </Text>
       </div>
 
-      {followUpItems && followUpItems !== '{{followUpItems}}' && (
+      {follow_up_items && follow_up_items !== '{{follow_up_items}}' && (
         <div
           className="bg-amber-50 p-4 rounded-md mb-6"
           style={{
@@ -98,12 +98,12 @@ export default function RosterNotification({
           <Text className="text-sm font-semibold text-amber-800 m-0 mb-2">
             📌 後續配合事項
           </Text>
-          <Text className="text-sm text-amber-700 m-0">{followUpItems}</Text>
+          <Text className="text-sm text-amber-700 m-0">{follow_up_items}</Text>
         </div>
       )}
 
       <div className="mb-6">
-        <NYCUButton href={`${systemUrl}/profile/bank-info`} text="確認銀行帳戶資料" />
+        <NYCUButton href={`${system_url}/profile/bank-info`} text="確認銀行帳戶資料" />
       </div>
 
       <Hr className="border-gray-300 my-6" />

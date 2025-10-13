@@ -89,6 +89,9 @@ services:
       EMAIL_FROM: noreply@scholarshipapp.com
       EMAIL_FROM_NAME: Scholarship System
       FALLBACK_EMAIL: jotp.cs12@nycu.edu.tw
+      # Frontend URLs
+      FRONTEND_URL: http://localhost:3000  # External URL (for user redirects)
+      FRONTEND_INTERNAL_URL: http://frontend:3000  # Internal Docker network URL (for API calls)
       # Student API Configuration (Production)
       STUDENT_API_ENABLED: ${STUDENT_API_ENABLED:-false}
       STUDENT_API_BASE_URL: ${STUDENT_API_BASE_URL}

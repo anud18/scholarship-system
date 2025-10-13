@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -21,7 +21,11 @@ from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database_health import check_database_health
 from app.core.exceptions import ScholarshipException, scholarship_exception_handler
+
+# Import Prometheus metrics
+from app.core.metrics import CONTENT_TYPE_LATEST, generate_latest, set_app_info, update_db_pool_metrics
 from app.db.session import async_engine, sync_engine
+from app.middleware.metrics_middleware import MetricsMiddleware
 
 # Import scheduler
 from app.services.roster_scheduler_service import init_scheduler, shutdown_scheduler
@@ -70,6 +74,15 @@ async def lifespan(_app: FastAPI):
     try:
         LOGGER.info("Starting application...")
 
+        # Initialize Prometheus metrics
+        if settings.enable_metrics:
+            set_app_info(
+                app_name=settings.app_name,
+                version=settings.app_version,
+                environment=settings.environment,
+            )
+            LOGGER.info("Prometheus metrics initialized")
+
         # Conditionally initialize the roster scheduler
         if settings.should_start_scheduler:
             await init_scheduler()
@@ -114,6 +127,10 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["Content-Disposition"],  # Allow frontend to read filename from Content-Disposition header
 )
+
+# Add Prometheus metrics middleware
+if settings.enable_metrics:
+    app.add_middleware(MetricsMiddleware)
 
 # Add schema validation middleware (development only)
 # Temporarily disabled due to logger scoping issue
@@ -318,6 +335,34 @@ async def root():
         "docs_url": "/api/v1/docs",
         "redoc_url": "/api/v1/redoc",
     }
+
+
+# Prometheus metrics endpoint
+@app.get("/metrics")
+async def metrics():
+    """
+    Prometheus metrics endpoint.
+
+    Returns application metrics in Prometheus text format including:
+    - HTTP request count, duration, and status codes
+    - Database connection pool status
+    - Business metrics (applications, emails, uploads)
+    - Error rates
+
+    This endpoint is typically scraped by Prometheus or Grafana Alloy
+    every 15 seconds.
+    """
+    if not settings.enable_metrics:
+        raise StarletteHTTPException(status_code=404, detail="Metrics disabled")
+
+    # Update database pool metrics before returning
+    update_db_pool_metrics()
+
+    # Generate and return Prometheus metrics
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST,
+    )
 
 
 # Include API routers

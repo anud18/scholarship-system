@@ -69,6 +69,9 @@ services:
       STUDENT_API_ENCODE_TYPE: ${STUDENT_API_ENCODE_TYPE:-UTF-8}
       # Mock SSO disabled in production
       ENABLE_MOCK_SSO: "false"
+      # Frontend URLs
+      FRONTEND_URL: https://${DOMAIN}  # External URL (for user redirects)
+      FRONTEND_INTERNAL_URL: http://frontend:3000  # Internal Docker network URL (for API calls)
     volumes:
       - ./backend/uploads:/app/uploads
       - ./logs/backend:/app/logs

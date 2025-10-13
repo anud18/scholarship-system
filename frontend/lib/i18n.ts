@@ -136,6 +136,18 @@ export const translations = {
       sysadmin: "系統管理員",
     },
 
+    // Session 管理
+    session: {
+      expired_title: "登入已過期",
+      expired_message: "您的登入已過期，請重新登入以繼續使用系統。",
+      unauthorized_title: "權限不足",
+      unauthorized_message:
+        "您沒有權限執行此操作，請聯繫管理員或重新登入。",
+      forbidden_title: "存取被拒絕",
+      forbidden_message: "您無法存取此資源，請確認您的權限或重新登入。",
+      relogin_button: "重新登入",
+    },
+
     // 狀態
     status: {
       draft: "草稿",
@@ -446,6 +458,20 @@ export const translations = {
       reviewer: "Reviewer",
       admin: "Administrator",
       sysadmin: "System Administrator",
+    },
+
+    // Session management
+    session: {
+      expired_title: "Session Expired",
+      expired_message:
+        "Your session has expired. Please log in again to continue.",
+      unauthorized_title: "Unauthorized",
+      unauthorized_message:
+        "You don't have permission for this action. Please contact admin or log in again.",
+      forbidden_title: "Access Denied",
+      forbidden_message:
+        "You cannot access this resource. Please check your permissions or log in again.",
+      relogin_button: "Log In Again",
     },
 
     // Status

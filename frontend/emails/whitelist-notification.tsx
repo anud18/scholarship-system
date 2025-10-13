@@ -5,27 +5,27 @@ import { NYCUButton } from './_components/NYCUButton';
 import { InfoBox } from './_components/InfoBox';
 
 interface WhitelistNotificationProps {
-  scholarshipType?: string;
-  academicYear?: string;
+  scholarship_type?: string;
+  academic_year?: string;
   semester?: string;
-  applicationPeriod?: string;
+  application_period?: string;
   deadline?: string;
-  eligibilityRequirements?: string;
-  systemUrl?: string;
+  eligibility_requirements?: string;
+  system_url?: string;
 }
 
 export default function WhitelistNotification({
-  scholarshipType = '{{scholarshipType}}',
-  academicYear = '{{academicYear}}',
+  scholarship_type = '{{scholarship_type}}',
+  academic_year = '{{academic_year}}',
   semester = '{{semester}}',
-  applicationPeriod = '{{applicationPeriod}}',
+  application_period = '{{application_period}}',
   deadline = '{{deadline}}',
-  eligibilityRequirements = '{{eligibilityRequirements}}',
-  systemUrl = '{{systemUrl}}',
+  eligibility_requirements = '{{eligibility_requirements}}',
+  system_url = '{{system_url}}',
 }: WhitelistNotificationProps) {
   return (
     <BaseTemplate
-      previewText={`獎學金申請開放通知 - ${scholarshipType} (${academicYear}學年度${semester}學期)`}
+      previewText={`獎學金申請開放通知 - ${scholarship_type} (${academic_year}學年度${semester}學期)`}
     >
       <div
         className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 -mx-8 -mt-6 mb-6 rounded-t-lg"
@@ -52,13 +52,13 @@ export default function WhitelistNotification({
 
       <InfoBox>
         <Text className="font-semibold text-gray-900 m-0 mb-2">
-          🎓 獎學金名稱：{scholarshipType}
+          🎓 獎學金名稱：{scholarship_type}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          📅 學年度：{academicYear} 學年度 {semester}學期
+          📅 學年度：{academic_year} 學年度 {semester}學期
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          🗓️ 申請期間：{applicationPeriod}
+          🗓️ 申請期間：{application_period}
         </Text>
         <Text className="font-semibold text-red-700 m-0">
           ⏰ 截止日期：{deadline}
@@ -78,7 +78,7 @@ export default function WhitelistNotification({
           ✓ 您符合的申請條件
         </Text>
         <Text className="text-sm text-green-700 m-0">
-          {eligibilityRequirements}
+          {eligibility_requirements}
         </Text>
       </div>
 
@@ -115,7 +115,7 @@ export default function WhitelistNotification({
       </Text>
 
       <div className="mb-6">
-        <NYCUButton href={`${systemUrl}/scholarships/apply`} text="立即申請" />
+        <NYCUButton href={`${system_url}/scholarships/apply`} text="立即申請" />
       </div>
 
       <Hr className="border-gray-300 my-6" />

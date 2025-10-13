@@ -5,29 +5,29 @@ import { NYCUButton } from './_components/NYCUButton';
 import { InfoBox } from './_components/InfoBox';
 
 interface ApplicationSubmittedProps {
-  studentName?: string;
-  appId?: string;
-  scholarshipType?: string;
-  submitDate?: string;
-  professorName?: string;
-  systemUrl?: string;
+  student_name?: string;
+  app_id?: string;
+  scholarship_type?: string;
+  submit_date?: string;
+  professor_name?: string;
+  system_url?: string;
 }
 
 export default function ApplicationSubmitted({
-  studentName = '{{studentName}}',
-  appId = '{{appId}}',
-  scholarshipType = '{{scholarshipType}}',
-  submitDate = '{{submitDate}}',
-  professorName = '{{professorName}}',
-  systemUrl = '{{systemUrl}}',
+  student_name = '{{student_name}}',
+  app_id = '{{app_id}}',
+  scholarship_type = '{{scholarship_type}}',
+  submit_date = '{{submit_date}}',
+  professor_name = '{{professor_name}}',
+  system_url = '{{system_url}}',
 }: ApplicationSubmittedProps) {
   return (
-    <BaseTemplate previewText={`申請已成功送出 - ${scholarshipType}`}>
+    <BaseTemplate previewText={`申請已成功送出 - ${scholarship_type}`}>
       <Heading className="text-2xl font-bold text-gray-900 mb-4 mt-0">
         申請已成功送出 ✓
       </Heading>
 
-      <Text className="text-gray-700 mb-4">親愛的 {studentName} 同學您好：</Text>
+      <Text className="text-gray-700 mb-4">親愛的 {student_name} 同學您好：</Text>
 
       <Text className="text-gray-700 mb-4">
         您的獎學金申請已成功送出，以下是您的申請資訊：
@@ -35,16 +35,16 @@ export default function ApplicationSubmitted({
 
       <InfoBox>
         <Text className="font-semibold text-gray-900 m-0 mb-2">
-          📋 申請編號：{appId}
+          📋 申請編號：{app_id}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          🎓 獎學金類型：{scholarshipType}
+          🎓 獎學金類型：{scholarship_type}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          📅 送出日期：{submitDate}
+          📅 送出日期：{submit_date}
         </Text>
         <Text className="text-gray-700 m-0">
-          👨‍🏫 指導教授：{professorName}
+          👨‍🏫 指導教授：{professor_name}
         </Text>
       </InfoBox>
 
@@ -76,7 +76,7 @@ export default function ApplicationSubmitted({
       </Text>
 
       <div className="mb-6">
-        <NYCUButton href={`${systemUrl}/applications/${appId}`} text="查看申請狀態" />
+        <NYCUButton href={`${system_url}/applications/${app_id}`} text="查看申請狀態" />
       </div>
 
       <Hr className="border-gray-300 my-6" />

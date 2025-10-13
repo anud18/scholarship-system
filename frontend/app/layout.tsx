@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/hooks/use-auth";
 import { NotificationProvider } from "@/contexts/notification-context";
+import { SessionExpiredProvider } from "@/contexts/session-expired-context";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { DebugPanelWrapper } from "@/components/debug-panel-wrapper";
 import { SWRProvider } from "@/components/providers/swr-provider";
@@ -45,8 +46,10 @@ export default function RootLayout({
           <SWRProvider>
             <AuthProvider>
               <NotificationProvider>
-                {children}
-                <DebugPanelWrapper />
+                <SessionExpiredProvider>
+                  {children}
+                  <DebugPanelWrapper />
+                </SessionExpiredProvider>
               </NotificationProvider>
             </AuthProvider>
           </SWRProvider>

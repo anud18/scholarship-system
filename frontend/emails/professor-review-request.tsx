@@ -5,29 +5,29 @@ import { NYCUButton } from './_components/NYCUButton';
 import { InfoBox } from './_components/InfoBox';
 
 interface ProfessorReviewRequestProps {
-  professorName?: string;
-  studentName?: string;
-  appId?: string;
-  scholarshipType?: string;
-  submitDate?: string;
-  systemUrl?: string;
+  professor_name?: string;
+  student_name?: string;
+  app_id?: string;
+  scholarship_type?: string;
+  submit_date?: string;
+  system_url?: string;
 }
 
 export default function ProfessorReviewRequest({
-  professorName = '{{professorName}}',
-  studentName = '{{studentName}}',
-  appId = '{{appId}}',
-  scholarshipType = '{{scholarshipType}}',
-  submitDate = '{{submitDate}}',
-  systemUrl = '{{systemUrl}}',
+  professor_name = '{{professor_name}}',
+  student_name = '{{student_name}}',
+  app_id = '{{app_id}}',
+  scholarship_type = '{{scholarship_type}}',
+  submit_date = '{{submit_date}}',
+  system_url = '{{system_url}}',
 }: ProfessorReviewRequestProps) {
   return (
-    <BaseTemplate previewText={`新學生申請待推薦 - ${scholarshipType}`}>
+    <BaseTemplate previewText={`新學生申請待推薦 - ${scholarship_type}`}>
       <Heading className="text-2xl font-bold text-gray-900 mb-4 mt-0">
         新學生申請待推薦
       </Heading>
 
-      <Text className="text-gray-700 mb-4">尊敬的 {professorName} 教授您好：</Text>
+      <Text className="text-gray-700 mb-4">尊敬的 {professor_name} 教授您好：</Text>
 
       <Text className="text-gray-700 mb-4">
         您的學生提交了一份獎學金申請，需要您的審核與推薦。
@@ -35,15 +35,15 @@ export default function ProfessorReviewRequest({
 
       <InfoBox>
         <Text className="font-semibold text-gray-900 m-0 mb-2">
-          📋 申請編號：{appId}
+          📋 申請編號：{app_id}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          👨‍🎓 學生姓名：{studentName}
+          👨‍🎓 學生姓名：{student_name}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          🎓 獎學金類型：{scholarshipType}
+          🎓 獎學金類型：{scholarship_type}
         </Text>
-        <Text className="text-gray-700 m-0">📅 送出日期：{submitDate}</Text>
+        <Text className="text-gray-700 m-0">📅 送出日期：{submit_date}</Text>
       </InfoBox>
 
       <Text className="text-gray-700 mb-6">
@@ -69,7 +69,7 @@ export default function ProfessorReviewRequest({
 
       <div className="mb-6">
         <NYCUButton
-          href={`${systemUrl}/professor/applications/${appId}`}
+          href={`${system_url}/professor/applications/${app_id}`}
           text="前往審核申請"
         />
       </div>

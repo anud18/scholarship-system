@@ -5,35 +5,35 @@ import { NYCUButton } from './_components/NYCUButton';
 import { InfoBox } from './_components/InfoBox';
 
 interface CollegeReviewRequestProps {
-  collegeName?: string;
-  studentName?: string;
-  appId?: string;
-  scholarshipType?: string;
-  professorName?: string;
-  submitDate?: string;
-  professorRecommendation?: string;
-  reviewDeadline?: string;
-  systemUrl?: string;
+  college_name?: string;
+  student_name?: string;
+  app_id?: string;
+  scholarship_type?: string;
+  professor_name?: string;
+  submit_date?: string;
+  professor_recommendation?: string;
+  review_deadline?: string;
+  system_url?: string;
 }
 
 export default function CollegeReviewRequest({
-  collegeName = '{{collegeName}}',
-  studentName = '{{studentName}}',
-  appId = '{{appId}}',
-  scholarshipType = '{{scholarshipType}}',
-  professorName = '{{professorName}}',
-  submitDate = '{{submitDate}}',
-  professorRecommendation = '{{professorRecommendation}}',
-  reviewDeadline = '{{reviewDeadline}}',
-  systemUrl = '{{systemUrl}}',
+  college_name = '{{college_name}}',
+  student_name = '{{student_name}}',
+  app_id = '{{app_id}}',
+  scholarship_type = '{{scholarship_type}}',
+  professor_name = '{{professor_name}}',
+  submit_date = '{{submit_date}}',
+  professor_recommendation = '{{professor_recommendation}}',
+  review_deadline = '{{review_deadline}}',
+  system_url = '{{system_url}}',
 }: CollegeReviewRequestProps) {
   return (
-    <BaseTemplate previewText={`新申請案待審核 - ${scholarshipType}`}>
+    <BaseTemplate previewText={`新申請案待審核 - ${scholarship_type}`}>
       <Heading className="text-2xl font-bold text-gray-900 mb-4 mt-0">
         新申請案待審核
       </Heading>
 
-      <Text className="text-gray-700 mb-4">{collegeName} 您好：</Text>
+      <Text className="text-gray-700 mb-4">{college_name} 您好：</Text>
 
       <Text className="text-gray-700 mb-4">
         有一份獎學金申請已由教授推薦，需要貴學院進行審核。
@@ -41,21 +41,21 @@ export default function CollegeReviewRequest({
 
       <InfoBox>
         <Text className="font-semibold text-gray-900 m-0 mb-2">
-          📋 申請編號：{appId}
+          📋 申請編號：{app_id}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          👨‍🎓 學生姓名：{studentName}
+          👨‍🎓 學生姓名：{student_name}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          🎓 獎學金類型：{scholarshipType}
+          🎓 獎學金類型：{scholarship_type}
         </Text>
         <Text className="text-gray-700 m-0 mb-2">
-          👨‍🏫 推薦教授：{professorName}
+          👨‍🏫 推薦教授：{professor_name}
         </Text>
-        <Text className="text-gray-700 m-0">📅 送出日期：{submitDate}</Text>
+        <Text className="text-gray-700 m-0">📅 送出日期：{submit_date}</Text>
       </InfoBox>
 
-      {professorRecommendation && professorRecommendation !== '{{professorRecommendation}}' && (
+      {professor_recommendation && professor_recommendation !== '{{professor_recommendation}}' && (
         <div
           className="bg-green-50 p-4 rounded-md mb-6"
           style={{
@@ -69,12 +69,12 @@ export default function CollegeReviewRequest({
             ✓ 教授推薦意見
           </Text>
           <Text className="text-sm text-green-700 m-0 italic">
-            {professorRecommendation}
+            {professor_recommendation}
           </Text>
         </div>
       )}
 
-      {reviewDeadline && reviewDeadline !== '{{reviewDeadline}}' && (
+      {review_deadline && review_deadline !== '{{review_deadline}}' && (
         <div
           className="bg-amber-50 p-4 rounded-md mb-6"
           style={{
@@ -88,7 +88,7 @@ export default function CollegeReviewRequest({
             ⏰ 審核期限
           </Text>
           <Text className="text-sm text-amber-700 m-0">
-            請於 {reviewDeadline} 前完成審核
+            請於 {review_deadline} 前完成審核
           </Text>
         </div>
       )}
@@ -99,7 +99,7 @@ export default function CollegeReviewRequest({
 
       <div className="mb-6">
         <NYCUButton
-          href={`${systemUrl}/college/applications/${appId}`}
+          href={`${system_url}/college/applications/${app_id}`}
           text="前往審核系統"
         />
       </div>

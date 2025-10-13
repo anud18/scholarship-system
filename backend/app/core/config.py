@@ -25,7 +25,8 @@ class Settings(BaseSettings):
     port: int = 8000
     reload: bool = False
     base_url: str = "http://localhost:8000"  # Base URL for the application
-    frontend_url: str = "http://localhost:3000"  # Frontend URL for the application
+    frontend_url: str = "http://localhost:3000"  # Frontend URL for the application (external/user-facing)
+    frontend_internal_url: str = "http://frontend:3000"  # Frontend URL for backend API calls (internal Docker network)
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/scholarship_test"
@@ -87,6 +88,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "json"
     sqlalchemy_log_level: str = "WARNING"  # 簡化 SQLAlchemy 日誌
+
+    # Prometheus Metrics
+    enable_metrics: bool = True  # Enable/disable Prometheus metrics collection
+    metrics_include_endpoint_labels: bool = True  # Include detailed endpoint labels
+    metrics_include_business_metrics: bool = True  # Include business-specific metrics
 
     # Mock SSO for development
     enable_mock_sso: bool = True
