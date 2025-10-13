@@ -480,52 +480,56 @@ class EmailService:
         cc: Optional[List[str]] = None,
         bcc: Optional[List[str]] = None,
         db: Optional[AsyncSession] = None,
+        html_content: Optional[str] = None,
         **metadata,
     ):
         """
-        Send email using React Email template (HTML from exported templates).
+        Send email using React Email template.
 
-        This method loads pre-exported React Email templates from frontend/public/email-templates
-        and performs variable substitution with the provided context.
+        This method accepts either:
+        1. Pre-rendered HTML (preferred) - Frontend renders template with @react-email/render
+        2. Fallback to template loading - For backward compatibility
 
         Args:
             template_name: Name of the React Email template (e.g., 'application-submitted')
             to: Recipient email(s)
-            context: Dictionary of variables to substitute in template (e.g., {'studentName': '王小明'})
+            context: Dictionary of variables for fallback rendering (e.g., {'studentName': '王小明'})
             subject: Email subject line
             cc: CC recipients
             bcc: BCC recipients
             db: Database session for logging
+            html_content: Pre-rendered HTML from frontend (preferred, uses @react-email/render)
             **metadata: Additional metadata for logging (email_category, application_id, etc.)
 
-        Example:
+        Example (Preferred - with pre-rendered HTML):
+            >>> html = await render(<ApplicationSubmitted {...props} />)  # Frontend
             >>> await email_service.send_with_react_template(
             ...     template_name='application-submitted',
             ...     to='student@nycu.edu.tw',
-            ...     context={
-            ...         'studentName': '王小明',
-            ...         'appId': 'APP-001',
-            ...         'scholarshipType': '學術優秀獎學金',
-            ...         'submitDate': '2025-10-12',
-            ...         'professorName': '李教授',
-            ...         'systemUrl': 'https://scholarship.nycu.edu.tw'
-            ...     },
-            ...     subject='申請已成功送出 - 學術優秀獎學金 (APP-001)',
-            ...     db=db,
-            ...     email_category=EmailCategory.application_student
+            ...     context={},  # Not needed when html_content provided
+            ...     subject='申請已成功送出',
+            ...     html_content=html,  # Pre-rendered HTML
+            ...     db=db
+            ... )
+
+        Example (Backward Compatible - without pre-rendered HTML):
+            >>> await email_service.send_with_react_template(
+            ...     template_name='application-submitted',
+            ...     to='student@nycu.edu.tw',
+            ...     context={'studentName': '王小明', 'appId': 'APP-001'},
+            ...     subject='申請已成功送出',
+            ...     db=db
             ... )
         """
-        from app.services.email_template_loader import email_template_loader
+        # Add template name to metadata for logging
+        metadata["template_key"] = f"react:{template_name}"
 
-        try:
-            # Render template with variable substitution
-            html_content = email_template_loader.render(template_name, context)
+        # Preferred path: Use pre-rendered HTML from frontend
+        if html_content:
+            logger.info(f"Using pre-rendered HTML for template '{template_name}'")
 
             # Generate plain text fallback from HTML
             plain_body = self._html_to_text(html_content)
-
-            # Add template name to metadata for logging
-            metadata["template_key"] = f"react:{template_name}"
 
             # Send email with HTML content
             await self.send_email(
@@ -540,7 +544,36 @@ class EmailService:
             )
 
             logger.info(
-                f"Sent React Email template '{template_name}' to {to if isinstance(to, str) else ', '.join(to)}"
+                f"Sent pre-rendered React Email template '{template_name}' to {to if isinstance(to, str) else ', '.join(to)}"
+            )
+            return
+
+        # Fallback path: Load static template and render (backward compatible)
+        logger.warning(f"No pre-rendered HTML provided for '{template_name}', falling back to template loading")
+
+        from app.services.email_template_loader import email_template_loader
+
+        try:
+            # Render template with variable substitution
+            html_content = email_template_loader.render(template_name, context)
+
+            # Generate plain text fallback from HTML
+            plain_body = self._html_to_text(html_content)
+
+            # Send email with HTML content
+            await self.send_email(
+                to=to,
+                subject=subject,
+                body=plain_body,
+                html_content=html_content,
+                cc=cc,
+                bcc=bcc,
+                db=db,
+                **metadata,
+            )
+
+            logger.info(
+                f"Sent React Email template '{template_name}' to {to if isinstance(to, str) else ', '.join(to)} (using fallback template loader)"
             )
 
         except FileNotFoundError as e:
@@ -583,6 +616,7 @@ class EmailService:
         bcc: Optional[List[str]] = None,
         requires_approval: bool = False,
         priority: int = 5,
+        html_content: Optional[str] = None,
         **metadata,
     ) -> ScheduledEmail:
         """
@@ -592,12 +626,13 @@ class EmailService:
             db: Database session
             to: Recipient email
             subject: Email subject
-            body: Email body
+            body: Email body (plain text)
             scheduled_for: When to send the email
             cc: CC recipients
             bcc: BCC recipients
             requires_approval: Whether email needs approval before sending
             priority: Priority level (1-10, 1 being highest)
+            html_content: Pre-rendered HTML from frontend (optional, preferred)
             **metadata: Additional metadata (template_key, application_id, etc.)
         """
         scheduled_email = ScheduledEmail(
@@ -606,6 +641,7 @@ class EmailService:
             bcc_emails=json.dumps(bcc) if bcc else None,
             subject=subject,
             body=body,
+            html_body=html_content,  # Store pre-rendered HTML if provided
             template_key=metadata.get("template_key"),
             email_category=metadata.get("email_category"),
             scheduled_for=scheduled_for,
@@ -620,7 +656,7 @@ class EmailService:
         await db.commit()
         await db.refresh(scheduled_email)
 
-        logger.info(f"Email scheduled for {scheduled_for} to {to}")
+        logger.info(f"Email scheduled for {scheduled_for} to {to} (HTML: {'yes' if html_content else 'no'})")
         return scheduled_email
 
     async def schedule_with_template(

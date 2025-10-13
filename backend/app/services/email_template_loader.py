@@ -1,6 +1,22 @@
 """
 Email Template Loader Service
 
+⚠️ DEPRECATED: This module is kept for backward compatibility only.
+
+New architecture (as of 2025-10-13):
+- Frontend renders React Email templates with @react-email/render
+- Frontend passes complete HTML to backend
+- Backend only sends the email (no template loading/rendering)
+
+This loader is used as a fallback when:
+1. Old scheduled emails in database (without html_body)
+2. Legacy code paths during migration
+
+For new code, use EmailService.send_with_react_template() with html_content parameter.
+
+---
+
+Legacy behavior:
 Loads and renders React Email exported HTML templates with variable substitution.
 """
 

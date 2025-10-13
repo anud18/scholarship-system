@@ -32,9 +32,14 @@ export enum ApplicationStatus {
   DRAFT = "draft",
   SUBMITTED = "submitted",
   UNDER_REVIEW = "under_review",
+  PENDING_RECOMMENDATION = "pending_recommendation",
+  RECOMMENDED = "recommended",
   APPROVED = "approved",
   REJECTED = "rejected",
+  RETURNED = "returned",
   WITHDRAWN = "withdrawn",
+  CANCELLED = "cancelled",
+  DELETED = "deleted",
 }
 
 export enum UserRole {
@@ -135,17 +140,27 @@ export const getApplicationStatusLabel = (
       [ApplicationStatus.DRAFT]: "草稿",
       [ApplicationStatus.SUBMITTED]: "已提交",
       [ApplicationStatus.UNDER_REVIEW]: "審核中",
+      [ApplicationStatus.PENDING_RECOMMENDATION]: "待教授推薦",
+      [ApplicationStatus.RECOMMENDED]: "已推薦",
       [ApplicationStatus.APPROVED]: "已核准",
       [ApplicationStatus.REJECTED]: "已拒絕",
+      [ApplicationStatus.RETURNED]: "已退回",
       [ApplicationStatus.WITHDRAWN]: "已撤回",
+      [ApplicationStatus.CANCELLED]: "已取消",
+      [ApplicationStatus.DELETED]: "已刪除",
     },
     en: {
       [ApplicationStatus.DRAFT]: "Draft",
       [ApplicationStatus.SUBMITTED]: "Submitted",
       [ApplicationStatus.UNDER_REVIEW]: "Under Review",
+      [ApplicationStatus.PENDING_RECOMMENDATION]: "Pending Recommendation",
+      [ApplicationStatus.RECOMMENDED]: "Recommended",
       [ApplicationStatus.APPROVED]: "Approved",
       [ApplicationStatus.REJECTED]: "Rejected",
+      [ApplicationStatus.RETURNED]: "Returned",
       [ApplicationStatus.WITHDRAWN]: "Withdrawn",
+      [ApplicationStatus.CANCELLED]: "Cancelled",
+      [ApplicationStatus.DELETED]: "Deleted",
     },
   };
   return labels[locale][status];

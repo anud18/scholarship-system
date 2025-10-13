@@ -31,6 +31,12 @@ import apiClient, {
   HistoricalApplication,
   HistoricalApplicationFilters,
 } from "@/lib/api";
+import {
+  getStatusColor,
+  getStatusName,
+  ApplicationStatus,
+} from "@/lib/utils/application-helpers";
+import { Locale } from "@/lib/validators";
 import { AlertCircle, FileText, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -60,6 +66,9 @@ interface HistoryPanelProps {
 }
 
 export function HistoryPanel({ user }: HistoryPanelProps) {
+  // Locale for translations (admin panel uses Chinese by default)
+  const locale: Locale = "zh";
+
   // 歷史申請相關狀態
   const [historicalApplications, setHistoricalApplications] = useState<
     HistoricalApplication[]
@@ -289,11 +298,17 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">全部狀態</SelectItem>
+                      <SelectItem value="draft">草稿</SelectItem>
                       <SelectItem value="submitted">已提交</SelectItem>
                       <SelectItem value="under_review">審核中</SelectItem>
+                      <SelectItem value="pending_recommendation">待教授推薦</SelectItem>
+                      <SelectItem value="recommended">已推薦</SelectItem>
                       <SelectItem value="approved">已通過</SelectItem>
                       <SelectItem value="rejected">已拒絕</SelectItem>
+                      <SelectItem value="returned">已退回</SelectItem>
+                      <SelectItem value="withdrawn">已撤回</SelectItem>
                       <SelectItem value="cancelled">已取消</SelectItem>
+                      <SelectItem value="deleted">已刪除</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -492,18 +507,14 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                               </TableCell>
                               <TableCell>
                                 <Badge
-                                  variant="secondary"
-                                  className={
-                                    application.status === "approved"
-                                      ? "bg-green-100 text-green-700"
-                                      : application.status === "rejected"
-                                        ? "bg-red-100 text-red-700"
-                                        : application.status === "under_review"
-                                          ? "bg-yellow-100 text-yellow-700"
-                                          : "bg-gray-100 text-gray-700"
-                                  }
+                                  variant={getStatusColor(
+                                    application.status as ApplicationStatus
+                                  )}
                                 >
-                                  {application.status_name || application.status}
+                                  {getStatusName(
+                                    application.status as ApplicationStatus,
+                                    locale
+                                  )}
                                 </Badge>
                               </TableCell>
                               <TableCell>
@@ -632,11 +643,17 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">全部狀態</SelectItem>
+                        <SelectItem value="draft">草稿</SelectItem>
                         <SelectItem value="submitted">已提交</SelectItem>
                         <SelectItem value="under_review">審核中</SelectItem>
+                        <SelectItem value="pending_recommendation">待教授推薦</SelectItem>
+                        <SelectItem value="recommended">已推薦</SelectItem>
                         <SelectItem value="approved">已通過</SelectItem>
                         <SelectItem value="rejected">已拒絕</SelectItem>
+                        <SelectItem value="returned">已退回</SelectItem>
+                        <SelectItem value="withdrawn">已撤回</SelectItem>
                         <SelectItem value="cancelled">已取消</SelectItem>
+                        <SelectItem value="deleted">已刪除</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -768,18 +785,14 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                               </TableCell>
                               <TableCell>
                                 <Badge
-                                  variant="secondary"
-                                  className={
-                                    application.status === "approved"
-                                      ? "bg-green-100 text-green-700"
-                                      : application.status === "rejected"
-                                        ? "bg-red-100 text-red-700"
-                                        : application.status === "under_review"
-                                          ? "bg-yellow-100 text-yellow-700"
-                                          : "bg-gray-100 text-gray-700"
-                                  }
+                                  variant={getStatusColor(
+                                    application.status as ApplicationStatus
+                                  )}
                                 >
-                                  {application.status_name || application.status}
+                                  {getStatusName(
+                                    application.status as ApplicationStatus,
+                                    locale
+                                  )}
                                 </Badge>
                               </TableCell>
                               <TableCell>

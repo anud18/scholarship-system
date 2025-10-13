@@ -118,6 +118,7 @@ class ScheduledEmail(Base):
     bcc_emails = Column(Text)  # JSON array of BCC emails
     subject = Column(String(500), nullable=False)
     body = Column(Text, nullable=False)
+    html_body = Column(Text, nullable=True)  # Pre-rendered HTML from frontend (preferred)
 
     # Template and categorization
     template_key = Column(String(100), ForeignKey("email_templates.key"), nullable=True)

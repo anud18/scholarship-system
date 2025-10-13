@@ -487,7 +487,7 @@ class EmailAutomationService:
             # Get scheduled emails that are ready to send
             query = text(
                 """
-                SELECT id, recipient_email, subject, body, cc_emails, bcc_emails, template_key,
+                SELECT id, recipient_email, subject, body, html_body, cc_emails, bcc_emails, template_key,
                        email_category, application_id, scholarship_type_id, priority
                 FROM scheduled_emails
                 WHERE status = 'pending'
@@ -522,14 +522,33 @@ class EmailAutomationService:
                         "template_key": email_row.template_key,
                     }
 
-                    # Check if React Email template exists for this template_key
-                    react_template_name = (
-                        self._get_react_email_template_name(email_row.template_key) if email_row.template_key else None
-                    )
+                    # Preferred path: Use pre-rendered HTML if available
+                    if email_row.html_body:
+                        logger.info(f"   Using pre-rendered HTML for email {email_row.id}")
+                        await self.email_service.send_email(
+                            to=email_row.recipient_email,
+                            subject=email_row.subject,
+                            body=email_row.body,
+                            html_content=email_row.html_body,  # Use stored pre-rendered HTML
+                            cc=cc_emails,
+                            bcc=bcc_emails,
+                            db=db,
+                            **metadata,
+                        )
+                        logger.info(f"✓ Sent pre-rendered HTML email {email_row.id} to {email_row.recipient_email}")
 
-                    if react_template_name and email_row.application_id:
-                        # Use React Email template with fresh application data
-                        logger.info(f"   Using React Email template '{react_template_name}' for email {email_row.id}")
+                    # Fallback path: Check if React Email template exists for this template_key
+                    elif (
+                        react_template_name := (
+                            self._get_react_email_template_name(email_row.template_key)
+                            if email_row.template_key
+                            else None
+                        )
+                    ) and email_row.application_id:
+                        # Use React Email template with fresh application data (backward compatible)
+                        logger.info(
+                            f"   Using React Email template '{react_template_name}' for email {email_row.id} (fallback)"
+                        )
 
                         try:
                             # Re-query application data for fresh context
@@ -564,7 +583,7 @@ class EmailAutomationService:
                                     "system_url": "https://scholarship.nycu.edu.tw",
                                 }
 
-                                # Send with React template
+                                # Send with React template (no html_content, will use fallback template loader)
                                 await self.email_service.send_with_react_template(
                                     template_name=react_template_name,
                                     to=email_row.recipient_email,
@@ -576,7 +595,7 @@ class EmailAutomationService:
                                     **metadata,
                                 )
                                 logger.info(
-                                    f"✓ Sent React Email {email_row.id} to {email_row.recipient_email} using {react_template_name}"
+                                    f"✓ Sent React Email {email_row.id} to {email_row.recipient_email} using {react_template_name} (fallback)"
                                 )
                             else:
                                 # Application not found, fall back to plain text
@@ -606,8 +625,8 @@ class EmailAutomationService:
                                 **metadata,
                             )
                     else:
-                        # No React template available, use plain text
-                        logger.info(f"   Sending plain text email {email_row.id} (no React template)")
+                        # No HTML available, use plain text
+                        logger.info(f"   Sending plain text email {email_row.id}")
                         await self.email_service.send_email(
                             to=email_row.recipient_email,
                             subject=email_row.subject,

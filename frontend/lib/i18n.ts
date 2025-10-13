@@ -142,10 +142,14 @@ export const translations = {
       submitted: "已提交",
       under_review: "審核中",
       pending_review: "待審核",
-      approved: "已核准",
-      rejected: "已駁回",
       pending_recommendation: "待推薦",
       recommended: "已推薦",
+      approved: "已核准",
+      rejected: "已駁回",
+      returned: "已退回",
+      withdrawn: "已撤回",
+      cancelled: "已取消",
+      deleted: "已刪除",
     },
 
     // 表單
@@ -450,10 +454,14 @@ export const translations = {
       submitted: "Submitted",
       under_review: "Under Review",
       pending_review: "Pending Review",
-      approved: "Approved",
-      rejected: "Rejected",
       pending_recommendation: "Pending Recommendation",
       recommended: "Recommended",
+      approved: "Approved",
+      rejected: "Rejected",
+      returned: "Returned",
+      withdrawn: "Withdrawn",
+      cancelled: "Cancelled",
+      deleted: "Deleted",
     },
 
     // Form

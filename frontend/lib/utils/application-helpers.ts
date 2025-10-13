@@ -12,7 +12,8 @@ export type ApplicationStatus =
   | "rejected"
   | "returned"
   | "withdrawn"
-  | "cancelled";
+  | "cancelled"
+  | "deleted";
 export type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
 // 時間軸步驟類型
@@ -297,6 +298,7 @@ export const getStatusColor = (status: ApplicationStatus): BadgeVariant => {
     returned: "secondary",
     withdrawn: "secondary",
     cancelled: "secondary",
+    deleted: "destructive",
   };
   return statusMap[status];
 };
@@ -315,6 +317,7 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       returned: "已退回",
       withdrawn: "已撤回",
       cancelled: "已取消",
+      deleted: "已刪除",
     },
     en: {
       draft: "Draft",
@@ -327,6 +330,7 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       returned: "Returned",
       withdrawn: "Withdrawn",
       cancelled: "Cancelled",
+      deleted: "Deleted",
     },
   } as const;
   return statusNames[locale][status];
