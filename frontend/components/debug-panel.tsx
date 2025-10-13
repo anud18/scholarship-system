@@ -40,8 +40,8 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   const { user, token } = useAuth();
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Component only renders when NEXT_PUBLIC_ENABLE_DEBUG_PANEL is true (controlled by parent)
-  // No need for runtime environment checks - tree-shaken out in production builds
+  // Component visibility is controlled by parent (debug-panel-wrapper.tsx)
+  // which checks if URL hostname contains "test" or is localhost
 
   // Handle modal focus management and escape key
   useEffect(() => {

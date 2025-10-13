@@ -129,8 +129,6 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://${HOST_IP:-host.docker.internal}:8000
       NODE_ENV: production
-      # Debug Panel Control
-      NEXT_PUBLIC_ENABLE_DEBUG_PANEL: "false"
     depends_on:
       backend:
         condition: service_healthy

@@ -375,22 +375,6 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 INTERNAL_API_URL=http://backend:8000  # Docker internal network
 ```
 
-## Debug Panel Control
-
-Control via `NEXT_PUBLIC_ENABLE_DEBUG_PANEL` environment variable:
-
-```yaml
-# Development
-frontend:
-  environment:
-    NEXT_PUBLIC_ENABLE_DEBUG_PANEL: "true"
-
-# Production
-frontend:
-  environment:
-    NEXT_PUBLIC_ENABLE_DEBUG_PANEL: "false"
-```
-
 ---
 
 **Remember**: Create a flexible, maintainable system where new scholarship types can be added through database configuration without code changes.
