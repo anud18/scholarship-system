@@ -359,7 +359,11 @@ class EmailAutomationService:
         scholarship_type_value = application_data.get("scholarship_type", "")
         app_id_value = application_data.get("app_id", "")
         submit_date_value = application_data.get("submit_date", datetime.now().strftime("%Y-%m-%d"))
-        system_url_value = "https://scholarship.nycu.edu.tw"
+
+        # Get system URL from settings (environment-specific)
+        from app.core.config import settings
+
+        system_url_value = settings.frontend_url
 
         context = {
             # Basic information
@@ -397,6 +401,8 @@ class EmailAutomationService:
         self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
     ):
         """Trigger emails when professor submits review"""
+        from app.core.config import settings
+
         scholarship_type_value = review_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
@@ -412,13 +418,15 @@ class EmailAutomationService:
             "professor_recommendation": review_data.get("professor_recommendation", ""),
             "college_name": review_data.get("college_name", ""),
             "review_deadline": review_data.get("review_deadline", ""),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         await self.process_trigger(db, "professor_review_submitted", context)
 
     async def trigger_final_result_decided(self, db: AsyncSession, application_id: int, result_data: Dict[str, Any]):
         """Trigger emails when final result is decided"""
+        from app.core.config import settings
+
         scholarship_type_value = result_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
@@ -435,7 +443,7 @@ class EmailAutomationService:
             "approved_amount": result_data.get("approved_amount", ""),
             "result_message": result_data.get("result_message", ""),
             "next_steps": result_data.get("next_steps", ""),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         await self.process_trigger(db, "final_result_decided", context)
@@ -444,6 +452,8 @@ class EmailAutomationService:
         self, db: AsyncSession, application_id: int, review_data: Dict[str, Any]
     ):
         """Trigger emails when college submits review"""
+        from app.core.config import settings
+
         scholarship_type_value = review_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
@@ -459,13 +469,15 @@ class EmailAutomationService:
             "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
             "scholarship_type_id": review_data.get("scholarship_type_id"),
             "review_date": review_data.get("review_date", datetime.now().strftime("%Y-%m-%d")),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         await self.process_trigger(db, "college_review_submitted", context)
 
     async def trigger_supplement_requested(self, db: AsyncSession, application_id: int, request_data: Dict[str, Any]):
         """Trigger emails when supplement documents are requested"""
+        from app.core.config import settings
+
         scholarship_type_value = request_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
@@ -481,13 +493,15 @@ class EmailAutomationService:
             "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
             "scholarship_type_id": request_data.get("scholarship_type_id"),
             "request_date": request_data.get("request_date", datetime.now().strftime("%Y-%m-%d")),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         await self.process_trigger(db, "supplement_requested", context)
 
     async def trigger_deadline_approaching(self, db: AsyncSession, application_id: int, deadline_data: Dict[str, Any]):
         """Trigger emails when deadline is approaching"""
+        from app.core.config import settings
+
         scholarship_type_value = deadline_data.get("scholarship_type", "")
         context = {
             "application_id": application_id,
@@ -500,7 +514,7 @@ class EmailAutomationService:
             "scholarship_type": scholarship_type_value,
             "scholarship_name": scholarship_type_value,  # Alias for backward compatibility with templates
             "scholarship_type_id": deadline_data.get("scholarship_type_id"),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         await self.process_trigger(db, "deadline_approaching", context)
@@ -586,6 +600,8 @@ class EmailAutomationService:
 
                             if application:
                                 # Build context from application data
+                                from app.core.config import settings
+
                                 student_data = application.student_data if application.student_data else {}
                                 context = {
                                     "app_id": application.app_id,
@@ -604,7 +620,7 @@ class EmailAutomationService:
                                         else ""
                                     ),
                                     "professor_name": application.professor.name if application.professor else "",
-                                    "system_url": "https://scholarship.nycu.edu.tw",
+                                    "system_url": settings.frontend_url,
                                 }
 
                                 # Send with React template (no html_content, will use fallback template loader)

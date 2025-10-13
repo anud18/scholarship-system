@@ -712,7 +712,7 @@ class EmailService:
             "scholarship_type": application_data.get("scholarship_type", ""),
             "submit_date": application_data.get("submit_date", ""),
             "professor_name": application_data.get("professor_name", ""),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         default_subject = (
@@ -745,7 +745,7 @@ class EmailService:
             "student_name": application_data.get("student_name", ""),
             "scholarship_type": application_data.get("scholarship_type", ""),
             "submit_date": application_data.get("submit_date", ""),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         default_subject = (
@@ -781,7 +781,7 @@ class EmailService:
             "professor_recommendation": application_data.get("professor_recommendation", ""),
             "college_name": application_data.get("college_name", ""),
             "review_deadline": application_data.get("review_deadline", ""),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         default_subject = (
@@ -818,7 +818,7 @@ class EmailService:
             "application_period": scholarship_data.get("application_period", ""),
             "deadline": scholarship_data.get("deadline", ""),
             "eligibility_requirements": scholarship_data.get("eligibility_requirements", ""),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         default_subject = f"獎學金申請開放通知 - {scholarship_data.get('scholarship_type', '')} ({scholarship_data.get('academic_year', '')}學年度{scholarship_data.get('semester', '')}學期)"
@@ -849,7 +849,7 @@ class EmailService:
             "student_name": application_data.get("student_name", ""),
             "scholarship_type": application_data.get("scholarship_type", ""),
             "deadline": application_data.get("deadline", ""),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         default_subject = f"申請截止提醒 - {application_data.get('scholarship_type', '')} (剩餘 3 天)"
@@ -881,7 +881,7 @@ class EmailService:
             "supplement_items": supplement_data.get("supplement_items", ""),
             "supplement_notes": supplement_data.get("supplement_notes", ""),
             "supplement_deadline": supplement_data.get("supplement_deadline", ""),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         default_subject = (
@@ -918,7 +918,7 @@ class EmailService:
             "reason": document_request_data.get("reason", ""),
             "notes": document_request_data.get("notes", ""),
             "requested_by": document_request_data.get("requested_by_name", ""),
-            "system_url": "https://scholarship.nycu.edu.tw",
+            "system_url": settings.frontend_url,
         }
 
         default_subject = (
