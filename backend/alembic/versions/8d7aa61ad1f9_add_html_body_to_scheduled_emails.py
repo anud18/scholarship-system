@@ -20,15 +20,27 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add html_body column to scheduled_emails table for storing pre-rendered HTML from frontend"""
-    # Add html_body column (nullable for backward compatibility)
-    op.add_column(
-        "scheduled_emails",
-        sa.Column(
-            "html_body", sa.Text(), nullable=True, comment="Pre-rendered HTML from frontend (@react-email/render)"
-        ),
-    )
+    # Check if column already exists
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_columns = {col["name"] for col in inspector.get_columns("scheduled_emails")}
+
+    # Only add column if it doesn't exist
+    if "html_body" not in existing_columns:
+        op.add_column(
+            "scheduled_emails",
+            sa.Column(
+                "html_body", sa.Text(), nullable=True, comment="Pre-rendered HTML from frontend (@react-email/render)"
+            ),
+        )
 
 
 def downgrade() -> None:
     """Remove html_body column from scheduled_emails table"""
-    op.drop_column("scheduled_emails", "html_body")
+    # Check if column exists before trying to drop it
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_columns = {col["name"] for col in inspector.get_columns("scheduled_emails")}
+
+    if "html_body" in existing_columns:
+        op.drop_column("scheduled_emails", "html_body")
