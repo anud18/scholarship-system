@@ -490,7 +490,7 @@ class EmailAutomationService:
                 SELECT id, recipient_email, subject, body, cc_emails, bcc_emails, template_key,
                        email_category, application_id, scholarship_type_id, priority
                 FROM scheduled_emails
-                WHERE status = 'PENDING'
+                WHERE status = 'pending'
                 AND scheduled_for <= NOW()
                 AND (requires_approval = false OR approved_by_user_id IS NOT NULL)
                 ORDER BY priority ASC, scheduled_for ASC
@@ -622,7 +622,7 @@ class EmailAutomationService:
                     update_query = text(
                         """
                         UPDATE scheduled_emails
-                        SET status = 'SENT', updated_at = NOW()
+                        SET status = 'sent', updated_at = NOW()
                         WHERE id = :email_id
                     """
                     )
@@ -635,7 +635,7 @@ class EmailAutomationService:
                     fail_query = text(
                         """
                         UPDATE scheduled_emails
-                        SET status = 'FAILED', last_error = :error, retry_count = retry_count + 1, updated_at = NOW()
+                        SET status = 'failed', last_error = :error, retry_count = retry_count + 1, updated_at = NOW()
                         WHERE id = :email_id
                     """
                     )
