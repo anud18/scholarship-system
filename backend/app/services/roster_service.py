@@ -216,8 +216,6 @@ class RosterService:
                                     "phone",
                                     "address",
                                     "bank_account",
-                                    "bank_code",
-                                    "bank_name",
                                 ]
                                 has_changes = False
                                 updated_fields = []
@@ -499,7 +497,7 @@ class RosterService:
             else:
                 exclusion_reason = "不符合獎學金資格條件"
         # 3. 檢查銀行帳戶資訊
-        elif not student_data.get("bank_account") or not student_data.get("bank_code"):
+        elif not student_data.get("bank_account"):
             is_included = False
             exclusion_reason = "缺少銀行帳戶資訊"
 
@@ -510,10 +508,6 @@ class RosterService:
             student_name=student_data.get("std_cname", ""),
             student_email=student_data.get("com_email", ""),
             bank_account=student_data.get("bank_account", ""),
-            bank_code=student_data.get("bank_code", ""),
-            bank_name=student_data.get("bank_name", ""),
-            permanent_address=student_data.get("address", ""),
-            mailing_address=student_data.get("address", ""),
             scholarship_name=application.scholarship_configuration.scholarship_type.name,
             scholarship_amount=application.amount or application.scholarship_configuration.amount,
             scholarship_subtype=application.sub_scholarship_type,
@@ -928,7 +922,7 @@ class RosterService:
 
                     # 檢查學生資料完整性
                     if application.student:
-                        if not application.student.bank_account or not application.student.bank_code:
+                        if not application.student.bank_account:
                             potential_issues.append(f"學生 {application.student.name} 銀行資訊不完整")
 
                     estimated_items.append(

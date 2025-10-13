@@ -111,8 +111,6 @@ class StudentVerificationService:
                 "phone": f"0912-{last_digit:03d}{last_digit:03d}",  # 模擬電話可能有更新
                 "address": f"新竹市大學路{last_digit+1000}號",  # 模擬地址可能有更新
                 "bank_account": f"12345678{last_digit}",  # 銀行帳號
-                "bank_code": "012",
-                "bank_name": "台灣銀行",
             }
         elif last_digit == 7:
             status = StudentVerificationStatus.GRADUATED

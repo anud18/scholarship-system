@@ -249,7 +249,6 @@ class ApplicationFieldService:
 
             if profile:
                 return {
-                    "bank_code": profile.bank_code,
                     "account_number": profile.account_number,
                     "bank_document_photo_url": profile.bank_document_photo_url,
                     "advisor_name": profile.advisor_name,
@@ -287,7 +286,6 @@ class ApplicationFieldService:
             "help_text": "請填寫正確的郵局帳號以便獎學金匯款",
             "help_text_en": "Please provide your correct Post Office or ESUN Bank account number for scholarship remittance",
             "prefill_value": prefill_data.get("account_number", "") if prefill_data else "",
-            "bank_code": prefill_data.get("bank_code", "") if prefill_data else "",
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat(),
             "created_by": 0,

@@ -99,7 +99,6 @@ class ExcelExportService:
             "id_number": 0,  # 身分證字號
             "name": 1,  # 姓名
             "bank_account": 2,  # 帳號
-            "bank_code": 3,  # 銀行代碼
             "job_title": 4,  # 職別(稱)
             "address": 5,  # 戶籍地址
             "identity_code": 6,  # 身份別代碼
@@ -283,7 +282,7 @@ class ExcelExportService:
             remarks_parts.append(f"獎學金:{item.scholarship_name}")
             if not item.is_included:
                 remarks_parts.append("狀態:不合格")
-            if not item.bank_account or not item.bank_code:
+            if not item.bank_account:
                 remarks_parts.append("缺銀行資訊")
             remarks = " ".join(remarks_parts)
 
@@ -296,7 +295,6 @@ class ExcelExportService:
                 # 3. 帳號 (若無則標註於說明欄)
                 "帳號": item.bank_account or "",
                 # 4. 銀行代碼 (若無則標註於說明欄)
-                "銀行代碼": item.bank_code or "",
                 # 5. 職別(稱) (固定值"學生")
                 "職別(稱)": "學生",
                 # 6. 戶籍地址 (選填)
@@ -672,7 +670,7 @@ class ExcelExportService:
                 remarks.append(f"排除原因: {item.exclusion_reason}")
         elif item.verification_status.value != "verified":
             remarks.append(f"學籍狀態: {self._get_verification_status_label(item.verification_status)}")
-        elif not item.bank_account or not item.bank_code:
+        elif not item.bank_account:
             remarks.append("缺少銀行資訊")
         else:
             remarks.append("合格")

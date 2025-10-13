@@ -73,7 +73,6 @@ class ApplicationFieldResponse(ApplicationFieldBase):
     # Fixed field properties
     is_fixed: Optional[bool] = Field(None, description="Is this a fixed field")
     prefill_value: Optional[str] = Field(None, description="Prefilled value from user profile")
-    bank_code: Optional[str] = Field(None, description="Bank code for bank account fields")
 
     class Config:
         from_attributes = True

@@ -95,8 +95,6 @@ class TestOCRService:
         mock_response.text = json.dumps(
             {
                 "success": True,
-                "bank_name": "台灣銀行",
-                "bank_code": "004",
                 "account_number": "123456789012",
                 "account_holder": "王小明",
                 "branch_name": "台北分行",
@@ -112,8 +110,6 @@ class TestOCRService:
         result = await service.extract_bank_info_from_image(sample_image_bytes)
 
         assert result["success"] is True
-        assert result["bank_name"] == "台灣銀行"
-        assert result["bank_code"] == "004"
         assert result["account_number"] == "123456789012"
         assert result["account_holder"] == "王小明"
         assert result["confidence"] == 0.95
@@ -217,7 +213,7 @@ class TestOCRService:
 
         # Mock successful response
         mock_response = MagicMock()
-        mock_response.text = json.dumps({"success": True, "bank_name": "測試銀行", "confidence": 0.9})
+        mock_response.text = json.dumps({"success": True, "account_number": "測試帳號", "confidence": 0.9})
 
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
@@ -265,7 +261,7 @@ class TestOCRService:
 
         # Mock response with markdown formatting
         mock_response = MagicMock()
-        mock_response.text = '```json\n{"success": true, "bank_name": "測試銀行", "confidence": 0.9}\n```'
+        mock_response.text = '```json\n{"success": true, "account_number": "測試帳號", "confidence": 0.9}\n```'
 
         mock_model = MagicMock()
         mock_model.generate_content.return_value = mock_response
@@ -275,7 +271,7 @@ class TestOCRService:
         result = await service.extract_bank_info_from_image(sample_image_bytes)
 
         assert result["success"] is True
-        assert result["bank_name"] == "測試銀行"
+        assert result["account_number"] == "測試帳號"
         assert result["confidence"] == 0.9
 
     @pytest.mark.asyncio

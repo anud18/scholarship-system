@@ -112,8 +112,6 @@ class OCRService:
             請以以下JSON格式回傳，確保數字和文字準確：
             {
                 "success": true,
-                "bank_name": "銀行名稱",
-                "bank_code": "銀行代碼",
                 "account_number": "帳戶號碼",
                 "account_holder": "戶名",
                 "branch_name": "分行名稱",

@@ -22,9 +22,7 @@ type CompleteUserProfile = {
   full_name: string;
   email: string;
   phone?: string;
-  bank_account?: string;
-  bank_name?: string;
-  bank_branch?: string;
+  account_number?: string;
   bank_document_url?: string;
   advisor_name?: string;
   advisor_email?: string;
@@ -43,9 +41,7 @@ type UserProfileUpdate = {
 };
 
 type BankInfoUpdate = {
-  bank_account?: string;
-  bank_name?: string;
-  bank_branch?: string;
+  account_number?: string;
   change_reason?: string;
 };
 

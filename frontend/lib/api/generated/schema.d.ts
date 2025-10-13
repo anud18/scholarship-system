@@ -6697,11 +6697,6 @@ export interface components {
              * @description Prefilled value from user profile
              */
             prefill_value?: string | null;
-            /**
-             * Bank Code
-             * @description Bank code for bank account fields
-             */
-            bank_code?: string | null;
         };
         /**
          * ApplicationFieldUpdate

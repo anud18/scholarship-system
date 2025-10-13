@@ -16,7 +16,6 @@ type BankVerificationResult = {
   application_id: number;
   verified: boolean;
   message?: string;
-  bank_name?: string;
   account_holder?: string;
 };
 

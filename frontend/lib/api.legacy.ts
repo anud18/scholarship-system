@@ -293,18 +293,6 @@ export interface BankVerificationResult {
   application_id: number;
   verification_status: "verified" | "failed" | "partial" | "no_document";
   verification_details: {
-    bank_name?: {
-      form_value: string;
-      ocr_value: string;
-      similarity: number;
-      match: boolean;
-    };
-    bank_code?: {
-      form_value: string;
-      ocr_value: string;
-      similarity: number;
-      match: boolean;
-    };
     account_number?: {
       form_value: string;
       ocr_value: string;
@@ -705,7 +693,6 @@ export interface ApplicationField {
   // Fixed field properties
   is_fixed?: boolean;
   prefill_value?: string;
-  bank_code?: string;
   existing_file_url?: string;
 }
 
@@ -1093,9 +1080,6 @@ export interface ScholarshipConfigurationFormData {
 export interface UserProfile {
   id: number;
   user_id: number;
-  bank_name?: string;
-  bank_code?: string;
-  bank_branch?: string;
   account_number?: string;
   account_holder_name?: string;
   advisor_name?: string;
@@ -1132,9 +1116,6 @@ export interface CompleteUserProfile {
 }
 
 export interface UserProfileUpdate {
-  bank_name?: string;
-  bank_code?: string;
-  bank_branch?: string;
   account_number?: string;
   account_holder_name?: string;
   advisor_name?: string;
@@ -1161,9 +1142,6 @@ export interface UserProfileUpdate {
 }
 
 export interface BankInfoUpdate {
-  bank_name?: string;
-  bank_code?: string;
-  bank_branch?: string;
   account_number?: string;
   account_holder_name?: string;
   change_reason?: string;

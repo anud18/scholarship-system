@@ -122,7 +122,7 @@ async def update_my_bank_info(
     client_ip, user_agent = get_client_info(request)
 
     # Convert to UserProfileUpdate
-    update_data = UserProfileUpdate(bank_code=bank_data.bank_code, account_number=bank_data.account_number)
+    update_data = UserProfileUpdate(account_number=bank_data.account_number)
 
     profile = await service.update_user_profile(
         user_id=current_user.id,
@@ -134,9 +134,8 @@ async def update_my_bank_info(
 
     return {
         "success": True,
-        "message": "銀行帳戶資訊更新成功",
+        "message": "郵局帳號資訊更新成功",
         "data": {
-            "bank_code": profile.bank_code,
             "account_number": profile.account_number,
             "bank_document_photo_url": profile.bank_document_photo_url,
             "has_complete_bank_info": profile.has_complete_bank_info,
