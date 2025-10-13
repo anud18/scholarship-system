@@ -64,6 +64,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metrics
+         * @description Prometheus metrics endpoint.
+         *
+         *     Returns application metrics in Prometheus text format including:
+         *     - HTTP request count, duration, and status codes
+         *     - Database connection pool status
+         *     - Business metrics (applications, emails, uploads)
+         *     - Error rates
+         *
+         *     This endpoint is typically scraped by Prometheus or Grafana Alloy
+         *     every 15 seconds.
+         */
+        get: operations["metrics_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/register": {
         parameters: {
             query?: never;
@@ -5002,6 +5031,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/email-management/react-email-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get React Email Templates
+         * @description 獲取所有 React Email 模板列表
+         *
+         *     Returns:
+         *         模板列表，包含模板名稱、描述、變數等元數據
+         */
+        get: operations["get_react_email_templates_api_v1_email_management_react_email_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/email-management/react-email-templates/{template_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get React Email Template
+         * @description 獲取特定 React Email 模板的詳細資訊
+         *
+         *     Args:
+         *         template_name: 模板名稱 (e.g., "application-submitted")
+         *
+         *     Returns:
+         *         模板詳細資訊
+         */
+        get: operations["get_react_email_template_api_v1_email_management_react_email_templates__template_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/email-management/react-email-templates/{template_name}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get React Email Template Source
+         * @description 獲取 React Email 模板的源碼（僅供查看，不可編輯）
+         *
+         *     Args:
+         *         template_name: 模板名稱 (e.g., "application-submitted")
+         *
+         *     Returns:
+         *         模板源碼 (TypeScript/React)
+         */
+        get: operations["get_react_email_template_source_api_v1_email_management_react_email_templates__template_name__source_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/email-automation": {
         parameters: {
             query?: never;
@@ -9556,6 +9660,26 @@ export interface operations {
         };
     };
     root__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    metrics_metrics_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -18175,6 +18299,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_react_email_templates_api_v1_email_management_react_email_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_react_email_template_api_v1_email_management_react_email_templates__template_name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_react_email_template_source_api_v1_email_management_react_email_templates__template_name__source_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
