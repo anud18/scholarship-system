@@ -862,18 +862,6 @@ export function ApplicationDetailDialog({
                                 </p>
                               )}
                               {application.meta_data.bank_verification_details
-                                .bank_name && (
-                                <p>
-                                  {locale === "zh"
-                                    ? "銀行名稱: "
-                                    : "Bank name: "}
-                                  {
-                                    application.meta_data
-                                      .bank_verification_details.bank_name
-                                  }
-                                </p>
-                              )}
-                              {application.meta_data.bank_verification_details
                                 .confidence_score && (
                                 <p>
                                   {locale === "zh"

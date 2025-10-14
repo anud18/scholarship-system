@@ -45,6 +45,11 @@ import { DeleteApplicationDialog } from "@/components/delete-application-dialog"
 import { DocumentRequestForm } from "@/components/document-request-form";
 import { getTranslation } from "@/lib/i18n";
 import {
+  getStatusColor,
+  getStatusName,
+  ApplicationStatus,
+} from "@/lib/utils/application-helpers";
+import {
   Search,
   Eye,
   CheckCircle,
@@ -567,29 +572,6 @@ export function CollegeDashboard({
     }
   };
 
-  const getStatusColor = (status: string) => {
-    const statusMap = {
-      pending_review: "destructive",
-      under_review: "outline",
-      approved: "default",
-      rejected: "secondary",
-      submitted: "outline",
-    };
-    return statusMap[status as keyof typeof statusMap] || "secondary";
-  };
-
-  const getStatusName = (status: string) => {
-    const statusMap = {
-      draft: locale === "zh" ? "草稿" : "Draft",
-      submitted: locale === "zh" ? "待學院審核" : "Pending College Review",
-      under_review: locale === "zh" ? "學院審核中" : "Under College Review",
-      approved: locale === "zh" ? "已核准" : "Approved",
-      rejected: locale === "zh" ? "已駁回" : "Rejected",
-      withdrawn: locale === "zh" ? "已撤回" : "Withdrawn",
-    };
-    return statusMap[status as keyof typeof statusMap] || status;
-  };
-
   const handleApprove = async (appId: number) => {
     try {
       await updateApplicationStatus(appId, "approved", "學院核准通過");
@@ -1008,9 +990,9 @@ export function CollegeDashboard({
                                 </TableCell>
                                 <TableCell>
                                   <Badge
-                                    variant={getStatusColor(app.status) as any}
+                                    variant={getStatusColor(app.status as ApplicationStatus)}
                                   >
-                                    {app.status_zh || getStatusName(app.status)}
+                                    {app.status_zh || getStatusName(app.status as ApplicationStatus, locale)}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>

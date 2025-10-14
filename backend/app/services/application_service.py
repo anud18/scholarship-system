@@ -3,7 +3,6 @@ Application service for scholarship application management
 """
 
 import logging
-import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
@@ -143,11 +142,64 @@ class ApplicationService:
         # Otherwise convert to string
         return str(semester)
 
-    def _generate_app_id(self) -> str:
-        """Generate unique application ID"""
-        year = datetime.now().year
-        random_suffix = str(uuid.uuid4().int)[-6:]
-        return f"APP-{year}-{random_suffix}"
+    async def _generate_app_id(self, academic_year: int, semester: Optional[str]) -> str:
+        """
+        Generate sequential application ID with database locking
+
+        Args:
+            academic_year: Academic year (e.g., 113 for 民國113年)
+            semester: Semester enum value ('first', 'second', 'annual' or None)
+
+        Returns:
+            str: Sequential application ID (e.g., 'APP-113-1-00001')
+
+        Format: APP-{academic_year}-{semester_code}-{sequence:05d}
+        - semester_code: '1' for first, '2' for second, '0' for annual/None
+        """
+        from app.models.application_sequence import ApplicationSequence
+
+        # Handle None semester (for yearly scholarships)
+        if semester is None:
+            semester = "annual"
+
+        # Use database lock to ensure thread-safe sequence generation
+        from sqlalchemy import and_, select
+
+        stmt = (
+            select(ApplicationSequence)
+            .where(
+                and_(
+                    ApplicationSequence.academic_year == academic_year,
+                    ApplicationSequence.semester == semester,
+                )
+            )
+            .with_for_update()
+        )
+
+        result = await self.db.execute(stmt)
+        seq_record = result.scalar_one_or_none()
+
+        # Create sequence record if it doesn't exist
+        if not seq_record:
+            seq_record = ApplicationSequence(academic_year=academic_year, semester=semester, last_sequence=0)
+            self.db.add(seq_record)
+            await self.db.flush()  # Flush to get the record in the session
+
+        # Increment sequence
+        seq_record.last_sequence += 1
+        sequence_num = seq_record.last_sequence
+
+        # Commit the sequence increment immediately to release the lock
+        await self.db.commit()
+
+        # Format and return app_id
+        app_id = ApplicationSequence.format_app_id(academic_year, semester, sequence_num)
+        logger.debug(
+            f"Generated app_id: {app_id} (academic_year={academic_year}, "
+            f"semester={semester}, sequence={sequence_num})"
+        )
+
+        return app_id
 
     async def _validate_student_eligibility(
         self,
@@ -260,8 +312,8 @@ class ApplicationService:
         semester = config.semester  # This can be None for yearly scholarships
         logger.debug(f"Using config {config.id}: academic_year={academic_year}, semester={semester}")
 
-        # Generate unique application ID
-        app_id = self._generate_app_id()
+        # Generate sequential application ID
+        app_id = await self._generate_app_id(academic_year, semester)
         logger.debug(f"Generated app_id: {app_id}")
 
         # Determine sub_type_selection_mode from scholarship configuration

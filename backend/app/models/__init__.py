@@ -13,6 +13,7 @@ from app.models.application import (
     ReviewStatus,
 )
 from app.models.application_field import ApplicationDocument, ApplicationField, FieldType
+from app.models.application_sequence import ApplicationSequence
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.batch_import import BatchImport
 from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview, QuotaDistribution
@@ -67,6 +68,7 @@ __all__ = [
     "ApplicationFile",
     "ReviewStatus",
     "FileType",
+    "ApplicationSequence",
     # Shared enums
     "Semester",
     "SubTypeSelectionMode",

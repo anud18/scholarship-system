@@ -243,7 +243,49 @@ with open('endpoint.py', 'w') as f:
 # python -m black endpoint.py
 ```
 
-### 6. OpenAPI Type Generation
+### 6. Application ID Format
+
+**Sequential Application Numbering**: Application IDs follow a structured format for better tracking and management.
+
+#### Format Specification
+```
+APP-{academic_year}-{semester_code}-{sequence:05d}
+
+Examples:
+- APP-113-1-00001 (Academic Year 113, First Semester, Sequence 1)
+- APP-113-2-00125 (Academic Year 113, Second Semester, Sequence 125)
+- APP-114-0-00001 (Academic Year 114, Annual, Sequence 1)
+```
+
+#### Semester Codes
+- `1`: First Semester (`first`)
+- `2`: Second Semester (`second`)
+- `0`: Annual/Yearly Scholarships (`annual`)
+
+#### Implementation Details
+- **Sequence Management**: Each (academic_year, semester) combination has an independent sequence counter
+- **Database Table**: `application_sequences` stores the last used sequence number
+- **Concurrency Safety**: Uses database-level row locking (`FOR UPDATE`) to prevent duplicate numbers
+- **Auto-Creation**: Sequence records are created automatically when first application is made
+
+#### Key Components
+```python
+# Model: app/models/application_sequence.py
+class ApplicationSequence(Base):
+    academic_year = Column(Integer, primary_key=True)
+    semester = Column(String(20), primary_key=True)
+    last_sequence = Column(Integer, default=0)
+
+# Service: app/services/application_service.py
+async def _generate_app_id(self, academic_year: int, semester: Optional[str]) -> str:
+    # Uses database locking for thread-safe sequence generation
+    # Returns formatted app_id: APP-{year}-{code}-{seq:05d}
+```
+
+#### Migration
+Migration `6b5cb44d2fe3` creates the `application_sequences` table and initializes sequences from existing applications.
+
+### 7. OpenAPI Type Generation
 
 **When modifying API endpoints/schemas**, regenerate TypeScript types to maintain type safety:
 
