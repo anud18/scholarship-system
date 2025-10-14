@@ -57,7 +57,7 @@ export const Header = () => {
           opacity: '0.9',
         }}
       >
-        Scholarship Application & Approval System
+        NYCU Admissions Scholarship System
       </Text>
     </Section>
   );
