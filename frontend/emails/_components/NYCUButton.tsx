@@ -21,7 +21,7 @@ export const NYCUButton = ({ href, text }: NYCUButtonProps) => {
         textDecoration: 'none',
         display: 'inline-block',
         textAlign: 'center',
-        minHeight: '44px',
+        minHeight: '24px',
         minWidth: '120px',
         lineHeight: '1.5',
         boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
