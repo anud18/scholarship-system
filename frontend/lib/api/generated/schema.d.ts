@@ -7073,6 +7073,12 @@ export interface components {
              * @description Custom ranking name
              */
             ranking_name?: string | null;
+            /**
+             * Force New
+             * @description Create a new ranking even if an unfinished one already exists
+             * @default false
+             */
+            force_new: boolean;
         };
         /** Body_extract_bank_info_from_passbook_api_v1_user_profiles_bank_passbook_ocr_post */
         Body_extract_bank_info_from_passbook_api_v1_user_profiles_bank_passbook_ocr_post: {
