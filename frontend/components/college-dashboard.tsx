@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -38,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { NationalityFlag } from "@/components/nationality-flag";
 import { CollegeRankingTable } from "@/components/college-ranking-table";
+import { DistributionResultsPanel } from "@/components/distribution-results-panel";
 import { SemesterSelector } from "@/components/semester-selector";
 import { ScholarshipTypeSelector } from "@/components/ui/scholarship-type-selector";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
@@ -71,6 +73,11 @@ import {
   RefreshCw,
   Trash2,
   FileText,
+  Pencil,
+  Check,
+  X,
+  Lock,
+  LockOpen,
 } from "lucide-react";
 import { useCollegeApplications } from "@/hooks/use-admin";
 import { User } from "@/types/user";
@@ -97,10 +104,356 @@ interface AcademicConfig {
 interface RankingData {
   applications: any[];
   totalQuota: number;
+  collegeQuota?: number;  // College-specific quota
+  collegeQuotaBreakdown?: Record<string, number | { quota?: number; label?: string; label_en?: string }>;
+  subTypeMetadata?: Record<string, { code: string; label: string; label_en: string }>;
   subTypeCode: string;
   academicYear: number;
-  semester?: string;
+  semester?: string | null;
   isFinalized: boolean;
+}
+
+interface DistributionQuotaSummaryProps {
+  locale: "zh" | "en";
+  totalQuota?: number;
+  collegeQuota?: number;
+  applications?: Array<{ is_allocated?: boolean }>;
+  breakdown?: Record<string, number | { quota?: number; label?: string; label_en?: string }>;
+  subTypeMeta?: Record<string, { code: string; label: string; label_en: string }>;
+}
+
+function DistributionQuotaSummary({
+  locale,
+  totalQuota: _totalQuota,
+  collegeQuota,
+  applications,
+  breakdown,
+  subTypeMeta,
+}: DistributionQuotaSummaryProps) {
+  const hasCollegeQuota =
+    typeof collegeQuota === "number" && !Number.isNaN(collegeQuota);
+  const effectiveQuota = hasCollegeQuota
+    ? (collegeQuota as number)
+    : typeof _totalQuota === "number" && !Number.isNaN(_totalQuota)
+      ? (_totalQuota as number)
+      : 0;
+
+  const allocatedCount = Array.isArray(applications)
+    ? applications.filter((app) => app?.is_allocated).length
+    : 0;
+  const remainingQuota = Math.max(0, effectiveQuota - allocatedCount);
+
+  const breakdownItems = useMemo(() => {
+    if (!breakdown) {
+      return [] as Array<{
+        code: string;
+        quota: number;
+        label: string;
+        labelEn: string;
+      }>;
+    }
+
+    return Object.entries(breakdown)
+      .map(([code, raw]) => {
+        let quota = 0;
+        let label = subTypeMeta?.[code]?.label || code;
+        let labelEn = subTypeMeta?.[code]?.label_en || label;
+
+        if (raw && typeof raw === "object") {
+          const maybeQuota = (raw as any).quota;
+          if (typeof maybeQuota === "number" && !Number.isNaN(maybeQuota)) {
+            quota = maybeQuota;
+          } else if (maybeQuota !== undefined) {
+            const parsed = Number(maybeQuota);
+            quota = Number.isNaN(parsed) ? 0 : parsed;
+          }
+
+          if ((raw as any).label) {
+            label = String((raw as any).label);
+          }
+
+          if ((raw as any).label_en) {
+            labelEn = String((raw as any).label_en);
+          }
+        } else if (raw !== undefined) {
+          const parsed = Number(raw);
+          quota = Number.isNaN(parsed) ? 0 : parsed;
+        }
+
+        return {
+          code,
+          quota,
+          label,
+          labelEn,
+        };
+      })
+      .filter((item) => Number.isFinite(item.quota));
+  }, [breakdown, subTypeMeta]);
+
+  const eligibleCounts = useMemo(() => {
+    if (!Array.isArray(applications)) {
+      return {};
+    }
+
+    return applications.reduce<Record<string, number>>((acc, app: any) => {
+      const rawEligible = app?.eligible_subtypes;
+      if (!rawEligible) {
+        return acc;
+      }
+
+      const list = Array.isArray(rawEligible)
+        ? rawEligible
+        : typeof rawEligible === "string"
+          ? rawEligible.split(",")
+          : [];
+
+      list.forEach((item) => {
+        let key: string | undefined;
+
+        if (typeof item === "string") {
+          key = item;
+        } else if (item && typeof item === "object") {
+          key =
+            item.code ||
+            item.sub_type ||
+            item.subType ||
+            item.name ||
+            item.label ||
+            item.value;
+        }
+
+        if (!key) {
+          return;
+        }
+
+        const normalized = String(key).trim();
+        if (!normalized) {
+          return;
+        }
+
+        acc[normalized] = (acc[normalized] || 0) + 1;
+      });
+
+      return acc;
+    }, {});
+  }, [applications]);
+
+  const formatValue = (value: number | undefined) =>
+    typeof value === "number" && !Number.isNaN(value)
+      ? value.toLocaleString()
+      : "-";
+
+  const allocationRate =
+    effectiveQuota > 0
+      ? Math.min(100, Math.round((allocatedCount / effectiveQuota) * 100))
+      : 0;
+
+  const demandCount = Array.isArray(applications) ? applications.length : 0;
+
+  const getSubtypeLabel = (subtype: string) => {
+    if (!subtype) {
+      return locale === "zh" ? "未命名子項目" : "Unnamed";
+    }
+
+    return subtype
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toUpperCase();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="border-blue-100 bg-blue-50/50">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                <School className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-blue-700">
+                  {locale === "zh" ? "學院配額" : "College Quota"}
+                </p>
+                <p className="text-2xl font-semibold text-blue-900">
+                  {formatValue(effectiveQuota)}
+                </p>
+                {!hasCollegeQuota && (
+                  <p className="mt-1 text-xs text-blue-700/80">
+                    {locale === "zh"
+                      ? "尚未設定學院配額，暫以總配額估算"
+                      : "Using global quota until college values are configured"}
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <CheckCircle className="h-5 w-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-emerald-700">
+                  {locale === "zh" ? "已分配" : "Allocated"}
+                </p>
+                <p className="text-2xl font-semibold text-emerald-700">
+                  {allocatedCount.toLocaleString()}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {locale === "zh"
+                    ? `總申請 ${demandCount.toLocaleString()} 名`
+                    : `${demandCount.toLocaleString()} total applicants`}
+                </p>
+                <div className="mt-3">
+                  <Progress
+                    value={allocationRate}
+                    className="h-2"
+                    indicatorClassName="bg-emerald-500"
+                    aria-label={locale === "zh" ? "分配進度" : "Allocation progress"}
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-orange-700">
+                  {locale === "zh" ? "剩餘名額" : "Seats Remaining"}
+                </p>
+                <p className="text-2xl font-semibold text-orange-700">
+                  {formatValue(remainingQuota)}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {locale === "zh"
+                    ? "若名額不足，請檢視備取或調整排序"
+                    : "Review backups or ranking if seats are exhausted"}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+
+      {breakdownItems.length > 0 && (
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              {locale === "zh" ? "子項目配額概況" : "Sub-scholarship Overview"}
+            </CardTitle>
+            <CardDescription>
+              {locale === "zh"
+                ? "比較學院配額與申請需求，協助掌握壓力點"
+                : "Compare college quota with demand to spot pressure points"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {breakdownItems.map(({ code, quota, label, labelEn }) => {
+                const quotaNumber =
+                  typeof quota === "number" && !Number.isNaN(quota) ? quota : 0;
+                const eligible = eligibleCounts[code] || 0;
+                const delta = quotaNumber ? quotaNumber - eligible : 0;
+                const ratio =
+                  quotaNumber > 0
+                    ? Math.min(100, Math.round((eligible / quotaNumber) * 100))
+                    : eligible > 0
+                      ? 100
+                      : 0;
+                const progressColor =
+                  quotaNumber > 0 && eligible > quotaNumber
+                    ? "bg-orange-500"
+                    : "bg-blue-500";
+                const displayLabel = locale === "zh" ? label : labelEn || label;
+
+                const demandLabel =
+                  quotaNumber > 0
+                    ? delta >= 0
+                      ? {
+                          text:
+                            locale === "zh"
+                              ? `尚餘 ${delta}`
+                              : `${delta} remaining`,
+                          className: "text-emerald-600",
+                        }
+                      : {
+                          text:
+                            locale === "zh"
+                              ? `超出 ${Math.abs(delta)}`
+                              : `${Math.abs(delta)} over`,
+                          className: "text-orange-600",
+                        }
+                    : {
+                        text:
+                          locale === "zh"
+                            ? `需求 ${eligible}`
+                            : `${eligible} applicants`,
+                        className: "text-slate-500",
+                      };
+
+                return (
+                  <Card key={code} className="border border-slate-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-slate-700">
+                            {displayLabel}
+                          </p>
+                          <p className={`text-xs ${demandLabel.className}`}>
+                            {demandLabel.text}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {locale === "zh" ? "配額" : "Quota"}
+                          </p>
+                          <p className="text-lg font-semibold text-slate-800">
+                            {formatValue(quotaNumber)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>
+                            {locale === "zh"
+                              ? `需求 ${eligible}`
+                              : `Demand ${eligible}`}
+                          </span>
+                          <span>{ratio}%</span>
+                        </div>
+                        <Progress
+                          value={ratio}
+                          className="mt-1 h-2"
+                          indicatorClassName={progressColor}
+                          aria-label={
+                            locale === "zh"
+                              ? `${displayLabel} 需求與配額比`
+                              : `Quota usage for ${displayLabel}`
+                          }
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 export function CollegeDashboard({
@@ -243,6 +596,12 @@ export function CollegeDashboard({
   const [applicationToDelete, setApplicationToDelete] = useState<any>(null);
   const [showDocumentRequestDialog, setShowDocumentRequestDialog] = useState(false);
   const [applicationToRequestDocs, setApplicationToRequestDocs] = useState<any>(null);
+  const [showDeleteRankingDialog, setShowDeleteRankingDialog] = useState(false);
+  const [rankingToDelete, setRankingToDelete] = useState<any>(null);
+
+  // Ranking name editing state
+  const [editingRankingId, setEditingRankingId] = useState<number | null>(null);
+  const [editingRankingName, setEditingRankingName] = useState<string>("");
 
   // 學期選擇相關狀態
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>();
@@ -257,6 +616,65 @@ export function CollegeDashboard({
     academic_years: number[];
     semesters: string[];
   } | null>(null);
+
+  const filteredRankings = useMemo(() => {
+    const activeConfig = scholarshipConfig.find(
+      config => config.code === activeScholarshipTab
+    );
+
+    const desiredSemester = selectedSemester
+      ? selectedSemester === "YEARLY"
+        ? null
+        : selectedSemester.toLowerCase()
+      : undefined;
+
+    return rankings.filter(ranking => {
+      const matchesScholarship = activeConfig
+        ? ranking.scholarship_type_id === activeConfig.id
+        : true;
+
+      const matchesYear =
+        typeof selectedAcademicYear === "number"
+          ? ranking.academic_year === selectedAcademicYear
+          : true;
+
+      const rankingSemesterRaw =
+        ranking.semester !== undefined && ranking.semester !== null
+          ? String(ranking.semester).toLowerCase()
+          : null;
+      const rankingSemester =
+        rankingSemesterRaw && rankingSemesterRaw !== "yearly"
+          ? rankingSemesterRaw
+          : null;
+
+      const matchesSemester =
+        desiredSemester === undefined
+          ? true
+          : desiredSemester === null
+            ? rankingSemester === null
+            : rankingSemester === desiredSemester;
+
+      return matchesScholarship && matchesYear && matchesSemester;
+    });
+  }, [
+    rankings,
+    scholarshipConfig,
+    activeScholarshipTab,
+    selectedAcademicYear,
+    selectedSemester,
+  ]);
+
+  useEffect(() => {
+    if (!selectedRanking) return;
+    const exists = filteredRankings.some(
+      ranking => ranking.id === selectedRanking
+    );
+
+    if (!exists) {
+      setSelectedRanking(null);
+      setRankingData(null);
+    }
+  }, [filteredRankings, selectedRanking]);
 
   // Fetch rankings and configuration on component mount
   useEffect(() => {
@@ -373,7 +791,18 @@ export function CollegeDashboard({
       const response = await apiClient.college.getRankings();
       if (response.success && response.data) {
         console.log(`Fetched ${response.data.length} rankings:`, response.data);
-        setRankings(response.data);
+        const normalizedRankings = response.data.map((ranking: any) => {
+          const rawSemester =
+            typeof ranking.semester === "string" && ranking.semester.length > 0
+              ? ranking.semester.toLowerCase()
+              : null;
+          const safeSemester =
+            rawSemester && rawSemester !== "yearly"
+              ? rawSemester
+              : null;
+          return { ...ranking, semester: safeSemester };
+        });
+        setRankings(normalizedRankings);
       } else {
         console.warn("No rankings found or error:", response.message);
         setRankings([]);
@@ -391,28 +820,119 @@ export function CollegeDashboard({
       if (response.success && response.data) {
         // Transform the API response to match the expected format for CollegeRankingTable
         const transformedApplications = (response.data.items || []).map(
-          (item: any) => ({
-            id: item.application?.id || item.id,
-            app_id: item.application?.app_id || `APP-${item.id}`,
-            student_name: item.student_name || "未提供姓名",
-            student_id: item.student_id || "N/A",
+          (item: any) => {
+            const fallbackStudentName =
+              item.student_name ||
+              item.application?.student_info?.display_name ||
+              "未提供姓名";
+            const fallbackStudentId =
+              item.student_id ||
+              item.application?.student_info?.student_id ||
+              item.application?.student_info?.student_id_masked ||
+              "N/A";
+
+            return {
+              id: item.application?.id || item.id,
+              app_id: item.application?.app_id || `APP-${item.id}`,
+              student_name: fallbackStudentName,
+              student_id: fallbackStudentId,
             scholarship_type:
               item.application?.scholarship_type || item.scholarship_type || "",
             sub_type: item.application?.sub_type || item.sub_type || "",
+            eligible_subtypes: item.application?.eligible_subtypes || [],  // Eligible sub-types for badges
             total_score: item.total_score || 0,
             rank_position: item.rank_position || 0,
             is_allocated: item.is_allocated || false,
             status: item.status || "pending",
             review_status: item.application?.status || "pending",
-          })
+            };
+          }
+        );
+
+        const rawSemester =
+          typeof response.data.semester === "string"
+            ? response.data.semester
+            : null;
+        const normalizedSemester =
+          rawSemester && rawSemester.length > 0
+            ? rawSemester.toLowerCase()
+            : null;
+        const safeSemester =
+          normalizedSemester && normalizedSemester !== "yearly"
+            ? normalizedSemester
+            : null;
+
+        const subTypeMetaArray = Array.isArray(response.data.sub_type_metadata)
+          ? response.data.sub_type_metadata
+          : [];
+        const subTypeMetaMap = subTypeMetaArray.reduce(
+          (acc: Record<string, { code: string; label: string; label_en: string }>, item: any) => {
+            if (item && item.code) {
+              acc[item.code] = {
+                code: item.code,
+                label: item.label || item.code,
+                label_en: item.label_en || item.label || item.code,
+              };
+            }
+            return acc;
+          },
+          {}
+        );
+
+        if (response.data.sub_type_code && !subTypeMetaMap[response.data.sub_type_code]) {
+          subTypeMetaMap[response.data.sub_type_code] = {
+            code: response.data.sub_type_code,
+            label: response.data.sub_type_code,
+            label_en: response.data.sub_type_code,
+          };
+        }
+
+        const normalizedBreakdown = Object.entries(
+          response.data.college_quota_breakdown || {}
+        ).reduce(
+          (acc: Record<string, { quota: number; label: string; label_en: string }>, [code, raw]) => {
+            const meta = subTypeMetaMap[code] || { code, label: code, label_en: code };
+            let quotaValue = 0;
+
+            if (raw && typeof raw === "object") {
+              const maybeQuota = (raw as any).quota;
+              if (typeof maybeQuota === "number" && !Number.isNaN(maybeQuota)) {
+                quotaValue = maybeQuota;
+              } else if (maybeQuota !== undefined) {
+                const parsed = Number(maybeQuota);
+                quotaValue = Number.isNaN(parsed) ? 0 : parsed;
+              }
+
+              const rawLabel = (raw as any).label;
+              const rawLabelEn = (raw as any).label_en;
+              acc[code] = {
+                quota: quotaValue,
+                label: rawLabel || meta.label,
+                label_en: rawLabelEn || rawLabel || meta.label_en,
+              };
+            } else {
+              const parsed = Number(raw);
+              quotaValue = Number.isNaN(parsed) ? 0 : parsed;
+              acc[code] = {
+                quota: quotaValue,
+                label: meta.label,
+                label_en: meta.label_en,
+              };
+            }
+            return acc;
+          },
+          {} as Record<string, { quota: number; label: string; label_en: string }>
         );
 
         setRankingData({
           applications: transformedApplications,
           totalQuota: response.data.total_quota,
+          collegeQuota: response.data.college_quota,  // College-specific quota from backend
+          collegeQuotaBreakdown: normalizedBreakdown,
+          subTypeMetadata: subTypeMetaMap,
           subTypeCode: response.data.sub_type_code,
           academicYear: response.data.academic_year,
-          semester: response.data.semester,
+          semester: safeSemester,
           isFinalized: response.data.is_finalized,
         });
 
@@ -450,44 +970,130 @@ export function CollegeDashboard({
   const handleExecuteDistribution = async () => {
     if (selectedRanking) {
       try {
-        const response = await apiClient.college.executeDistribution(
-          selectedRanking,
-          {}
+        // Use matrix distribution endpoint
+        const response = await apiClient.college.executeMatrixDistribution(
+          selectedRanking
         );
         if (response.success) {
-          // Refresh ranking data
+          console.log("Matrix distribution executed successfully:", response.data);
+          // Refresh ranking data to show updated allocation status
           await fetchRankingDetails(selectedRanking);
+          // Switch to distribution tab to show results
+          setActiveTab("distribution");
         } else {
           console.error("Failed to execute distribution:", response.message);
+          alert(`分配執行失敗：${response.message}`);
         }
       } catch (error) {
         console.error("Failed to execute distribution:", error);
+        alert(`分配執行時發生錯誤：${error instanceof Error ? error.message : "未知錯誤"}`);
       }
     }
   };
 
-  const handleFinalizeRanking = async () => {
-    if (selectedRanking) {
-      try {
-        const response =
-          await apiClient.college.finalizeRanking(selectedRanking);
-        if (response.success) {
-          // Refresh rankings list
-          await fetchRankings();
-          // Update current ranking data
-          if (rankingData) {
-            setRankingData({
-              ...rankingData,
-              isFinalized: true,
-            });
-          }
-        } else {
-          console.error("Failed to finalize ranking:", response.message);
-        }
-      } catch (error) {
-        console.error("Failed to finalize ranking:", error);
-      }
+  const handleFinalizeRanking = async (targetRankingId?: number) => {
+    const rankingId = targetRankingId ?? selectedRanking;
+    if (!rankingId) {
+      return;
     }
+
+    try {
+      const response = await apiClient.college.finalizeRanking(rankingId);
+      if (response.success) {
+        // Refresh rankings list
+        await fetchRankings();
+        // Update current ranking data if it matches the locked ranking
+        if (rankingData && rankingId === selectedRanking) {
+          setRankingData({
+            ...rankingData,
+            isFinalized: true,
+          });
+        }
+      } else {
+        console.error("Failed to finalize ranking:", response.message);
+      }
+    } catch (error) {
+      console.error("Failed to finalize ranking:", error);
+    }
+  };
+
+  const handleImportExcel = async (data: any[]) => {
+    if (!selectedRanking) {
+      throw new Error("No ranking selected");
+    }
+
+    try {
+      const response = await apiClient.college.importRankingExcel(
+        selectedRanking,
+        data
+      );
+
+      if (response.success) {
+        // Refresh ranking details to show updated data
+        await fetchRankingDetails(selectedRanking);
+        console.log("Excel import successful:", response.data);
+      } else {
+        throw new Error(response.message || "Failed to import ranking data");
+      }
+    } catch (error) {
+      console.error("Failed to import Excel:", error);
+      throw error;
+    }
+  };
+
+  const handleDeleteRanking = async () => {
+    if (!rankingToDelete) return;
+
+    try {
+      const response = await apiClient.college.deleteRanking(rankingToDelete.id);
+      if (response.success) {
+        // Clear selection if deleted ranking was selected
+        if (selectedRanking === rankingToDelete.id) {
+          setSelectedRanking(null);
+          setRankingData(null);
+        }
+        // Refresh rankings list
+        await fetchRankings();
+        // Close dialog
+        setShowDeleteRankingDialog(false);
+        setRankingToDelete(null);
+      } else {
+        alert(`刪除排名失敗：${response.message}`);
+      }
+    } catch (error) {
+      console.error("Failed to delete ranking:", error);
+      alert(`刪除排名失敗：${error instanceof Error ? error.message : "未知錯誤"}`);
+    }
+  };
+
+  const handleEditRankingName = (ranking: any) => {
+    setEditingRankingId(ranking.id);
+    setEditingRankingName(ranking.ranking_name);
+  };
+
+  const handleSaveRankingName = async (rankingId: number) => {
+    try {
+      const response = await apiClient.college.updateRanking(rankingId, {
+        ranking_name: editingRankingName,
+      });
+      if (response.success) {
+        // Refresh rankings list
+        await fetchRankings();
+        // Clear editing state
+        setEditingRankingId(null);
+        setEditingRankingName("");
+      } else {
+        alert(`更新排名名稱失敗：${response.message}`);
+      }
+    } catch (error) {
+      console.error("Failed to update ranking name:", error);
+      alert(`更新排名名稱失敗：${error instanceof Error ? error.message : "未知錯誤"}`);
+    }
+  };
+
+  const handleCancelEditRankingName = () => {
+    setEditingRankingId(null);
+    setEditingRankingName("");
   };
 
   const createNewRanking = async (
@@ -555,6 +1161,7 @@ export function CollegeDashboard({
         academic_year: useYear,
         semester: useSemester,
         ranking_name: `新建排名 - ${useYear}學年度 ${semesterName}`,
+        force_new: true,
       };
 
       const response = await apiClient.college.createRanking(newRanking);
@@ -1174,15 +1781,15 @@ export function CollegeDashboard({
                     <CardDescription>選擇要管理的排名清單</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {rankings.length === 0 ? (
+                    {filteredRankings.length === 0 ? (
                       <div className="text-center py-12">
                         <Trophy className="h-12 w-12 mx-auto mb-4 text-nycu-blue-300" />
                         <h3 className="text-lg font-semibold text-nycu-navy-800 mb-2">
-                          暫無排名資料
+                          暫無符合條件的排名
                         </h3>
                         <p className="text-nycu-navy-600 mb-4">
                           {scholarshipType.name}{" "}
-                          目前還沒有建立任何排名，請點擊上方「建立新排名」按鈕開始
+                          目前在選定的學年度與學期沒有排名，請點擊上方「建立新排名」按鈕開始
                         </p>
                         <Button
                           onClick={async () => {
@@ -1203,38 +1810,211 @@ export function CollegeDashboard({
                       </div>
                     ) : (
                       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {rankings.map(ranking => (
-                          <Card
-                            key={ranking.id}
-                            className={`cursor-pointer transition-colors ${selectedRanking === ranking.id ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}
-                            onClick={() => {
-                              setSelectedRanking(ranking.id);
-                              fetchRankingDetails(ranking.id);
-                            }}
-                          >
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <Badge
-                                  variant={
-                                    ranking.is_finalized
-                                      ? "default"
-                                      : "secondary"
-                                  }
-                                >
-                                  {ranking.is_finalized ? "已確認" : "進行中"}
-                                </Badge>
-                                <Trophy className="h-4 w-4 text-blue-600" />
-                              </div>
-                              <h3 className="font-medium mb-1">
-                                {ranking.ranking_name}
-                              </h3>
-                              <p className="text-sm text-gray-600">
-                                申請數: {ranking.total_applications} | 配額:{" "}
-                                {ranking.total_quota}
-                              </p>
-                            </CardContent>
-                          </Card>
-                        ))}
+                        {filteredRankings.map((ranking) => {
+                          const isSelected = selectedRanking === ranking.id;
+                          const isLocked = Boolean(ranking.is_finalized);
+                          const cardClasses = [
+                            "group cursor-pointer rounded-lg border transition-all duration-200",
+                            isSelected
+                              ? "border-blue-500 bg-blue-50/80 shadow-md ring-2 ring-blue-100"
+                              : "border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm",
+                            isLocked ? "opacity-95" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ");
+
+                          return (
+                            <Card
+                              key={ranking.id}
+                              className={cardClasses}
+                              onClick={() => {
+                                setSelectedRanking(ranking.id);
+                                fetchRankingDetails(ranking.id);
+                              }}
+                            >
+                              <CardContent className="space-y-3 p-5">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge
+                                      variant={isLocked ? "default" : "secondary"}
+                                      className="flex items-center gap-1"
+                                    >
+                                      {isLocked ? (
+                                        <Lock className="h-3 w-3" />
+                                      ) : (
+                                        <Clock className="h-3 w-3" />
+                                      )}
+                                      {isLocked ? "已鎖定" : "進行中"}
+                                    </Badge>
+                                    {ranking.distribution_executed && (
+                                      <Badge className="border-green-200 bg-green-50 text-green-700">
+                                        {locale === "zh" ? "已執行分發" : "Distributed"}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className={`h-8 w-8 p-0 ${isLocked ? "text-blue-600" : "text-slate-500 hover:bg-blue-50 hover:text-blue-600"}`}
+                                      disabled={isLocked}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!isLocked) {
+                                          handleFinalizeRanking(ranking.id);
+                                        }
+                                      }}
+                                    >
+                                      {isLocked ? (
+                                        <Lock className="h-4 w-4" />
+                                      ) : (
+                                        <LockOpen className="h-4 w-4" />
+                                      )}
+                                      <span className="sr-only">
+                                        {isLocked
+                                          ? locale === "zh"
+                                            ? "排名已鎖定"
+                                            : "Ranking locked"
+                                          : locale === "zh"
+                                            ? "鎖定此排名"
+                                            : "Lock this ranking"}
+                                      </span>
+                                    </Button>
+                                    {!isLocked && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setRankingToDelete(ranking);
+                                          setShowDeleteRankingDialog(true);
+                                        }}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                        <span className="sr-only">
+                                          {locale === "zh" ? "刪除此排名" : "Delete ranking"}
+                                        </span>
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span
+                                    className={`h-4 w-4 rounded-full border-2 transition-colors ${
+                                      isSelected
+                                        ? "border-blue-500 bg-blue-500 shadow-sm"
+                                        : "border-slate-300 bg-white group-hover:border-blue-300"
+                                    }`}
+                                    aria-hidden
+                                  />
+                                  {editingRankingId === ranking.id ? (
+                                    <div
+                                      className="flex flex-1 items-center gap-2"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Input
+                                        value={editingRankingName}
+                                        onChange={(e) => setEditingRankingName(e.target.value)}
+                                        className="h-8 flex-1 text-sm"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            handleSaveRankingName(ranking.id);
+                                          } else if (e.key === "Escape") {
+                                            handleCancelEditRankingName();
+                                          }
+                                        }}
+                                      />
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 p-0 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleSaveRankingName(ranking.id);
+                                        }}
+                                      >
+                                        <Check className="h-4 w-4" />
+                                        <span className="sr-only">
+                                          {locale === "zh" ? "儲存名稱" : "Save name"}
+                                        </span>
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 p-0 text-slate-500 hover:bg-slate-100"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCancelEditRankingName();
+                                        }}
+                                      >
+                                        <X className="h-4 w-4" />
+                                        <span className="sr-only">
+                                          {locale === "zh" ? "取消編輯" : "Cancel edit"}
+                                        </span>
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <h3 className="flex-1 text-sm font-semibold text-slate-800">
+                                        {ranking.ranking_name}
+                                      </h3>
+                                      {!isLocked && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 p-0 text-slate-500 hover:bg-blue-50 hover:text-blue-600"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditRankingName(ranking);
+                                          }}
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                          <span className="sr-only">
+                                            {locale === "zh" ? "重新命名" : "Rename"}
+                                          </span>
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                  <Trophy className="h-3.5 w-3.5 text-blue-500" />
+                                  <span>
+                                    {locale === "zh"
+                                      ? `申請數 ${ranking.total_applications ?? 0}`
+                                      : `Applicants ${ranking.total_applications ?? 0}`}
+                                  </span>
+                                  {typeof ranking.allocated_count === "number" && (
+                                    <>
+                                      <span aria-hidden className="text-slate-300">
+                                        •
+                                      </span>
+                                      <span>
+                                        {locale === "zh"
+                                          ? `已分配 ${ranking.allocated_count}`
+                                          : `Allocated ${ranking.allocated_count}`}
+                                      </span>
+                                    </>
+                                  )}
+                                  {ranking.finalized_at && (
+                                    <>
+                                      <span aria-hidden className="text-slate-300">
+                                        •
+                                      </span>
+                                      <span>
+                                        {locale === "zh"
+                                          ? "已鎖定"
+                                          : "Locked"}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
                       </div>
                     )}
                   </CardContent>
@@ -1255,10 +2035,12 @@ export function CollegeDashboard({
                         academicYear={rankingData.academicYear}
                         semester={rankingData.semester}
                         isFinalized={rankingData.isFinalized}
+                        rankingId={selectedRanking}
                         onRankingChange={handleRankingChange}
                         onReviewApplication={handleReviewApplication}
                         onExecuteDistribution={handleExecuteDistribution}
                         onFinalizeRanking={handleFinalizeRanking}
+                        onImportExcel={handleImportExcel}
                         locale={locale}
                       />
                     )}
@@ -1268,110 +2050,121 @@ export function CollegeDashboard({
 
               {/* 獎學金分發標籤頁 */}
               <TabsContent value="distribution" className="space-y-6">
-                <div>
-                  <h2 className="text-3xl font-bold tracking-tight">
-                    獎學金分發 - {scholarshipType.name}
-                  </h2>
-                  <p className="text-muted-foreground">
-                    執行獎學金的分配和發放
-                  </p>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-3xl font-bold tracking-tight">
+                      獎學金分發 - {scholarshipType.name}
+                    </h2>
+                    <p className="text-muted-foreground">
+                      執行獎學金的分配和發放
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={selectedRanking ? String(selectedRanking) : undefined}
+                      onValueChange={value => {
+                        if (value === "no-rankings") return;
+                        const rankingId = Number(value);
+                        if (!Number.isNaN(rankingId)) {
+                          if (rankingId !== selectedRanking) {
+                            setSelectedRanking(rankingId);
+                          }
+                          fetchRankingDetails(rankingId);
+                        }
+                      }}
+                      disabled={filteredRankings.length === 0}
+                    >
+                      <SelectTrigger
+                        className="w-64"
+                        disabled={filteredRankings.length === 0}
+                      >
+                        <SelectValue
+                          placeholder={
+                            locale === "zh" ? "選擇排名" : "Select a ranking"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredRankings.length > 0 ? (
+                          filteredRankings.map(ranking => (
+                            <SelectItem
+                              key={ranking.id}
+                              value={String(ranking.id)}
+                            >
+                              {ranking.ranking_name}
+                              {ranking.is_finalized
+                                ? locale === "zh"
+                                  ? "（已確認）"
+                                  : " (Finalized)"
+                                : ""}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-rankings" disabled>
+                            {locale === "zh"
+                              ? "目前沒有符合條件的排名"
+                              : "No rankings available"}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      variant="outline"
+                      onClick={handleExecuteDistribution}
+                      disabled={!selectedRanking}
+                    >
+                      <Send className="h-4 w-4 mr-2" />
+                      {locale === "zh" ? "執行矩陣分配" : "Execute Distribution"}
+                    </Button>
+                    <Button
+                      variant="default"
+                      onClick={() => handleFinalizeRanking()}
+                      disabled={!selectedRanking || rankingData?.isFinalized}
+                      className={
+                        rankingData?.isFinalized
+                          ? "bg-slate-200 text-slate-600 hover:bg-slate-200 hover:text-slate-600"
+                          : ""
+                      }
+                    >
+                      <Lock className="h-4 w-4 mr-2" />
+                      {locale === "zh" ? "鎖定排名結果" : "Lock Ranking"}
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Award className="h-5 w-5" />
-                        分發統計
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex justify-between">
-                        <span>總申請數</span>
-                        <span className="font-semibold">
-                          {applications.length}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>可分發配額</span>
-                        <span className="font-semibold text-green-600">10</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>已分發數量</span>
-                        <span className="font-semibold text-blue-600">8</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>剩餘配額</span>
-                        <span className="font-semibold text-orange-600">2</span>
-                      </div>
-                    </CardContent>
-                  </Card>
+                {selectedRanking && rankingData && (
+                  <DistributionQuotaSummary
+                    locale={locale}
+                    totalQuota={rankingData.totalQuota}
+                    collegeQuota={rankingData.collegeQuota}
+                    applications={rankingData.applications}
+                    breakdown={rankingData.collegeQuotaBreakdown}
+                    subTypeMeta={rankingData.subTypeMetadata}
+                  />
+                )}
 
+                {selectedRanking ? (
+                  <DistributionResultsPanel
+                    rankingId={selectedRanking}
+                    applications={rankingData?.applications}
+                    locale={locale}
+                  />
+                ) : (
                   <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Send className="h-5 w-5" />
-                        分發操作
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <p className="text-sm text-gray-600">
-                        根據已確認的排名執行獎學金分配
+                    <CardContent className="p-12 text-center">
+                      <Trophy className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                      <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                        {locale === "zh" ? "請選擇排名" : "Select a Ranking"}
+                      </h3>
+                      <p className="text-gray-600">
+                        {locale === "zh"
+                          ? "請在上方選擇要查看分配結果的排名"
+                          : "Use the selector above to choose a ranking to view distribution results"}
                       </p>
-                      <div className="space-y-2">
-                        <Button
-                          className="w-full"
-                          onClick={handleExecuteDistribution}
-                          disabled={!selectedRanking}
-                        >
-                          <Send className="h-4 w-4 mr-2" />
-                          執行自動分發
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={handleFinalizeRanking}
-                          disabled={!selectedRanking}
-                        >
-                          <Trophy className="h-4 w-4 mr-2" />
-                          確認排名結果
-                        </Button>
-                      </div>
                     </CardContent>
                   </Card>
-                </div>
-
-                {/* Distribution History */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>分發紀錄</CardTitle>
-                    <CardDescription>查看歷史分發紀錄</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>分發批次</TableHead>
-                          <TableHead>獎學金類型</TableHead>
-                          <TableHead>分發數量</TableHead>
-                          <TableHead>執行時間</TableHead>
-                          <TableHead>狀態</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <TableRow>
-                          <TableCell>2024-001</TableCell>
-                          <TableCell>博士生卓越獎學金</TableCell>
-                          <TableCell>8/10</TableCell>
-                          <TableCell>2024-01-15 14:30</TableCell>
-                          <TableCell>
-                            <Badge>已完成</Badge>
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
+                )}
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -1420,6 +2213,48 @@ export function CollegeDashboard({
           }}
         />
       )}
+
+      {/* Delete Ranking Confirmation Dialog */}
+      <Dialog open={showDeleteRankingDialog} onOpenChange={setShowDeleteRankingDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-600" />
+              確認刪除排名
+            </DialogTitle>
+            <DialogDescription>
+              {rankingToDelete && (
+                <>
+                  您確定要刪除排名「{rankingToDelete.ranking_name}」嗎？
+                  <br />
+                  <br />
+                  <span className="text-red-600 font-medium">
+                    此操作無法復原，將會永久刪除此排名及其所有相關資料。
+                  </span>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteRankingDialog(false);
+                setRankingToDelete(null);
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteRanking}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              確認刪除
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -50,7 +50,7 @@ def upgrade() -> None:
         sa.Column("scholarship_configuration_id", sa.Integer(), nullable=False),
         sa.Column("period_label", sa.String(length=20), nullable=False),
         sa.Column("academic_year", sa.Integer(), nullable=False),
-        sa.Column("roster_cycle", sa.Enum("monthly", "semi_annual", "annual", name="rostercycle"), nullable=False),
+        sa.Column("roster_cycle", sa.Enum("monthly", "semi_yearly", "yearly", name="rostercycle"), nullable=False),
         sa.Column(
             "status",
             sa.Enum("draft", "processing", "completed", "locked", "failed", name="rosterstatus"),

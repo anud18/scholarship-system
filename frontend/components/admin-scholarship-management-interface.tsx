@@ -734,7 +734,8 @@ export function AdminScholarshipManagementInterface({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${formConfig?.title || scholarshipTypeData.name}_白名單_${scholarshipTypeData.academic_year}_${scholarshipTypeData.semester || "annual"}.xlsx`;
+      const semesterLabel = scholarshipTypeData.semester || "yearly";
+      a.download = `${formConfig?.title || scholarshipTypeData.name}_白名單_${scholarshipTypeData.academic_year}_${semesterLabel}.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
 

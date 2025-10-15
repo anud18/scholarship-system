@@ -29,8 +29,8 @@ class RosterCycle(enum.Enum):
     """造冊週期枚舉"""
 
     MONTHLY = "monthly"  # 每月
-    SEMI_ANNUAL = "semi_annual"  # 半年
-    ANNUAL = "annual"  # 年度
+    SEMI_YEARLY = "semi_yearly"  # 半年
+    YEARLY = "yearly"  # 年度
 
 
 class RosterStatus(enum.Enum):

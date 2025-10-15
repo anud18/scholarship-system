@@ -10,7 +10,7 @@ class Semester(enum.Enum):
 
     first = "first"
     second = "second"
-    annual = "annual"  # 全年
+    yearly = "yearly"  # 全年
 
 
 class SubTypeSelectionMode(enum.Enum):

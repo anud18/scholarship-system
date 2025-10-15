@@ -6,7 +6,7 @@
 export enum Semester {
   FIRST = "first",
   SECOND = "second",
-  ANNUAL = "annual",
+  YEARLY = "yearly",
 }
 
 export enum SubTypeSelectionMode {
@@ -80,12 +80,12 @@ export const getSemesterLabel = (
     zh: {
       [Semester.FIRST]: "第一學期",
       [Semester.SECOND]: "第二學期",
-      [Semester.ANNUAL]: "全年",
+      [Semester.YEARLY]: "全年",
     },
     en: {
       [Semester.FIRST]: "First Semester",
       [Semester.SECOND]: "Second Semester",
-      [Semester.ANNUAL]: "Annual",
+      [Semester.YEARLY]: "Yearly",
     },
   };
   return labels[locale][semester];
@@ -349,8 +349,8 @@ export enum EmailCategory {
 // Payment Roster Enums
 export enum RosterCycle {
   MONTHLY = "monthly",
-  SEMI_ANNUAL = "semi_annual",
-  ANNUAL = "annual",
+  SEMI_YEARLY = "semi_yearly",
+  YEARLY = "yearly",
 }
 
 export enum RosterStatus {
@@ -409,13 +409,13 @@ export const getRosterCycleLabel = (
   const labels = {
     zh: {
       [RosterCycle.MONTHLY]: "每月",
-      [RosterCycle.SEMI_ANNUAL]: "半年",
-      [RosterCycle.ANNUAL]: "年度",
+      [RosterCycle.SEMI_YEARLY]: "半年",
+      [RosterCycle.YEARLY]: "年度",
     },
     en: {
       [RosterCycle.MONTHLY]: "Monthly",
-      [RosterCycle.SEMI_ANNUAL]: "Semi-annual",
-      [RosterCycle.ANNUAL]: "Annual",
+      [RosterCycle.SEMI_YEARLY]: "Semi-yearly",
+      [RosterCycle.YEARLY]: "Yearly",
     },
   };
   return labels[locale][cycle];

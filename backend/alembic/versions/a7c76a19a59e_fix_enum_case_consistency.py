@@ -27,7 +27,7 @@ def upgrade() -> None:
     try:
         # 1. Fix Semester enum (most important for scholarship data)
         print("📅 Updating Semester enum...")
-        op.execute("CREATE TYPE semester_new AS ENUM ('first', 'second', 'summer', 'annual')")
+        op.execute("CREATE TYPE semester_new AS ENUM ('first', 'second', 'summer', 'yearly')")
 
         # Check if tables exist before updating them
         connection = op.get_bind()
@@ -44,7 +44,7 @@ def upgrade() -> None:
                     WHEN semester = 'FIRST' THEN 'first'::semester_new
                     WHEN semester = 'SECOND' THEN 'second'::semester_new
                     WHEN semester = 'SUMMER' THEN 'summer'::semester_new
-                    WHEN semester = 'ANNUAL' THEN 'annual'::semester_new
+                    WHEN semester = 'YEARLY' THEN 'yearly'::semester_new
                     ELSE NULL
                 END;
             """
@@ -69,7 +69,7 @@ def upgrade() -> None:
                         WHEN semester = 'FIRST' THEN 'first'::semester_new
                         WHEN semester = 'SECOND' THEN 'second'::semester_new
                         WHEN semester = 'SUMMER' THEN 'summer'::semester_new
-                        WHEN semester = 'ANNUAL' THEN 'annual'::semester_new
+                        WHEN semester = 'YEARLY' THEN 'yearly'::semester_new
                         ELSE NULL
                     END;
                     ALTER TABLE scholarship_configurations DROP COLUMN semester;

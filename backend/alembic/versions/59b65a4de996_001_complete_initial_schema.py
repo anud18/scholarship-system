@@ -35,7 +35,7 @@ def upgrade() -> None:
                 CREATE TYPE notificationtype AS ENUM ('info', 'warning', 'error', 'success', 'reminder');
                 CREATE TYPE notificationpriority AS ENUM ('low', 'normal', 'high', 'urgent');
                 CREATE TYPE notificationfrequency AS ENUM ('immediate', 'daily', 'weekly', 'disabled');
-                CREATE TYPE semester AS ENUM ('first', 'second', 'annual');
+                CREATE TYPE semester AS ENUM ('first', 'second', 'yearly');
                 CREATE TYPE applicationstatus AS ENUM ('draft', 'submitted', 'under_review', 'approved', 'rejected', 'withdrawn');
                 CREATE TYPE applicationcycle AS ENUM ('semester', 'yearly');
                 CREATE TYPE subtypeselectionmode AS ENUM ('single', 'multiple', 'hierarchical');

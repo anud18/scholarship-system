@@ -206,7 +206,8 @@ export function WhitelistManagementDialog({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${configuration.scholarship_type_name}_申請白名單_${configuration.academic_year}_${configuration.semester || "annual"}.xlsx`;
+      const semesterLabel = configuration.semester || "yearly";
+      a.download = `${configuration.scholarship_type_name}_申請白名單_${configuration.academic_year}_${semesterLabel}.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
 

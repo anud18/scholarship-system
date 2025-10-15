@@ -20,10 +20,10 @@ def test_format_app_id():
     assert app_id == "APP-113-2-00125", f"Expected APP-113-2-00125, got {app_id}"
     print(f"  ✓ Second semester format: {app_id}")
 
-    # Test annual scholarship
-    app_id = ApplicationSequence.format_app_id(114, "annual", 1)
+    # Test yearly scholarship
+    app_id = ApplicationSequence.format_app_id(114, "yearly", 1)
     assert app_id == "APP-114-0-00001", f"Expected APP-114-0-00001, got {app_id}"
-    print(f"  ✓ Annual format: {app_id}")
+    print(f"  ✓ Yearly format: {app_id}")
 
     # Test large sequence number
     app_id = ApplicationSequence.format_app_id(113, "first", 99999)
@@ -43,8 +43,8 @@ def test_get_semester_code():
     assert ApplicationSequence.get_semester_code("second") == "2"
     print("  ✓ second -> 2")
 
-    assert ApplicationSequence.get_semester_code("annual") == "0"
-    print("  ✓ annual -> 0")
+    assert ApplicationSequence.get_semester_code("yearly") == "0"
+    print("  ✓ yearly -> 0")
 
     assert ApplicationSequence.get_semester_code("unknown") == "0"
     print("  ✓ unknown -> 0 (default)")

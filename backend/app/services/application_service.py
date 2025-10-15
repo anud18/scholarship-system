@@ -148,19 +148,19 @@ class ApplicationService:
 
         Args:
             academic_year: Academic year (e.g., 113 for 民國113年)
-            semester: Semester enum value ('first', 'second', 'annual' or None)
+            semester: Semester enum value ('first', 'second', 'yearly' or None)
 
         Returns:
             str: Sequential application ID (e.g., 'APP-113-1-00001')
 
         Format: APP-{academic_year}-{semester_code}-{sequence:05d}
-        - semester_code: '1' for first, '2' for second, '0' for annual/None
+        - semester_code: '1' for first, '2' for second, '0' for yearly/None
         """
         from app.models.application_sequence import ApplicationSequence
 
         # Handle None semester (for yearly scholarships)
         if semester is None:
-            semester = "annual"
+            semester = "yearly"
 
         # Use database lock to ensure thread-safe sequence generation
         from sqlalchemy import and_, select

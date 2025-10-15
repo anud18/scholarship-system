@@ -24,7 +24,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: 
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner:
 --
 
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
@@ -38,7 +38,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
 
 
 --
--- Name: EXTENSION "uuid-ossp"; Type: COMMENT; Schema: -; Owner: 
+-- Name: EXTENSION "uuid-ossp"; Type: COMMENT; Schema: -; Owner:
 --
 
 COMMENT ON EXTENSION "uuid-ossp" IS 'generate universally unique identifiers (UUIDs)';
@@ -272,8 +272,8 @@ ALTER TYPE public.rosterauditlevel OWNER TO scholarship_user;
 
 CREATE TYPE public.rostercycle AS ENUM (
     'monthly',
-    'semi_annual',
-    'annual'
+    'semi_yearly',
+    'yearly'
 );
 
 
@@ -328,7 +328,7 @@ ALTER TYPE public.schedulestatus OWNER TO scholarship_user;
 CREATE TYPE public.semester AS ENUM (
     'first',
     'second',
-    'annual'
+    'yearly'
 );
 
 
@@ -4411,4 +4411,3 @@ ALTER TABLE ONLY public.user_profiles
 --
 -- PostgreSQL database dump complete
 --
-

@@ -252,9 +252,22 @@ export function ReactEmailTemplateViewer() {
 
     try {
       const response = await api.emailManagement.getReactEmailTemplates();
-      setTemplates(response.data || []);
+      console.log("📧 React Email Templates API response:", response);
+
+      // Check if data is an array
+      if (Array.isArray(response.data)) {
+        console.log(`✅ Found ${response.data.length} React Email templates`);
+        setTemplates(response.data);
+      } else if (response.success && response.data) {
+        console.warn("⚠️ Unexpected response data format:", response.data);
+        setTemplates([]);
+        setError("回應格式錯誤：無法解析模板列表");
+      } else {
+        console.warn("⚠️ No templates data in response:", response);
+        setTemplates([]);
+      }
     } catch (err) {
-      console.error("Failed to fetch templates:", err);
+      console.error("❌ Failed to fetch React Email templates:", err);
       setError(err instanceof Error ? err.message : "載入模板失敗");
     } finally {
       setIsLoading(false);

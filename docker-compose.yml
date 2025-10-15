@@ -101,9 +101,12 @@ services:
       STUDENT_API_ENCODE_TYPE: ${STUDENT_API_ENCODE_TYPE:-UTF-8}
       # Super Admin Configuration
       SUPER_ADMIN_NYCU_ID: ${SUPER_ADMIN_NYCU_ID:-super_admin}
+      # React Email Templates Directory (Docker mount point)
+      REACT_EMAIL_TEMPLATES_DIR: /react-email-templates
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend:/app
+      - ./frontend/emails:/react-email-templates:ro  # Mount React Email templates (read-only)
     depends_on:
       postgres:
         condition: service_healthy

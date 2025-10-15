@@ -68,8 +68,24 @@ export function createCollegeApi() {
       academic_year: number;
       semester?: string;
       ranking_name?: string;
+      force_new?: boolean;
     }): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/college-review/rankings', {
+        body: data,
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
+     * Update ranking metadata (name, etc.)
+     * Type-safe: Path parameter and request body validated against OpenAPI
+     */
+    updateRanking: async (
+      rankingId: number,
+      data: { ranking_name: string }
+    ): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.PUT('/api/v1/college-review/rankings/{ranking_id}' as any, {
+        params: { path: { ranking_id: rankingId } },
         body: data,
       });
       return toApiResponse<any>(response);
@@ -111,6 +127,47 @@ export function createCollegeApi() {
      */
     finalizeRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/finalize', {
+        params: { path: { ranking_id: rankingId } },
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
+     * Import ranking data from Excel
+     * Type-safe: Path parameter and request body validated against OpenAPI
+     */
+    importRankingExcel: async (
+      rankingId: number,
+      importData: Array<{
+        student_id: string;
+        student_name: string;
+        rank_position: number;
+      }>
+    ): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/import-excel' as any, {
+        params: { path: { ranking_id: rankingId } },
+        body: importData,
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
+     * Execute matrix distribution for a ranking
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    executeMatrixDistribution: async (rankingId: number): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/execute-matrix-distribution' as any, {
+        params: { path: { ranking_id: rankingId } },
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
+     * Get distribution details for a ranking
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    getDistributionDetails: async (rankingId: number): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.GET('/api/v1/college-review/rankings/{ranking_id}/distribution-details' as any, {
         params: { path: { ranking_id: rankingId } },
       });
       return toApiResponse<any>(response);
@@ -171,7 +228,7 @@ export function createCollegeApi() {
         semesters: string[];
       }>
     > => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/available-combinations');
+      const response = await typedClient.raw.GET('/api/v1/college-review/available-combinations', {});
       return toApiResponse<{
         scholarship_types: Array<{
           code: string;
@@ -180,6 +237,34 @@ export function createCollegeApi() {
         }>;
         academic_years: number[];
         semesters: string[];
+      }>(response);
+    },
+
+    /**
+     * Delete a ranking
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    deleteRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.DELETE('/api/v1/college-review/rankings/{ranking_id}' as any, {
+        params: { path: { ranking_id: rankingId } },
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
+     * Get sub-type translations from database
+     * Type-safe: Response contains Chinese and English translations for sub-types
+     */
+    getSubTypeTranslations: async (): Promise<
+      ApiResponse<{
+        zh: { [key: string]: string };
+        en: { [key: string]: string };
+      }>
+    > => {
+      const response = await typedClient.raw.GET('/api/v1/college-review/sub-type-translations' as any, {});
+      return toApiResponse<{
+        zh: { [key: string]: string };
+        en: { [key: string]: string };
       }>(response);
     },
   };

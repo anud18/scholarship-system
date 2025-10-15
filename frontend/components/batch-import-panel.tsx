@@ -46,6 +46,15 @@ interface PeriodOption {
   sort_order: number;
 }
 
+type ValidationWarning =
+  | {
+      row?: number;
+      field?: string;
+      message?: string;
+      warning_type?: string;
+    }
+  | string;
+
 interface UploadedBatch {
   batch_id: number;
   file_name: string;
@@ -54,7 +63,7 @@ interface UploadedBatch {
   validation_summary: {
     valid_count: number;
     invalid_count: number;
-    warnings: any[];
+    warnings: ValidationWarning[];
     errors: Array<{
       row: number;
       field?: string;
@@ -101,6 +110,14 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingScholarships, setIsLoadingScholarships] = useState(false);
   const [isLoadingPeriods, setIsLoadingPeriods] = useState(false);
+
+  const errorItems = uploadedBatch?.validation_summary?.errors ?? [];
+  const warningItems = (uploadedBatch?.validation_summary?.warnings ?? []).map(
+    warning =>
+      typeof warning === "string"
+        ? { message: warning }
+        : warning
+  );
 
   // Fetch scholarships on mount
   useEffect(() => {
@@ -611,25 +628,25 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                   <AlertTriangle className="h-5 w-5" />
                   <span className="font-semibold">{locale === "zh" ? "警告" : "Warnings"}</span>
                 </div>
-                <p className="text-2xl font-bold text-yellow-800">{uploadedBatch.validation_summary.warnings.length}</p>
+                <p className="text-2xl font-bold text-yellow-800">{warningItems.length}</p>
               </div>
             </div>
 
             {/* Errors Display */}
-            {uploadedBatch.validation_summary.errors.length > 0 && (
+            {errorItems.length > 0 && (
               <Alert variant="destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
                   <div className="font-semibold mb-2">{locale === "zh" ? "驗證錯誤:" : "Validation Errors:"}</div>
                   <ul className="list-disc list-inside space-y-1 text-sm">
-                    {uploadedBatch.validation_summary.errors.slice(0, 5).map((err, idx) => (
+                    {errorItems.slice(0, 5).map((err, idx) => (
                       <li key={idx}>
                         {locale === "zh" ? "第" : "Row"} {err.row} {locale === "zh" ? "行" : ""}{err.field ? ` (${err.field})` : ""}: {err.message}
                       </li>
                     ))}
-                    {uploadedBatch.validation_summary.errors.length > 5 && (
+                    {errorItems.length > 5 && (
                       <li className="text-gray-600">
-                        {locale === "zh" ? `...還有 ${uploadedBatch.validation_summary.errors.length - 5} 個錯誤` : `...and ${uploadedBatch.validation_summary.errors.length - 5} more errors`}
+                        {locale === "zh" ? `...還有 ${errorItems.length - 5} 個錯誤` : `...and ${errorItems.length - 5} more errors`}
                       </li>
                     )}
                   </ul>
@@ -638,15 +655,31 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
             )}
 
             {/* Warnings Display */}
-            {uploadedBatch.validation_summary.warnings.length > 0 && (
+            {warningItems.length > 0 && (
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
                   <div className="font-semibold mb-2">{locale === "zh" ? "警告訊息:" : "Warnings:"}</div>
                   <ul className="list-disc list-inside space-y-1 text-sm">
-                    {uploadedBatch.validation_summary.warnings.map((warning, idx) => (
-                      <li key={idx}>{warning}</li>
-                    ))}
+                    {warningItems.map((warning, idx) => {
+                      const rowLabel = warning.row
+                        ? locale === "zh"
+                          ? `第 ${warning.row} 行`
+                          : `Row ${warning.row}`
+                        : locale === "zh"
+                          ? "資料"
+                          : "Entry";
+                      const fieldLabel = warning.field ? ` (${warning.field})` : "";
+                      const message = warning.message ?? (locale === "zh" ? "待確認" : "Needs verification");
+
+                      return (
+                        <li key={idx}>
+                          {rowLabel}
+                          {fieldLabel}
+                          {`: ${message}`}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </AlertDescription>
               </Alert>

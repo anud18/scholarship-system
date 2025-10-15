@@ -98,8 +98,11 @@ services:
       # Frontend URLs
       FRONTEND_URL: http://localhost:3000  # External URL (for user redirects)
       FRONTEND_INTERNAL_URL: http://frontend:3000  # Internal Docker network URL (for API calls)
+      # React Email Templates Directory (Docker mount point)
+      REACT_EMAIL_TEMPLATES_DIR: /react-email-templates
     volumes:
       - ./backend:/app
+      - ./frontend/emails:/react-email-templates:ro  # Mount React Email templates (read-only)
     depends_on:
       postgres:
         condition: service_healthy

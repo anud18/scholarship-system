@@ -302,6 +302,88 @@ class TestBatchImportService:
             assert "不符" in error_msg
 
     @pytest.mark.asyncio
+    async def test_bulk_validate_missing_student_with_dept(self):
+        """Missing students should pass when dept_code verifies college."""
+        from app.models.student import Department
+
+        db_mock = AsyncMock()
+        service = BatchImportService(db_mock)
+
+        department = Mock(spec=Department)
+        department.code = "5201"
+        department.academy_code = "C"
+
+        user_result = Mock()
+        user_scalars = Mock()
+        user_scalars.all.return_value = []
+        user_result.scalars.return_value = user_scalars
+
+        dept_result = Mock()
+        dept_result.scalar_one_or_none.return_value = department
+
+        db_mock.execute.side_effect = [user_result, dept_result]
+
+        permission_results, duplicate_results, warnings = await service.bulk_validate_permissions_and_duplicates(
+            student_ids=["111111111"],
+            college_code="C",
+            scholarship_type_id=1,
+            academic_year=113,
+            semester="first",
+            student_dept_map={"111111111": "5201"},
+        )
+
+        assert permission_results["111111111"] == (True, None)
+        assert duplicate_results["111111111"] == (False, None)
+        assert warnings
+        assert any(w.get("warning_type") == "student_not_in_system" for w in warnings)
+
+    @pytest.mark.asyncio
+    async def test_bulk_validate_existing_student_uses_file_dept(self):
+        """Existing student without dept should use batch dept_code for validation."""
+        from app.models.student import Department
+
+        db_mock = AsyncMock()
+        service = BatchImportService(db_mock)
+
+        student = Mock(spec=User)
+        student.nycu_id = "111111111"
+        student.dept_code = None
+        student.raw_data = None
+        student.id = 10
+
+        user_result = Mock()
+        user_scalars = Mock()
+        user_scalars.all.return_value = [student]
+        user_result.scalars.return_value = user_scalars
+
+        department = Mock(spec=Department)
+        department.code = "5201"
+        department.academy_code = "C"
+
+        dept_result = Mock()
+        dept_result.scalar_one_or_none.return_value = department
+
+        duplicates_result = Mock()
+        duplicates_scalars = Mock()
+        duplicates_scalars.all.return_value = []
+        duplicates_result.scalars.return_value = duplicates_scalars
+
+        db_mock.execute.side_effect = [user_result, dept_result, duplicates_result]
+
+        permission_results, duplicate_results, warnings = await service.bulk_validate_permissions_and_duplicates(
+            student_ids=["111111111"],
+            college_code="C",
+            scholarship_type_id=1,
+            academic_year=113,
+            semester="first",
+            student_dept_map={"111111111": "5201"},
+        )
+
+        assert permission_results["111111111"] == (True, None)
+        assert duplicate_results["111111111"] == (False, None)
+        assert warnings == []
+
+    @pytest.mark.asyncio
     async def test_check_duplicate_application_exists(self, service):
         """Test duplicate application detection"""
         from app.models.application import Application

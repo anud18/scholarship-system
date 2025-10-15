@@ -734,6 +734,26 @@ async def send_simple_test_email(
         )
 
 
+def extract_template_variables(subject: str, body: str) -> list[str]:
+    """
+    從模板中提取 {variable} 格式的變數
+
+    Args:
+        subject: 郵件主旨模板
+        body: 郵件內容模板
+
+    Returns:
+        排序後的變數名稱列表
+    """
+    import re
+
+    pattern = r"\{(\w+)\}"
+    variables = set()
+    variables.update(re.findall(pattern, subject))
+    variables.update(re.findall(pattern, body))
+    return sorted(list(variables))
+
+
 @router.get("/templates")
 async def get_email_templates(
     *,
@@ -744,7 +764,7 @@ async def get_email_templates(
     獲取所有郵件模板列表
 
     Returns:
-        郵件模板列表，包含 key、subject_template 和 sending_type
+        郵件模板列表，包含完整元數據和變數列表
     """
     try:
         from app.models.system_setting import EmailTemplate
@@ -754,11 +774,23 @@ async def get_email_templates(
 
         template_list = []
         for template in templates:
+            # Extract variables from template content
+            variables = extract_template_variables(template.subject_template, template.body_template)
+
+            # Create template name from key
+            template_name = template.key.replace("_", " ").title()
+
             template_list.append(
                 {
-                    "key": template.key,
+                    "id": template.id,
+                    "template_key": template.key,
+                    "template_name": template_name,
                     "subject_template": template.subject_template,
                     "body_template": template.body_template,
+                    "category": "general",
+                    "variables": variables,
+                    "is_active": True,
+                    "description": f"郵件模板：{template_name}",
                     "sending_type": template.sending_type.value if template.sending_type else "single",
                     "requires_approval": template.requires_approval,
                 }

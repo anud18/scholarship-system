@@ -72,7 +72,7 @@ APP-{學年度}-{學期代碼}-{序號:05d}
 學期代碼對應：
   first  → 1
   second → 2
-  annual → 0
+  yearly → 0
 ```
 
 ---
@@ -91,7 +91,7 @@ APP-{學年度}-{學期代碼}-{序號:05d}
 ```bash
 ✓ First semester format: APP-113-1-00001
 ✓ Second semester format: APP-113-2-00125
-✓ Annual format: APP-114-0-00001
+✓ Yearly format: APP-114-0-00001
 ✓ Large sequence number: APP-113-1-99999
 ✓ ALL TESTS PASSED!
 ```

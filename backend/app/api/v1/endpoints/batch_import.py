@@ -8,17 +8,18 @@ offline application data imports.
 import os
 import re
 from io import BytesIO
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import magic
 import pandas as pd
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user
 from app.db.deps import get_db
+from app.models.application import Application, ApplicationStatus
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus
 from app.models.scholarship import ScholarshipType
@@ -137,48 +138,57 @@ async def upload_batch_import_data(
         )
 
     # Parse and validate
+    normalized_semester = (semester.strip() if isinstance(semester, str) else semester) or None
+
     parsed_data, validation_errors = await service.parse_excel_file(
         file_content=file_content,
         scholarship_type_id=scholarship.id,
         academic_year=academic_year,
-        semester=semester,
+        semester=normalized_semester,
     )
+
+    validation_warnings: List[Dict[str, Any]] = []
 
     # Bulk validation for performance optimization
     if parsed_data:
-        # Collect all student IDs
         student_ids = [row_data["student_id"] for row_data in parsed_data]
+        student_dept_map = {row_data["student_id"]: row_data.get("dept_code") for row_data in parsed_data}
+        student_row_map = {row_data["student_id"]: row_data.get("row_number") for row_data in parsed_data}
 
-        # Perform bulk validation (single query instead of N queries)
-        permission_results, duplicate_results = await service.bulk_validate_permissions_and_duplicates(
+        (
+            permission_results,
+            duplicate_results,
+            permission_warnings,
+        ) = await service.bulk_validate_permissions_and_duplicates(
             student_ids=student_ids,
             college_code=college_code or "",
             scholarship_type_id=scholarship.id,
             academic_year=academic_year,
             semester=semester,
+            student_dept_map=student_dept_map,
+            student_row_map=student_row_map,
         )
 
-        # Process validation results
-        for idx, row_data in enumerate(parsed_data):
+        validation_warnings.extend(permission_warnings)
+
+        for row_data in parsed_data:
             student_id = row_data["student_id"]
-            row_number = idx + 2  # Excel row number (1-indexed + header row)
+            row_number = row_data.get("row_number") or 0
 
-            # Check college permission (skip for super_admin)
-            if current_user.role != UserRole.super_admin:
-                is_valid, error_msg = permission_results.get(student_id, (False, "未知錯誤"))
-                if not is_valid:
-                    validation_errors.append(
-                        {
-                            "row_number": row_number,
-                            "student_id": student_id,
-                            "field": "college_code",
-                            "error_type": "permission_error",
-                            "message": error_msg,
-                        }
-                    )
+            is_valid, error_msg = permission_results.get(student_id, (True, None))
 
-            # Check duplicate
-            is_duplicate, error_msg = duplicate_results.get(student_id, (False, None))
+            if not is_valid:
+                validation_errors.append(
+                    {
+                        "row_number": row_number,
+                        "student_id": student_id,
+                        "field": "college_code",
+                        "error_type": "permission_error",
+                        "message": error_msg or "學院驗證失敗",
+                    }
+                )
+
+            is_duplicate, duplicate_msg = duplicate_results.get(student_id, (False, None))
             if is_duplicate:
                 validation_errors.append(
                     {
@@ -186,7 +196,7 @@ async def upload_batch_import_data(
                         "student_id": student_id,
                         "field": "duplicate",
                         "error_type": "duplicate_application",
-                        "message": error_msg,
+                        "message": duplicate_msg,
                     }
                 )
 
@@ -196,7 +206,7 @@ async def upload_batch_import_data(
         college_code=college_code or "admin",  # Use special value for super_admin (max 10 chars)
         scholarship_type_id=scholarship.id,
         academic_year=academic_year,
-        semester=semester,
+        semester=normalized_semester,
         file_name=file.filename,
         total_records=len(parsed_data),
     )
@@ -243,6 +253,16 @@ async def upload_batch_import_data(
             }
             for e in validation_errors
         ],
+        "warnings": [
+            {
+                "row_number": w.get("row_number") if isinstance(w, dict) else w.row_number,
+                "student_id": w.get("student_id") if isinstance(w, dict) else getattr(w, "student_id", None),
+                "field": w.get("field") if isinstance(w, dict) else getattr(w, "field", None),
+                "warning_type": w.get("warning_type") if isinstance(w, dict) else getattr(w, "warning_type", None),
+                "message": w.get("message") if isinstance(w, dict) else getattr(w, "message", None),
+            }
+            for w in validation_warnings
+        ],
     }
 
     await db.commit()
@@ -258,6 +278,15 @@ async def upload_batch_import_data(
         for e in validation_errors[:20]  # Limit preview errors
     ]
 
+    frontend_warnings = [
+        {
+            "row": w.get("row_number") if isinstance(w, dict) else getattr(w, "row_number", None),
+            "field": w.get("field") if isinstance(w, dict) else getattr(w, "field", None),
+            "message": w.get("message") if isinstance(w, dict) else getattr(w, "message", None),
+        }
+        for w in validation_warnings[:20]
+    ]
+
     response_data = BatchImportUploadResponse(
         batch_id=batch_import.id,
         file_name=file.filename,
@@ -266,14 +295,22 @@ async def upload_batch_import_data(
         validation_summary={
             "valid_count": len(parsed_data) - len(validation_errors),
             "invalid_count": len(validation_errors),
-            "warnings": [],  # No warnings for now
+            "warnings": frontend_warnings,
             "errors": frontend_errors,
         },
     )
 
+    warning_suffix = ""
+    if validation_warnings:
+        warning_suffix = f"，另有 {len(validation_warnings)} 筆待後續確認"
+
     return {
         "success": True,
-        "message": "檔案上傳成功" if len(validation_errors) == 0 else f"檔案上傳完成，發現 {len(validation_errors)} 個驗證錯誤",
+        "message": (
+            "檔案上傳成功" + warning_suffix
+            if len(validation_errors) == 0
+            else f"檔案上傳完成，發現 {len(validation_errors)} 個驗證錯誤" + warning_suffix
+        ),
         "data": response_data.model_dump(),
     }
 
@@ -396,51 +433,63 @@ async def revalidate_batch_import(
 
     parsed_data = batch_import.parsed_data["data"]
     service = BatchImportService(db)
-    validation_errors = []
+    validation_errors: List[Dict[str, Any]] = []
+    validation_warnings: List[Dict[str, Any]] = []
 
     # Get college code from user
     college_code = current_user.college_code
 
-    # Re-validate all records
-    for row_data in parsed_data:
-        # Check college permission (skip for super_admin)
-        if current_user.role != UserRole.super_admin:
-            is_valid, error_msg = await service.validate_college_permission(
-                student_id=row_data.get("student_id"),
-                college_code=college_code,
-                dept_code=row_data.get("dept_code"),
-            )
-            if not is_valid:
-                validation_errors.append(
-                    {
-                        "row_number": parsed_data.index(row_data) + 2,
-                        "student_id": row_data.get("student_id"),
-                        "field": "college_code",
-                        "error_type": "permission_error",
-                        "message": error_msg,
-                    }
-                )
+    student_ids = [row["student_id"] for row in parsed_data]
+    student_dept_map = {row["student_id"]: row.get("dept_code") for row in parsed_data}
+    student_row_map = {row["student_id"]: row.get("row_number") for row in parsed_data}
 
-        # Check duplicate
-        is_duplicate, error_msg = await service.check_duplicate_application(
-            student_id=row_data.get("student_id"),
-            scholarship_type_id=batch_import.scholarship_type_id,
-            academic_year=batch_import.academic_year,
-            semester=batch_import.semester,
-        )
+    (
+        permission_results,
+        duplicate_results,
+        permission_warnings,
+    ) = await service.bulk_validate_permissions_and_duplicates(
+        student_ids=student_ids,
+        college_code=college_code or batch_import.college_code or "",
+        scholarship_type_id=batch_import.scholarship_type_id,
+        academic_year=batch_import.academic_year,
+        semester=batch_import.semester,
+        student_dept_map=student_dept_map,
+        student_row_map=student_row_map,
+    )
+
+    validation_warnings.extend(permission_warnings)
+
+    for row_data in parsed_data:
+        student_id = row_data.get("student_id")
+        row_number = row_data.get("row_number") or 0
+
+        is_valid, error_msg = permission_results.get(student_id, (True, None))
+        if not is_valid:
+            validation_errors.append(
+                {
+                    "row_number": row_number,
+                    "student_id": student_id,
+                    "field": "college_code",
+                    "error_type": "permission_error",
+                    "message": error_msg or "學院驗證失敗",
+                }
+            )
+
+        is_duplicate, duplicate_msg = duplicate_results.get(student_id, (False, None))
         if is_duplicate:
             validation_errors.append(
                 {
-                    "row_number": parsed_data.index(row_data) + 2,
-                    "student_id": row_data.get("student_id"),
+                    "row_number": row_number,
+                    "student_id": student_id,
                     "field": "duplicate",
                     "error_type": "duplicate_application",
-                    "message": error_msg,
+                    "message": duplicate_msg,
                 }
             )
 
     # Update parsed_data with new errors
     batch_import.parsed_data["errors"] = validation_errors
+    batch_import.parsed_data["warnings"] = validation_warnings
     await db.commit()
 
     response_data = BatchImportRevalidateResponse(
@@ -448,6 +497,14 @@ async def revalidate_batch_import(
         total_records=len(parsed_data),
         valid_count=len(parsed_data) - len(validation_errors),
         invalid_count=len(validation_errors),
+        warnings=[
+            {
+                "row": w.get("row_number"),
+                "field": w.get("field"),
+                "message": w.get("message"),
+            }
+            for w in validation_warnings[:20]
+        ],
         errors=[
             {
                 "row": e.get("row_number"),
@@ -458,9 +515,16 @@ async def revalidate_batch_import(
         ],
     )
 
+    if validation_errors:
+        message = f"驗證完成，發現 {len(validation_errors)} 個錯誤"
+    elif validation_warnings:
+        message = f"驗證完成，另有 {len(validation_warnings)} 筆待後續確認"
+    else:
+        message = "驗證完成"
+
     return {
         "success": True,
-        "message": "驗證完成" if len(validation_errors) == 0 else f"驗證完成，發現 {len(validation_errors)} 個錯誤",
+        "message": message,
         "data": response_data.model_dump(),
     }
 
@@ -538,6 +602,14 @@ async def delete_batch_record(
             if e.get("row_number") > record_index + 2:
                 e["row_number"] -= 1
         batch_import.parsed_data["errors"] = errors
+
+    if "warnings" in batch_import.parsed_data:
+        warnings = batch_import.parsed_data["warnings"]
+        warnings = [w for w in warnings if w.get("row_number") != record_index + 2]
+        for w in warnings:
+            if w.get("row_number") and w.get("row_number") > record_index + 2:
+                w["row_number"] -= 1
+        batch_import.parsed_data["warnings"] = warnings
 
     await db.commit()
 
@@ -879,7 +951,7 @@ async def upload_batch_documents(
 @router.post("/{batch_id}/confirm")
 async def confirm_batch_import(
     batch_id: int,
-    request: BatchImportConfirmRequest,
+    request: BatchImportConfirmRequest | None = Body(None),
     current_user: User = Depends(require_college_role),
     db: AsyncSession = Depends(get_db),
 ):
@@ -910,13 +982,29 @@ async def confirm_batch_import(
         )
 
     # Check status
-    if batch_import.import_status != BatchImportStatus.pending:
+    allowed_statuses = {BatchImportStatus.pending, BatchImportStatus.failed}
+
+    current_status = batch_import.import_status
+    if isinstance(current_status, str):
+        # Ensure compatibility if status was stored as raw string
+        try:
+            current_status = BatchImportStatus(current_status)
+        except ValueError:
+            current_status = None
+
+    if current_status not in allowed_statuses:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"此批次狀態為 {batch_import.import_status.value}，無法再次確認",
+            detail=f"此批次狀態為 {batch_import.import_status}, 無法再次確認",
         )
 
-    if not request.confirm:
+    if current_status == BatchImportStatus.failed:
+        # Reset to pending so the batch can be reprocessed
+        batch_import.import_status = BatchImportStatus.pending.value
+
+    confirm_flag = True if request is None else request.confirm
+
+    if not confirm_flag:
         # Cancel the batch
         batch_import.import_status = BatchImportStatus.cancelled.value
         await db.commit()
@@ -952,12 +1040,18 @@ async def confirm_batch_import(
     from app.core.exceptions import BatchImportError
 
     try:
+        normalized_semester = (
+            batch_import.semester.strip() if isinstance(batch_import.semester, str) else batch_import.semester
+        ) or None
+        if batch_import.semester != normalized_semester:
+            batch_import.semester = normalized_semester
+
         created_ids, creation_errors = await service.create_applications_from_batch(
             batch_import=batch_import,
             parsed_data=parsed_data,
             scholarship_type_id=batch_import.scholarship_type_id,
             academic_year=batch_import.academic_year,
-            semester=batch_import.semester,
+            semester=normalized_semester,
         )
 
         # Update batch import status
@@ -968,6 +1062,14 @@ async def confirm_batch_import(
             errors=creation_errors,
             status="completed" if len(creation_errors) == 0 else "partial",
         )
+
+        # Ensure applications created via batch import are visible for college review
+        await db.execute(
+            update(Application)
+            .where(Application.batch_import_id == batch_id)
+            .values(status=ApplicationStatus.under_review.value)
+        )
+        await db.commit()
 
         response_data = BatchImportConfirmResponse(
             batch_id=batch_id,
@@ -1328,6 +1430,7 @@ async def download_batch_import_template(
     columns = [
         "學號",  # student_id - 必填
         "學生姓名",  # student_name - 必填
+        "系所代碼",  # dept_code - 建議提供以利權限驗證
         "郵局帳號",  # postal_account - 可選
     ]
 
@@ -1335,6 +1438,7 @@ async def download_batch_import_template(
     column_mapping = {
         "學號": "student_id",
         "學生姓名": "student_name",
+        "系所代碼": "dept_code",
         "郵局帳號": "postal_account",
     }
 
@@ -1395,11 +1499,13 @@ async def download_batch_import_template(
         {
             "學號": "111111111",
             "學生姓名": "王小明",
+            "系所代碼": "5201",
             "郵局帳號": "1234567890123",
         },
         {
             "學號": "222222222",
             "學生姓名": "陳小華",
+            "系所代碼": "5401",
             "郵局帳號": "9876543210987",
         },
     ]

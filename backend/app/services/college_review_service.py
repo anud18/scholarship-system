@@ -22,7 +22,7 @@ from app.core.exceptions import BusinessLogicError, NotFoundError
 from app.models.application import Application, ApplicationStatus, ProfessorReview
 from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview, QuotaDistribution
 from app.models.enums import Semester
-from app.models.scholarship import ScholarshipConfiguration
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.services.email_automation_service import email_automation_service
 
 func: Any = sa_func
@@ -66,6 +66,43 @@ class CollegeReviewService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _normalize_semester_value(semester: Optional[Any]) -> Optional[str]:
+        """Normalize semester representations to canonical string or None for yearly."""
+        if semester is None:
+            return None
+
+        value = semester.value if hasattr(semester, "value") else str(semester).strip()
+        lower = value.lower()
+
+        if lower.startswith("semester."):
+            lower = lower.split(".", 1)[1]
+
+        if lower in {"", "none"}:
+            return None
+
+        if lower in {"yearly"}:
+            return None
+
+        try:
+            return Semester(lower).value
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _is_yearly_semester(semester: Optional[Any]) -> bool:
+        """Return True if semester represents a yearly cycle."""
+        if semester is None:
+            return True
+
+        value = semester.value if hasattr(semester, "value") else str(semester).strip()
+        lower = value.lower()
+
+        if lower.startswith("semester."):
+            lower = lower.split(".", 1)[1]
+
+        return lower in {"yearly"}
 
     async def create_or_update_review(
         self, application_id: int, reviewer_id: int, review_data: Dict[str, Any]
@@ -282,7 +319,7 @@ class CollegeReviewService:
 
         result = await self.db.execute(stmt)
         applications = result.scalars().all()
-        logger.info("Query executed, found {len(applications)} applications")
+        logger.info(f"Query executed, found {len(applications)} applications")
         for app in applications:
             logger.info(
                 f"  App {app.id}: status={app.status}, type_id={app.scholarship_type_id}, year={app.academic_year}, semester={app.semester}"
@@ -306,11 +343,22 @@ class CollegeReviewService:
             # Get college review if exists
             college_review = college_review_lookup.get(app.id)
 
+            student_payload = app.student_data if isinstance(app.student_data, dict) else {}
+            student_id = (
+                student_payload.get("std_stdcode")
+                or student_payload.get("nycu_id")
+                or student_payload.get("student_id")
+                or student_payload.get("student_no")
+            )
+            student_name = (
+                student_payload.get("std_cname") or student_payload.get("name") or student_payload.get("student_name")
+            )
+
             app_data = {
                 "id": app.id,
                 "app_id": app.app_id,
-                "student_id": app.student_data.get("std_stdcode") if app.student_data else "N/A",
-                "student_name": app.student_data.get("std_cname") if app.student_data else "N/A",
+                "student_id": student_id or "N/A",
+                "student_name": student_name or "N/A",
                 "scholarship_type": app.main_scholarship_type,
                 "scholarship_type_zh": app.scholarship_type_ref.name if app.scholarship_type_ref else "未知獎學金",
                 "sub_type": app.sub_scholarship_type,
@@ -319,7 +367,7 @@ class CollegeReviewService:
                 "submitted_at": app.submitted_at,
                 "status": app.status,
                 "created_at": app.created_at,
-                "student_data": app.student_data,  # Include full student_data for API endpoint processing
+                "student_data": student_payload,
                 "is_renewal": app.is_renewal if hasattr(app, "is_renewal") else False,
                 "professor_review_completed": len(app.professor_reviews) > 0,
                 "college_review_completed": college_review is not None,
@@ -337,58 +385,51 @@ class CollegeReviewService:
         semester: Optional[str],
         creator_id: int,
         ranking_name: Optional[str] = None,
+        force_new: bool = False,
     ) -> CollegeRanking:
         """Create a new ranking for a scholarship sub-type with race condition protection"""
 
-        # Normalize semester value - handle "YEARLY" special case
-        normalized_semester = None
-        if semester == "YEARLY":
-            # YEARLY means semester is NULL in database
-            normalized_semester = None
-        elif semester:
-            try:
-                # Try to convert to Semester enum
-                normalized_semester = Semester(semester)
-            except ValueError:
-                # If invalid semester, treat as NULL (yearly)
-                normalized_semester = None
-        else:
-            normalized_semester = semester
+        # Normalize semester value; treat yearly cycles as NULL for storage
+        normalized_semester = self._normalize_semester_value(semester)
+        is_yearly_semester = self._is_yearly_semester(semester)
 
-        # Check if ranking already exists (without manual transaction management)
-        # The transaction is managed by FastAPI's get_db dependency
-        existing_stmt = select(CollegeRanking).where(
-            and_(
+        if not force_new:
+            # Check if an unfinished ranking already exists (reuse to prevent duplicates)
+            existing_conditions = [
                 CollegeRanking.scholarship_type_id == scholarship_type_id,
                 CollegeRanking.sub_type_code == sub_type_code,
                 CollegeRanking.academic_year == academic_year,
-                CollegeRanking.semester == normalized_semester,
-                CollegeRanking.is_finalized.is_(False),  # Only non-finalized rankings
-            )
-        )
+                CollegeRanking.is_finalized.is_(False),
+            ]
 
-        existing_result = await self.db.execute(existing_stmt)
-        existing_ranking = existing_result.scalar_one_or_none()
+            if normalized_semester is None:
+                existing_conditions.append(
+                    or_(CollegeRanking.semester.is_(None), CollegeRanking.semester == Semester.yearly.value)
+                )
+            else:
+                existing_conditions.append(CollegeRanking.semester == normalized_semester)
 
-        if existing_ranking:
-            return existing_ranking
+            existing_stmt = select(CollegeRanking).where(and_(*existing_conditions)).limit(1)
+
+            existing_result = await self.db.execute(existing_stmt)
+            existing_ranking = existing_result.scalar_one_or_none()
+
+            if existing_ranking:
+                return existing_ranking
 
         # Get applications for this sub-type that have college reviews
         # Use the same semester filtering logic as in get_applications_for_review
-        if semester == "YEARLY":
-            # For YEARLY, only get applications where semester is NULL
-            semester_filter = Application.semester.is_(None)
-        elif semester:
-            try:
-                semester_enum = Semester(semester)
-                # Include both semester-specific applications AND yearly applications (semester=NULL)
-                semester_filter = or_(
-                    Application.semester == semester_enum,
-                    Application.semester.is_(None),  # Include yearly scholarships
-                )
-            except ValueError:
-                # If invalid semester value, only show yearly scholarships
-                semester_filter = Application.semester.is_(None)
+        if is_yearly_semester:
+            semester_filter = or_(
+                Application.semester.is_(None),
+                Application.semester == Semester.yearly.value,
+            )
+        elif normalized_semester:
+            semester_enum = Semester(normalized_semester)
+            semester_filter = or_(
+                Application.semester == semester_enum,
+                Application.semester.is_(None),
+            )
         else:
             # If semester is None, get all applications
             semester_filter = True
@@ -461,9 +502,9 @@ class CollegeReviewService:
                 default_review = CollegeReview(
                     application_id=app.id,
                     reviewer_id=creator_id,  # Use the ranking creator as default reviewer
-                    status="pending",
+                    review_status="pending",
                     ranking_score=0.0,  # Default score
-                    comments="Auto-created for ranking purposes",
+                    review_comments="Auto-created for ranking purposes",
                 )
                 self.db.add(default_review)
                 await self.db.flush()  # Flush to get the ID
@@ -477,21 +518,33 @@ class CollegeReviewService:
             and_(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
-                ScholarshipConfiguration.semester == normalized_semester,
                 ScholarshipConfiguration.is_active.is_(True),
             )
         )
+
+        if normalized_semester is not None:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester == normalized_semester)
+        else:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
         config_result = await self.db.execute(config_stmt)
         config = config_result.scalar_one_or_none()
 
         total_quota = None
-        if config and config.has_quota_limit:
-            if sub_type_code == "default":
-                # For "default", calculate total quota across all sub-types
+        if config:
+            if config.has_quota_limit:
+                if sub_type_code == "default":
+                    # For "default", use the total quota across all sub-types
+                    total_quota = config.total_quota
+                else:
+                    # For specific sub-types, try to get sub-type specific quota
+                    if config.has_college_quota:
+                        total_quota = config.get_sub_type_total_quota(sub_type_code)
+                    # Fallback to total quota if college quota not set or returns 0
+                    if not total_quota:
+                        total_quota = config.total_quota
+            # If no quota limit set but total_quota exists, use it as a reference
+            elif config.total_quota:
                 total_quota = config.total_quota
-            else:
-                # For specific sub-types, get the sub-type quota
-                total_quota = config.get_sub_type_total_quota(sub_type_code)
 
         # Create ranking
         ranking = CollegeRanking(
@@ -547,7 +600,7 @@ class CollegeReviewService:
                 .selectinload(CollegeRankingItem.application)
                 .selectinload(Application.scholarship_type_ref),
                 selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.college_review),
-                selectinload(CollegeRanking.scholarship_type),
+                selectinload(CollegeRanking.scholarship_type).selectinload(ScholarshipType.sub_type_configs),
                 selectinload(CollegeRanking.creator),
                 selectinload(CollegeRanking.finalizer),
             )
@@ -749,6 +802,40 @@ class CollegeReviewService:
                 if ranking.is_finalized:
                     raise RankingModificationError("Ranking is already finalized")
 
+                # Ensure only one ranking per scholarship/sub-type/term is finalized at a time
+                semester_conditions = []
+                if self._is_yearly_semester(ranking.semester):
+                    semester_conditions.append(CollegeRanking.semester.is_(None))
+                    semester_conditions.append(CollegeRanking.semester == Semester.yearly.value)
+                else:
+                    normalized_semester = self._normalize_semester_value(ranking.semester)
+                    if normalized_semester:
+                        semester_conditions.append(CollegeRanking.semester == normalized_semester)
+                    else:
+                        semester_conditions.append(CollegeRanking.semester.is_(None))
+
+                other_rankings_stmt = (
+                    select(CollegeRanking)
+                    .where(
+                        CollegeRanking.id != ranking_id,
+                        CollegeRanking.scholarship_type_id == ranking.scholarship_type_id,
+                        CollegeRanking.sub_type_code == ranking.sub_type_code,
+                        CollegeRanking.academic_year == ranking.academic_year,
+                        or_(*semester_conditions),
+                        CollegeRanking.is_finalized.is_(True),
+                    )
+                    .with_for_update()
+                )
+
+                other_rankings_result = await self.db.execute(other_rankings_stmt)
+                other_rankings = other_rankings_result.scalars().all()
+
+                for other in other_rankings:
+                    other.is_finalized = False
+                    other.finalized_at = None
+                    other.finalized_by = None
+                    other.ranking_status = "draft"
+
                 ranking.is_finalized = True
                 ranking.finalized_at = datetime.now(timezone.utc)
                 ranking.finalized_by = finalizer_id
@@ -885,7 +972,13 @@ class QuotaDistributionService:
         grouped_apps = {}
         for app in applications:
             sub_type = app.sub_scholarship_type
-            college = app.student_data.get("college_code") if app.student_data else "unknown"
+            student_payload = app.student_data if isinstance(app.student_data, dict) else {}
+            college = (
+                student_payload.get("college_code")
+                or student_payload.get("std_college")
+                or student_payload.get("academy_code")
+                or "unknown"
+            )
 
             if sub_type not in grouped_apps:
                 grouped_apps[sub_type] = {}

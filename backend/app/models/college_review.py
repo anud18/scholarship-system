@@ -55,7 +55,7 @@ class CollegeReview(Base):
     __tablename__ = "college_reviews"
 
     id = Column(Integer, primary_key=True, index=True)
-    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False, unique=True)
+    application_id = Column(Integer, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, unique=True)
     reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # Ranking and scoring
@@ -114,7 +114,12 @@ class CollegeReview(Base):
     )
 
     # Relationships using string references to avoid circular dependencies
-    application = relationship("Application", lazy="select", foreign_keys=[application_id])
+    application = relationship(
+        "Application",
+        lazy="select",
+        foreign_keys=[application_id],
+        back_populates="college_review",
+    )
     reviewer = relationship("User", lazy="select", foreign_keys=[reviewer_id], back_populates="college_reviews")
 
     def __repr__(self):
@@ -254,6 +259,10 @@ class CollegeRankingItem(Base):
 
     # Status tracking
     status = Column(String(20), default="ranked")  # 'ranked', 'allocated', 'rejected', 'waitlisted'
+
+    # Matrix distribution fields
+    allocated_sub_type = Column(String(50), nullable=True)  # Sub-type code allocated to (e.g., 'nstc', 'moe_1w')
+    backup_position = Column(Integer, nullable=True)  # Backup position (NULL for admitted, 1, 2, 3... for backup)
 
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())

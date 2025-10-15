@@ -27,8 +27,8 @@ class TestApplicationSequence:
         app_id = ApplicationSequence.format_app_id(113, "second", 125)
         assert app_id == "APP-113-2-00125"
 
-        # Test annual scholarship
-        app_id = ApplicationSequence.format_app_id(114, "annual", 1)
+        # Test yearly scholarship
+        app_id = ApplicationSequence.format_app_id(114, "yearly", 1)
         assert app_id == "APP-114-0-00001"
 
         # Test large sequence number
@@ -39,7 +39,7 @@ class TestApplicationSequence:
         """Test semester code conversion"""
         assert ApplicationSequence.get_semester_code("first") == "1"
         assert ApplicationSequence.get_semester_code("second") == "2"
-        assert ApplicationSequence.get_semester_code("annual") == "0"
+        assert ApplicationSequence.get_semester_code("yearly") == "0"
         assert ApplicationSequence.get_semester_code("unknown") == "0"  # Default
 
     async def test_generate_sequential_app_ids(self, db: AsyncSession):
@@ -113,7 +113,7 @@ class TestApplicationSequence:
         # Generate with None semester
         app_id = await service._generate_app_id(113, None)
 
-        # Should use annual (code 0)
+        # Should use yearly (code 0)
         assert "APP-113-0-" in app_id
 
     async def test_sequence_persistence(self, db: AsyncSession):

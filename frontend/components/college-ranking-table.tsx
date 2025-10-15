@@ -62,20 +62,25 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Calculator,
   FileText,
   Download,
   Send,
+  Upload,
+  FileSpreadsheet,
 } from "lucide-react";
 import { getTranslation } from "@/lib/i18n";
+import { useToast } from "@/components/ui/use-toast";
+import { apiClient } from "@/lib/api";
+import * as XLSX from "xlsx";
 
 interface Application {
   id: number;
   app_id: string;
   student_name: string;
-  student_no: string;
+  student_id: string;
   scholarship_type: string;
   sub_type: string;
+  eligible_subtypes?: string[];  // Eligible sub-scholarship types
   total_score: number;
   rank_position: number;
   is_allocated: boolean;
@@ -88,12 +93,14 @@ interface CollegeRankingTableProps {
   totalQuota: number;
   subTypeCode: string;
   academicYear: number;
-  semester?: string;
+  semester?: string | null;
   isFinalized: boolean;
+  rankingId?: number;
   onRankingChange: (newOrder: Application[]) => void;
   onReviewApplication: (applicationId: number) => void;
   onExecuteDistribution: () => void;
   onFinalizeRanking: () => void;
+  onImportExcel?: (data: any[]) => Promise<void>;
   locale?: "zh" | "en";
 }
 
@@ -107,7 +114,6 @@ function SortableItem({
   onReviewApplication,
   reviewScores,
   handleScoreUpdate,
-  calculateTotalScore,
 }: {
   application: Application;
   index: number;
@@ -117,7 +123,6 @@ function SortableItem({
   onReviewApplication: (applicationId: number) => void;
   reviewScores: { [key: number]: any };
   handleScoreUpdate: (appId: number, field: string, value: any) => void;
-  calculateTotalScore: (scores: any) => string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: application.id.toString(), disabled: isFinalized });
@@ -164,6 +169,21 @@ function SortableItem({
     }
   };
 
+  const getSubtypeBadgeColor = (subtype: string) => {
+    const subtypeUpper = subtype.toUpperCase();
+    if (subtypeUpper.includes("NSTC")) {
+      return "bg-blue-100 text-blue-800 border-blue-300";
+    } else if (subtypeUpper.includes("MOE_1W") || subtypeUpper.includes("1W")) {
+      return "bg-green-100 text-green-800 border-green-300";
+    } else if (subtypeUpper.includes("MOE_2W") || subtypeUpper.includes("2W")) {
+      return "bg-yellow-100 text-yellow-800 border-yellow-300";
+    } else if (subtypeUpper.includes("GENERAL")) {
+      return "bg-gray-100 text-gray-800 border-gray-300";
+    } else {
+      return "bg-purple-100 text-purple-800 border-purple-300";
+    }
+  };
+
   return (
     <TableRow
       ref={setNodeRef}
@@ -184,16 +204,30 @@ function SortableItem({
       <TableCell>
         <div className="space-y-1">
           <p className="font-medium">{application.student_name}</p>
-          <p className="text-sm text-gray-500">{application.student_no}</p>
+          <p className="text-sm text-gray-500">
+            {locale === "zh"
+              ? `學號：${application.student_id || "-"}`
+              : `Student ID: ${application.student_id || "-"}`}
+          </p>
           <p className="text-xs text-gray-400">{application.app_id}</p>
         </div>
       </TableCell>
 
       <TableCell className="text-center">
-        <div className="flex flex-col items-center gap-1">
-          <Badge variant="outline" className="font-mono">
-            {application.total_score?.toFixed(2) || "N/A"}
-          </Badge>
+        <div className="flex flex-wrap justify-center gap-1">
+          {application.eligible_subtypes && application.eligible_subtypes.length > 0 ? (
+            application.eligible_subtypes.map((subtype, idx) => (
+              <Badge
+                key={idx}
+                variant="outline"
+                className={`text-xs ${getSubtypeBadgeColor(subtype)}`}
+              >
+                {subtype.toUpperCase()}
+              </Badge>
+            ))
+          ) : (
+            <span className="text-xs text-gray-400">-</span>
+          )}
         </div>
       </TableCell>
 
@@ -218,106 +252,6 @@ function SortableItem({
               </DialogHeader>
 
               <div className="space-y-4">
-                {/* Score Breakdown */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">
-                      學術成績 (30%)
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={reviewScores[application.id]?.academic || ""}
-                      onChange={e =>
-                        handleScoreUpdate(
-                          application.id,
-                          "academic",
-                          Number(e.target.value)
-                        )
-                      }
-                      disabled={isFinalized}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium">
-                      教授推薦 (40%)
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={
-                        reviewScores[application.id]?.professor_review || ""
-                      }
-                      onChange={e =>
-                        handleScoreUpdate(
-                          application.id,
-                          "professor_review",
-                          Number(e.target.value)
-                        )
-                      }
-                      disabled={isFinalized}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium">
-                      學院標準 (20%)
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={
-                        reviewScores[application.id]?.college_criteria || ""
-                      }
-                      onChange={e =>
-                        handleScoreUpdate(
-                          application.id,
-                          "college_criteria",
-                          Number(e.target.value)
-                        )
-                      }
-                      disabled={isFinalized}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium">
-                      特殊情況 (10%)
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={
-                        reviewScores[application.id]?.special_circumstances ||
-                        ""
-                      }
-                      onChange={e =>
-                        handleScoreUpdate(
-                          application.id,
-                          "special_circumstances",
-                          Number(e.target.value)
-                        )
-                      }
-                      disabled={isFinalized}
-                    />
-                  </div>
-                </div>
-
-                {/* Total Score */}
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">總分:</span>
-                    <Badge variant="default" className="text-lg px-3 py-1">
-                      {calculateTotalScore(reviewScores[application.id])}
-                    </Badge>
-                  </div>
-                </div>
-
                 {/* Review Comments */}
                 <div>
                   <label className="text-sm font-medium">審查意見</label>
@@ -331,37 +265,28 @@ function SortableItem({
                       )
                     }
                     disabled={isFinalized}
-                    rows={3}
+                    rows={4}
+                    placeholder="請輸入審查意見..."
                   />
                 </div>
 
-                {/* Recommendation */}
-                <div>
-                  <label className="text-sm font-medium">推薦結果</label>
-                  <Select
-                    value={reviewScores[application.id]?.recommendation || ""}
-                    onValueChange={value =>
-                      handleScoreUpdate(application.id, "recommendation", value)
-                    }
-                    disabled={isFinalized}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="選擇推薦結果" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="approve">核准</SelectItem>
-                      <SelectItem value="reject">駁回</SelectItem>
-                      <SelectItem value="conditional">有條件核准</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
+                {/* Action Buttons */}
                 {!isFinalized && (
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline">取消</Button>
-                    <Button onClick={() => onReviewApplication(application.id)}>
-                      <Save className="h-4 w-4 mr-2" />
-                      儲存審查
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => onReviewApplication(application.id)}
+                      className="flex-1"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      核准
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => onReviewApplication(application.id)}
+                      className="flex-1"
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      駁回
                     </Button>
                   </div>
                 )}
@@ -381,19 +306,42 @@ export function CollegeRankingTable({
   academicYear,
   semester,
   isFinalized,
+  rankingId,
   onRankingChange,
   onReviewApplication,
   onExecuteDistribution,
   onFinalizeRanking,
+  onImportExcel,
   locale = "zh",
 }: CollegeRankingTableProps) {
   const t = (key: string) => getTranslation(locale, key);
+  const { toast } = useToast();
+
+  const formatSemesterLabel = (value?: string | null) => {
+    if (!value) {
+      return locale === "zh" ? "全年" : "Yearly";
+    }
+
+    const lower = value.toLowerCase();
+
+    if (lower === "first") {
+      return locale === "zh" ? "第一學期" : "1st Semester";
+    }
+
+    if (lower === "second") {
+      return locale === "zh" ? "第二學期" : "2nd Semester";
+    }
+
+    return value;
+  };
 
   const [localApplications, setLocalApplications] =
     useState<Application[]>(applications);
   const [selectedApplication, setSelectedApplication] =
     useState<Application | null>(null);
   const [reviewScores, setReviewScores] = useState<{ [key: number]: any }>({});
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -417,27 +365,29 @@ export function CollegeRankingTable({
       return;
     }
 
-    setLocalApplications(items => {
-      const oldIndex = items.findIndex(
-        item => item.id.toString() === active.id
-      );
-      const newIndex = items.findIndex(item => item.id.toString() === over.id);
+    const oldIndex = localApplications.findIndex(
+      item => item.id.toString() === active.id
+    );
+    const newIndex = localApplications.findIndex(
+      item => item.id.toString() === over.id
+    );
 
-      const newItems = arrayMove(items, oldIndex, newIndex);
+    const newItems = arrayMove(localApplications, oldIndex, newIndex);
 
-      // Update rank positions
-      const updatedItems = newItems.map((item, index) => ({
-        ...item,
-        rank_position: index + 1,
-        is_allocated: index < totalQuota, // Update allocation based on new position
-      }));
+    // Update rank positions only - allocation status is set by distribution execution
+    const updatedItems = newItems.map((item, index) => ({
+      ...item,
+      rank_position: index + 1,
+      // is_allocated is not updated here - only set after distribution execution
+    }));
 
-      onRankingChange(updatedItems);
-      return updatedItems;
-    });
+    // Update local state first, then notify parent
+    setLocalApplications(updatedItems);
+    // Call parent callback outside of setState to avoid setState-in-render error
+    onRankingChange(updatedItems);
   };
 
-  const handleScoreUpdate = (appId: number, field: string, value: number) => {
+  const handleScoreUpdate = (appId: number, field: string, value: any) => {
     setReviewScores(prev => ({
       ...prev,
       [appId]: {
@@ -447,31 +397,77 @@ export function CollegeRankingTable({
     }));
   };
 
-  const calculateTotalScore = (scores: any) => {
-    const weights = {
-      academic: 0.3,
-      professor_review: 0.4,
-      college_criteria: 0.2,
-      special_circumstances: 0.1,
-    };
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    return (
-      (scores?.academic || 0) * weights.academic +
-      (scores?.professor_review || 0) * weights.professor_review +
-      (scores?.college_criteria || 0) * weights.college_criteria +
-      (scores?.special_circumstances || 0) * weights.special_circumstances
-    ).toFixed(2);
+    // Validate file type
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      toast({
+        title: "檔案格式錯誤",
+        description: "請上傳 Excel 檔案 (.xlsx 或 .xls)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsImporting(true);
+
+    try {
+      // Read Excel file
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      // Parse Excel data - expected columns: 學號, 姓名, 排名
+      const importData = jsonData.map((row: any) => ({
+        student_id: row['學號'] || row['student_id'] || '',
+        student_name: row['姓名'] || row['student_name'] || row['name'] || '',
+        rank_position: parseInt(row['排名'] || row['rank_position'] || row['rank'] || '0'),
+      })).filter(item => item.student_id && item.rank_position > 0);
+
+      if (importData.length === 0) {
+        toast({
+          title: "無有效資料",
+          description: "Excel 檔案中沒有找到有效的排名資料",
+          variant: "destructive",
+        });
+        setIsImporting(false);
+        return;
+      }
+
+      // Call import handler if provided
+      if (onImportExcel) {
+        await onImportExcel(importData);
+        toast({
+          title: "匯入成功",
+          description: `成功匯入 ${importData.length} 筆排名資料`,
+        });
+        setIsImportDialogOpen(false);
+      }
+    } catch (error) {
+      console.error('Excel import error:', error);
+      toast({
+        title: "匯入失敗",
+        description: error instanceof Error ? error.message : "無法讀取 Excel 檔案",
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
+      // Reset file input
+      event.target.value = '';
+    }
   };
 
   const allocatedCount = localApplications.filter(
     app => app.is_allocated
   ).length;
-  const remainingQuota = Math.max(0, totalQuota - allocatedCount);
 
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
@@ -481,20 +477,6 @@ export function CollegeRankingTable({
                   {locale === "zh" ? "總申請數" : "Total Applications"}
                 </p>
                 <p className="text-2xl font-bold">{localApplications.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Trophy className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">
-                  {locale === "zh" ? "可分配配額" : "Available Quota"}
-                </p>
-                <p className="text-2xl font-bold">{totalQuota}</p>
               </div>
             </div>
           </CardContent>
@@ -515,22 +497,6 @@ export function CollegeRankingTable({
             </div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <AlertCircle className="h-8 w-8 text-orange-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">
-                  {locale === "zh" ? "剩餘配額" : "Remaining Quota"}
-                </p>
-                <p className="text-2xl font-bold text-orange-600">
-                  {remainingQuota}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Ranking Table */}
@@ -545,14 +511,79 @@ export function CollegeRankingTable({
               </CardTitle>
               <CardDescription>
                 {locale === "zh"
-                  ? `學年度 ${academicYear}${semester ? ` - ${semester}` : ""}`
-                  : `AY ${academicYear}${semester ? ` - ${semester}` : ""}`}
+                  ? `學年度 ${academicYear} - ${formatSemesterLabel(semester)}`
+                  : `AY ${academicYear} - ${formatSemesterLabel(semester)}`}
               </CardDescription>
             </div>
 
             <div className="flex gap-2">
               {!isFinalized && (
                 <>
+                  <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Upload className="h-4 w-4 mr-2" />
+                        {locale === "zh" ? "匯入排名" : "Import Ranking"}
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>
+                          {locale === "zh" ? "匯入排名資料" : "Import Ranking Data"}
+                        </DialogTitle>
+                        <DialogDescription>
+                          {locale === "zh"
+                            ? "上傳包含學號、姓名、排名的 Excel 檔案"
+                            : "Upload an Excel file containing Student ID, Name, and Rank"}
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="space-y-4">
+                        {/* Instructions */}
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <h4 className="text-sm font-semibold text-blue-900 mb-2">
+                            {locale === "zh" ? "檔案格式要求" : "File Format Requirements"}
+                          </h4>
+                          <ul className="text-sm text-blue-800 space-y-1">
+                            <li>• {locale === "zh" ? "Excel 格式 (.xlsx 或 .xls)" : "Excel format (.xlsx or .xls)"}</li>
+                            <li>• {locale === "zh" ? "必需欄位：學號、姓名、排名" : "Required columns: Student ID, Name, Rank"}</li>
+                            <li>• {locale === "zh" ? "排名必須為正整數 (1, 2, 3...)" : "Rank must be positive integers (1, 2, 3...)"}</li>
+                          </ul>
+                        </div>
+
+                        {/* Template Download */}
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="h-5 w-5 text-gray-500" />
+                          <Button variant="link" className="text-sm p-0">
+                            {locale === "zh" ? "下載範本檔案" : "Download Template"}
+                          </Button>
+                        </div>
+
+                        {/* File Upload */}
+                        <div>
+                          <label htmlFor="excel-upload" className="block text-sm font-medium mb-2">
+                            {locale === "zh" ? "選擇檔案" : "Select File"}
+                          </label>
+                          <Input
+                            id="excel-upload"
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={handleFileUpload}
+                            disabled={isImporting}
+                          />
+                        </div>
+
+                        {isImporting && (
+                          <div className="text-center py-4">
+                            <p className="text-sm text-gray-600">
+                              {locale === "zh" ? "正在處理檔案..." : "Processing file..."}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
                   <Button
                     variant="outline"
                     size="sm"
@@ -605,7 +636,7 @@ export function CollegeRankingTable({
                   </TableHead>
                   <TableHead>{locale === "zh" ? "學生" : "Student"}</TableHead>
                   <TableHead className="text-center">
-                    {locale === "zh" ? "分數" : "Score"}
+                    {locale === "zh" ? "符合子類別" : "Eligible Types"}
                   </TableHead>
                   <TableHead className="text-center">
                     {locale === "zh" ? "狀態" : "Status"}
@@ -631,7 +662,6 @@ export function CollegeRankingTable({
                       onReviewApplication={onReviewApplication}
                       reviewScores={reviewScores}
                       handleScoreUpdate={handleScoreUpdate}
-                      calculateTotalScore={calculateTotalScore}
                     />
                   ))}
                 </SortableContext>

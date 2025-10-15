@@ -29,7 +29,7 @@ def upgrade() -> None:
         op.create_table(
             "application_sequences",
             sa.Column("academic_year", sa.Integer(), nullable=False, comment="民國年，例如 113"),
-            sa.Column("semester", sa.String(length=20), nullable=False, comment="學期：first, second, annual"),
+            sa.Column("semester", sa.String(length=20), nullable=False, comment="學期：first, second, yearly"),
             sa.Column("last_sequence", sa.Integer(), nullable=False, server_default="0", comment="最後使用的序號"),
             sa.PrimaryKeyConstraint("academic_year", "semester", name="pk_application_sequences"),
         )

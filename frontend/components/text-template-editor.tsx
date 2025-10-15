@@ -37,6 +37,10 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Refs for input elements to manage cursor position
+  const subjectInputRef = React.useRef<HTMLInputElement>(null);
+  const bodyTextareaRef = React.useRef<HTMLTextAreaElement>(null);
+
   useEffect(() => {
     if (template) {
       setEditedTemplate(template);
@@ -66,19 +70,60 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
     }
   };
 
+  /**
+   * Insert variable at cursor position instead of appending to end
+   */
   const insertVariable = (variable: string, field: "subject" | "body") => {
     const variableTag = `{{${variable}}}`;
-    if (field === "subject") {
+    const inputElement = field === "subject" ? subjectInputRef.current : bodyTextareaRef.current;
+    const currentValue = field === "subject"
+      ? (editedTemplate.subject_template || "")
+      : (editedTemplate.body_template || "");
+
+    if (inputElement) {
+      // Get cursor position
+      const start = inputElement.selectionStart || 0;
+      const end = inputElement.selectionEnd || 0;
+
+      // Insert variable at cursor position
+      const newValue =
+        currentValue.substring(0, start) +
+        variableTag +
+        currentValue.substring(end);
+
+      // Update state
+      const fieldName = field === "subject" ? "subject_template" : "body_template";
       setEditedTemplate((prev) => ({
         ...prev,
-        subject_template: (prev.subject_template || "") + variableTag,
+        [fieldName]: newValue,
       }));
+
+      // Set cursor position after the inserted variable (next tick to ensure state update)
+      setTimeout(() => {
+        const newCursorPos = start + variableTag.length;
+        inputElement.setSelectionRange(newCursorPos, newCursorPos);
+        inputElement.focus();
+      }, 0);
     } else {
+      // Fallback: append to end if ref not available
+      const fieldName = field === "subject" ? "subject_template" : "body_template";
       setEditedTemplate((prev) => ({
         ...prev,
-        body_template: (prev.body_template || "") + variableTag,
+        [fieldName]: currentValue + variableTag,
       }));
     }
+  };
+
+  /**
+   * Handle drop event to insert variable at drop position
+   */
+  const handleDropVariable = (
+    variable: string,
+    field: "subject" | "body",
+    e: React.DragEvent
+  ) => {
+    e.preventDefault();
+    insertVariable(variable, field);
   };
 
   if (!template) return null;
@@ -101,25 +146,29 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
             <span className="text-gray-600">模板 Key: {template.template_key}</span>
           </div>
 
-          {/* Variables Helper */}
+          {/* Draggable Variables */}
           {template.variables && template.variables.length > 0 && (
-            <div className="border rounded-lg p-4 bg-blue-50">
-              <h4 className="font-semibold text-sm mb-2">可用變數</h4>
+            <div className="border rounded-lg p-4 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+              <h4 className="font-semibold text-sm mb-2 text-gray-800">
+                可用變數 (可拖曳至模板中)
+              </h4>
               <div className="flex flex-wrap gap-2">
                 {template.variables.map((variable) => (
-                  <Badge
+                  <span
                     key={variable}
-                    variant="outline"
-                    className="cursor-pointer hover:bg-blue-100"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`{{${variable}}}`);
-                    }}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData("text/plain", variable)}
+                    className="inline-flex items-center px-3 py-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-full cursor-move text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:from-orange-600 hover:to-orange-700 active:scale-95"
+                    title={`拖曳此變數: ${variable}`}
                   >
-                    {`{{${variable}}}`}
-                  </Badge>
+                    <span className="mr-1">📧</span>
+                    {variable}
+                  </span>
                 ))}
               </div>
-              <p className="text-xs text-gray-600 mt-2">點擊變數複製到剪貼板</p>
+              <p className="text-xs text-gray-700 mt-2">
+                💡 提示：將變數拖曳到下方的標題或內容欄位中，系統會自動插入對應的變數代碼
+              </p>
             </div>
           )}
 
@@ -130,6 +179,7 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
               <span className="text-xs text-gray-500 ml-2">(支持變數：使用 {`{{變數名}}`} 格式)</span>
             </Label>
             <Input
+              ref={subjectInputRef}
               id="subject_template"
               value={editedTemplate.subject_template || ""}
               onChange={(e) =>
@@ -138,11 +188,14 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
                   subject_template: e.target.value,
                 }))
               }
-              placeholder="輸入郵件主旨模板"
+              onDrop={(e) => handleDropVariable(e.dataTransfer.getData("text/plain"), "subject", e)}
+              onDragOver={(e) => e.preventDefault()}
+              placeholder="輸入郵件主旨模板，可拖曳變數進來"
+              className="border-2 border-dashed transition-colors hover:border-blue-300 focus:border-blue-500"
             />
             {template.variables && template.variables.length > 0 && (
               <div className="flex gap-2 flex-wrap">
-                <span className="text-xs text-gray-600">快速插入：</span>
+                <span className="text-xs text-gray-600">點擊插入到游標位置：</span>
                 {template.variables.slice(0, 5).map((variable) => (
                   <Button
                     key={variable}
@@ -166,6 +219,7 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
               <span className="text-xs text-gray-500 ml-2">(支持變數和簡單 HTML 標籤)</span>
             </Label>
             <Textarea
+              ref={bodyTextareaRef}
               id="body_template"
               value={editedTemplate.body_template || ""}
               onChange={(e) =>
@@ -174,13 +228,15 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
                   body_template: e.target.value,
                 }))
               }
-              placeholder="輸入郵件內容模板"
+              onDrop={(e) => handleDropVariable(e.dataTransfer.getData("text/plain"), "body", e)}
+              onDragOver={(e) => e.preventDefault()}
+              placeholder="輸入郵件內容模板，可拖曳變數進來&#10;&#10;範例：&#10;親愛的 {{student_name}} 同學，您好！&#10;&#10;您申請的獎學金 {{scholarship_name}} 已收到..."
               rows={15}
-              className="font-mono text-sm"
+              className="font-mono text-sm border-2 border-dashed transition-colors hover:border-blue-300 focus:border-blue-500 resize-none"
             />
             {template.variables && template.variables.length > 0 && (
               <div className="flex gap-2 flex-wrap">
-                <span className="text-xs text-gray-600">快速插入：</span>
+                <span className="text-xs text-gray-600">點擊插入到游標位置：</span>
                 {template.variables.slice(0, 8).map((variable) => (
                   <Button
                     key={variable}
@@ -230,6 +286,7 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
               <strong>變數使用說明：</strong>
               <ul className="list-disc list-inside mt-2 text-xs space-y-1">
                 <li>使用 {`{{變數名}}`} 格式插入變數</li>
+                <li>點擊變數按鈕會在游標位置插入，若有選取文字則會替換</li>
                 <li>支持簡單 HTML 標籤：{`<b>, <i>, <br>, <p>`} 等</li>
                 <li>換行請使用 {`<br>`} 標籤或實際換行</li>
               </ul>

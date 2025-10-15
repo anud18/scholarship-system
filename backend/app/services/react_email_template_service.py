@@ -19,8 +19,14 @@ logger = logging.getLogger(__name__)
 class ReactEmailTemplateService:
     """Service for scanning and managing React Email template metadata"""
 
-    # Path to React Email templates directory (relative to backend root)
-    TEMPLATE_DIR = Path(__file__).parent.parent.parent.parent / "frontend" / "emails"
+    # Path to React Email templates directory
+    # Check environment variable first (for Docker), then fall back to relative path (for local dev)
+    _template_dir_env = os.getenv("REACT_EMAIL_TEMPLATES_DIR")
+    TEMPLATE_DIR = (
+        Path(_template_dir_env)
+        if _template_dir_env
+        else (Path(__file__).parent.parent.parent.parent / "frontend" / "emails")
+    )
 
     # Template display names and descriptions (can be moved to database later)
     TEMPLATE_METADATA = {

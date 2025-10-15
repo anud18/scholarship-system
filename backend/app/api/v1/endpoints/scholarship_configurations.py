@@ -301,6 +301,48 @@ async def get_matrix_quota_status(
         # Get usage data efficiently from applications with student_data JSON field
         usage_data = {}
 
+        # Query applications for this scholarship type and period
+        app_stmt = select(Application).where(
+            and_(
+                Application.scholarship_type_id == phd_scholarship.id,
+                Application.academic_year == academic_year,
+                Application.semester == semester if semester else Application.semester.is_(None),
+                Application.status.in_(["allocated", "submitted", "professor_reviewed", "college_reviewed"]),
+            )
+        )
+
+        app_result = await db.execute(app_stmt)
+        applications = app_result.scalars().all()
+
+        # Calculate usage per college
+        for app in applications:
+            if not app.student_data or not isinstance(app.student_data, dict):
+                continue
+
+            # Get college code from student data
+            college_code = (
+                app.student_data.get("college_code")
+                or app.student_data.get("std_college")
+                or app.student_data.get("academy_code")
+            )
+
+            if not college_code:
+                continue
+
+            # Normalize college code to uppercase
+            college_code = college_code.upper()
+
+            # Initialize college usage if not exists
+            if college_code not in usage_data:
+                usage_data[college_code] = {"used": 0, "applications": 0}
+
+            # Count allocated applications as "used"
+            if app.status == "allocated":
+                usage_data[college_code]["used"] += 1
+
+            # Count all applications
+            usage_data[college_code]["applications"] += 1
+
         # Build quota matrix using pre-fetched usage data
         for sub_type in sub_types:
             phd_quotas[sub_type] = {}
@@ -1601,7 +1643,7 @@ async def export_whitelist_excel(
 
     # Return as downloadable file
     filename = (
-        f"{scholarship_name}_申請白名單_{config.academic_year}_{config.semester.value if config.semester else 'annual'}.xlsx"
+        f"{scholarship_name}_申請白名單_{config.academic_year}_{config.semester.value if config.semester else 'yearly'}.xlsx"
     )
 
     return StreamingResponse(

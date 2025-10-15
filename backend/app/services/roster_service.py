@@ -563,10 +563,10 @@ class RosterService:
         """
         if roster_cycle == RosterCycle.MONTHLY:
             return target_date.strftime("%Y-%m")  # 2025-01
-        elif roster_cycle == RosterCycle.SEMI_ANNUAL:
+        elif roster_cycle == RosterCycle.SEMI_YEARLY:
             half = "H1" if target_date.month <= 6 else "H2"
             return f"{target_date.year}-{half}"  # 2025-H1
-        elif roster_cycle == RosterCycle.ANNUAL:
+        elif roster_cycle == RosterCycle.YEARLY:
             return str(target_date.year)  # 2025
         else:
             raise ValueError(f"Unsupported roster cycle: {roster_cycle}")

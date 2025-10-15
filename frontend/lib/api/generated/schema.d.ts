@@ -4239,9 +4239,20 @@ export interface paths {
          * @description Get a ranking with all its items
          */
         get: operations["get_ranking_api_v1_college_review_rankings__ranking_id__get"];
-        put?: never;
+        /**
+         * Update Ranking
+         * @description Update ranking metadata (name, etc.)
+         */
+        put: operations["update_ranking_api_v1_college_review_rankings__ranking_id__put"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete Ranking
+         * @description Delete a ranking
+         *
+         *     Only the creator or admin can delete a ranking.
+         *     Cannot delete finalized rankings.
+         */
+        delete: operations["delete_ranking_api_v1_college_review_rankings__ranking_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4359,6 +4370,102 @@ export interface paths {
          * @description Get available combinations of scholarship types, academic years, and semesters from configurations
          */
         get: operations["get_available_combinations_api_v1_college_review_available_combinations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/rankings/{ranking_id}/import-excel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Ranking From Excel
+         * @description Import ranking data from Excel
+         *
+         *     Expected Excel columns: 學號, 姓名, 排名
+         *     This endpoint updates the rank_position of existing ranking items based on student IDs
+         */
+        post: operations["import_ranking_from_excel_api_v1_college_review_rankings__ranking_id__import_excel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/rankings/{ranking_id}/execute-matrix-distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute Matrix Distribution
+         * @description Execute matrix-based quota distribution for a ranking
+         *
+         *     This uses the matrix distribution algorithm which:
+         *     - Processes sub-types in fixed priority order
+         *     - Allocates students to sub-type × college matrix quotas
+         *     - Tracks admitted (正取) and backup (備取) positions
+         *     - Checks eligibility rules before allocation
+         */
+        post: operations["execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/rankings/{ranking_id}/distribution-details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution Details
+         * @description Get detailed distribution results for a ranking
+         *
+         *     Returns allocation details by sub-type and college including:
+         *     - Admitted students (正取)
+         *     - Backup students (備取) with positions
+         *     - Rejected students
+         */
+        get: operations["get_distribution_details_api_v1_college_review_rankings__ranking_id__distribution_details_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/sub-type-translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Sub Type Translations
+         * @description Get sub-type name translations for all supported languages from database
+         *
+         *     Returns a dictionary with Chinese and English translations for all active sub-type configurations
+         */
+        get: operations["get_sub_type_translations_api_v1_college_review_sub_type_translations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5020,7 +5127,7 @@ export interface paths {
          * @description 獲取所有郵件模板列表
          *
          *     Returns:
-         *         郵件模板列表，包含 key、subject_template 和 sending_type
+         *         郵件模板列表，包含完整元數據和變數列表
          */
         get: operations["get_email_templates_api_v1_email_management_templates_get"];
         put?: never;
@@ -8125,6 +8232,27 @@ export interface components {
             distribution_rules?: Record<string, never> | null;
         };
         /**
+         * RankingImportItem
+         * @description Schema for importing ranking data from Excel
+         */
+        RankingImportItem: {
+            /**
+             * Student Id
+             * @description Student ID (學號)
+             */
+            student_id: string;
+            /**
+             * Student Name
+             * @description Student name (姓名)
+             */
+            student_name: string;
+            /**
+             * Rank Position
+             * @description Ranking position (排名)
+             */
+            rank_position: number;
+        };
+        /**
          * RankingOrderUpdate
          * @description Schema for updating ranking order
          */
@@ -8133,6 +8261,17 @@ export interface components {
             item_id: number;
             /** Position */
             position: number;
+        };
+        /**
+         * RankingUpdate
+         * @description Schema for updating ranking metadata
+         */
+        RankingUpdate: {
+            /**
+             * Ranking Name
+             * @description New ranking name
+             */
+            ranking_name: string;
         };
         /**
          * RosterCreateRequest
@@ -8168,7 +8307,7 @@ export interface components {
          * @description 造冊週期枚舉
          * @enum {string}
          */
-        RosterCycle: "monthly" | "semi_annual" | "annual";
+        RosterCycle: "monthly" | "semi_yearly" | "yearly";
         /**
          * RosterExportRequest
          * @description 造冊匯出請求
@@ -8951,7 +9090,7 @@ export interface components {
          * @description Semester enum
          * @enum {string}
          */
-        Semester: "first" | "second" | "annual";
+        Semester: "first" | "second" | "yearly";
         /**
          * SendTestEmailRequest
          * @description Schema for sending test email
@@ -17225,6 +17364,72 @@ export interface operations {
             };
         };
     };
+    update_ranking_api_v1_college_review_rankings__ranking_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RankingUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_ranking_api_v1_college_review_rankings__ranking_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_ranking_order_api_v1_college_review_rankings__ranking_id__order_put: {
         parameters: {
             query?: never;
@@ -17397,6 +17602,123 @@ export interface operations {
         };
     };
     get_available_combinations_api_v1_college_review_available_combinations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    import_ranking_from_excel_api_v1_college_review_rankings__ranking_id__import_excel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RankingImportItem"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_distribution_details_api_v1_college_review_rankings__ranking_id__distribution_details_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sub_type_translations_api_v1_college_review_sub_type_translations_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -17598,9 +17920,9 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["BatchImportConfirmRequest"];
+                "application/json": components["schemas"]["BatchImportConfirmRequest"] | null;
             };
         };
         responses: {

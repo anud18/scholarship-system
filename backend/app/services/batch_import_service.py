@@ -6,6 +6,7 @@ for college staff importing offline collected student data.
 """
 
 import io
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -13,19 +14,61 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ServiceUnavailableError
 from app.models.application import Application, ApplicationStatus
 from app.models.batch_import import BatchImport
-from app.models.enums import BatchImportStatus
+from app.models.enums import BatchImportStatus, Semester
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
 from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationError
+from app.services.student_service import StudentService
+
+logger = logging.getLogger(__name__)
+
+
+DEPT_CODE_COLUMNS = [
+    "dept_code",
+    "deptCode",
+    "系所代碼",
+    "系所代號",
+    "科系代碼",
+    "科系代號",
+    "學系代碼",
+    "學系代號",
+]
+
+
+def _normalize_identifier(value: Any) -> str:
+    """Convert cell value to trimmed string identifier."""
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        if pd.isna(value):
+            return ""
+        if value.is_integer():
+            value = int(value)
+    return str(value).strip()
+
+
+def _normalize_optional(value: Any) -> Optional[str]:
+    """Convert optional cell value to trimmed string, handling NaN/None."""
+    if value is None:
+        return None
+    if isinstance(value, float):
+        if pd.isna(value):
+            return None
+        if value.is_integer():
+            value = int(value)
+    normalized = str(value).strip()
+    return normalized or None
 
 
 class BatchImportService:
     """Service for handling batch import operations"""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, student_service: Optional[StudentService] = None):
         self.db = db
+        self.student_service = student_service or StudentService()
 
     async def parse_excel_file(
         self, file_content: bytes, scholarship_type_id: int, academic_year: int, semester: Optional[str]
@@ -130,9 +173,9 @@ class BatchImportService:
 
             # Get student_id based on column format
             if use_chinese_columns:
-                student_id = str(row.get("學號", "")).strip()
+                student_id = _normalize_identifier(row.get("學號", ""))
             else:
-                student_id = str(row.get("student_id", "")).strip()
+                student_id = _normalize_identifier(row.get("student_id", ""))
 
             if not student_id:
                 errors.append(
@@ -152,18 +195,22 @@ class BatchImportService:
                 if use_chinese_columns:
                     data_row = {
                         "student_id": student_id,
-                        "student_name": str(row.get("學生姓名", "")).strip(),
-                        "postal_account": (str(row.get("郵局帳號", "")).strip() if pd.notna(row.get("郵局帳號")) else None),
-                        "advisor_name": (str(row.get("指導教授姓名", "")).strip() if pd.notna(row.get("指導教授姓名")) else None),
-                        "advisor_email": (
-                            str(row.get("指導教授Email", "")).strip() if pd.notna(row.get("指導教授Email")) else None
-                        ),
-                        "advisor_nycu_id": (
-                            str(row.get("指導教授本校人事編號", "")).strip() if pd.notna(row.get("指導教授本校人事編號")) else None
-                        ),
+                        "student_name": _normalize_identifier(row.get("學生姓名", "")),
+                        "postal_account": _normalize_optional(row.get("郵局帳號")),
+                        "advisor_name": _normalize_optional(row.get("指導教授姓名")),
+                        "advisor_email": _normalize_optional(row.get("指導教授Email")),
+                        "advisor_nycu_id": _normalize_optional(row.get("指導教授本校人事編號")),
                         "sub_types": [],
                         "custom_fields": {},
                     }
+
+                    # Optional department code columns
+                    for dept_col in DEPT_CODE_COLUMNS:
+                        if dept_col in df.columns:
+                            dept_value = _normalize_optional(row.get(dept_col))
+                            if dept_value:
+                                data_row["dept_code"] = dept_value
+                                break
 
                     # Parse sub_types from Chinese column names
                     for chinese_label, sub_type_code in sub_type_labels.items():
@@ -184,24 +231,22 @@ class BatchImportService:
                     # English column format (backward compatibility)
                     data_row = {
                         "student_id": student_id,
-                        "student_name": str(row.get("student_name", "")).strip(),
-                        "postal_account": (
-                            str(row.get("postal_account", "")).strip() if pd.notna(row.get("postal_account")) else None
-                        ),
-                        "advisor_name": (
-                            str(row.get("advisor_name", "")).strip() if pd.notna(row.get("advisor_name")) else None
-                        ),
-                        "advisor_email": (
-                            str(row.get("advisor_email", "")).strip() if pd.notna(row.get("advisor_email")) else None
-                        ),
-                        "advisor_nycu_id": (
-                            str(row.get("advisor_nycu_id", "")).strip()
-                            if pd.notna(row.get("advisor_nycu_id"))
-                            else None
-                        ),
+                        "student_name": _normalize_identifier(row.get("student_name", "")),
+                        "postal_account": _normalize_optional(row.get("postal_account")),
+                        "advisor_name": _normalize_optional(row.get("advisor_name")),
+                        "advisor_email": _normalize_optional(row.get("advisor_email")),
+                        "advisor_nycu_id": _normalize_optional(row.get("advisor_nycu_id")),
                         "sub_types": [],
                         "custom_fields": {},
                     }
+
+                    # Optional department code columns
+                    for dept_col in DEPT_CODE_COLUMNS:
+                        if dept_col in df.columns:
+                            dept_value = _normalize_optional(row.get(dept_col))
+                            if dept_value:
+                                data_row["dept_code"] = dept_value
+                                break
 
                     # Parse sub_types from English column names (sub_type_*)
                     for col in df.columns:
@@ -221,9 +266,11 @@ class BatchImportService:
                                 else:
                                     data_row["custom_fields"][field_name] = str(value).strip()
 
-                # Validate using Pydantic schema
-                ApplicationDataRow(**data_row)
-                parsed_data.append(data_row)
+                # Validate using Pydantic schema and capture normalized values
+                validated_row = ApplicationDataRow(**data_row)
+                normalized_row = validated_row.model_dump()
+                normalized_row["row_number"] = row_number
+                parsed_data.append(normalized_row)
 
             except Exception as e:
                 errors.append(
@@ -260,19 +307,26 @@ class BatchImportService:
         student = result.scalar_one_or_none()
 
         if not student:
-            return False, f"查無學號 {student_id} 的學生資料"
+            return False, f"查無學號 {student_id} 的學生資料 等待之後驗證"
 
         # Get student's department from raw_data JSON or dept_code column
+        student_dept = None
         if student.raw_data and isinstance(student.raw_data, dict):
-            student_dept = student.raw_data.get("deptCode") or student.dept_code
-        else:
+            student_dept = student.raw_data.get("deptCode")
+
+        if not student_dept:
             student_dept = student.dept_code
+
+        # Allow override from import data when existing record lacks dept information
+        normalized_dept_code = _normalize_optional(dept_code)
+        if not student_dept and normalized_dept_code:
+            student_dept = normalized_dept_code
 
         if not student_dept:
             # If no dept in database, use dept_code from import data
-            if not dept_code:
+            if not normalized_dept_code:
                 return False, f"學生 {student_id} 無系所資料，且匯入資料未提供 dept_code"
-            student_dept = dept_code
+            student_dept = normalized_dept_code
 
         # Query department from database to get academy_code
         dept_stmt = select(Department).where(Department.code == student_dept)
@@ -338,18 +392,57 @@ class BatchImportService:
         scholarship_type_id: int,
         academic_year: int,
         semester: Optional[str],
-    ) -> Tuple[Dict[str, Tuple[bool, Optional[str]]], Dict[str, Tuple[bool, Optional[str]]]]:
+        student_dept_map: Optional[Dict[str, Optional[str]]] = None,
+        student_row_map: Optional[Dict[str, int]] = None,
+    ) -> Tuple[Dict[str, Tuple[bool, Optional[str]]], Dict[str, Tuple[bool, Optional[str]]], List[Dict[str, Any]],]:
         """
         Bulk validate college permissions and check duplicates for multiple students
 
         Returns:
-            Tuple of (permission_results, duplicate_results)
+            Tuple of (permission_results, duplicate_results, warnings)
             Each dict maps student_id to (is_valid/is_duplicate, error_message)
         """
         from app.models.student import Department
 
-        permission_results = {}
-        duplicate_results = {}
+        permission_results: Dict[str, Tuple[bool, Optional[str]]] = {
+            student_id: (True, None) for student_id in student_ids
+        }
+        duplicate_results: Dict[str, Tuple[bool, Optional[str]]] = {}
+        warnings: List[Dict[str, Any]] = []
+        student_dept_map = student_dept_map or {}
+        student_row_map = student_row_map or {}
+        normalized_semester_str = _normalize_optional(semester)
+        normalized_semester_enum: Optional[Semester] = None
+        if normalized_semester_str:
+            try:
+                normalized_semester_enum = Semester(normalized_semester_str)
+            except ValueError:
+                normalized_semester_enum = None
+
+        def add_warning(
+            student_id: Optional[str],
+            warning_type: str,
+            message: str,
+            field: str = "department",
+        ) -> None:
+            warnings.append(
+                {
+                    "row_number": student_row_map.get(student_id) if student_id else None,
+                    "student_id": student_id,
+                    "field": field,
+                    "warning_type": warning_type,
+                    "message": message,
+                }
+            )
+
+        dept_cache: Dict[str, Optional[Department]] = {}
+
+        async def get_department_by_code(code: str) -> Optional[Department]:
+            if code not in dept_cache:
+                dept_stmt = select(Department).where(Department.code == code)
+                dept_result = await self.db.execute(dept_stmt)
+                dept_cache[code] = dept_result.scalar_one_or_none()
+            return dept_cache[code]
 
         # Batch query: Get all students by student IDs
         students_stmt = select(User).where(User.nycu_id.in_(student_ids))
@@ -360,7 +453,27 @@ class BatchImportService:
         # Find missing students
         for student_id in student_ids:
             if student_id not in student_map:
-                permission_results[student_id] = (False, f"查無學號 {student_id} 的學生資料")
+                dept_code = _normalize_optional(student_dept_map.get(student_id))
+                if not dept_code:
+                    add_warning(student_id, "student_not_in_system", f"查無學號 {student_id} 的使用者資料，將於後續確認。")
+                    duplicate_results[student_id] = (False, None)
+                    continue
+
+                dept = await get_department_by_code(dept_code)
+
+                if not dept:
+                    add_warning(
+                        student_id,
+                        "department_not_found",
+                        f"系所代碼 {dept_code} 不存在，請後續確認學生系所資訊。",
+                    )
+                elif college_code and dept.academy_code != college_code:
+                    add_warning(
+                        student_id,
+                        "college_mismatch_local",
+                        f"學生 {student_id} 的系所 ({dept_code}) 隸屬 {dept.academy_code} 學院，與目前學院 {college_code} 不符。",
+                    )
+
                 duplicate_results[student_id] = (False, None)
 
         # Get department info for permission validation
@@ -372,26 +485,102 @@ class BatchImportService:
                 student_dept = student.dept_code
 
             if not student_dept:
-                permission_results[student_id] = (False, f"學生 {student_id} 無系所資料")
-                continue
+                fallback_dept = _normalize_optional(student_dept_map.get(student_id))
+                if fallback_dept:
+                    student_dept = fallback_dept
+                else:
+                    add_warning(
+                        student_id,
+                        "missing_department_local",
+                        f"學生 {student_id} 無系所資料，請後續確認。",
+                    )
+                    continue
 
-            # Get department college code
-            dept_stmt = select(Department).where(Department.code == student_dept)
-            dept_result = await self.db.execute(dept_stmt)
-            dept = dept_result.scalar_one_or_none()
+            dept = await get_department_by_code(student_dept)
 
             if not dept:
-                permission_results[student_id] = (False, f"系所代碼 {student_dept} 不存在")
+                add_warning(
+                    student_id,
+                    "department_not_found",
+                    f"系所代碼 {student_dept} 不存在，請後續確認。",
+                )
                 continue
 
             # Validate college permission
-            if dept.college_code != college_code:
-                permission_results[student_id] = (
-                    False,
-                    f"學生 {student_id} 屬於 {dept.college_code} 學院，不屬於 {college_code} 學院",
+            if college_code and dept.academy_code != college_code:
+                add_warning(
+                    student_id,
+                    "college_mismatch_local",
+                    f"學生 {student_id} 的系所 ({student_dept}) 隸屬 {dept.academy_code} 學院，與目前學院 {college_code} 不符。",
                 )
-            else:
-                permission_results[student_id] = (True, None)
+
+        # Query student API for latest department info
+        api_codes: Dict[str, str] = {}
+        if getattr(self.student_service, "api_enabled", False):
+            api_failed = False
+            for student_id in student_ids:
+                try:
+                    api_data = await self.student_service.get_student_basic_info(student_id)
+                except ServiceUnavailableError:
+                    if not api_failed:
+                        add_warning(
+                            None,
+                            "student_api_unavailable",
+                            "學籍系統目前不可用，已跳過即時系所驗證。",
+                        )
+                        api_failed = True
+                    break
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("Student API unexpected error for %s: %s", student_id, exc)
+                    add_warning(
+                        student_id,
+                        "student_api_error",
+                        f"查詢學生 {student_id} 的學籍資料時發生錯誤，請後續確認。",
+                    )
+                    continue
+
+                if not api_data:
+                    add_warning(
+                        student_id,
+                        "student_api_not_found",
+                        f"學籍系統查無學號 {student_id}，請後續確認。",
+                    )
+                    continue
+
+                dep_code = _normalize_optional(api_data.get("std_depno"))
+                if not dep_code:
+                    add_warning(
+                        student_id,
+                        "student_api_missing_depno",
+                        f"學籍系統回傳的學生 {student_id} 缺少系所代碼，請後續確認。",
+                    )
+                    continue
+
+                api_codes[student_id] = dep_code.upper()
+
+        # Compare API department data with college
+        if api_codes:
+            api_dept_stmt = select(Department).where(Department.code.in_(list(set(api_codes.values()))))
+            api_dept_result = await self.db.execute(api_dept_stmt)
+            api_depts = api_dept_result.scalars().all()
+            api_dept_lookup = {dept.code: dept for dept in api_depts}
+
+            for student_id, dept_code in api_codes.items():
+                dept = api_dept_lookup.get(dept_code)
+                if not dept:
+                    add_warning(
+                        student_id,
+                        "student_api_department_unknown",
+                        f"學籍系統回傳系所代碼 {dept_code} 未在系所資料表中，請後續確認。",
+                    )
+                    continue
+
+                if college_code and dept.academy_code != college_code:
+                    add_warning(
+                        student_id,
+                        "college_mismatch_api",
+                        f"學籍系統顯示學生 {student_id} 的系所 ({dept_code}) 隸屬 {dept.academy_code} 學院，與目前學院 {college_code} 不符。",
+                    )
 
         # Batch query: Check for duplicate applications
         user_ids = [s.id for s in students]
@@ -400,8 +589,13 @@ class BatchImportService:
                 Application.user_id.in_(user_ids),
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
-                Application.semester == semester,
             )
+
+            if normalized_semester_enum is None:
+                duplicates_stmt = duplicates_stmt.where(Application.semester.is_(None))
+            else:
+                duplicates_stmt = duplicates_stmt.where(Application.semester == normalized_semester_enum)
+
             duplicates_result = await self.db.execute(duplicates_stmt)
             duplicate_apps = duplicates_result.scalars().all()
 
@@ -419,7 +613,11 @@ class BatchImportService:
                 else:
                     duplicate_results[student_id] = (False, None)
 
-        return permission_results, duplicate_results
+        # Ensure duplicates entry exists for students not in DB
+        for student_id in student_ids:
+            duplicate_results.setdefault(student_id, (False, None))
+
+        return permission_results, duplicate_results, warnings
 
     async def create_batch_import_record(
         self,
@@ -554,6 +752,15 @@ class BatchImportService:
                 app_id = f"APP-{academic_year}-{ApplicationStatus.submitted.value[:3].upper()}-{user.id:06d}"
 
                 # Create application
+                student_payload = {
+                    "nycu_id": student_id,
+                    "name": row_data["student_name"],
+                }
+                if row_data.get("dept_code"):
+                    student_payload["dept_code"] = row_data.get("dept_code")
+                if batch_import.college_code:
+                    student_payload["college_code"] = batch_import.college_code
+
                 application = Application(
                     app_id=app_id,
                     user_id=user.id,
@@ -568,13 +775,13 @@ class BatchImportService:
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
                     academic_year=academic_year,
                     semester=semester,
-                    status=ApplicationStatus.submitted.value,
+                    status=ApplicationStatus.under_review.value,
                     imported_by_id=batch_import.importer_id,
                     batch_import_id=batch_import.id,
                     import_source="batch_import",
                     document_status="pending_documents",
                     submitted_at=datetime.now(timezone.utc),
-                    student_data={"nycu_id": student_id, "name": row_data["student_name"]},
+                    student_data=student_payload,
                     submitted_form_data={
                         "postal_account": row_data.get("postal_account"),
                         "advisor_name": row_data.get("advisor_name"),

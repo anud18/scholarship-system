@@ -210,7 +210,13 @@ class Application(Base):
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
     professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
     document_requests = relationship("DocumentRequest", back_populates="application", cascade="all, delete-orphan")
-    # college_review = relationship("CollegeReview", back_populates="application", uselist=False, cascade="all, delete-orphan")  # Temporarily commented for testing
+    college_review = relationship(
+        "CollegeReview",
+        back_populates="application",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
 
     # Batch import relationships
     imported_by = relationship("User", foreign_keys=[imported_by_id])
