@@ -14,6 +14,11 @@
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../../api.legacy';
+import type { components as SchemaComponents } from '../generated/schema';
+
+type CreateRankingRequest =
+  SchemaComponents['schemas']['Body_create_ranking_api_v1_college_review_rankings_post'];
+type CreateRankingInput = Omit<CreateRankingRequest, 'force_new'> & { force_new?: boolean };
 
 export function createCollegeApi() {
   return {
@@ -62,15 +67,8 @@ export function createCollegeApi() {
      * Create new ranking
      * Type-safe: Request body validated against OpenAPI
      */
-    createRanking: async (data: {
-      scholarship_type_id: number;
-      sub_type_code: string;
-      academic_year: number;
-      semester?: string;
-      ranking_name?: string;
-      force_new?: boolean;
-    }): Promise<ApiResponse<any>> => {
-      const payload = {
+    createRanking: async (data: CreateRankingInput): Promise<ApiResponse<any>> => {
+      const payload: CreateRankingRequest = {
         ...data,
         force_new: data.force_new ?? false,
       };
