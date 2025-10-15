@@ -70,8 +70,12 @@ export function createCollegeApi() {
       ranking_name?: string;
       force_new?: boolean;
     }): Promise<ApiResponse<any>> => {
+      const payload = {
+        ...data,
+        force_new: data.force_new ?? false,
+      };
       const response = await typedClient.raw.POST('/api/v1/college-review/rankings', {
-        body: data,
+        body: payload,
       });
       return toApiResponse<any>(response);
     },

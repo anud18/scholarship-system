@@ -3530,10 +3530,15 @@ class ApiClient {
       academic_year: number;
       semester?: string;
       ranking_name?: string;
+      force_new?: boolean;
     }): Promise<ApiResponse<any>> => {
+      const payload = {
+        ...data,
+        force_new: data.force_new ?? false,
+      };
       return this.request("/college/rankings", {
         method: "POST",
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
     },
 
