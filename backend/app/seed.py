@@ -121,6 +121,7 @@ async def seed_test_users(session: AsyncSession):
             "status": EmployeeStatus.active,
             "dept_code": "7000",
             "dept_name": "資訊學院",
+            "college_code": "C",
             "role": UserRole.college,
         },
         {
@@ -192,6 +193,7 @@ async def seed_test_users(session: AsyncSession):
             "status": EmployeeStatus.active,
             "dept_code": "CS",
             "dept_name": "資訊工程學系",
+            "college_code": "C",
             "role": UserRole.college,
         },
         {
@@ -232,8 +234,8 @@ async def seed_test_users(session: AsyncSession):
             text(
                 """
             INSERT INTO users (nycu_id, name, email, user_type, status, dept_code, dept_name,
-                               role, created_at, updated_at)
-            VALUES (:nycu_id, :name, :email, :user_type, :status, :dept_code, :dept_name, :role, NOW(), NOW())
+                               college_code, role, created_at, updated_at)
+            VALUES (:nycu_id, :name, :email, :user_type, :status, :dept_code, :dept_name, :college_code, :role, NOW(), NOW())
             ON CONFLICT (nycu_id) DO UPDATE
             SET name = EXCLUDED.name,
                 email = EXCLUDED.email,
@@ -241,6 +243,7 @@ async def seed_test_users(session: AsyncSession):
                 status = EXCLUDED.status,
                 dept_code = EXCLUDED.dept_code,
                 dept_name = EXCLUDED.dept_name,
+                college_code = EXCLUDED.college_code,
                 role = EXCLUDED.role,
                 updated_at = NOW()
         """
@@ -253,6 +256,7 @@ async def seed_test_users(session: AsyncSession):
                 "status": user_data["status"].value if user_data.get("status") else None,
                 "dept_code": user_data.get("dept_code"),
                 "dept_name": user_data.get("dept_name"),
+                "college_code": user_data.get("college_code"),
                 "role": user_data["role"].value,
             },
         )

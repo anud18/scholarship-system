@@ -1745,3 +1745,61 @@ async def delete_ranking(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete ranking: {str(e)}"
         )
+
+
+@router.get("/managed-college")
+async def get_managed_college(
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get the college that the current college user has management permission for
+
+    Uses the college_code field directly from the User model, which should be set
+    when college users are created or assigned to colleges.
+    """
+
+    try:
+        from app.models.student import Academy
+        from app.models.user import AdminScholarship
+
+        logger.info(f"User {current_user.id} requesting managed college information")
+
+        # Check if user has college_code set
+        if not current_user.college_code:
+            logger.warning(f"College user {current_user.id} has no college_code assigned")
+            return ApiResponse(success=True, message="No college assigned to this user", data=None)
+
+        # Get college information from Academy table
+        academy_stmt = select(Academy).where(Academy.code == current_user.college_code)
+        academy_result = await db.execute(academy_stmt)
+        academy = academy_result.scalar_one_or_none()
+
+        if not academy:
+            logger.error(f"College code {current_user.college_code} not found in Academy table")
+            return ApiResponse(
+                success=True, message=f"College information not found for code: {current_user.college_code}", data=None
+            )
+
+        # Get scholarship count for this user
+        admin_scholarships_stmt = select(AdminScholarship).where(AdminScholarship.admin_id == current_user.id)
+        admin_scholarships_result = await db.execute(admin_scholarships_stmt)
+        admin_scholarships = admin_scholarships_result.scalars().all()
+
+        # Return managed college information
+        managed_college_data = {
+            "code": academy.code,
+            "name": academy.name,
+            "name_en": academy.name_en or academy.name,
+            "scholarship_count": len(admin_scholarships),
+        }
+
+        logger.info(f"User {current_user.id} manages college: {academy.code} ({academy.name})")
+
+        return ApiResponse(success=True, message="Managed college retrieved successfully", data=managed_college_data)
+
+    except Exception as e:
+        logger.error(f"Error retrieving managed college for user {current_user.id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve managed college: {str(e)}"
+        )
