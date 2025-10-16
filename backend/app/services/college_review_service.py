@@ -137,11 +137,24 @@ class CollegeReviewService:
         if not application:
             raise NotFoundError("Application", str(application_id))
 
-        if application.status not in [
+        # Allow reviewing applications in these states:
+        # - recommended: initial state after professor review
+        # - under_review: currently being reviewed
+        # - approved: allow re-review of approved applications
+        # - rejected: allow re-review of rejected applications
+        # - college_reviewed: backward compatibility
+        reviewable_states = [
             ApplicationStatus.recommended.value,
             ApplicationStatus.under_review.value,
-        ]:
-            raise BusinessLogicError(f"Application {application_id} is not in reviewable state")
+            ApplicationStatus.approved.value,
+            ApplicationStatus.rejected.value,
+            "college_reviewed",
+        ]
+
+        if application.status not in reviewable_states:
+            raise BusinessLogicError(
+                f"Application {application_id} is not in reviewable state (current status: {application.status})"
+            )
 
         # Calculate scores if not provided
         if not review_data.get("ranking_score"):
@@ -173,11 +186,52 @@ class CollegeReviewService:
 
         # Update application's college review fields
         application.college_ranking_score = college_review.ranking_score
-        application.status = "college_reviewed"
+
+        # Set application status based on review recommendation
+        recommendation = review_data.get("recommendation", "")
+        if recommendation == "approve":
+            application.status = ApplicationStatus.approved.value
+        elif recommendation == "reject":
+            application.status = ApplicationStatus.rejected.value
+        elif recommendation == "conditional":
+            application.status = ApplicationStatus.under_review.value  # 條件核准仍在審核中
+        else:
+            application.status = "college_reviewed"  # 預設狀態
 
         # Note: commit handled by transaction context manager
         await self.db.flush()  # Ensure changes are written to DB within transaction
         await self.db.refresh(college_review)
+
+        # Update associated ranking items to reflect review status
+        ranking_items_stmt = select(CollegeRankingItem).where(CollegeRankingItem.application_id == application_id)
+        ranking_items_result = await self.db.execute(ranking_items_stmt)
+        ranking_items = ranking_items_result.scalars().all()
+
+        # Update ranking item status based on recommendation (use the same value from above)
+        for ranking_item in ranking_items:
+            if recommendation == "approve":
+                ranking_item.status = "ranked"  # 核准的保持 ranked 狀態
+                # Reset allocation fields to allow re-distribution
+                ranking_item.allocated_sub_type = None
+                ranking_item.is_allocated = False
+                ranking_item.allocation_reason = None
+                ranking_item.backup_position = None
+            elif recommendation == "reject":
+                ranking_item.status = "rejected"  # 駁回的標記為 rejected
+                # Also reset allocation fields for rejected items
+                ranking_item.allocated_sub_type = None
+                ranking_item.is_allocated = False
+                ranking_item.allocation_reason = None
+                ranking_item.backup_position = None
+            elif recommendation == "conditional":
+                ranking_item.status = "ranked"  # 條件核准也保持 ranked
+                # Reset allocation fields for conditional approval too
+                ranking_item.allocated_sub_type = None
+                ranking_item.is_allocated = False
+                ranking_item.allocation_reason = None
+                ranking_item.backup_position = None
+
+        await self.db.flush()  # Flush ranking item updates
 
         # 觸發學院審查提交事件（會觸發自動化郵件規則）
         try:
@@ -273,10 +327,15 @@ class CollegeReviewService:
                 or_(
                     Application.status == ApplicationStatus.recommended.value,
                     Application.status == ApplicationStatus.under_review.value,
+                    Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請
+                    Application.status == ApplicationStatus.rejected.value,  # 包含已駁回的申請
+                    Application.status == "college_reviewed",  # 向後兼容舊資料
                 )
             )
         )
-        logger.info("Base query created, looking for status in [recommended, under_review]")
+        logger.info(
+            "Base query created, looking for status in [recommended, under_review, approved, rejected, college_reviewed]"
+        )
 
         # Apply filters
         if scholarship_type_id:

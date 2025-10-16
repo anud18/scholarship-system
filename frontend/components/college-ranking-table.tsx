@@ -97,11 +97,12 @@ interface CollegeRankingTableProps {
   isFinalized: boolean;
   rankingId?: number;
   onRankingChange: (newOrder: Application[]) => void;
-  onReviewApplication: (applicationId: number) => void;
+  onReviewApplication: (applicationId: number, action: 'approve' | 'reject', comments?: string) => void;
   onExecuteDistribution: () => void;
   onFinalizeRanking: () => void;
   onImportExcel?: (data: any[]) => Promise<void>;
   locale?: "zh" | "en";
+  subTypeMeta?: Record<string, { label: string; label_en: string; code?: string }>;
 }
 
 // SortableItem component for drag and drop
@@ -114,15 +115,17 @@ function SortableItem({
   onReviewApplication,
   reviewScores,
   handleScoreUpdate,
+  subTypeMeta,
 }: {
   application: Application;
   index: number;
   totalQuota: number;
   locale: "zh" | "en";
   isFinalized: boolean;
-  onReviewApplication: (applicationId: number) => void;
+  onReviewApplication: (applicationId: number, action: 'approve' | 'reject', comments?: string) => void;
   reviewScores: { [key: number]: any };
   handleScoreUpdate: (appId: number, field: string, value: any) => void;
+  subTypeMeta?: Record<string, { label: string; label_en: string; code?: string }>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: application.id.toString(), disabled: isFinalized });
@@ -152,6 +155,16 @@ function SortableItem({
   };
 
   const getStatusBadge = (app: Application) => {
+    // Check for rejected status first (highest priority)
+    if (app.status === 'rejected') {
+      return (
+        <Badge variant="destructive" className="bg-red-100 text-red-800">
+          <XCircle className="w-3 h-3 mr-1" />
+          {locale === "zh" ? "駁回" : "Rejected"}
+        </Badge>
+      );
+    }
+
     if (app.is_allocated) {
       return (
         <Badge variant="default" className="bg-green-100 text-green-800">
@@ -161,7 +174,7 @@ function SortableItem({
       );
     } else {
       return (
-        <Badge variant="secondary" className="bg-red-100 text-red-800">
+        <Badge variant="secondary" className="bg-gray-100 text-gray-800">
           <XCircle className="w-3 h-3 mr-1" />
           {locale === "zh" ? "未分配" : "Not Allocated"}
         </Badge>
@@ -184,6 +197,17 @@ function SortableItem({
     }
   };
 
+  const getSubtypeLabel = (subtype: string) => {
+    const meta =
+      subTypeMeta?.[subtype] ||
+      subTypeMeta?.[subtype.toUpperCase()] ||
+      subTypeMeta?.[subtype.toLowerCase()];
+    if (!meta) {
+      return subtype.toUpperCase();
+    }
+    return (locale === "zh" ? meta.label : meta.label_en || meta.label) || subtype;
+  };
+
   return (
     <TableRow
       ref={setNodeRef}
@@ -204,13 +228,12 @@ function SortableItem({
       <TableCell>
         <div className="space-y-1">
           <p className="font-medium">{application.student_name}</p>
-          <p className="text-sm text-gray-500">
-            {locale === "zh"
-              ? `學號：${application.student_id || "-"}`
-              : `Student ID: ${application.student_id || "-"}`}
-          </p>
           <p className="text-xs text-gray-400">{application.app_id}</p>
         </div>
+      </TableCell>
+
+      <TableCell className="text-center text-sm text-gray-600">
+        {application.student_id || (locale === "zh" ? "未提供" : "N/A")}
       </TableCell>
 
       <TableCell className="text-center">
@@ -222,7 +245,7 @@ function SortableItem({
                 variant="outline"
                 className={`text-xs ${getSubtypeBadgeColor(subtype)}`}
               >
-                {subtype.toUpperCase()}
+                {getSubtypeLabel(subtype)}
               </Badge>
             ))
           ) : (
@@ -274,7 +297,11 @@ function SortableItem({
                 {!isFinalized && (
                   <div className="flex gap-2">
                     <Button
-                      onClick={() => onReviewApplication(application.id)}
+                      onClick={() => onReviewApplication(
+                        application.id,
+                        'approve',
+                        reviewScores[application.id]?.comments
+                      )}
                       className="flex-1"
                     >
                       <CheckCircle className="h-4 w-4 mr-2" />
@@ -282,7 +309,11 @@ function SortableItem({
                     </Button>
                     <Button
                       variant="destructive"
-                      onClick={() => onReviewApplication(application.id)}
+                      onClick={() => onReviewApplication(
+                        application.id,
+                        'reject',
+                        reviewScores[application.id]?.comments
+                      )}
                       className="flex-1"
                     >
                       <XCircle className="h-4 w-4 mr-2" />
@@ -313,6 +344,7 @@ export function CollegeRankingTable({
   onFinalizeRanking,
   onImportExcel,
   locale = "zh",
+  subTypeMeta,
 }: CollegeRankingTableProps) {
   const t = (key: string) => getTranslation(locale, key);
   const { toast } = useToast();
@@ -631,10 +663,15 @@ export function CollegeRankingTable({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-12">
+                  <TableHead className="w-16">
                     {locale === "zh" ? "排名" : "Rank"}
                   </TableHead>
-                  <TableHead>{locale === "zh" ? "學生" : "Student"}</TableHead>
+                  <TableHead className="w-48">
+                    {locale === "zh" ? "學生" : "Student"}
+                  </TableHead>
+                  <TableHead className="w-36 text-center">
+                    {locale === "zh" ? "學號" : "Student ID"}
+                  </TableHead>
                   <TableHead className="text-center">
                     {locale === "zh" ? "符合子類別" : "Eligible Types"}
                   </TableHead>
@@ -662,6 +699,7 @@ export function CollegeRankingTable({
                       onReviewApplication={onReviewApplication}
                       reviewScores={reviewScores}
                       handleScoreUpdate={handleScoreUpdate}
+                      subTypeMeta={subTypeMeta}
                     />
                   ))}
                 </SortableContext>

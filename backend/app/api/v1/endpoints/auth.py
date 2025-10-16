@@ -20,6 +20,21 @@ from app.services.portal_sso_service import PortalSSOService
 router = APIRouter()
 
 
+async def populate_college_info(user_data: UserResponse, db: AsyncSession, user: User):
+    """Helper to populate college_name from Academy table"""
+    if user.college_code:
+        from sqlalchemy import select
+
+        from app.models.student import Academy
+
+        stmt = select(Academy).where(Academy.code == user.college_code)
+        result = await db.execute(stmt)
+        academy = result.scalar_one_or_none()
+
+        if academy:
+            user_data.college_name = academy.name
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
@@ -49,6 +64,11 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
     auth_service = AuthService(db)
     token_response = await auth_service.login(login_data)
 
+    # Populate college_name from Academy table
+    user = await db.get(User, token_response.user.id)
+    if user:
+        await populate_college_info(token_response.user, db, user)
+
     # Return wrapped in standard ApiResponse format
     return {
         "success": True,
@@ -63,9 +83,23 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me")
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
+async def get_current_user_info(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get current user information"""
     user_data = UserResponse.model_validate(current_user)
+
+    # Populate college_name from Academy table if college_code exists
+    if current_user.college_code:
+        from sqlalchemy import select
+
+        from app.models.student import Academy
+
+        stmt = select(Academy).where(Academy.code == current_user.college_code)
+        result = await db.execute(stmt)
+        academy = result.scalar_one_or_none()
+
+        if academy:
+            user_data.college_name = academy.name
+
     return {
         "success": True,
         "message": "User information retrieved successfully",
@@ -131,6 +165,11 @@ async def mock_sso_login(request_data: PortalSSORequest, db: AsyncSession = Depe
     try:
         mock_sso_service = MockSSOService(db)
         token_response = await mock_sso_service.mock_sso_login(nycu_id)
+
+        # Populate college_name from Academy table
+        user = await db.get(User, token_response.user.id)
+        if user:
+            await populate_college_info(token_response.user, db, user)
 
         return {
             "success": True,

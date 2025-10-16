@@ -18,23 +18,21 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _drop_existing_constraint(constraints, constraint_name: str) -> None:
-    for constraint in constraints:
+def _drop_fk_if_exists(table_name: str, constraint_name: str) -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    fk_constraints = inspector.get_foreign_keys(table_name)
+
+    for constraint in fk_constraints:
         if constraint.get("name") == constraint_name:
-            op.drop_constraint(constraint_name, "college_reviews", type_="foreignkey")
+            op.drop_constraint(constraint_name, table_name, type_="foreignkey")
             break
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    fk_constraints = inspector.get_foreign_keys("college_reviews")
-
-    constraint_name = "college_reviews_application_id_fkey"
-    _drop_existing_constraint(fk_constraints, constraint_name)
-
+    _drop_fk_if_exists("college_reviews", "college_reviews_application_id_fkey")
     op.create_foreign_key(
-        constraint_name,
+        "college_reviews_application_id_fkey",
         "college_reviews",
         "applications",
         ["application_id"],
@@ -42,19 +40,32 @@ def upgrade() -> None:
         ondelete="CASCADE",
     )
 
+    _drop_fk_if_exists("college_ranking_items", "college_ranking_items_college_review_id_fkey")
+    op.create_foreign_key(
+        "college_ranking_items_college_review_id_fkey",
+        "college_ranking_items",
+        "college_reviews",
+        ["college_review_id"],
+        ["id"],
+        ondelete="CASCADE",
+    )
+
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    fk_constraints = inspector.get_foreign_keys("college_reviews")
-
-    constraint_name = "college_reviews_application_id_fkey"
-    _drop_existing_constraint(fk_constraints, constraint_name)
-
+    _drop_fk_if_exists("college_reviews", "college_reviews_application_id_fkey")
     op.create_foreign_key(
-        constraint_name,
+        "college_reviews_application_id_fkey",
         "college_reviews",
         "applications",
         ["application_id"],
+        ["id"],
+    )
+
+    _drop_fk_if_exists("college_ranking_items", "college_ranking_items_college_review_id_fkey")
+    op.create_foreign_key(
+        "college_ranking_items_college_review_id_fkey",
+        "college_ranking_items",
+        "college_reviews",
+        ["college_review_id"],
         ["id"],
     )

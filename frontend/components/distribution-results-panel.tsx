@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import type { ReactNode } from "react";
 import {
   Card,
   CardContent,
@@ -25,14 +26,27 @@ import {
   Download,
   AlertCircle,
   LayoutGrid,
+  Trophy,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import {
+  ALLOCATION_MATRIX_LAYOUT,
+  contiguousRuns,
+} from "@/lib/constants/allocation-matrix-layout";
+import { useGridMetrics } from "@/hooks/useGridMetrics";
+import { usePillMetrics } from "@/hooks/usePillMetrics";
+
+const { GRID_GAP, CELL_PADDING_X, Z_INDEX } = ALLOCATION_MATRIX_LAYOUT;
 
 interface DistributionResultsPanelProps {
   rankingId: number;
   applications?: any[];
   locale?: "zh" | "en";
   onClose?: () => void;
+  subTypeQuotaBreakdown?: Record<
+    string,
+    { quota?: number; label?: string; label_en?: string }
+  >;
 }
 
 interface SubTypeResult {
@@ -82,6 +96,28 @@ interface DistributionDetails {
 type SubTypeTranslations = {
   zh: Record<string, string>;
   en: Record<string, string>;
+};
+
+type StudentRow = {
+  key: string | number;
+  applicationId?: number;
+  appId?: string | number;
+  studentName: string;
+  studentId?: string;
+  rank: number | null;
+  sortRank: number;
+  termCount: number | null;
+  eligibleCodes: string[];
+  eligibleLabels: string[];
+  primaryEligibleSubType?: string;
+  allocation?: { subType: string; college: string };
+  backupEntries: Array<{
+    subType: string;
+    backupPosition?: number;
+    college: string;
+  }>;
+  rejection?: { reason: string; rank: number };
+  statusBadge: { label: string; className: string; icon: string };
 };
 
 const VERIFIED_STATUSES = new Set([
@@ -189,6 +225,7 @@ export function DistributionResultsPanel({
   applications,
   locale = "zh",
   onClose,
+  subTypeQuotaBreakdown,
 }: DistributionResultsPanelProps) {
   const [distributionData, setDistributionData] =
     useState<DistributionDetails | null>(null);
@@ -283,6 +320,8 @@ export function DistributionResultsPanel({
       return empty;
     }
 
+    const quotaBreakdown = subTypeQuotaBreakdown || {};
+
     const applicationIds = new Set<number>();
     if (Array.isArray(applications)) {
       applications.forEach((app: any) => {
@@ -324,9 +363,21 @@ export function DistributionResultsPanel({
         label: subEntry.label || subType,
         label_en: subEntry.label_en || subEntry.label || subType,
       };
+      const overrideMeta = quotaBreakdown[subType];
+      const overrideLabel =
+        typeof overrideMeta?.label === "string"
+          ? overrideMeta.label.trim()
+          : undefined;
+      const overrideLabelEn =
+        typeof overrideMeta?.label_en === "string"
+          ? overrideMeta.label_en.trim()
+          : undefined;
+      const computedLabel = fallbackMeta.label || subType;
+      const computedLabelEn = fallbackMeta.label_en || fallbackMeta.label || subType;
+
       subTypeInfo[subType] = {
-        label: fallbackMeta.label || subType,
-        labelEn: fallbackMeta.label_en || fallbackMeta.label || subType,
+        label: overrideLabel || computedLabel,
+        labelEn: overrideLabelEn || overrideLabel || computedLabelEn,
       };
 
       let subtotalQuota = 0;
@@ -379,11 +430,20 @@ export function DistributionResultsPanel({
         typeof subEntry.total_quota === "number" && !Number.isNaN(subEntry.total_quota)
           ? subEntry.total_quota
           : undefined;
+      const overrideQuotaRaw = overrideMeta?.quota;
+      const overrideQuota =
+        typeof overrideQuotaRaw === "number"
+          ? overrideQuotaRaw
+          : overrideQuotaRaw !== undefined
+            ? Number(overrideQuotaRaw)
+            : undefined;
 
       quotaMap[subType] =
-        typeof totalQuotaFromEntry === "number"
-          ? totalQuotaFromEntry
-          : subtotalQuota;
+        typeof overrideQuota === "number" && !Number.isNaN(overrideQuota)
+          ? overrideQuota
+          : typeof totalQuotaFromEntry === "number"
+            ? totalQuotaFromEntry
+            : subtotalQuota;
     });
 
     const rejectedMap = new Map<number, { reason: string; rank: number }>();
@@ -415,7 +475,7 @@ export function DistributionResultsPanel({
       backupCount,
       rejectedMap,
     };
-  }, [distributionData, applications, subTypeMetaMap]);
+  }, [distributionData, applications, subTypeMetaMap, subTypeQuotaBreakdown]);
   const studentRows = useMemo(() => {
     if (!Array.isArray(applications)) {
       return [];
@@ -484,6 +544,30 @@ export function DistributionResultsPanel({
           labelForSubtype(code)
         );
 
+        const termCandidates = [
+          app?.student_termcount,
+          app?.student_term_count,
+          app?.studentTermCount,
+          app?.application?.student_info?.term_count,
+          app?.application?.student_info?.study_terms,
+          app?.application?.student_info?.termCount,
+        ];
+        let termCount: number | null = null;
+        for (const candidate of termCandidates) {
+          if (termCount !== null) break;
+          if (typeof candidate === "number" && !Number.isNaN(candidate)) {
+            termCount = candidate;
+            break;
+          }
+          if (candidate !== undefined) {
+            const parsed = Number(candidate);
+            if (!Number.isNaN(parsed)) {
+              termCount = parsed;
+              break;
+            }
+          }
+        }
+
         return {
           key: applicationId ?? `row-${index}`,
           applicationId,
@@ -492,6 +576,7 @@ export function DistributionResultsPanel({
           studentId: app?.student_id,
           rank: rawRank,
           sortRank,
+          termCount,
           eligibleCodes,
           eligibleLabels,
           primaryEligibleSubType: eligibleCodes[0],
@@ -501,7 +586,7 @@ export function DistributionResultsPanel({
           statusBadge,
         };
       })
-      .sort((a, b) => a.sortRank - b.sortRank);
+      .sort((a, b) => a.sortRank - b.sortRank) as StudentRow[];
   }, [applications, aggregated, locale, subTypeTranslations]);
 
   const getColumnLabel = (subType: string) => {
@@ -529,36 +614,229 @@ export function DistributionResultsPanel({
     );
   };
 
-  const renderEligibleTags = (
-    labels: string[],
-    tone: "default" | "warm" = "default"
-  ) => (
-    <div
-      className={`rounded-xl ${
-        tone === "warm" ? "bg-orange-100/70" : "bg-slate-100/80"
-      } p-3 shadow-inner`}
-    >
-      <p className="text-[11px] font-medium text-slate-600">
-        {locale === "zh" ? "符合子項目" : "Eligible Sub-scholarships"}
-      </p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {labels.length > 0 ? (
-          labels.map((label, idx) => (
-            <span
-              key={`${label}-${idx}`}
-              className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-700 shadow-sm"
-            >
-              {label}
+  /**
+   * RunPill - Run-level pill that wraps around contiguous card groups
+   * Positioned absolutely at row level, uses grid metrics for precise geometry
+   */
+  const RunPill = ({
+    runStart,
+    runEnd,
+    labels,
+    tone,
+    rowKey,
+    rankColumnWidth,
+  }: {
+    runStart: number;
+    runEnd: number;
+    labels: string[];
+    tone: "blue" | "warm" | "muted";
+    rowKey: string | number;
+    rankColumnWidth: number;
+  }) => {
+    const gridMetrics = useGridMetrics(rankColumnWidth);
+    const geometry = usePillMetrics(rowKey, runStart, runEnd, gridMetrics);
+
+    if (!geometry.visible) {
+      return null;
+    }
+
+    const { PILL_CARD_RADIUS } = ALLOCATION_MATRIX_LAYOUT;
+
+    // Calculate corner radius: min(card radius, half height)
+    const pillRadius = Math.min(PILL_CARD_RADIUS, geometry.height / 2);
+
+    return (
+      <div
+        className="alloc-matrix-pill"
+        data-tone={tone}
+        data-pill-run={`${runStart}-${runEnd}`}
+        style={{
+          position: "absolute",
+          left: `${geometry.left}px`,
+          top: `${geometry.top}px`,
+          width: `${geometry.width}px`,
+          height: `${geometry.height}px`,
+          ["--pill-radius" as string]: `${pillRadius}px`,
+          zIndex: Z_INDEX.PILL,
+          pointerEvents: "none",
+        }}
+      >
+        {/* Pill content - labels */}
+        <div className="flex h-full items-center px-4">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-semibold opacity-60 uppercase tracking-wider">
+              {locale === "zh" ? "符合" : "Eligible"}
             </span>
-          ))
-        ) : (
-          <span className="text-[11px] text-slate-500">
-            {locale === "zh" ? "尚未提供" : "Not provided"}
-          </span>
-        )}
+            {labels.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {labels.map((label, idx) => (
+                  <span
+                    key={`${label}-${idx}`}
+                    className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-medium bg-white/50 border border-white/70"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-[10px] opacity-40">
+                {locale === "zh" ? "無" : "None"}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    );
+  };
+
+  const StudentInfoCard = ({
+    student,
+    tone = "neutral",
+    footer,
+  }: {
+    student: StudentRow;
+    tone?: "neutral" | "warm" | "muted";
+    footer?: ReactNode;
+  }) => {
+    // Enhanced toggle handle appearance based on tone
+    const handleStyles = {
+      warm: {
+        // Backup position - warm orange handle
+        gradient: "from-orange-50 via-orange-100 to-orange-50",
+        border: "border-orange-300",
+        shadow: "shadow-[0_4px_8px_rgba(251,146,60,0.3),0_2px_4px_rgba(251,146,60,0.2),0_8px_16px_rgba(251,146,60,0.1)]",
+        highlight: "bg-gradient-to-br from-orange-200/20 to-transparent",
+        textColor: "text-orange-900"
+      },
+      muted: {
+        // Unassigned - muted gray handle
+        gradient: "from-slate-50 via-slate-100 to-slate-50",
+        border: "border-slate-300",
+        shadow: "shadow-[0_2px_4px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]",
+        highlight: "bg-gradient-to-br from-slate-200/20 to-transparent",
+        textColor: "text-slate-700"
+      },
+      neutral: {
+        // Allocated position - prominent white handle
+        gradient: "from-white via-slate-50 to-white",
+        border: "border-slate-400",
+        shadow: "shadow-[0_6px_12px_rgba(0,0,0,0.15),0_3px_6px_rgba(0,0,0,0.1),0_12px_24px_rgba(0,0,0,0.05)]",
+        highlight: "bg-gradient-to-br from-white/40 to-transparent",
+        textColor: "text-slate-900"
+      }
+    }[tone];
+
+    const termText =
+      typeof student.termCount === "number"
+        ? locale === "zh"
+          ? `在學 ${student.termCount} 學期`
+          : `${student.termCount} ${student.termCount === 1 ? "term" : "terms"} enrolled`
+        : null;
+
+    return (
+      <div
+        className={`
+          relative overflow-hidden rounded-2xl
+          bg-gradient-to-b ${handleStyles.gradient}
+          ${handleStyles.border} border-2
+          ${handleStyles.shadow}
+          transform transition-all duration-200
+          hover:scale-[1.02] hover:shadow-xl
+        `}
+      >
+        {/* Top highlight for 3D effect */}
+        <div className={`absolute inset-x-0 top-0 h-8 ${handleStyles.highlight} pointer-events-none`} />
+
+        {/* Glass effect overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
+
+        {/* Content */}
+        <div className="relative p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              {/* Handle grip indicator - like toggle switch ridges */}
+              <div className="absolute -left-1 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-20">
+                <div className="w-0.5 h-3 bg-slate-400 rounded-full" />
+                <div className="w-0.5 h-3 bg-slate-400 rounded-full" />
+                <div className="w-0.5 h-3 bg-slate-400 rounded-full" />
+              </div>
+
+              <p className={`text-sm font-bold ${handleStyles.textColor} tracking-tight`}>
+                {student.studentName}
+              </p>
+              <div className="mt-1.5 space-y-1 text-xs text-slate-600">
+                {student.studentId && (
+                  <div className="flex items-center gap-1">
+                    <span className="opacity-70">
+                      {locale === "zh" ? "學號" : "ID"}
+                    </span>
+                    <span className="font-medium">{student.studentId}</span>
+                  </div>
+                )}
+                {termText && (
+                  <div className="text-[11px] text-slate-500">{termText}</div>
+                )}
+                {student.appId && (
+                  <div className="text-[10px] text-slate-400 mt-2">
+                    {locale === "zh"
+                      ? `申請編號 ${student.appId}`
+                      : `Application ${student.appId}`}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {footer && (
+            <div className="mt-3 pt-2 border-t border-slate-200/50">
+              <div className="text-[11px] text-slate-600">{footer}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom edge shadow for depth */}
+        <div className="absolute inset-x-2 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+      </div>
+    );
+  };
+
+  const renderStatusChip = (badge: StudentRow["statusBadge"]) => (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
+    >
+      <span aria-hidden>{badge.icon}</span>
+      <span>{badge.label}</span>
+    </span>
   );
+
+  const renderRankBadge = (rank: number | null) => {
+    if (rank === null) {
+      return (
+        <Badge variant="outline" className="border-slate-300 text-slate-600">
+          {locale === "zh" ? "待排序" : "Waitlist"}
+        </Badge>
+      );
+    }
+
+    if (rank >= 1 && rank <= 3) {
+      const styles: Record<number, string> = {
+        1: "bg-yellow-100 text-yellow-800 border-yellow-300",
+        2: "bg-gray-100 text-gray-800 border-gray-300",
+        3: "bg-orange-100 text-orange-800 border-orange-300",
+      };
+      return (
+        <Badge variant="outline" className={styles[rank] || ""}>
+          <Trophy className="mr-1 h-3 w-3" aria-hidden />#{rank}
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge variant="outline" className="border-slate-300 text-slate-700">
+        #{rank}
+      </Badge>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -594,6 +872,12 @@ export function DistributionResultsPanel({
   const totalRejected = distributionData.rejected?.length ?? 0;
   const pendingDistribution =
     !!distributionData && distributionData.distribution_executed === false;
+  const columnSegments = ["220px"];
+  if (subTypeKeys.length > 0) {
+    columnSegments.push(`repeat(${subTypeKeys.length}, minmax(260px, 1fr))`);
+  }
+  columnSegments.push("minmax(260px, 1fr)");
+  const gridTemplateColumns = columnSegments.join(" ");
 
   return (
     <div className="space-y-6">
@@ -691,11 +975,11 @@ export function DistributionResultsPanel({
                 <div
                   className="grid"
                   style={{
-                    gridTemplateColumns: `160px repeat(${subTypeKeys.length}, minmax(240px, 1fr))`,
+                    gridTemplateColumns,
                   }}
                 >
-                  <div className="sticky top-0 left-0 z-30 border-b border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 shadow-[inset_-1px_-1px_0_rgba(15,23,42,0.05)]">
-                    {locale === "zh" ? "排名 / 學生" : "Rank / Student"}
+                  <div className="sticky top-0 left-0 z-30 border-b border-slate-200 bg-slate-100 px-3 py-3 text-sm font-semibold text-slate-700 shadow-[inset_-1px_-1px_0_rgba(15,23,42,0.05)]">
+                    {locale === "zh" ? "排名" : "Rank"}
                   </div>
                   {subTypeKeys.map((subType) => {
                     const quota = aggregated.quotaMap[subType] ?? 0;
@@ -729,146 +1013,161 @@ export function DistributionResultsPanel({
                       </div>
                     );
                   })}
+                  <div className="sticky top-0 z-20 border-b border-l border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 shadow-[inset_0_-1px_0_rgba(15,23,42,0.05)]">
+                    {locale === "zh" ? "未獲分發" : "Unassigned"}
+                  </div>
 
                   {studentRows.map((student) => {
                     const rowKey = student.key;
+                    const hasAllocation = Boolean(student.allocation);
+                    const hasBackup = student.backupEntries.length > 0;
+                    const isUnassigned = !hasAllocation && !hasBackup;
+
+                    // Calculate contiguous runs of eligible columns
+                    const eligibleIndexes = student.eligibleCodes
+                      .map((code) => subTypeKeys.indexOf(code))
+                      .filter((idx) => idx >= 0)
+                      .sort((a, b) => a - b);
+                    const eligibleRuns = contiguousRuns(eligibleIndexes);
+                    // Map to pill tone (blue for allocated, warm for backup, muted for unassigned)
+                    const pillTone: "blue" | "warm" | "muted" = hasAllocation
+                      ? "blue"
+                      : hasBackup
+                        ? "warm"
+                        : "muted";
+
                     return (
-                      <div key={rowKey} className="contents group">
-                        <div className="sticky left-0 z-10 border-b border-slate-200 bg-white px-4 py-4 shadow-[1px_0_0_rgba(15,23,42,0.08)] transition-colors group-hover:bg-slate-50">
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                              {student.rank !== null
-                                ? locale === "zh"
-                                  ? `第 ${student.rank} 名`
-                                  : `Rank ${student.rank}`
-                                : locale === "zh"
-                                  ? "未排序"
-                                  : "Unranked"}
-                            </span>
-                            <span className="text-sm font-semibold text-slate-800">
-                              {student.studentName}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                            {student.studentId && (
-                              <span>
-                                {locale === "zh"
-                                  ? `學號 ${student.studentId}`
-                                  : `ID ${student.studentId}`}
-                              </span>
-                            )}
-                            {student.appId && (
-                              <span className="text-slate-400">
-                                {locale === "zh"
-                                  ? `申請 ${student.appId}`
-                                  : `App ${student.appId}`}
-                              </span>
-                            )}
-                          </div>
-                          <span
-                            className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${student.statusBadge.className}`}
-                          >
-                            <span aria-hidden>{student.statusBadge.icon}</span>
-                            <span>{student.statusBadge.label}</span>
-                          </span>
-                        </div>
+                      <div
+                        key={rowKey}
+                        style={{
+                          gridColumn: "1 / -1",
+                          position: "relative",
+                          overflow: "visible"
+                        }}
+                        data-row-container={rowKey}
+                      >
+                        {/* Render run-level pills */}
+                        {eligibleRuns.map(([runStart, runEnd]) => (
+                          <RunPill
+                            key={`pill-${rowKey}-${runStart}-${runEnd}`}
+                            runStart={runStart}
+                            runEnd={runEnd}
+                            labels={student.eligibleLabels}
+                            tone={pillTone}
+                            rowKey={rowKey}
+                            rankColumnWidth={220}
+                          />
+                        ))}
 
-                        {subTypeKeys.map((subType) => {
-                          const eligible = student.eligibleCodes.includes(subType);
-                          const isAllocated =
-                            student.allocation?.subType === subType;
-                          const backupInfo = student.backupEntries.find(
-                            (entry) => entry.subType === subType
-                          );
-                          const cellClasses = [
-                            "relative border-b border-l border-slate-200 px-4 py-4 transition-colors",
-                            eligible ? "bg-slate-50/60" : "bg-white",
-                            "group-hover:bg-slate-50",
-                          ].join(" ");
+                        {/* Grid cells using display: contents for grid participation */}
+                        <div className="contents group">
+                          <div className="sticky left-0 z-10 border-b border-slate-200 bg-white px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.08)] transition-colors group-hover:bg-slate-50">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                {renderRankBadge(student.rank)}
+                                <span className="text-sm font-semibold text-slate-800">
+                                  {student.studentName}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                                {student.studentId && (
+                                  <span>
+                                    {locale === "zh"
+                                      ? `學號 ${student.studentId}`
+                                      : `ID ${student.studentId}`}
+                                  </span>
+                                )}
+                                {typeof student.termCount === "number" && (
+                                  <span>
+                                    {locale === "zh"
+                                      ? `在學 ${student.termCount} 學期`
+                                      : `${student.termCount} ${student.termCount === 1 ? "term" : "terms"}`}
+                                  </span>
+                                )}
+                                {student.appId && (
+                                  <span className="text-slate-400">
+                                    {locale === "zh"
+                                      ? `申請 ${student.appId}`
+                                      : `App ${student.appId}`}
+                                  </span>
+                                )}
+                              </div>
+                              {renderStatusChip(student.statusBadge)}
+                            </div>
+                          </div>
 
-                          return (
-                            <div key={`${rowKey}-${subType}`} className={cellClasses}>
+                          {subTypeKeys.map((subType, subTypeIndex) => {
+                            const eligible = student.eligibleCodes.includes(subType);
+                            const isAllocated = student.allocation?.subType === subType;
+                            const backupInfo = student.backupEntries.find(
+                              (entry) => entry.subType === subType
+                            );
+
+                            const cellClasses = [
+                              "relative border-b border-l border-slate-200 px-4 py-4 transition-colors overflow-visible",
+                              // Make eligible cells transparent to show the pill behind
+                              eligible
+                                ? "bg-transparent"
+                                : "bg-white",
+                              "group-hover:bg-slate-50/50",
+                            ].join(" ");
+
+                            return (
+                              <div
+                                key={`${rowKey}-${subType}`}
+                                className={cellClasses}
+                                data-row-key={rowKey}
+                                data-subtype-index={subTypeIndex}
+                              >
+
                               {isAllocated ? (
-                                <div className="space-y-3">
-                                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div>
-                                        <p className="text-sm font-semibold text-slate-900">
-                                          {student.studentName}
-                                        </p>
-                                        <p className="text-xs text-slate-500">
+                                <div
+                                  className="relative"
+                                  style={{ zIndex: Z_INDEX.CARD }}
+                                  data-student-card
+                                >
+                                  <StudentInfoCard
+                                    student={student}
+                                    footer={
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-slate-600">
                                           {locale === "zh"
-                                            ? `實際分配：${getColumnLabel(subType)}`
-                                            : `Allocated: ${getColumnLabel(subType)}`}
-                                        </p>
-                                      </div>
-                                      <span
-                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${student.statusBadge.className}`}
-                                      >
-                                        <span aria-hidden>{student.statusBadge.icon}</span>
-                                        <span>{student.statusBadge.label}</span>
-                                      </span>
-                                    </div>
-                                    <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-                                      <span>
-                                        {locale === "zh"
-                                          ? `排名 ${student.rank ?? "-"}`
-                                          : `Rank ${student.rank ?? "-"}`}
-                                      </span>
-                                      {student.appId && (
-                                        <span>
-                                          {locale === "zh"
-                                            ? `申請 ${student.appId}`
-                                            : `App ${student.appId}`}
+                                            ? "已分配至本子項目"
+                                            : "Allocated to this sub-type"}
                                         </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {renderEligibleTags(student.eligibleLabels)}
+                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                      </div>
+                                    }
+                                  />
                                 </div>
                               ) : backupInfo ? (
-                                <div className="space-y-3">
-                                  <div className="rounded-xl border border-orange-300 bg-orange-50/70 p-4 shadow-sm">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div>
-                                        <p className="text-sm font-semibold text-slate-900">
-                                          {student.studentName}
-                                        </p>
-                                        <p className="text-xs font-medium text-orange-700">
+                                <div
+                                  className="relative"
+                                  style={{ zIndex: Z_INDEX.CARD }}
+                                  data-student-card
+                                >
+                                  <StudentInfoCard
+                                    student={student}
+                                    tone="warm"
+                                    footer={
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-orange-700">
                                           {locale === "zh"
-                                            ? `備取第 ${backupInfo.backupPosition ?? "-"} 位`
-                                            : `Backup #${backupInfo.backupPosition ?? "-"}`}
-                                        </p>
+                                            ? `備取順位 ${backupInfo.backupPosition ?? "-"}`
+                                            : `Backup position ${backupInfo.backupPosition ?? "-"}`}
+                                        </span>
+                                        <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
                                       </div>
-                                      <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-orange-700 shadow-sm">
-                                        {locale === "zh" ? "備取" : "Backup"}
-                                      </span>
-                                    </div>
-                                    <p className="mt-2 text-xs text-slate-600">
-                                      {locale === "zh"
-                                        ? "若前序名額釋出，將自動遞補"
-                                        : "Advances when seats are released"}
-                                    </p>
-                                  </div>
-                                  {renderEligibleTags(student.eligibleLabels, "warm")}
+                                    }
+                                  />
                                 </div>
                               ) : eligible ? (
-                                subType === student.primaryEligibleSubType ? (
-                                  <div className="space-y-3">
-                                    <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 p-4 text-center text-xs font-medium text-slate-500">
-                                      {locale === "zh"
-                                        ? "符合資格，尚未分配"
-                                        : "Eligible, awaiting allocation"}
-                                    </div>
-                                    {renderEligibleTags(student.eligibleLabels)}
-                                  </div>
-                                ) : (
-                                  <div className="flex h-full items-center justify-center">
-                                    <span className="rounded-full border border-dashed border-slate-300 px-3 py-1 text-[11px] text-slate-500">
-                                      {locale === "zh" ? "符合資格" : "Eligible"}
-                                    </span>
-                                  </div>
-                                )
+                                <div
+                                  className="relative flex h-full items-center justify-center"
+                                  style={{ zIndex: Z_INDEX.CARD }}
+                                >
+                                  {/* Empty for eligible cells - the track shows through */}
+                                </div>
                               ) : (
                                 <div className="flex h-full items-center justify-center text-2xl text-slate-200">
                                   —
@@ -877,6 +1176,39 @@ export function DistributionResultsPanel({
                             </div>
                           );
                         })}
+                        <div className="relative border-b border-l border-slate-200 px-4 py-4 transition-colors group-hover:bg-slate-50">
+                          {isUnassigned ? (
+                            <div className="relative" style={{ zIndex: Z_INDEX.CARD }}>
+                              <StudentInfoCard
+                                student={student}
+                                tone="muted"
+                                footer={
+                                  <div className="flex items-center justify-between">
+                                    <span
+                                      className={`text-xs ${student.rejection ? "text-rose-600" : "text-slate-600"}`}
+                                    >
+                                      {student.rejection
+                                        ? (locale === "zh"
+                                            ? `未獲分發：${student.rejection.reason}`
+                                            : `Not allocated: ${student.rejection.reason}`)
+                                        : locale === "zh"
+                                          ? "尚未分發"
+                                          : "Awaiting allocation"}
+                                    </span>
+                                    {student.rejection && (
+                                      <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                                    )}
+                                  </div>
+                                }
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-2xl text-slate-200">
+                              —
+                            </div>
+                          )}
+                        </div>
+                        </div>
                       </div>
                     );
                   })}

@@ -173,7 +173,7 @@ async def _check_scholarship_permission(user: User, scholarship_type_id: int, db
     from app.models.user import AdminScholarship
 
     stmt = select(AdminScholarship).where(
-        and_(AdminScholarship.user_id == user.id, AdminScholarship.scholarship_type_id == scholarship_type_id)
+        and_(AdminScholarship.admin_id == user.id, AdminScholarship.scholarship_id == scholarship_type_id)
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none() is not None

@@ -402,7 +402,7 @@ class BatchImportService:
             Tuple of (permission_results, duplicate_results, warnings)
             Each dict maps student_id to (is_valid/is_duplicate, error_message)
         """
-        from app.models.student import Department
+        from app.models.student import Academy, Department
 
         permission_results: Dict[str, Tuple[bool, Optional[str]]] = {
             student_id: (True, None) for student_id in student_ids
@@ -436,6 +436,7 @@ class BatchImportService:
             )
 
         dept_cache: Dict[str, Optional[Department]] = {}
+        academy_cache: Dict[str, Optional[Academy]] = {}
 
         async def get_department_by_code(code: str) -> Optional[Department]:
             if code not in dept_cache:
@@ -443,6 +444,13 @@ class BatchImportService:
                 dept_result = await self.db.execute(dept_stmt)
                 dept_cache[code] = dept_result.scalar_one_or_none()
             return dept_cache[code]
+
+        async def get_academy_by_code(code: str) -> Optional[Academy]:
+            if code not in academy_cache:
+                academy_stmt = select(Academy).where(Academy.code == code)
+                academy_result = await self.db.execute(academy_stmt)
+                academy_cache[code] = academy_result.scalar_one_or_none()
+            return academy_cache[code]
 
         # Batch query: Get all students by student IDs
         students_stmt = select(User).where(User.nycu_id.in_(student_ids))
@@ -468,10 +476,16 @@ class BatchImportService:
                         f"系所代碼 {dept_code} 不存在，請後續確認學生系所資訊。",
                     )
                 elif college_code and dept.academy_code != college_code:
+                    # Get academy names for better error message
+                    dept_academy = await get_academy_by_code(dept.academy_code) if dept.academy_code else None
+                    current_academy = await get_academy_by_code(college_code)
+                    dept_academy_name = dept_academy.name if dept_academy else dept.academy_code
+                    current_academy_name = current_academy.name if current_academy else college_code
+
                     add_warning(
                         student_id,
                         "college_mismatch_local",
-                        f"學生 {student_id} 的系所 ({dept_code}) 隸屬 {dept.academy_code} 學院，與目前學院 {college_code} 不符。",
+                        f"學生 {student_id} 的系所 ({dept.name}) 隸屬 {dept_academy_name}，與目前學院 {current_academy_name} 不符。",
                     )
 
                 duplicate_results[student_id] = (False, None)
@@ -508,10 +522,16 @@ class BatchImportService:
 
             # Validate college permission
             if college_code and dept.academy_code != college_code:
+                # Get academy names for better error message
+                dept_academy = await get_academy_by_code(dept.academy_code) if dept.academy_code else None
+                current_academy = await get_academy_by_code(college_code)
+                dept_academy_name = dept_academy.name if dept_academy else dept.academy_code
+                current_academy_name = current_academy.name if current_academy else college_code
+
                 add_warning(
                     student_id,
                     "college_mismatch_local",
-                    f"學生 {student_id} 的系所 ({student_dept}) 隸屬 {dept.academy_code} 學院，與目前學院 {college_code} 不符。",
+                    f"學生 {student_id} 的系所 ({dept.name}) 隸屬 {dept_academy_name}，與目前學院 {current_academy_name} 不符。",
                 )
 
         # Query student API for latest department info
@@ -576,10 +596,16 @@ class BatchImportService:
                     continue
 
                 if college_code and dept.academy_code != college_code:
+                    # Get academy names for better error message
+                    dept_academy = await get_academy_by_code(dept.academy_code) if dept.academy_code else None
+                    current_academy = await get_academy_by_code(college_code)
+                    dept_academy_name = dept_academy.name if dept_academy else dept.academy_code
+                    current_academy_name = current_academy.name if current_academy else college_code
+
                     add_warning(
                         student_id,
                         "college_mismatch_api",
-                        f"學籍系統顯示學生 {student_id} 的系所 ({dept_code}) 隸屬 {dept.academy_code} 學院，與目前學院 {college_code} 不符。",
+                        f"學籍系統顯示學生 {student_id} 的系所 ({dept.name}) 隸屬 {dept_academy_name}，與目前學院 {current_academy_name} 不符。",
                     )
 
         # Batch query: Check for duplicate applications

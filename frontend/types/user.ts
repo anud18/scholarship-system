@@ -9,6 +9,8 @@ export interface User {
   status?: "在學" | "畢業" | "在職" | "退休";
   dept_code?: string;
   dept_name?: string;
+  college_code?: string;
+  college_name?: string;
   comment?: string;
   last_login_at?: string;
   created_at: string;

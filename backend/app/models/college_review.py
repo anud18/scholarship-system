@@ -245,7 +245,11 @@ class CollegeRankingItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     ranking_id = Column(Integer, ForeignKey("college_rankings.id"), nullable=False)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
-    college_review_id = Column(Integer, ForeignKey("college_reviews.id"), nullable=False)
+    college_review_id = Column(
+        Integer,
+        ForeignKey("college_reviews.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # Ranking position
     rank_position = Column(Integer, nullable=False)  # 1-based ranking position
@@ -271,7 +275,12 @@ class CollegeRankingItem(Base):
     # Relationships using string references to avoid circular imports
     ranking = relationship("CollegeRanking", back_populates="items")
     application = relationship("Application", lazy="select", foreign_keys=[application_id])
-    college_review = relationship("CollegeReview", lazy="select", foreign_keys=[college_review_id])
+    college_review = relationship(
+        "CollegeReview",
+        lazy="select",
+        foreign_keys=[college_review_id],
+        passive_deletes=True,
+    )
 
     def __repr__(self):
         return f"<CollegeRankingItem(id={self.id}, rank={self.rank_position}, allocated={self.is_allocated})>"

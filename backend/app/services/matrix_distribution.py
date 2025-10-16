@@ -181,7 +181,7 @@ class MatrixDistributionService:
                         item.is_allocated = True
                         item.backup_position = None
                         item.status = "allocated"
-                        item.allocation_reason = f"Admitted to {sub_type_code}-{college_code}"
+                        item.allocation_reason = f"正取 {sub_type_code}-{college_code}"
                         admitted_count += 1
                         total_allocated += 1
 
@@ -199,7 +199,7 @@ class MatrixDistributionService:
                         item.is_allocated = False
                         item.backup_position = backup_count
                         item.status = "waitlisted"
-                        item.allocation_reason = f"Backup #{backup_count} for {sub_type_code}-{college_code}"
+                        item.allocation_reason = f"備取第{backup_count}名 {sub_type_code}-{college_code}"
 
                         college_summary["backup"].append(
                             {
@@ -219,7 +219,7 @@ class MatrixDistributionService:
             if item.allocated_sub_type is None:
                 item.is_allocated = False
                 item.status = "rejected"
-                item.allocation_reason = "No suitable sub-type or quota exceeded"
+                item.allocation_reason = "無符合的子類別或超出配額"
 
         # Flush changes to database
         await self.db.flush()

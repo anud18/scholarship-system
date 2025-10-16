@@ -68,6 +68,7 @@ import {
   Trophy,
   Users,
   Award,
+  Building,
   Send,
   Plus,
   RefreshCw,
@@ -101,11 +102,13 @@ interface AcademicConfig {
   availableYears: number[];
 }
 
+type SubTypeQuotaBreakdown = Record<string, { quota?: number; label?: string; label_en?: string }>;
+
 interface RankingData {
   applications: any[];
   totalQuota: number;
   collegeQuota?: number;  // College-specific quota
-  collegeQuotaBreakdown?: Record<string, number | { quota?: number; label?: string; label_en?: string }>;
+  collegeQuotaBreakdown?: SubTypeQuotaBreakdown;
   subTypeMetadata?: Record<string, { code: string; label: string; label_en: string }>;
   subTypeCode: string;
   academicYear: number;
@@ -118,7 +121,7 @@ interface DistributionQuotaSummaryProps {
   totalQuota?: number;
   collegeQuota?: number;
   applications?: Array<{ is_allocated?: boolean }>;
-  breakdown?: Record<string, number | { quota?: number; label?: string; label_en?: string }>;
+  breakdown?: SubTypeQuotaBreakdown;
   subTypeMeta?: Record<string, { code: string; label: string; label_en: string }>;
 }
 
@@ -676,6 +679,18 @@ export function CollegeDashboard({
     }
   }, [filteredRankings, selectedRanking]);
 
+  const collegeDisplayName = useMemo(() => {
+    // Format: 學院名稱(代號) e.g., "資訊學院(CS)"
+    if (user?.college_name && user?.college_code) {
+      return `${user.college_name}(${user.college_code})`;
+    }
+    // If only code is available, show just the code
+    if (user?.college_code) {
+      return user.college_code;
+    }
+    return locale === "zh" ? "未指定" : "Unspecified";
+  }, [user, locale]);
+
   // Fetch rankings and configuration on component mount
   useEffect(() => {
     const initializeData = async () => {
@@ -836,6 +851,12 @@ export function CollegeDashboard({
               app_id: item.application?.app_id || `APP-${item.id}`,
               student_name: fallbackStudentName,
               student_id: fallbackStudentId,
+              student_termcount:
+                item.application?.student_info?.term_count ??
+                item.application?.student_info?.study_terms ??
+                item.student_term_count ??
+                item.student_termcount ??
+                null,
             scholarship_type:
               item.application?.scholarship_type || item.scholarship_type || "",
             sub_type: item.application?.sub_type || item.sub_type || "",
@@ -962,9 +983,32 @@ export function CollegeDashboard({
     }
   };
 
-  const handleReviewApplication = async (applicationId: number) => {
-    // Handle application review
-    console.log("Reviewing application:", applicationId);
+  const handleReviewApplication = async (
+    applicationId: number,
+    action: 'approve' | 'reject',
+    comments?: string
+  ) => {
+    try {
+      // Call API to submit review
+      const response = await apiClient.college.reviewApplication(applicationId, {
+        recommendation: action,
+        review_comments: comments,
+      });
+
+      if (response.success) {
+        alert(`${action === 'approve' ? '核准' : '駁回'}成功：申請 #${applicationId} 已${action === 'approve' ? '核准' : '駁回'}`);
+
+        // Refresh ranking data to show updated review status
+        if (selectedRanking) {
+          await fetchRankingDetails(selectedRanking);
+        }
+      } else {
+        throw new Error(response.message || '操作失敗');
+      }
+    } catch (error) {
+      console.error('Review submission error:', error);
+      alert(`提交失敗：${error instanceof Error ? error.message : '無法提交審查意見'}`);
+    }
   };
 
   const handleExecuteDistribution = async () => {
@@ -1440,23 +1484,22 @@ export function CollegeDashboard({
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">
-                        {locale === "zh" ? "平均等待天數" : "Avg Wait Days"}
+                        {locale === "zh" ? "學院配額" : "College Quota"}
                       </CardTitle>
-                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <Award className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {applications.length > 0
-                          ? Math.round(
-                              applications.reduce(
-                                (sum, app) => sum + (app.days_waiting || 0),
-                                0
-                              ) / applications.length
-                            )
-                          : 0}
+                        {rankingData?.collegeQuota !== undefined
+                          ? rankingData.collegeQuota.toLocaleString()
+                          : rankingData?.totalQuota !== undefined
+                            ? rankingData.totalQuota.toLocaleString()
+                            : "-"}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {locale === "zh" ? "天" : "days"}
+                        {locale === "zh"
+                          ? "本院可分配的名額"
+                          : "Seats allocated to this college"}
                       </p>
                     </CardContent>
                   </Card>
@@ -1464,19 +1507,18 @@ export function CollegeDashboard({
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">
-                        {locale === "zh" ? "總金額" : "Total Amount"}
+                        {locale === "zh" ? "學院名稱" : "College"}
                       </CardTitle>
-                      <Award className="h-4 w-4 text-muted-foreground" />
+                      <Building className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">
-                        NT${" "}
-                        {applications
-                          .reduce((sum, app) => sum + (app.amount || 0), 0)
-                          .toLocaleString()}
+                      <div className="text-2xl font-bold leading-tight">
+                        {collegeDisplayName}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {locale === "zh" ? "申請金額" : "Application amount"}
+                        {locale === "zh"
+                          ? "目前檢視的學院"
+                          : "Currently selected college"}
                       </p>
                     </CardContent>
                   </Card>
@@ -2038,14 +2080,15 @@ export function CollegeDashboard({
                         rankingId={selectedRanking}
                         onRankingChange={handleRankingChange}
                         onReviewApplication={handleReviewApplication}
-                        onExecuteDistribution={handleExecuteDistribution}
-                        onFinalizeRanking={handleFinalizeRanking}
-                        onImportExcel={handleImportExcel}
-                        locale={locale}
-                      />
-                    )}
-                  </div>
-                )}
+                      onExecuteDistribution={handleExecuteDistribution}
+                      onFinalizeRanking={handleFinalizeRanking}
+                      onImportExcel={handleImportExcel}
+                      locale={locale}
+                      subTypeMeta={rankingData.subTypeMetadata}
+                    />
+                  )}
+                </div>
+              )}
               </TabsContent>
 
               {/* 獎學金分發標籤頁 */}
@@ -2149,6 +2192,7 @@ export function CollegeDashboard({
                     rankingId={selectedRanking}
                     applications={rankingData?.applications}
                     locale={locale}
+                    subTypeQuotaBreakdown={rankingData?.collegeQuotaBreakdown}
                   />
                 ) : (
                   <Card>

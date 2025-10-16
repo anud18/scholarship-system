@@ -71,6 +71,7 @@ class UserResponse(BaseModel):
     dept_code: Optional[str] = None
     dept_name: Optional[str] = None
     college_code: Optional[str] = None
+    college_name: Optional[str] = None
     role: UserRole
     comment: Optional[str] = None
     created_at: datetime

@@ -254,6 +254,31 @@ export function createCollegeApi() {
     },
 
     /**
+     * Create or update college review for an application
+     * Type-safe: Path parameter and request body validated against OpenAPI
+     */
+    reviewApplication: async (
+      applicationId: number,
+      reviewData: {
+        recommendation: 'approve' | 'reject' | 'conditional';
+        review_comments?: string;
+        academic_score?: number;
+        professor_review_score?: number;
+        college_criteria_score?: number;
+        special_circumstances_score?: number;
+        decision_reason?: string;
+        is_priority?: boolean;
+        needs_special_attention?: boolean;
+      }
+    ): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.POST('/api/v1/college-review/applications/{application_id}/review' as any, {
+        params: { path: { application_id: applicationId } },
+        body: reviewData,
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
      * Get sub-type translations from database
      * Type-safe: Response contains Chinese and English translations for sub-types
      */
