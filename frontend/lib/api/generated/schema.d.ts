@@ -4474,6 +4474,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/managed-college": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Managed College
+         * @description Get the college that the current college user has management permission for
+         *
+         *     Uses the college_code field directly from the User model, which should be set
+         *     when college users are created or assigned to colleges.
+         */
+        get: operations["get_managed_college_api_v1_college_review_managed_college_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/batch-import/upload-data": {
         parameters: {
             query?: never;
@@ -17725,6 +17748,26 @@ export interface operations {
         };
     };
     get_sub_type_translations_api_v1_college_review_sub_type_translations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_managed_college_api_v1_college_review_managed_college_get: {
         parameters: {
             query?: never;
             header?: never;
