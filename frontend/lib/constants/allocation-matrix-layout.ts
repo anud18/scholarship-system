@@ -22,8 +22,8 @@ export const ALLOCATION_MATRIX_LAYOUT = {
   TRACK_PADDING_X: 8, // px - Inner padding from cell edges
 
   // Pill styling (for run-level design)
-  PILL_INSET_X: 2, // px - Horizontal inset from cell edges (minimal inset to cover borders)
-  PILL_INSET_Y: 6, // px - Vertical inset from card bounding box (increased for consistency)
+  PILL_INSET_X: 6, // px - Horizontal inset from cell edges (minimal inset to cover borders)
+  PILL_INSET_Y: 10, // px - Vertical inset from card bounding box (increased for consistency)
   PILL_BORDER_WIDTH: 1.5, // px - Border thickness
   PILL_CARD_RADIUS: 16, // px - Card corner radius (rounded-2xl) for radius calculation
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Card,
@@ -36,7 +36,7 @@ import {
 import { useGridMetrics } from "@/hooks/useGridMetrics";
 import { usePillMetrics } from "@/hooks/usePillMetrics";
 
-const { GRID_GAP, CELL_PADDING_X, Z_INDEX } = ALLOCATION_MATRIX_LAYOUT;
+const { Z_INDEX } = ALLOCATION_MATRIX_LAYOUT;
 
 interface DistributionResultsPanelProps {
   rankingId: number;
@@ -745,26 +745,19 @@ export function DistributionResultsPanel({
         `}
       >
         {/* Top highlight for 3D effect */}
-        <div className={`absolute inset-x-0 top-0 h-8 ${handleStyles.highlight} pointer-events-none`} />
+        <div className={`absolute inset-x-0 top-0 h-6 ${handleStyles.highlight} pointer-events-none`} />
 
         {/* Glass effect overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
 
         {/* Content */}
-        <div className="relative p-4">
-          <div className="flex items-start gap-3">
+        <div className="relative p-2.5">
+          <div className="flex items-start gap-2">
             <div className="flex-1">
-              {/* Handle grip indicator - like toggle switch ridges */}
-              <div className="absolute -left-1 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-20">
-                <div className="w-0.5 h-3 bg-slate-400 rounded-full" />
-                <div className="w-0.5 h-3 bg-slate-400 rounded-full" />
-                <div className="w-0.5 h-3 bg-slate-400 rounded-full" />
-              </div>
-
-              <p className={`text-sm font-bold ${handleStyles.textColor} tracking-tight`}>
+              <p className={`text-xs font-bold ${handleStyles.textColor} tracking-tight`}>
                 {student.studentName}
               </p>
-              <div className="mt-1.5 space-y-1 text-xs text-slate-600">
+              <div className="mt-1 space-y-0.5 text-[11px] text-slate-600">
                 {student.studentId && (
                   <div className="flex items-center gap-1">
                     <span className="opacity-70">
@@ -774,10 +767,10 @@ export function DistributionResultsPanel({
                   </div>
                 )}
                 {termText && (
-                  <div className="text-[11px] text-slate-500">{termText}</div>
+                  <div className="text-[10px] text-slate-500">{termText}</div>
                 )}
                 {student.appId && (
-                  <div className="text-[10px] text-slate-400 mt-2">
+                  <div className="text-[10px] text-slate-400 mt-1">
                     {locale === "zh"
                       ? `申請編號 ${student.appId}`
                       : `Application ${student.appId}`}
@@ -788,8 +781,8 @@ export function DistributionResultsPanel({
           </div>
 
           {footer && (
-            <div className="mt-3 pt-2 border-t border-slate-200/50">
-              <div className="text-[11px] text-slate-600">{footer}</div>
+            <div className="mt-2 pt-1.5 border-t border-slate-200/50">
+              <div className="text-[10px] text-slate-600">{footer}</div>
             </div>
           )}
         </div>
@@ -799,15 +792,6 @@ export function DistributionResultsPanel({
       </div>
     );
   };
-
-  const renderStatusChip = (badge: StudentRow["statusBadge"]) => (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
-    >
-      <span aria-hidden>{badge.icon}</span>
-      <span>{badge.label}</span>
-    </span>
-  );
 
   const renderRankBadge = (rank: number | null) => {
     if (rank === null) {
@@ -1040,7 +1024,9 @@ export function DistributionResultsPanel({
                       <div
                         key={rowKey}
                         style={{
+                          display: "grid",
                           gridColumn: "1 / -1",
+                          gridTemplateColumns: "subgrid",
                           position: "relative",
                           overflow: "visible"
                         }}
@@ -1061,38 +1047,9 @@ export function DistributionResultsPanel({
 
                         {/* Grid cells using display: contents for grid participation */}
                         <div className="contents group">
-                          <div className="sticky left-0 z-10 border-b border-slate-200 bg-white px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.08)] transition-colors group-hover:bg-slate-50">
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2">
-                                {renderRankBadge(student.rank)}
-                                <span className="text-sm font-semibold text-slate-800">
-                                  {student.studentName}
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                                {student.studentId && (
-                                  <span>
-                                    {locale === "zh"
-                                      ? `學號 ${student.studentId}`
-                                      : `ID ${student.studentId}`}
-                                  </span>
-                                )}
-                                {typeof student.termCount === "number" && (
-                                  <span>
-                                    {locale === "zh"
-                                      ? `在學 ${student.termCount} 學期`
-                                      : `${student.termCount} ${student.termCount === 1 ? "term" : "terms"}`}
-                                  </span>
-                                )}
-                                {student.appId && (
-                                  <span className="text-slate-400">
-                                    {locale === "zh"
-                                      ? `申請 ${student.appId}`
-                                      : `App ${student.appId}`}
-                                  </span>
-                                )}
-                              </div>
-                              {renderStatusChip(student.statusBadge)}
+                          <div className="sticky left-0 z-10 border-b border-slate-200 bg-white px-3 py-2 shadow-[1px_0_0_rgba(15,23,42,0.08)] transition-colors group-hover:bg-slate-50">
+                            <div className="flex items-center justify-center">
+                              {renderRankBadge(student.rank)}
                             </div>
                           </div>
 
