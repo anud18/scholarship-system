@@ -307,7 +307,7 @@ class BatchImportService:
         student = result.scalar_one_or_none()
 
         if not student:
-            return False, f"查無學號 {student_id} 的學生資料 等待之後驗證"
+            return False, f"查無學號 {student_id} 的使用者資料（可能尚未透過 Portal 登入本系統），將於後續確認"
 
         # Get student's department from raw_data JSON or dept_code column
         student_dept = None
@@ -463,7 +463,9 @@ class BatchImportService:
             if student_id not in student_map:
                 dept_code = _normalize_optional(student_dept_map.get(student_id))
                 if not dept_code:
-                    add_warning(student_id, "student_not_in_system", f"查無學號 {student_id} 的使用者資料，將於後續確認。")
+                    add_warning(
+                        student_id, "student_not_in_system", f"查無學號 {student_id} 的使用者資料（可能尚未透過 Portal 登入本系統），將於後續確認"
+                    )
                     duplicate_results[student_id] = (False, None)
                     continue
 
