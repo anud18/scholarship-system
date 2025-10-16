@@ -61,32 +61,76 @@ class DeadlineChecker:
             target_date_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
             target_date_end = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-            # Find scholarship configurations with deadlines approaching
-            stmt = (
+            # Check renewal application deadlines
+            renewal_stmt = (
                 select(ScholarshipConfiguration)
                 .options(selectinload(ScholarshipConfiguration.scholarship_type))
                 .where(
                     and_(
                         ScholarshipConfiguration.is_active.is_(True),
-                        ScholarshipConfiguration.submission_deadline.isnot(None),
-                        ScholarshipConfiguration.submission_deadline >= target_date_start,
-                        ScholarshipConfiguration.submission_deadline <= target_date_end,
+                        ScholarshipConfiguration.renewal_application_end_date.isnot(None),
+                        ScholarshipConfiguration.renewal_application_end_date >= target_date_start,
+                        ScholarshipConfiguration.renewal_application_end_date <= target_date_end,
                     )
                 )
             )
 
-            result = await self.db.execute(stmt)
-            configs = result.scalars().all()
+            result = await self.db.execute(renewal_stmt)
+            renewal_configs = result.scalars().all()
 
             logger.info(
-                f"Found {len(configs)} scholarship configurations with submission deadline in {days_remaining} days"
+                f"Found {len(renewal_configs)} scholarship configurations with renewal deadline in {days_remaining} days"
             )
 
-            for config in configs:
-                await self._notify_submission_deadline(config, days_remaining)
+            for config in renewal_configs:
+                await self._notify_submission_deadline(config, days_remaining, deadline_type="renewal")
 
-    async def _notify_submission_deadline(self, config: ScholarshipConfiguration, days_remaining: int):
-        """Send notifications for approaching submission deadline"""
+            # Check general application deadlines
+            general_stmt = (
+                select(ScholarshipConfiguration)
+                .options(selectinload(ScholarshipConfiguration.scholarship_type))
+                .where(
+                    and_(
+                        ScholarshipConfiguration.is_active.is_(True),
+                        ScholarshipConfiguration.application_end_date.isnot(None),
+                        ScholarshipConfiguration.application_end_date >= target_date_start,
+                        ScholarshipConfiguration.application_end_date <= target_date_end,
+                    )
+                )
+            )
+
+            result = await self.db.execute(general_stmt)
+            general_configs = result.scalars().all()
+
+            logger.info(
+                f"Found {len(general_configs)} scholarship configurations with general deadline in {days_remaining} days"
+            )
+
+            for config in general_configs:
+                await self._notify_submission_deadline(config, days_remaining, deadline_type="general")
+
+    async def _notify_submission_deadline(
+        self, config: ScholarshipConfiguration, days_remaining: int, deadline_type: str = "general"
+    ):
+        """Send notifications for approaching submission deadline
+
+        Args:
+            config: ScholarshipConfiguration object
+            days_remaining: Days remaining until deadline
+            deadline_type: Type of deadline - "renewal" or "general"
+        """
+        # Determine which deadline to use
+        if deadline_type == "renewal":
+            deadline = config.renewal_application_end_date
+            deadline_label = "renewal_submission"
+        else:
+            deadline = config.application_end_date
+            deadline_label = "submission"
+
+        if not deadline:
+            logger.warning(f"No {deadline_type} deadline found for config {config.id}, skipping notification")
+            return
+
         # Find students who have draft applications for this scholarship
         stmt = (
             select(Application)
@@ -129,11 +173,9 @@ class DeadlineChecker:
                         "app_id": application.app_id,
                         "student_name": student_data.get("name") or application.user.name,
                         "student_email": student_data.get("email") or application.user.email,
-                        "deadline": config.submission_deadline.strftime("%Y-%m-%d %H:%M")
-                        if config.submission_deadline
-                        else "",
+                        "deadline": deadline.strftime("%Y-%m-%d %H:%M"),
                         "days_remaining": str(days_remaining),
-                        "deadline_type": "submission",
+                        "deadline_type": deadline_label,
                         "scholarship_name": config.scholarship_type.name if config.scholarship_type else "Unknown",
                         "scholarship_type": application.main_scholarship_type,
                         "scholarship_type_id": config.scholarship_type_id,
@@ -141,7 +183,7 @@ class DeadlineChecker:
                 )
 
                 logger.info(
-                    f"Triggered deadline notification for application {application.id} (student: {application.user.email})"
+                    f"Triggered {deadline_type} deadline notification for application {application.id} (student: {application.user.email})"
                 )
 
             except Exception as e:
