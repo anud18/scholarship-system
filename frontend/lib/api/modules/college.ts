@@ -294,5 +294,26 @@ export function createCollegeApi() {
         en: { [key: string]: string };
       }>(response);
     },
+
+    /**
+     * Get the college that the current college user has management permission for
+     * Type-safe: Response contains college information from Academy table
+     */
+    getManagedCollege: async (): Promise<
+      ApiResponse<{
+        code: string;
+        name: string;
+        name_en: string;
+        scholarship_count: number;
+      } | null>
+    > => {
+      const response = await typedClient.raw.GET('/api/v1/college-review/managed-college' as any, {});
+      return toApiResponse<{
+        code: string;
+        name: string;
+        name_en: string;
+        scholarship_count: number;
+      } | null>(response);
+    },
   };
 }

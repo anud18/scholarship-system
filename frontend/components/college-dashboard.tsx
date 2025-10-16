@@ -679,17 +679,21 @@ export function CollegeDashboard({
     }
   }, [filteredRankings, selectedRanking]);
 
+  // Fetch managed college information
+  const [managedCollege, setManagedCollege] = useState<{
+    code: string;
+    name: string;
+    name_en: string;
+    scholarship_count: number;
+  } | null>(null);
+
   const collegeDisplayName = useMemo(() => {
-    // Format: 學院名稱(代號) e.g., "資訊學院(CS)"
-    if (user?.college_name && user?.college_code) {
-      return `${user.college_name}(${user.college_code})`;
+    // Use managed college information if available
+    if (managedCollege) {
+      return `${managedCollege.name} (${managedCollege.code})`;
     }
-    // If only code is available, show just the code
-    if (user?.college_code) {
-      return user.college_code;
-    }
-    return locale === "zh" ? "未指定" : "Unspecified";
-  }, [user, locale]);
+    return locale === "zh" ? "⚠️ 未分配學院管理權限" : "⚠️ No College Assigned";
+  }, [managedCollege, locale]);
 
   // Fetch rankings and configuration on component mount
   useEffect(() => {
@@ -700,6 +704,21 @@ export function CollegeDashboard({
       await getScholarshipConfig();
     };
     initializeData();
+  }, []);
+
+  // Fetch managed college information on component mount
+  useEffect(() => {
+    const fetchManagedCollege = async () => {
+      try {
+        const response = await apiClient.college.getManagedCollege();
+        if (response.success && response.data) {
+          setManagedCollege(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch managed college:", error);
+      }
+    };
+    fetchManagedCollege();
   }, []);
 
   const fetchAvailableOptions = async () => {

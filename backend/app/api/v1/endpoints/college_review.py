@@ -35,6 +35,7 @@ from app.services.college_review_service import (
     ReviewPermissionError,
 )
 from app.services.matrix_distribution import MatrixDistributionService
+from app.services.student_service import StudentService
 
 logger = logging.getLogger(__name__)
 
@@ -255,9 +256,140 @@ async def get_applications_for_review(
         # Import i18n utilities
         from app.utils.i18n import ScholarshipI18n
 
+        # Create StudentService instance for dynamic student data fetching
+        student_service = StudentService()
+
+        # Import Academy and Department models for name resolution
+        from app.models.student import Academy, Department
+
+        # Collect all unique academy and department codes for batch query
+        academy_codes = set()
+        department_codes = set()
+        for app in applications:
+            student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
+            if student_data:
+                academy_code = student_data.get("std_academyno") or student_data.get("academy_code")
+                dept_code = student_data.get("std_depno") or student_data.get("dept_code")
+                if academy_code:
+                    academy_codes.add(academy_code)
+                if dept_code:
+                    department_codes.add(dept_code)
+
+        # Query all academies at once to avoid N+1 queries
+        academy_map = {}
+        if academy_codes:
+            academy_stmt = select(Academy).where(Academy.code.in_(academy_codes))
+            academy_result = await db.execute(academy_stmt)
+            academies = academy_result.scalars().all()
+            academy_map = {academy.code: academy.name for academy in academies}
+
+        # Query all departments at once to avoid N+1 queries
+        department_map = {}
+        if department_codes:
+            dept_stmt = select(Department).where(Department.code.in_(department_codes))
+            dept_result = await db.execute(dept_stmt)
+            departments = dept_result.scalars().all()
+            department_map = {dept.code: dept.name for dept in departments}
+
         for app in applications:
             # Extract only necessary fields to minimize data exposure
             student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
+
+            # Check if student_data is empty or missing critical fields
+            # If so, try to fetch from external API using application's student_id
+            if (
+                not student_data
+                or (
+                    not student_data.get("nycu_id")
+                    and not student_data.get("std_stdcode")
+                    and not student_data.get("name")
+                    and not student_data.get("std_cname")
+                )
+            ) and app.get("student_id"):
+                # Only fetch if API is available
+                if student_service.is_api_available():
+                    try:
+                        logger.info(
+                            f"Fetching student data from API for student_id: {app.get('student_id')} (application {app.get('id')})"
+                        )
+                        fetched_data = await student_service.get_student_basic_info(app.get("student_id"))
+
+                        if fetched_data:
+                            logger.info(f"Successfully fetched student data for {app.get('student_id')}")
+                            student_data = fetched_data
+
+                            # Optionally update database with fetched data for future requests
+                            # This prevents repeated API calls
+                            try:
+                                app_stmt = select(Application).where(Application.id == app.get("id"))
+                                app_result = await db.execute(app_stmt)
+                                app_obj = app_result.scalar_one_or_none()
+
+                                if app_obj:
+                                    app_obj.student_data = fetched_data
+                                    await db.commit()
+                                    logger.info(f"Updated application {app.get('id')} with fetched student data")
+                            except Exception as db_err:
+                                logger.warning(
+                                    f"Failed to update application {app.get('id')} with student data: {str(db_err)}"
+                                )
+                                # Continue even if database update fails - we still have the data for response
+                        else:
+                            logger.warning(f"No student data found in API for {app.get('student_id')}")
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch student data for {app.get('student_id')}: {str(e)}")
+                        # Continue with empty student_data - will show fallback values
+                else:
+                    logger.debug(f"Student API not available, using existing data for application {app.get('id')}")
+
+            # Extract student info with fallback for both old and new field names
+            student_id = (
+                (student_data.get("nycu_id") or student_data.get("std_stdcode") or "未提供學號") if student_data else "N/A"
+            )
+
+            student_name = (
+                (student_data.get("name") or student_data.get("std_cname") or student_data.get("std_ename") or "未提供姓名")
+                if student_data
+                else "未提供學生資料"
+            )
+
+            student_termcount = (
+                (student_data.get("term_count") or student_data.get("std_termcount") or "N/A")
+                if student_data
+                else "N/A"
+            )
+
+            department_code = (
+                (student_data.get("dept_code") or student_data.get("std_depno") or "N/A") if student_data else "N/A"
+            )
+
+            # Extract academy code and name
+            academy_code = (
+                (student_data.get("std_academyno") or student_data.get("academy_code") or None)
+                if student_data
+                else None
+            )
+
+            academy_name = (
+                (
+                    student_data.get("aca_cname")
+                    or academy_map.get(academy_code)  # Prioritize API returned Chinese name
+                    or None  # Then lookup from database
+                )
+                if academy_code
+                else None
+            )
+
+            # Extract department name
+            department_name = (
+                (
+                    student_data.get("dep_depname")
+                    or department_map.get(department_code)  # Prioritize API returned Chinese name
+                    or None  # Then lookup from database
+                )
+                if department_code and department_code != "N/A"
+                else None
+            )
 
             filtered_app = {
                 "id": app.get("id"),
@@ -273,10 +405,13 @@ async def get_applications_for_review(
                 "created_at": app.get("created_at"),
                 "submitted_at": app.get("submitted_at"),
                 # Student info in flat format for frontend compatibility
-                "student_id": student_data.get("std_stdcode", "未提供學號") if student_data else "N/A",
-                "student_name": student_data.get("std_cname", "未提供姓名") if student_data else "未提供學生資料",
-                "student_termcount": student_data.get("std_termcount", "N/A") if student_data else "N/A",
-                "department_code": student_data.get("std_depno", "N/A") if student_data else "N/A",
+                "student_id": student_id,
+                "student_name": student_name,
+                "student_termcount": student_termcount,
+                "department_code": department_code,
+                "department_name": department_name,  # NEW: Department Chinese name
+                "academy_code": academy_code,  # NEW: Academy code
+                "academy_name": academy_name,  # NEW: Academy Chinese name
                 # Add review status for UI purposes
                 "review_status": {
                     "has_professor_review": len(app.get("professor_reviews", [])) > 0,
