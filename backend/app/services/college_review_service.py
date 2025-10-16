@@ -493,55 +493,67 @@ class CollegeReviewService:
             # If semester is None, get all applications
             semester_filter = True
 
+        # Get creator's college code for filtering applications
+        from app.models.user import User
+
+        creator_stmt = select(User).where(User.id == creator_id)
+        creator_result = await self.db.execute(creator_stmt)
+        creator = creator_result.scalar_one_or_none()
+        creator_college = creator.college_code if creator else None
+
         # Get all applications for the scholarship type (if sub_type_code is "default", include all sub-types)
         if sub_type_code == "default":
             # Include all applications for this scholarship type, regardless of sub-type
-            apps_stmt = select(Application).where(
-                and_(
-                    Application.scholarship_type_id == scholarship_type_id,
-                    Application.academic_year == academic_year,
-                    semester_filter,
-                )
-            )
+            conditions = [
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                semester_filter,
+            ]
+            # Filter by creator's college if available
+            if creator_college:
+                conditions.append(Application.student_data["college_code"].astext == creator_college)
+
+            apps_stmt = select(Application).where(and_(*conditions))
         else:
             # Only include applications for the specific sub-type
-            apps_stmt = select(Application).where(
-                and_(
-                    Application.scholarship_type_id == scholarship_type_id,
-                    Application.sub_scholarship_type == sub_type_code,
-                    Application.academic_year == academic_year,
-                    semester_filter,
-                )
-            )
+            conditions = [
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.sub_scholarship_type == sub_type_code,
+                Application.academic_year == academic_year,
+                semester_filter,
+            ]
+            # Filter by creator's college if available
+            if creator_college:
+                conditions.append(Application.student_data["college_code"].astext == creator_college)
+
+            apps_stmt = select(Application).where(and_(*conditions))
 
         # Get college reviews for the scholarship type
         if sub_type_code == "default":
             # Include college reviews for all applications of this scholarship type
-            college_reviews_stmt = (
-                select(CollegeReview)
-                .join(Application)
-                .where(
-                    and_(
-                        Application.scholarship_type_id == scholarship_type_id,
-                        Application.academic_year == academic_year,
-                        semester_filter,
-                    )
-                )
-            )
+            review_conditions = [
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                semester_filter,
+            ]
+            # Filter by creator's college if available
+            if creator_college:
+                review_conditions.append(Application.student_data["college_code"].astext == creator_college)
+
+            college_reviews_stmt = select(CollegeReview).join(Application).where(and_(*review_conditions))
         else:
             # Only include college reviews for the specific sub-type
-            college_reviews_stmt = (
-                select(CollegeReview)
-                .join(Application)
-                .where(
-                    and_(
-                        Application.scholarship_type_id == scholarship_type_id,
-                        Application.sub_scholarship_type == sub_type_code,
-                        Application.academic_year == academic_year,
-                        semester_filter,
-                    )
-                )
-            )
+            review_conditions = [
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.sub_scholarship_type == sub_type_code,
+                Application.academic_year == academic_year,
+                semester_filter,
+            ]
+            # Filter by creator's college if available
+            if creator_college:
+                review_conditions.append(Application.student_data["college_code"].astext == creator_college)
+
+            college_reviews_stmt = select(CollegeReview).join(Application).where(and_(*review_conditions))
         apps_result = await self.db.execute(apps_stmt)
         applications = apps_result.scalars().all()
 

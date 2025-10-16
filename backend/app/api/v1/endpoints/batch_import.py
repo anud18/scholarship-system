@@ -1032,6 +1032,22 @@ async def confirm_batch_import(
     parsed_data = batch_import.parsed_data["data"]
     service = BatchImportService(db)
 
+    # Filter out records with validation errors to prevent duplicate/invalid applications
+    error_student_ids = set()
+    if batch_import.parsed_data.get("errors"):
+        for error in batch_import.parsed_data["errors"]:
+            if error.get("student_id"):
+                error_student_ids.add(error["student_id"])
+
+    # Only create applications for records without errors
+    clean_parsed_data = [row for row in parsed_data if row["student_id"] not in error_student_ids]
+
+    if not clean_parsed_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"所有 {len(parsed_data)} 筆記錄都有驗證錯誤，無法執行匯入。請修正錯誤後重新上傳。",
+        )
+
     # Update status to processing
     batch_import.import_status = BatchImportStatus.processing.value
     await db.commit()
@@ -1048,7 +1064,7 @@ async def confirm_batch_import(
 
         created_ids, creation_errors = await service.create_applications_from_batch(
             batch_import=batch_import,
-            parsed_data=parsed_data,
+            parsed_data=clean_parsed_data,  # Use filtered data
             scholarship_type_id=batch_import.scholarship_type_id,
             academic_year=batch_import.academic_year,
             semester=normalized_semester,
