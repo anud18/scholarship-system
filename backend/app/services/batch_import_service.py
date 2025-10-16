@@ -167,6 +167,9 @@ class BatchImportService:
         # Determine which format is used
         use_chinese_columns = has_chinese
 
+        # Track seen student IDs to detect duplicates within the file
+        seen_student_ids: set = set()
+
         # Process each row
         for idx, row in df.iterrows():
             row_number = idx + 2  # Excel row number (header is 1)
@@ -188,6 +191,22 @@ class BatchImportService:
                     )
                 )
                 continue
+
+            # Check for duplicate student_id within the file
+            if student_id in seen_student_ids:
+                errors.append(
+                    BatchImportValidationError(
+                        row_number=row_number,
+                        student_id=student_id,
+                        field="student_id",
+                        error_type="duplicate_in_file",
+                        message=f"學號 {student_id} 在檔案中重複出現，每位學生在同一批次中只能有一筆申請",
+                    )
+                )
+                continue
+
+            # Mark this student_id as seen
+            seen_student_ids.add(student_id)
 
             # Build application data row
             try:
