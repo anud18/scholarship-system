@@ -507,8 +507,21 @@ class CollegeReviewService:
             conditions = [
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
-                semester_filter,
+                Application.is_renewal.is_(False),  # Exclude renewal applications
+                Application.deleted_at.is_(None),  # Exclude soft-deleted applications
+                Application.status.in_(  # Whitelist valid statuses
+                    [
+                        ApplicationStatus.recommended.value,
+                        ApplicationStatus.under_review.value,
+                        ApplicationStatus.approved.value,
+                        ApplicationStatus.rejected.value,
+                        "college_reviewed",
+                    ]
+                ),
             ]
+            # Add semester filter only if it's an actual SQL expression
+            if semester_filter is not True:
+                conditions.append(semester_filter)
             # Filter by creator's college if available
             if creator_college:
                 conditions.append(Application.student_data["college_code"].astext == creator_college)
@@ -520,8 +533,21 @@ class CollegeReviewService:
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.sub_scholarship_type == sub_type_code,
                 Application.academic_year == academic_year,
-                semester_filter,
+                Application.is_renewal.is_(False),  # Exclude renewal applications
+                Application.deleted_at.is_(None),  # Exclude soft-deleted applications
+                Application.status.in_(  # Whitelist valid statuses
+                    [
+                        ApplicationStatus.recommended.value,
+                        ApplicationStatus.under_review.value,
+                        ApplicationStatus.approved.value,
+                        ApplicationStatus.rejected.value,
+                        "college_reviewed",
+                    ]
+                ),
             ]
+            # Add semester filter only if it's an actual SQL expression
+            if semester_filter is not True:
+                conditions.append(semester_filter)
             # Filter by creator's college if available
             if creator_college:
                 conditions.append(Application.student_data["college_code"].astext == creator_college)
@@ -534,8 +560,21 @@ class CollegeReviewService:
             review_conditions = [
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
-                semester_filter,
+                Application.is_renewal.is_(False),  # Exclude renewal applications
+                Application.deleted_at.is_(None),  # Exclude soft-deleted applications
+                Application.status.in_(  # Whitelist valid statuses
+                    [
+                        ApplicationStatus.recommended.value,
+                        ApplicationStatus.under_review.value,
+                        ApplicationStatus.approved.value,
+                        ApplicationStatus.rejected.value,
+                        "college_reviewed",
+                    ]
+                ),
             ]
+            # Add semester filter only if it's an actual SQL expression
+            if semester_filter is not True:
+                review_conditions.append(semester_filter)
             # Filter by creator's college if available
             if creator_college:
                 review_conditions.append(Application.student_data["college_code"].astext == creator_college)
@@ -547,8 +586,21 @@ class CollegeReviewService:
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.sub_scholarship_type == sub_type_code,
                 Application.academic_year == academic_year,
-                semester_filter,
+                Application.is_renewal.is_(False),  # Exclude renewal applications
+                Application.deleted_at.is_(None),  # Exclude soft-deleted applications
+                Application.status.in_(  # Whitelist valid statuses
+                    [
+                        ApplicationStatus.recommended.value,
+                        ApplicationStatus.under_review.value,
+                        ApplicationStatus.approved.value,
+                        ApplicationStatus.rejected.value,
+                        "college_reviewed",
+                    ]
+                ),
             ]
+            # Add semester filter only if it's an actual SQL expression
+            if semester_filter is not True:
+                review_conditions.append(semester_filter)
             # Filter by creator's college if available
             if creator_college:
                 review_conditions.append(Application.student_data["college_code"].astext == creator_college)
