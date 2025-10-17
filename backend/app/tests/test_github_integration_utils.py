@@ -71,7 +71,6 @@ def test_generate_distribution_csv_content_sorts_and_formats_rows():
         SimpleNamespace(
             rank_position=2,
             application=SimpleNamespace(student_data={"std_cname": "B", "std_stdcode": "B002"}),
-            total_score=88.25,
             is_allocated=False,
             status="pending",
             allocation_reason=None,
@@ -79,7 +78,6 @@ def test_generate_distribution_csv_content_sorts_and_formats_rows():
         SimpleNamespace(
             rank_position=1,
             application=SimpleNamespace(student_data={"std_cname": "A", "std_stdcode": "A001"}),
-            total_score=95.5,
             is_allocated=True,
             status="approved",
             allocation_reason="Top score",
@@ -89,6 +87,6 @@ def test_generate_distribution_csv_content_sorts_and_formats_rows():
     csv_content = generate_distribution_csv_content(ranking_items)
     lines = csv_content.splitlines()
 
-    assert lines[0] == "Rank,Student Name,Student ID,Score,Allocated,Status,Allocation Reason"
-    assert lines[1].startswith("1,A,A001,95.50,Yes,approved,Top score")
-    assert lines[2].startswith("2,B,B002,88.25,No,pending,N/A")
+    assert lines[0] == "Rank,Student Name,Student ID,Allocated,Status,Allocation Reason"
+    assert lines[1].startswith("1,A,A001,Yes,approved,Top score")
+    assert lines[2].startswith("2,B,B002,No,pending,N/A")

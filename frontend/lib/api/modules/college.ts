@@ -135,6 +135,17 @@ export function createCollegeApi() {
     },
 
     /**
+     * Unfinalize ranking (unlock to allow editing)
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    unfinalizeRanking: async (rankingId: number): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/unfinalize' as any, {
+        params: { path: { ranking_id: rankingId } },
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
      * Import ranking data from Excel
      * Type-safe: Path parameter and request body validated against OpenAPI
      */

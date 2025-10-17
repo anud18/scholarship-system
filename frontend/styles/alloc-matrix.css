@@ -1,55 +1,33 @@
 /**
  * Allocation Matrix Pill Styling
- * Run-level pills with dynamic sizing and theming via CSS custom properties
+ * Unified gray inset shadow for all themes
  */
 
 .alloc-matrix-pill {
   transition: all 200ms ease-out;
-  background: linear-gradient(
-    180deg,
-    var(--pill-bg-start),
-    var(--pill-bg-end)
-  );
-  border: 1.5px solid var(--pill-border);
+  background: var(--pill-bg);
+  border: none;
   border-radius: var(--pill-radius);
-  box-shadow: inset 0 2px 4px var(--pill-shadow);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.15),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.alloc-matrix-pill:hover {
+  opacity: 0.95;
 }
 
 /* Blue tone - Allocated students */
 .alloc-matrix-pill[data-tone="blue"] {
-  --pill-bg-start: rgb(239, 246, 255); /* blue-50 */
-  --pill-bg-end: rgb(219, 234, 254); /* blue-100 */
-  --pill-border: rgb(147, 197, 253); /* blue-300 */
-  --pill-shadow: rgba(30, 64, 175, 0.08); /* blue-800 with transparency */
-}
-
-.alloc-matrix-pill[data-tone="blue"]:hover {
-  --pill-bg-start: rgb(219, 234, 254); /* blue-100 */
-  --pill-bg-end: rgb(191, 219, 254); /* blue-200 */
+  --pill-bg: rgb(219, 234, 254); /* blue-100 */
 }
 
 /* Warm tone - Backup students */
 .alloc-matrix-pill[data-tone="warm"] {
-  --pill-bg-start: rgb(255, 247, 237); /* orange-50 */
-  --pill-bg-end: rgb(255, 237, 213); /* orange-100 */
-  --pill-border: rgb(253, 186, 116); /* orange-300 */
-  --pill-shadow: rgba(194, 65, 12, 0.08); /* orange-700 with transparency */
-}
-
-.alloc-matrix-pill[data-tone="warm"]:hover {
-  --pill-bg-start: rgb(255, 237, 213); /* orange-100 */
-  --pill-bg-end: rgb(254, 215, 170); /* orange-200 */
+  --pill-bg: rgb(254, 215, 170); /* orange-200 */
 }
 
 /* Muted tone - Unallocated students */
 .alloc-matrix-pill[data-tone="muted"] {
-  --pill-bg-start: rgb(248, 250, 252); /* slate-50 */
-  --pill-bg-end: rgb(241, 245, 249); /* slate-100 */
-  --pill-border: rgb(226, 232, 240); /* slate-200 */
-  --pill-shadow: rgba(0, 0, 0, 0.04);
-}
-
-.alloc-matrix-pill[data-tone="muted"]:hover {
-  --pill-bg-start: rgb(241, 245, 249); /* slate-100 */
-  --pill-bg-end: rgb(226, 232, 240); /* slate-200 */
+  --pill-bg: rgb(226, 232, 240); /* slate-200 */
 }

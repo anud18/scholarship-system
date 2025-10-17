@@ -883,6 +883,41 @@ async def get_ranking(
                             college_quota = numeric_quota
                             break
 
+        # Collect all unique department codes for batch query
+        from sqlalchemy.orm import selectinload
+
+        from app.models.student import Department
+
+        department_codes = set()
+        for item in ranking.items:
+            if item.application and item.application.student_data:
+                student_data = item.application.student_data
+                if isinstance(student_data, dict):
+                    dept_code = student_data.get("std_depno") or student_data.get("dept_code")
+                    if dept_code:
+                        department_codes.add(dept_code)
+
+        # Query all departments with academy relationship to avoid N+1 queries
+        department_map = {}
+        if department_codes:
+            dept_stmt = (
+                select(Department)
+                .options(selectinload(Department.academy))
+                .where(Department.code.in_(department_codes))
+            )
+            dept_result = await db.execute(dept_stmt)
+            departments = dept_result.scalars().all()
+
+            # Build map with department name and academy information
+            department_map = {
+                dept.code: {
+                    "name": dept.name,
+                    "academy_code": dept.academy_code,
+                    "academy_name": dept.academy.name if dept.academy else None,
+                }
+                for dept in departments
+            }
+
         # Format ranking items
         items = []
         for item in sorted(ranking.items, key=lambda x: x.rank_position):
@@ -892,12 +927,30 @@ async def get_ranking(
                 else {}
             )
             student_name_raw = (
-                student_data.get("std_cname") or student_data.get("std_ename") or student_data.get("student_name")
+                student_data.get("std_cname")
+                or student_data.get("std_ename")
+                or student_data.get("name")
+                or student_data.get("student_name")
             )
             student_name = str(student_name_raw) if student_name_raw else "學生"
 
-            student_id_raw = student_data.get("std_stdcode") or student_data.get("student_id")
+            student_id_raw = (
+                student_data.get("std_stdcode") or student_data.get("nycu_id") or student_data.get("student_id")
+            )
             student_id = str(student_id_raw) if student_id_raw is not None else None
+
+            # Extract department and academy information
+            department_code = student_data.get("dept_code") or student_data.get("std_depno") or "N/A"
+
+            # Get department info from database
+            dept_info = department_map.get(department_code) if department_code and department_code != "N/A" else None
+
+            # Extract department name
+            department_name = student_data.get("dep_depname") or (dept_info["name"] if dept_info else None)
+
+            # Extract academy code and name from Department.academy relationship
+            academy_code = dept_info["academy_code"] if dept_info else None
+            academy_name = student_data.get("aca_cname") or (dept_info["academy_name"] if dept_info else None)
 
             items.append(
                 {
@@ -905,7 +958,6 @@ async def get_ranking(
                     "rank_position": item.rank_position,
                     "is_allocated": item.is_allocated,
                     "status": item.status,
-                    "total_score": float(item.total_score) if item.total_score else None,
                     "student_name": student_name,
                     "student_id": student_id,
                     # Lightweight DTO with minimal student exposure
@@ -933,7 +985,13 @@ async def get_ranking(
                                 if isinstance(student_data.get("std_depno"), str)
                                 else "N/A"
                             ),  # Use department code instead of full name
+                            "term_count": student_data.get("term_count") or student_data.get("std_termcount"),
                         },
+                        # Add academy and department information
+                        "department_code": department_code,
+                        "department_name": department_name,
+                        "academy_code": academy_code,
+                        "academy_name": academy_name,
                     },
                 }
             )
@@ -1165,6 +1223,60 @@ async def finalize_ranking(
     except Exception as e:
         logger.error(f"Unexpected error finalizing ranking: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to finalize ranking")
+
+
+@router.post("/rankings/{ranking_id}/unfinalize")
+async def unfinalize_ranking(
+    ranking_id: int,
+    current_user: User = Depends(require_college),  # College users can unfinalize their own rankings
+    db: AsyncSession = Depends(get_db),
+):
+    """Unfinalize a ranking (makes it editable again)"""
+
+    try:
+        # Get ranking to check ownership
+        stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id)
+        result = await db.execute(stmt)
+        ranking_check = result.scalar_one_or_none()
+
+        if not ranking_check:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ranking not found")
+
+        # Check permissions - only creator or admin can unfinalize
+        if ranking_check.created_by != current_user.id and current_user.role not in [
+            UserRole.admin,
+            UserRole.super_admin,
+        ]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the ranking creator or admin can unfinalize this ranking",
+            )
+
+        service = CollegeReviewService(db)
+        ranking = await service.unfinalize_ranking(ranking_id=ranking_id)
+
+        return ApiResponse(
+            success=True,
+            message="Ranking unfinalized successfully",
+            data={
+                "id": ranking.id,
+                "is_finalized": ranking.is_finalized,
+                "ranking_status": ranking.ranking_status,
+            },
+        )
+
+    except RankingNotFoundError as e:
+        logger.warning(f"Ranking not found for unfinalization: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except RankingModificationError as e:
+        logger.warning(f"Cannot unfinalize ranking: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except CollegeReviewError as e:
+        logger.error(f"College review error during unfinalization: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error unfinalizing ranking: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to unfinalize ranking")
 
 
 @router.get("/quota-status")
@@ -1674,8 +1786,8 @@ async def get_distribution_details(
             if not app or not app.student_data:
                 continue
 
-            student_id = app.student_data.get("std_stdcode", "N/A")
-            student_name = app.student_data.get("std_cname", "N/A")
+            student_id = app.student_data.get("std_stdcode") or app.student_data.get("nycu_id") or "N/A"
+            student_name = app.student_data.get("std_cname") or app.student_data.get("name") or "N/A"
             college_code = (
                 app.student_data.get("college_code")
                 or app.student_data.get("std_college")

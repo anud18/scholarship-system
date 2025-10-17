@@ -91,7 +91,6 @@ async def test_generate_issue_body_includes_summary_and_ranking(monkeypatch):
     ranking_item = SimpleNamespace(
         rank_position=1,
         application=application,
-        total_score=95.0,
         is_allocated=True,
         college_review=None,
     )
@@ -103,7 +102,7 @@ async def test_generate_issue_body_includes_summary_and_ranking(monkeypatch):
     assert "# Scholarship Distribution Report" in body
     assert "**Academic Year:** 2024" in body
     assert "| nstc | 10 | 8 | 7 | 3 | 87.5% |" in body
-    assert "| 1 | Alice | S123 | 95.00 | ✅ | Allocated |" in body
+    assert "| 1 | Alice | S123 | ✅ | Allocated |" in body
     assert "- Capacity adjustment applied" in body
     assert "- ranking: 0.6" in body  # Changed from gpa
     # min_gpa assertion removed - should be validated by ScholarshipRule system

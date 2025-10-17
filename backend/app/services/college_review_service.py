@@ -740,7 +740,6 @@ class CollegeReviewService:
                 application_id=app.id,
                 college_review_id=college_review.id,  # Now guaranteed to exist
                 rank_position=rank_position,
-                total_score=college_review.ranking_score,
             )
             self.db.add(ranking_item)
 
@@ -771,64 +770,62 @@ class CollegeReviewService:
     async def update_ranking_order(self, ranking_id: int, new_order: List[Dict[str, Any]]) -> CollegeRanking:
         """Update the ranking order of applications with transaction safety"""
 
-        async with self.db.begin():  # Atomic transaction
-            try:
-                # Get ranking with pessimistic locking
-                ranking_stmt = (
-                    select(CollegeRanking)
-                    .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
-                    .where(CollegeRanking.id == ranking_id)
-                    .with_for_update()
-                )
+        try:
+            # Get ranking with pessimistic locking
+            ranking_stmt = (
+                select(CollegeRanking)
+                .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
+                .where(CollegeRanking.id == ranking_id)
+                .with_for_update()
+            )
 
-                ranking_result = await self.db.execute(ranking_stmt)
-                ranking = ranking_result.scalar_one_or_none()
+            ranking_result = await self.db.execute(ranking_stmt)
+            ranking = ranking_result.scalar_one_or_none()
 
-                if not ranking:
-                    raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
+            if not ranking:
+                raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
 
-                if ranking.is_finalized:
-                    raise RankingModificationError(f"Cannot modify finalized ranking {ranking_id}")
+            if ranking.is_finalized:
+                raise RankingModificationError(f"Cannot modify finalized ranking {ranking_id}")
 
-                # Validate input
-                if not new_order:
-                    raise InvalidRankingDataError("New order cannot be empty")
+            # Validate input
+            if not new_order:
+                raise InvalidRankingDataError("New order cannot be empty")
 
-                positions = [item.get("position") for item in new_order]
-                if len(positions) != len(set(positions)):
-                    raise InvalidRankingDataError("Duplicate positions found in ranking update")
+            positions = [item.get("position") for item in new_order]
+            if len(positions) != len(set(positions)):
+                raise InvalidRankingDataError("Duplicate positions found in ranking update")
 
-                # Update rank positions with validation
-                updated_count = 0
-                for order_item in new_order:
-                    item_id = order_item.get("item_id")
-                    new_position = order_item.get("position")
+            # Update rank positions with validation
+            updated_count = 0
+            for order_item in new_order:
+                item_id = order_item.get("item_id")
+                new_position = order_item.get("position")
 
-                    if not item_id or new_position is None:
-                        continue
+                if not item_id or new_position is None:
+                    continue
 
-                    # Find the ranking item
-                    ranking_item = next((item for item in ranking.items if item.id == item_id), None)
+                # Find the ranking item
+                ranking_item = next((item for item in ranking.items if item.id == item_id), None)
 
-                    if ranking_item and ranking_item.rank_position != new_position:
-                        ranking_item.rank_position = new_position
-                        # Also update the application's ranking position for consistency
-                        if ranking_item.application:
-                            ranking_item.application.final_ranking_position = new_position
-                        updated_count += 1
+                if ranking_item and ranking_item.rank_position != new_position:
+                    ranking_item.rank_position = new_position
+                    # Also update the application's ranking position for consistency
+                    if ranking_item.application:
+                        ranking_item.application.final_ranking_position = new_position
+                    updated_count += 1
 
-                if updated_count == 0:
-                    raise InvalidRankingDataError("No valid position updates found in ranking data")
+            if updated_count == 0:
+                raise InvalidRankingDataError("No valid position updates found in ranking data")
 
-                ranking.updated_at = datetime.now(timezone.utc)
-                await self.db.flush()
-                await self.db.refresh(ranking)
+            ranking.updated_at = datetime.now(timezone.utc)
+            await self.db.flush()
+            await self.db.refresh(ranking)
 
-                return ranking
+            return ranking
 
-            except Exception as e:
-                await self.db.rollback()
-                raise e
+        except Exception as e:
+            raise e
 
     async def execute_quota_distribution(
         self,
@@ -946,67 +943,97 @@ class CollegeReviewService:
     async def finalize_ranking(self, ranking_id: int, finalizer_id: int) -> CollegeRanking:
         """Finalize a ranking (makes it read-only) with concurrent access protection"""
 
-        async with self.db.begin():  # Atomic transaction
-            try:
-                # Get ranking with pessimistic locking to prevent concurrent modifications
-                ranking_stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id).with_for_update()
+        try:
+            # Get ranking with pessimistic locking to prevent concurrent modifications
+            ranking_stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id).with_for_update()
 
-                ranking_result = await self.db.execute(ranking_stmt)
-                ranking = ranking_result.scalar_one_or_none()
+            ranking_result = await self.db.execute(ranking_stmt)
+            ranking = ranking_result.scalar_one_or_none()
 
-                if not ranking:
-                    raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
+            if not ranking:
+                raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
 
-                if ranking.is_finalized:
-                    raise RankingModificationError("Ranking is already finalized")
+            if ranking.is_finalized:
+                raise RankingModificationError("Ranking is already finalized")
 
-                # Ensure only one ranking per scholarship/sub-type/term is finalized at a time
-                semester_conditions = []
-                if self._is_yearly_semester(ranking.semester):
-                    semester_conditions.append(CollegeRanking.semester.is_(None))
-                    semester_conditions.append(CollegeRanking.semester == Semester.yearly.value)
+            # Ensure only one ranking per scholarship/sub-type/term is finalized at a time
+            semester_conditions = []
+            if self._is_yearly_semester(ranking.semester):
+                semester_conditions.append(CollegeRanking.semester.is_(None))
+                semester_conditions.append(CollegeRanking.semester == Semester.yearly.value)
+            else:
+                normalized_semester = self._normalize_semester_value(ranking.semester)
+                if normalized_semester:
+                    semester_conditions.append(CollegeRanking.semester == normalized_semester)
                 else:
-                    normalized_semester = self._normalize_semester_value(ranking.semester)
-                    if normalized_semester:
-                        semester_conditions.append(CollegeRanking.semester == normalized_semester)
-                    else:
-                        semester_conditions.append(CollegeRanking.semester.is_(None))
+                    semester_conditions.append(CollegeRanking.semester.is_(None))
 
-                other_rankings_stmt = (
-                    select(CollegeRanking)
-                    .where(
-                        CollegeRanking.id != ranking_id,
-                        CollegeRanking.scholarship_type_id == ranking.scholarship_type_id,
-                        CollegeRanking.sub_type_code == ranking.sub_type_code,
-                        CollegeRanking.academic_year == ranking.academic_year,
-                        or_(*semester_conditions),
-                        CollegeRanking.is_finalized.is_(True),
-                    )
-                    .with_for_update()
+            other_rankings_stmt = (
+                select(CollegeRanking)
+                .where(
+                    CollegeRanking.id != ranking_id,
+                    CollegeRanking.scholarship_type_id == ranking.scholarship_type_id,
+                    CollegeRanking.sub_type_code == ranking.sub_type_code,
+                    CollegeRanking.academic_year == ranking.academic_year,
+                    or_(*semester_conditions),
+                    CollegeRanking.is_finalized.is_(True),
                 )
+                .with_for_update()
+            )
 
-                other_rankings_result = await self.db.execute(other_rankings_stmt)
-                other_rankings = other_rankings_result.scalars().all()
+            other_rankings_result = await self.db.execute(other_rankings_stmt)
+            other_rankings = other_rankings_result.scalars().all()
 
-                for other in other_rankings:
-                    other.is_finalized = False
-                    other.finalized_at = None
-                    other.finalized_by = None
-                    other.ranking_status = "draft"
+            for other in other_rankings:
+                other.is_finalized = False
+                other.finalized_at = None
+                other.finalized_by = None
+                other.ranking_status = "draft"
 
-                ranking.is_finalized = True
-                ranking.finalized_at = datetime.now(timezone.utc)
-                ranking.finalized_by = finalizer_id
-                ranking.ranking_status = "finalized"
+            ranking.is_finalized = True
+            ranking.finalized_at = datetime.now(timezone.utc)
+            ranking.finalized_by = finalizer_id
+            ranking.ranking_status = "finalized"
 
-                await self.db.flush()  # Flush within transaction context
+            await self.db.flush()  # Flush within transaction context
 
-                return ranking
+            return ranking
 
-            except (RankingNotFoundError, RankingModificationError):
-                raise  # Re-raise specific exceptions
-            except Exception as e:
-                raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}: {str(e)}")
+        except (RankingNotFoundError, RankingModificationError):
+            raise  # Re-raise specific exceptions
+        except Exception as e:
+            raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}: {str(e)}")
+
+    async def unfinalize_ranking(self, ranking_id: int) -> CollegeRanking:
+        """Unfinalize a ranking (makes it editable again)"""
+
+        try:
+            # Get ranking with pessimistic locking
+            ranking_stmt = select(CollegeRanking).where(CollegeRanking.id == ranking_id).with_for_update()
+
+            ranking_result = await self.db.execute(ranking_stmt)
+            ranking = ranking_result.scalar_one_or_none()
+
+            if not ranking:
+                raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
+
+            if not ranking.is_finalized:
+                raise RankingModificationError("Ranking is not finalized")
+
+            # Unfinalize the ranking
+            ranking.is_finalized = False
+            ranking.finalized_at = None
+            ranking.finalized_by = None
+            ranking.ranking_status = "draft"
+
+            await self.db.flush()  # Flush within transaction context
+
+            return ranking
+
+        except (RankingNotFoundError, RankingModificationError):
+            raise  # Re-raise specific exceptions
+        except Exception as e:
+            raise BusinessLogicError(f"Failed to unfinalize ranking {ranking_id}: {str(e)}")
 
     async def get_quota_status(
         self,

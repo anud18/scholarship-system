@@ -84,7 +84,6 @@ interface Application {
   scholarship_type: string;
   sub_type: string;
   eligible_subtypes?: string[];  // Eligible sub-scholarship types
-  total_score: number;
   rank_position: number;
   is_allocated: boolean;
   status: string;
@@ -106,6 +105,7 @@ interface CollegeRankingTableProps {
   onImportExcel?: (data: any[]) => Promise<void>;
   locale?: "zh" | "en";
   subTypeMeta?: Record<string, { label: string; label_en: string; code?: string }>;
+  saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
 }
 
 // SortableItem component for drag and drop
@@ -359,6 +359,7 @@ export function CollegeRankingTable({
   onImportExcel,
   locale = "zh",
   subTypeMeta,
+  saveStatus = 'idle',
 }: CollegeRankingTableProps) {
   const t = (key: string) => getTranslation(locale, key);
   const { toast } = useToast();
@@ -506,6 +507,118 @@ export function CollegeRankingTable({
     }
   };
 
+  const handleTemplateDownload = () => {
+    try {
+      // Extract current students from localApplications with blank rankings
+      const templateData = localApplications.map((app) => ({
+        '學號': app.student_id || '',
+        '姓名': app.student_name || '',
+        '排名': '',  // Blank for user to fill
+      }));
+
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(templateData);
+
+      // Set column widths for better readability
+      worksheet['!cols'] = [
+        { wch: 15 },  // 學號
+        { wch: 20 },  // 姓名
+        { wch: 10 },  // 排名
+      ];
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '排名範本');
+
+      // Generate filename
+      const filename = `排名範本_${subTypeCode}_${academicYear}.xlsx`;
+
+      // Download file
+      XLSX.writeFile(workbook, filename);
+
+      toast({
+        title: "下載成功",
+        description: `已下載範本檔案：${filename}`,
+      });
+    } catch (error) {
+      console.error('Template download error:', error);
+      toast({
+        title: "下載失敗",
+        description: error instanceof Error ? error.message : "無法產生範本檔案",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExportRanking = () => {
+    try {
+      // Prepare export data with all columns
+      const exportData = localApplications.map((app) => {
+        // Format eligible subtypes
+        const eligibleSubtypes = app.eligible_subtypes
+          ? app.eligible_subtypes.join(', ')
+          : '-';
+
+        // Format status
+        let statusText = '';
+        if (app.status === 'rejected') {
+          statusText = locale === 'zh' ? '駁回' : 'Rejected';
+        } else if (app.is_allocated) {
+          statusText = locale === 'zh' ? '獲分配' : 'Allocated';
+        } else {
+          statusText = locale === 'zh' ? '未分配' : 'Not Allocated';
+        }
+
+        return {
+          '排名': app.rank_position,
+          '學號': app.student_id || '',
+          '姓名': app.student_name || '',
+          '學院': app.academy_name || '-',
+          '系所': app.department_name || '-',
+          '符合子類別': eligibleSubtypes,
+          '狀態': statusText,
+        };
+      });
+
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths for better readability
+      worksheet['!cols'] = [
+        { wch: 8 },   // 排名
+        { wch: 15 },  // 學號
+        { wch: 20 },  // 姓名
+        { wch: 20 },  // 學院
+        { wch: 25 },  // 系所
+        { wch: 30 },  // 符合子類別
+        { wch: 12 },  // 狀態
+      ];
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '排名匯出');
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `排名匯出_${subTypeCode}_${academicYear}_${timestamp}.xlsx`;
+
+      // Download file
+      XLSX.writeFile(workbook, filename);
+
+      toast({
+        title: "匯出成功",
+        description: `已匯出 ${exportData.length} 筆排名資料`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "匯出失敗",
+        description: error instanceof Error ? error.message : "無法匯出排名資料",
+        variant: "destructive",
+      });
+    }
+  };
+
   const allocatedCount = localApplications.filter(
     app => app.is_allocated
   ).length;
@@ -600,7 +713,7 @@ export function CollegeRankingTable({
                         {/* Template Download */}
                         <div className="flex items-center gap-2">
                           <FileSpreadsheet className="h-5 w-5 text-gray-500" />
-                          <Button variant="link" className="text-sm p-0">
+                          <Button variant="link" className="text-sm p-0" onClick={handleTemplateDownload}>
                             {locale === "zh" ? "下載範本檔案" : "Download Template"}
                           </Button>
                         </div>
@@ -641,7 +754,7 @@ export function CollegeRankingTable({
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={onFinalizeRanking}
+                    onClick={() => onFinalizeRanking()}
                   >
                     <Save className="h-4 w-4 mr-2" />
                     {locale === "zh" ? "確認排名" : "Finalize Ranking"}
@@ -649,7 +762,7 @@ export function CollegeRankingTable({
                 </>
               )}
 
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={handleExportRanking}>
                 <Download className="h-4 w-4 mr-2" />
                 {locale === "zh" ? "匯出" : "Export"}
               </Button>

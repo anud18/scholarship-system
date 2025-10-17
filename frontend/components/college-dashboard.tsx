@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -83,6 +83,8 @@ import {
 import { useCollegeApplications } from "@/hooks/use-admin";
 import { User } from "@/types/user";
 import { apiClient } from "@/lib/api";
+import * as XLSX from "xlsx";
+import { useToast } from "@/hooks/use-toast";
 
 interface CollegeDashboardProps {
   user: User;
@@ -267,99 +269,89 @@ function DistributionQuotaSummary({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card className="border-blue-100 bg-blue-50/50">
-          <CardContent className="p-6">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                <School className="h-5 w-5" />
+      <Card>
+        <CardContent className="px-6 py-4">
+          <div className="flex items-center justify-around divide-x divide-slate-200">
+            {/* 學院配額 */}
+            <div className="flex items-center gap-3 px-4 flex-1">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-blue-600 flex-shrink-0">
+                <School className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-sm font-medium text-blue-700">
+                <p className="text-xs font-medium text-blue-700">
                   {locale === "zh" ? "學院配額" : "College Quota"}
                 </p>
-                <p className="text-2xl font-semibold text-blue-900">
+                <p className="text-xl font-semibold text-blue-900">
                   {formatValue(effectiveQuota)}
                 </p>
                 {!hasCollegeQuota && (
-                  <p className="mt-1 text-xs text-blue-700/80">
+                  <p className="text-xs text-blue-700/80">
                     {locale === "zh"
-                      ? "尚未設定學院配額，暫以總配額估算"
-                      : "Using global quota until college values are configured"}
+                      ? "暫以總配額估算"
+                      : "Using global quota"}
                   </p>
                 )}
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                <CheckCircle className="h-5 w-5" />
+            {/* 已分配 */}
+            <div className="flex items-center gap-3 px-4 flex-1">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 flex-shrink-0">
+                <CheckCircle className="h-4 w-4" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-emerald-700">
+                <p className="text-xs font-medium text-emerald-700">
                   {locale === "zh" ? "已分配" : "Allocated"}
                 </p>
-                <p className="text-2xl font-semibold text-emerald-700">
-                  {allocatedCount.toLocaleString()}
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  {locale === "zh"
-                    ? `總申請 ${demandCount.toLocaleString()} 名`
-                    : `${demandCount.toLocaleString()} total applicants`}
-                </p>
-                <div className="mt-3">
-                  <Progress
-                    value={allocationRate}
-                    className="h-2"
-                    indicatorClassName="bg-emerald-500"
-                    aria-label={locale === "zh" ? "分配進度" : "Allocation progress"}
-                  />
+                <div className="flex items-baseline gap-2">
+                  <p className="text-xl font-semibold text-emerald-700">
+                    {allocatedCount.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {locale === "zh"
+                      ? `/ ${demandCount.toLocaleString()}`
+                      : `/ ${demandCount.toLocaleString()}`}
+                  </p>
                 </div>
+                <Progress
+                  value={allocationRate}
+                  className="h-1.5 mt-1"
+                  indicatorClassName="bg-emerald-500"
+                  aria-label={locale === "zh" ? "分配進度" : "Allocation progress"}
+                />
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 text-orange-600">
-                <AlertCircle className="h-5 w-5" />
+            {/* 剩餘名額 */}
+            <div className="flex items-center gap-3 px-4 flex-1">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-orange-100 text-orange-600 flex-shrink-0">
+                <AlertCircle className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-sm font-medium text-orange-700">
-                  {locale === "zh" ? "剩餘名額" : "Seats Remaining"}
+                <p className="text-xs font-medium text-orange-700">
+                  {locale === "zh" ? "剩餘名額" : "Remaining"}
                 </p>
-                <p className="text-2xl font-semibold text-orange-700">
+                <p className="text-xl font-semibold text-orange-700">
                   {formatValue(remainingQuota)}
                 </p>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="text-xs text-gray-500">
                   {locale === "zh"
-                    ? "若名額不足，請檢視備取或調整排序"
-                    : "Review backups or ranking if seats are exhausted"}
+                    ? "檢視備取或調整"
+                    : "Review or adjust"}
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
 
       {breakdownItems.length > 0 && (
         <Card className="shadow-sm">
-          <CardHeader className="pb-2">
+          <CardHeader className="pt-4 pb-2">
             <CardTitle className="text-base">
               {locale === "zh" ? "子項目配額概況" : "Sub-scholarship Overview"}
             </CardTitle>
-            <CardDescription>
-              {locale === "zh"
-                ? "比較學院配額與申請需求，協助掌握壓力點"
-                : "Compare college quota with demand to spot pressure points"}
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -407,10 +399,10 @@ function DistributionQuotaSummary({
 
                 return (
                   <Card key={code} className="border border-slate-200">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-3">
+                    <CardContent className="p-3">
+                      <div className="flex items-start justify-between gap-2">
                         <div>
-                          <p className="text-sm font-medium text-slate-700">
+                          <p className="text-xs font-medium text-slate-700">
                             {displayLabel}
                           </p>
                           <p className={`text-xs ${demandLabel.className}`}>
@@ -421,13 +413,13 @@ function DistributionQuotaSummary({
                           <p className="text-xs text-muted-foreground">
                             {locale === "zh" ? "配額" : "Quota"}
                           </p>
-                          <p className="text-lg font-semibold text-slate-800">
+                          <p className="text-base font-semibold text-slate-800">
                             {formatValue(quotaNumber)}
                           </p>
                         </div>
                       </div>
 
-                      <div className="mt-3">
+                      <div className="mt-2">
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span>
                             {locale === "zh"
@@ -438,7 +430,7 @@ function DistributionQuotaSummary({
                         </div>
                         <Progress
                           value={ratio}
-                          className="mt-1 h-2"
+                          className="mt-1 h-1.5"
                           indicatorClassName={progressColor}
                           aria-label={
                             locale === "zh"
@@ -464,6 +456,7 @@ export function CollegeDashboard({
   locale = "zh",
 }: CollegeDashboardProps) {
   const t = (key: string) => getTranslation(locale, key);
+  const { toast } = useToast();
   const {
     applications,
     isLoading,
@@ -606,6 +599,10 @@ export function CollegeDashboard({
   const [editingRankingId, setEditingRankingId] = useState<number | null>(null);
   const [editingRankingName, setEditingRankingName] = useState<string>("");
 
+  // Auto-save state
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
   // 學期選擇相關狀態
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<number>();
   const [selectedSemester, setSelectedSemester] = useState<string>();
@@ -679,6 +676,13 @@ export function CollegeDashboard({
     }
   }, [filteredRankings, selectedRanking]);
 
+  // 當獎學金類型切換時，自動選擇第一個符合條件的排名
+  useEffect(() => {
+    if (activeScholarshipTab && rankings.length > 0 && !selectedRanking) {
+      autoSelectFirstRanking(rankings);
+    }
+  }, [activeScholarshipTab, rankings.length]);
+
   // Fetch managed college information
   const [managedCollege, setManagedCollege] = useState<{
     code: string;
@@ -700,8 +704,8 @@ export function CollegeDashboard({
     const initializeData = async () => {
       await getAcademicConfig();
       await fetchAvailableOptions();
-      await fetchRankings();
       await getScholarshipConfig();
+      await fetchRankings();
     };
     initializeData();
   }, []);
@@ -837,6 +841,8 @@ export function CollegeDashboard({
           return { ...ranking, semester: safeSemester };
         });
         setRankings(normalizedRankings);
+        // 自動選擇第一個符合條件的排名
+        await autoSelectFirstRanking(normalizedRankings);
       } else {
         console.warn("No rankings found or error:", response.message);
         setRankings([]);
@@ -844,6 +850,75 @@ export function CollegeDashboard({
     } catch (error) {
       console.error("Failed to fetch rankings:", error);
       setRankings([]);
+    }
+  };
+
+  /**
+   * 自動選擇第一個符合當前篩選條件的排名並載入詳情
+   * @param allRankings - 所有可用的排名清單
+   */
+  const autoSelectFirstRanking = async (allRankings: any[]) => {
+    // 如果已經選擇了排名，不自動覆蓋
+    if (selectedRanking) {
+      console.log("Ranking already selected, skipping auto-selection");
+      return;
+    }
+
+    // 獲取當前獎學金配置
+    const activeConfig = scholarshipConfig.find(
+      config => config.code === activeScholarshipTab
+    );
+
+    if (!activeConfig) {
+      console.log("No active scholarship config found, skipping auto-selection");
+      return;
+    }
+
+    // 使用與 filteredRankings 相同的篩選邏輯
+    const desiredSemester = selectedSemester
+      ? selectedSemester === "YEARLY"
+        ? null
+        : selectedSemester.toLowerCase()
+      : undefined;
+
+    const matchingRankings = allRankings.filter(ranking => {
+      // 比對獎學金類型
+      const matchesScholarship = ranking.scholarship_type_id === activeConfig.id;
+
+      // 比對學年度
+      const matchesYear =
+        typeof selectedAcademicYear === "number"
+          ? ranking.academic_year === selectedAcademicYear
+          : true;
+
+      // 比對學期
+      const rankingSemesterRaw =
+        ranking.semester !== undefined && ranking.semester !== null
+          ? String(ranking.semester).toLowerCase()
+          : null;
+      const rankingSemester =
+        rankingSemesterRaw && rankingSemesterRaw !== "yearly"
+          ? rankingSemesterRaw
+          : null;
+
+      const matchesSemester =
+        desiredSemester === undefined
+          ? true
+          : desiredSemester === null
+            ? rankingSemester === null
+            : rankingSemester === desiredSemester;
+
+      return matchesScholarship && matchesYear && matchesSemester;
+    });
+
+    // 如果找到符合條件的排名，選擇第一個
+    if (matchingRankings.length > 0) {
+      const firstRanking = matchingRankings[0];
+      console.log(`Auto-selecting ranking: ${firstRanking.id} - ${firstRanking.ranking_name}`);
+      setSelectedRanking(firstRanking.id);
+      await fetchRankingDetails(firstRanking.id);
+    } else {
+      console.log("No matching rankings found for auto-selection");
     }
   };
 
@@ -867,6 +942,7 @@ export function CollegeDashboard({
 
             return {
               id: item.application?.id || item.id,
+              ranking_item_id: item.id,  // CollegeRankingItem ID for backend updates
               app_id: item.application?.app_id || `APP-${item.id}`,
               student_name: fallbackStudentName,
               student_id: fallbackStudentId,
@@ -876,15 +952,18 @@ export function CollegeDashboard({
                 item.student_term_count ??
                 item.student_termcount ??
                 null,
-            scholarship_type:
-              item.application?.scholarship_type || item.scholarship_type || "",
-            sub_type: item.application?.sub_type || item.sub_type || "",
-            eligible_subtypes: item.application?.eligible_subtypes || [],  // Eligible sub-types for badges
-            total_score: item.total_score || 0,
-            rank_position: item.rank_position || 0,
-            is_allocated: item.is_allocated || false,
-            status: item.status || "pending",
-            review_status: item.application?.status || "pending",
+              // Add academy and department information
+              academy_name: item.application?.academy_name,
+              academy_code: item.application?.academy_code,
+              department_name: item.application?.department_name,
+              scholarship_type:
+                item.application?.scholarship_type || item.scholarship_type || "",
+              sub_type: item.application?.sub_type || item.sub_type || "",
+              eligible_subtypes: item.application?.eligible_subtypes || [],  // Eligible sub-types for badges
+              rank_position: item.rank_position || 0,
+              is_allocated: item.is_allocated || false,
+              status: item.status || "pending",
+              review_status: item.application?.status || "pending",
             };
           }
         );
@@ -993,13 +1072,63 @@ export function CollegeDashboard({
     }
   };
 
-  const handleRankingChange = (newOrder: any[]) => {
-    if (rankingData) {
-      setRankingData({
-        ...rankingData,
-        applications: newOrder,
-      });
+  const handleRankingChange = async (newOrder: any[]) => {
+    if (!rankingData || !selectedRanking) {
+      return;
     }
+
+    // Immediately update local state for responsive UI
+    setRankingData({
+      ...rankingData,
+      applications: newOrder,
+    });
+
+    // Clear previous timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Set status to pending save
+    setSaveStatus('idle');
+
+    // Auto-save after 500ms of no changes (debouncing)
+    saveTimeoutRef.current = setTimeout(async () => {
+      setSaveStatus('saving');
+      try {
+        // Prepare update payload with new positions
+        const updatePayload = newOrder.map((item, index) => ({
+          item_id: item.ranking_item_id,  // Use CollegeRankingItem ID, not Application ID
+          position: index + 1,
+        }));
+
+        const response = await apiClient.college.updateRankingOrder(
+          selectedRanking,
+          updatePayload
+        );
+
+        if (response.success) {
+          setSaveStatus('saved');
+          // Reset to idle after showing "saved" for 2 seconds
+          setTimeout(() => setSaveStatus('idle'), 2000);
+        } else {
+          console.error('Failed to save ranking order:', response.message);
+          setSaveStatus('error');
+          toast({
+            title: locale === 'zh' ? '儲存失敗' : 'Save Failed',
+            description: response.message || (locale === 'zh' ? '無法儲存排名順序' : 'Failed to save ranking order'),
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        console.error('Error saving ranking order:', error);
+        setSaveStatus('error');
+        toast({
+          title: locale === 'zh' ? '儲存錯誤' : 'Save Error',
+          description: error instanceof Error ? error.message : (locale === 'zh' ? '儲存時發生錯誤' : 'An error occurred while saving'),
+          variant: 'destructive',
+        });
+      }
+    }, 500);
   };
 
   const handleReviewApplication = async (
@@ -1072,11 +1201,65 @@ export function CollegeDashboard({
             isFinalized: true,
           });
         }
+        toast({
+          title: locale === 'zh' ? '鎖定成功' : 'Locked Successfully',
+          description: locale === 'zh' ? '排名已成功鎖定' : 'Ranking has been locked successfully',
+        });
       } else {
         console.error("Failed to finalize ranking:", response.message);
+        toast({
+          title: locale === 'zh' ? '鎖定失敗' : 'Lock Failed',
+          description: response.message || (locale === 'zh' ? '無法鎖定排名' : 'Failed to lock ranking'),
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error("Failed to finalize ranking:", error);
+      toast({
+        title: locale === 'zh' ? '鎖定錯誤' : 'Lock Error',
+        description: error instanceof Error ? error.message : (locale === 'zh' ? '鎖定時發生錯誤' : 'An error occurred while locking'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUnfinalizeRanking = async (targetRankingId?: number) => {
+    const rankingId = targetRankingId ?? selectedRanking;
+    if (!rankingId) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.college.unfinalizeRanking(rankingId);
+      if (response.success) {
+        // Refresh rankings list
+        await fetchRankings();
+        // Update current ranking data if it matches the unlocked ranking
+        if (rankingData && rankingId === selectedRanking) {
+          setRankingData({
+            ...rankingData,
+            isFinalized: false,
+          });
+        }
+        toast({
+          title: locale === 'zh' ? '解除鎖定成功' : 'Unlocked Successfully',
+          description: locale === 'zh' ? '排名已成功解除鎖定，現在可以編輯' : 'Ranking has been unlocked successfully and can now be edited',
+        });
+      } else {
+        console.error("Failed to unfinalize ranking:", response.message);
+        toast({
+          title: locale === 'zh' ? '解除鎖定失敗' : 'Unlock Failed',
+          description: response.message || (locale === 'zh' ? '無法解除鎖定排名' : 'Failed to unlock ranking'),
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error("Failed to unfinalize ranking:", error);
+      toast({
+        title: locale === 'zh' ? '解除鎖定錯誤' : 'Unlock Error',
+        description: error instanceof Error ? error.message : (locale === 'zh' ? '解除鎖定時發生錯誤' : 'An error occurred while unlocking'),
+        variant: 'destructive',
+      });
     }
   };
 
@@ -1157,6 +1340,106 @@ export function CollegeDashboard({
   const handleCancelEditRankingName = () => {
     setEditingRankingId(null);
     setEditingRankingName("");
+  };
+  const handleExportApplications = () => {
+    try {
+      if (applications.length === 0) {
+        toast({
+          title: locale === "zh" ? "無資料可匯出" : "No data to export",
+          description: locale === "zh" ? "目前沒有申請資料" : "No applications available",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Prepare export data
+      const exportData = applications.map((app) => {
+        // Format status
+        const statusText = app.status_zh || getStatusName(app.status as ApplicationStatus, locale);
+
+        // Format review status (學院審核狀態)
+        let collegeReviewStatus = "-";
+        if (app.college_review_completed) {
+          collegeReviewStatus = locale === "zh" ? "已審核" : "Reviewed";
+        } else if (app.status === "recommended" || app.status === "submitted") {
+          collegeReviewStatus = locale === "zh" ? "待審核" : "Pending";
+        } else if (app.status === "under_review") {
+          collegeReviewStatus = locale === "zh" ? "審核中" : "Under Review";
+        }
+
+        // Format application type
+        const applicationType = app.is_renewal
+          ? (locale === "zh" ? "續領" : "Renewal")
+          : (locale === "zh" ? "初領" : "New");
+
+        // Format date
+        const applicationDate = app.created_at
+          ? new Date(app.created_at).toLocaleDateString("zh-TW", {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+            })
+          : "-";
+
+        return {
+          '學生姓名': app.student_name || "-",
+          '學號': app.student_id || "-",
+          '就讀學期數': app.student_termcount || "-",
+          '學院': (app as any).academy_name || "-",
+          '系所': (app as any).department_name || "-",
+          '獎學金類型': app.scholarship_type_zh || app.scholarship_type || "-",
+          '申請類別': applicationType,
+          '狀態': statusText,
+          '學院審核狀態': collegeReviewStatus,
+          '申請時間': applicationDate,
+        };
+      });
+
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      worksheet['!cols'] = [
+        { wch: 20 }, // 學生姓名
+        { wch: 15 }, // 學號
+        { wch: 12 }, // 就讀學期數
+        { wch: 25 }, // 學院
+        { wch: 30 }, // 系所
+        { wch: 25 }, // 獎學金類型
+        { wch: 12 }, // 申請類別
+        { wch: 15 }, // 狀態
+        { wch: 15 }, // 學院審核狀態
+        { wch: 12 }, // 申請時間
+      ];
+
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '申請審核清單');
+
+      // Generate filename
+      const timestamp = new Date().toISOString().split('T')[0];
+      const scholarshipType = activeScholarshipTab || "all";
+      const year = selectedAcademicYear || "all";
+      const semester = selectedSemester || "all";
+      const filename = `學院審核管理_${scholarshipType}_${year}_${semester}_${timestamp}.xlsx`;
+
+      // Download file
+      XLSX.writeFile(workbook, filename);
+
+      toast({
+        title: locale === "zh" ? "匯出成功" : "Export successful",
+        description: locale === "zh"
+          ? `已匯出 ${exportData.length} 筆申請資料`
+          : `Exported ${exportData.length} applications`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: locale === "zh" ? "匯出失敗" : "Export failed",
+        description: error instanceof Error ? error.message : (locale === "zh" ? "無法匯出資料" : "Failed to export data"),
+        variant: "destructive",
+      });
+    }
   };
 
   const createNewRanking = async (
@@ -1289,6 +1572,9 @@ export function CollegeDashboard({
         value={activeScholarshipTab || ""}
         onValueChange={scholarshipType => {
           setActiveScholarshipTab(scholarshipType);
+          // 重置排名選擇，觸發自動選擇新類型的排名
+          setSelectedRanking(null);
+          setRankingData(null);
           // 切換獎學金類型時重新載入資料
           fetchCollegeApplications(
             selectedAcademicYear,
@@ -1426,7 +1712,7 @@ export function CollegeDashboard({
                       </SelectContent>
                     </Select>
 
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" onClick={handleExportApplications}>
                       <Download className="h-4 w-4 mr-1" />
                       {locale === "zh" ? "匯出" : "Export"}
                     </Button>
@@ -1930,11 +2216,12 @@ export function CollegeDashboard({
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className={`h-8 w-8 p-0 ${isLocked ? "text-blue-600" : "text-slate-500 hover:bg-blue-50 hover:text-blue-600"}`}
-                                      disabled={isLocked}
+                                      className={`h-8 w-8 p-0 ${isLocked ? "text-blue-600 hover:bg-blue-50" : "text-slate-500 hover:bg-blue-50 hover:text-blue-600"}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (!isLocked) {
+                                        if (isLocked) {
+                                          handleUnfinalizeRanking(ranking.id);
+                                        } else {
                                           handleFinalizeRanking(ranking.id);
                                         }
                                       }}
@@ -1947,8 +2234,8 @@ export function CollegeDashboard({
                                       <span className="sr-only">
                                         {isLocked
                                           ? locale === "zh"
-                                            ? "排名已鎖定"
-                                            : "Ranking locked"
+                                            ? "解除鎖定此排名"
+                                            : "Unlock this ranking"
                                           : locale === "zh"
                                             ? "鎖定此排名"
                                             : "Lock this ranking"}
@@ -2097,6 +2384,30 @@ export function CollegeDashboard({
                 {/* Ranking Details */}
                 {selectedRanking && rankingData && (
                   <div className="space-y-6">
+                    {/* Save Status Indicator */}
+                    {saveStatus !== 'idle' && !rankingData.isFinalized && (
+                      <div className="flex items-center justify-end gap-2 px-1">
+                        {saveStatus === 'saving' && (
+                          <div className="flex items-center gap-2 text-sm text-slate-600">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <span>{locale === 'zh' ? '儲存中...' : 'Saving...'}</span>
+                          </div>
+                        )}
+                        {saveStatus === 'saved' && (
+                          <div className="flex items-center gap-2 text-sm text-green-600">
+                            <CheckCircle className="h-3 w-3" />
+                            <span>{locale === 'zh' ? '已儲存' : 'Saved'}</span>
+                          </div>
+                        )}
+                        {saveStatus === 'error' && (
+                          <div className="flex items-center gap-2 text-sm text-red-600">
+                            <XCircle className="h-3 w-3" />
+                            <span>{locale === 'zh' ? '儲存失敗' : 'Save failed'}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {isRankingLoading ? (
                       <div className="flex items-center justify-center p-8">
                         <Loader2 className="h-8 w-8 animate-spin" />

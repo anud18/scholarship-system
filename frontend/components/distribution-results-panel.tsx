@@ -35,6 +35,8 @@ import {
 } from "@/lib/constants/allocation-matrix-layout";
 import { useGridMetrics } from "@/hooks/useGridMetrics";
 import { usePillMetrics } from "@/hooks/usePillMetrics";
+import * as XLSX from "xlsx";
+import { useToast } from "@/hooks/use-toast";
 
 const { Z_INDEX } = ALLOCATION_MATRIX_LAYOUT;
 
@@ -233,6 +235,174 @@ export function DistributionResultsPanel({
   const [error, setError] = useState<string | null>(null);
   const [subTypeTranslations, setSubTypeTranslations] =
     useState<SubTypeTranslations>({ zh: {}, en: {} });
+  const { toast } = useToast();
+
+  const handleExportDistribution = () => {
+    try {
+      if (!distributionData) {
+        toast({
+          title: locale === "zh" ? "無資料可匯出" : "No data to export",
+          description: locale === "zh" ? "目前沒有分配資料" : "No distribution data available",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Sheet 1: Overview (分配概覽)
+      const overviewData = [
+        {
+          '項目': locale === "zh" ? "排名名稱" : "Ranking Name",
+          '數值': distributionData.ranking_name || "-",
+        },
+        {
+          '項目': locale === "zh" ? "總申請數" : "Total Applications",
+          '數值': distributionData.total_applications,
+        },
+        {
+          '項目': locale === "zh" ? "正取人數" : "Admitted",
+          '數值': distributionData.total_allocated,
+        },
+        {
+          '項目': locale === "zh" ? "備取人數" : "Backup",
+          '數值': totalBackup,
+        },
+        {
+          '項目': locale === "zh" ? "未獲分配" : "Not Allocated",
+          '數值': totalRejected,
+        },
+        {
+          '項目': locale === "zh" ? "分配成功率" : "Success Rate",
+          '數值': distributionData.total_applications > 0
+            ? `${((distributionData.total_allocated / distributionData.total_applications) * 100).toFixed(1)}%`
+            : "0%",
+        },
+      ];
+
+      // Add sub-type breakdown to overview
+      subTypeKeys.forEach((subType) => {
+        const quota = aggregated.quotaMap[subType] ?? 0;
+        const admitted = aggregated.admittedCount[subType] ?? 0;
+        const backups = aggregated.backupCount[subType] ?? 0;
+        const label = getColumnLabel(subType);
+
+        overviewData.push({
+          '項目': `${label} - ${locale === "zh" ? "配額" : "Quota"}`,
+          '數值': quota,
+        });
+        overviewData.push({
+          '項目': `${label} - ${locale === "zh" ? "正取" : "Admitted"}`,
+          '數值': admitted,
+        });
+        if (backups > 0) {
+          overviewData.push({
+            '項目': `${label} - ${locale === "zh" ? "備取" : "Backup"}`,
+            '數值': backups,
+          });
+        }
+      });
+
+      const worksheetOverview = XLSX.utils.json_to_sheet(overviewData);
+      worksheetOverview['!cols'] = [
+        { wch: 30 }, // 項目
+        { wch: 20 }, // 數值
+      ];
+
+      // Sheet 2: Details (詳細清單)
+      const detailsData = studentRows.map((student) => {
+        const allocation = student.allocation;
+        const backupInfo = student.backupEntries.length > 0 ? student.backupEntries[0] : null;
+
+        let allocationType = "-";
+        let allocatedSubType = "-";
+        let backupSubType = "-";
+        let backupPosition = "-";
+
+        if (allocation) {
+          allocationType = locale === "zh" ? "正取" : "Admitted";
+          allocatedSubType = getColumnLabel(allocation.subType);
+        } else if (backupInfo) {
+          allocationType = locale === "zh" ? "備取" : "Backup";
+          backupSubType = getColumnLabel(backupInfo.subType);
+          backupPosition = backupInfo.backupPosition?.toString() || "-";
+        } else if (student.rejection) {
+          allocationType = locale === "zh" ? "未獲分配" : "Not Allocated";
+        } else {
+          allocationType = locale === "zh" ? "待處理" : "Pending";
+        }
+
+        return {
+          '排名': student.rank ?? "-",
+          '學生姓名': student.studentName,
+          '學號': student.studentId || "-",
+          '就讀學期數': student.termCount ?? "-",
+          '符合子項目': student.eligibleLabels.join(", ") || "-",
+          '分配狀態': allocationType,
+          '正取子項目': allocatedSubType,
+          '備取子項目': backupSubType,
+          '備取順位': backupPosition,
+          '申請編號': student.appId || "-",
+        };
+      });
+
+      const worksheetDetails = XLSX.utils.json_to_sheet(detailsData);
+      worksheetDetails['!cols'] = [
+        { wch: 10 }, // 排名
+        { wch: 20 }, // 學生姓名
+        { wch: 15 }, // 學號
+        { wch: 12 }, // 就讀學期數
+        { wch: 30 }, // 符合子項目
+        { wch: 12 }, // 分配狀態
+        { wch: 25 }, // 正取子項目
+        { wch: 25 }, // 備取子項目
+        { wch: 12 }, // 備取順位
+        { wch: 20 }, // 申請編號
+      ];
+
+      // Sheet 3: Rejected (駁回清單)
+      const rejectedData = distributionData.rejected?.map((student) => ({
+        '排名': student.rank_position,
+        '學生姓名': student.student_name,
+        '學號': student.student_id,
+        '原因': student.reason,
+      })) || [];
+
+      const worksheetRejected = XLSX.utils.json_to_sheet(rejectedData);
+      worksheetRejected['!cols'] = [
+        { wch: 10 }, // 排名
+        { wch: 20 }, // 學生姓名
+        { wch: 15 }, // 學號
+        { wch: 40 }, // 原因
+      ];
+
+      // Create workbook with all sheets
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheetOverview, locale === "zh" ? '分配概覽' : 'Overview');
+      XLSX.utils.book_append_sheet(workbook, worksheetDetails, locale === "zh" ? '詳細清單' : 'Details');
+      XLSX.utils.book_append_sheet(workbook, worksheetRejected, locale === "zh" ? '駁回清單' : 'Rejected');
+
+      // Generate filename
+      const timestamp = new Date().toISOString().split('T')[0];
+      const rankingName = distributionData.ranking_name?.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_') || 'distribution';
+      const filename = `分配矩陣_${rankingName}_${timestamp}.xlsx`;
+
+      // Download file
+      XLSX.writeFile(workbook, filename);
+
+      toast({
+        title: locale === "zh" ? "匯出成功" : "Export successful",
+        description: locale === "zh"
+          ? `已匯出分配矩陣資料，共 ${studentRows.length} 位學生`
+          : `Exported distribution matrix with ${studentRows.length} students`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: locale === "zh" ? "匯出失敗" : "Export failed",
+        description: error instanceof Error ? error.message : (locale === "zh" ? "無法匯出資料" : "Failed to export data"),
+        variant: "destructive",
+      });
+    }
+  };
 
   useEffect(() => {
     fetchDistributionDetails();
@@ -752,37 +922,30 @@ export function DistributionResultsPanel({
 
         {/* Content */}
         <div className="relative p-2.5">
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <p className={`text-xs font-bold ${handleStyles.textColor} tracking-tight`}>
-                {student.studentName}
-              </p>
-              <div className="mt-1 space-y-0.5 text-[11px] text-slate-600">
-                {student.studentId && (
-                  <div className="flex items-center gap-1">
-                    <span className="opacity-70">
-                      {locale === "zh" ? "學號" : "ID"}
-                    </span>
-                    <span className="font-medium">{student.studentId}</span>
-                  </div>
-                )}
-                {termText && (
-                  <div className="text-[10px] text-slate-500">{termText}</div>
-                )}
-                {student.appId && (
-                  <div className="text-[10px] text-slate-400 mt-1">
-                    {locale === "zh"
-                      ? `申請編號 ${student.appId}`
-                      : `Application ${student.appId}`}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
+          {/* 分發狀態：右上角絕對定位 */}
           {footer && (
-            <div className="mt-2 pt-1.5 border-t border-slate-200/50">
-              <div className="text-[10px] text-slate-600">{footer}</div>
+            <div className="absolute top-1.5 right-2 z-10">
+              <div className="text-[9px]">{footer}</div>
+            </div>
+          )}
+
+          {/* 第一行：姓名 - 學號 */}
+          <p className={`text-xs font-bold ${handleStyles.textColor} tracking-tight pr-12`}>
+            {student.studentName}
+            {student.studentId && (
+              <span className="font-medium"> - {student.studentId}</span>
+            )}
+          </p>
+
+          {/* 第二行：在學學期 */}
+          {termText && (
+            <div className="mt-1 text-[10px] text-slate-500">{termText}</div>
+          )}
+
+          {/* 申請編號：右下角絕對定位 */}
+          {student.appId && (
+            <div className="absolute bottom-1.5 right-2 text-[9px] text-slate-400 opacity-70">
+              {student.appId}
             </div>
           )}
         </div>
@@ -877,60 +1040,57 @@ export function DistributionResultsPanel({
           </CardContent>
         </Card>
       )}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <Users className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-slate-600">
+      <Card>
+        <CardContent className="px-6 py-4">
+          <div className="flex items-center justify-around divide-x divide-slate-200">
+            {/* 總申請數 */}
+            <div className="flex items-center gap-3 px-4 flex-1">
+              <Users className="h-6 w-6 text-blue-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-slate-600">
                   {locale === "zh" ? "總申請數" : "Total Applications"}
                 </p>
-                <p className="text-2xl font-bold text-slate-900">
+                <p className="text-xl font-bold text-slate-900">
                   {distributionData.total_applications.toLocaleString()}
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-slate-600">
+            {/* 正取人數 + 備取 */}
+            <div className="flex items-center gap-3 px-4 flex-1">
+              <CheckCircle className="h-6 w-6 text-green-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-slate-600">
                   {locale === "zh" ? "正取人數" : "Admitted"}
                 </p>
-                <p className="text-2xl font-bold text-green-600">
-                  {distributionData.total_allocated.toLocaleString()}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {locale === "zh"
-                    ? `備取 ${totalBackup.toLocaleString()} 名`
-                    : `${totalBackup.toLocaleString()} backups`}
-                </p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-xl font-bold text-green-600">
+                    {distributionData.total_allocated.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {locale === "zh"
+                      ? `備取 ${totalBackup.toLocaleString()}`
+                      : `${totalBackup.toLocaleString()} backups`}
+                  </p>
+                </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center">
-              <XCircle className="h-8 w-8 text-rose-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-slate-600">
+            {/* 未獲分配 */}
+            <div className="flex items-center gap-3 px-4 flex-1">
+              <XCircle className="h-6 w-6 text-rose-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-slate-600">
                   {locale === "zh" ? "未獲分配" : "Not Allocated"}
                 </p>
-                <p className="text-2xl font-bold text-rose-600">
+                <p className="text-xl font-bold text-rose-600">
                   {totalRejected.toLocaleString()}
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="overflow-hidden">
         <CardHeader className="border-b">
@@ -946,7 +1106,7 @@ export function DistributionResultsPanel({
                   : "Columns represent sub-scholarships and rows follow ranking order. White cards highlight actual allocations."}
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleExportDistribution}>
               <Download className="mr-2 h-4 w-4" />
               {locale === "zh" ? "匯出" : "Export"}
             </Button>
@@ -962,7 +1122,7 @@ export function DistributionResultsPanel({
                     gridTemplateColumns,
                   }}
                 >
-                  <div className="sticky top-0 left-0 z-30 border-b border-slate-200 bg-slate-100 px-3 py-3 text-sm font-semibold text-slate-700 shadow-[inset_-1px_-1px_0_rgba(15,23,42,0.05)]">
+                  <div className="sticky top-0 left-0 z-30 bg-slate-100 px-3 py-3 text-sm font-semibold text-slate-700 shadow-[inset_-1px_-1px_0_rgba(15,23,42,0.05)]">
                     {locale === "zh" ? "排名" : "Rank"}
                   </div>
                   {subTypeKeys.map((subType) => {
@@ -972,7 +1132,7 @@ export function DistributionResultsPanel({
                     return (
                       <div
                         key={`header-${subType}`}
-                        className="sticky top-0 z-20 border-b border-l border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 shadow-[inset_0_-1px_0_rgba(15,23,42,0.05)]"
+                        className="sticky top-0 z-20 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 shadow-[inset_0_-1px_0_rgba(15,23,42,0.05)]"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="truncate">{getColumnLabel(subType)}</span>
@@ -997,7 +1157,7 @@ export function DistributionResultsPanel({
                       </div>
                     );
                   })}
-                  <div className="sticky top-0 z-20 border-b border-l border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 shadow-[inset_0_-1px_0_rgba(15,23,42,0.05)]">
+                  <div className="sticky top-0 z-20 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 shadow-[inset_0_-1px_0_rgba(15,23,42,0.05)]">
                     {locale === "zh" ? "未獲分發" : "Unassigned"}
                   </div>
 
@@ -1047,10 +1207,8 @@ export function DistributionResultsPanel({
 
                         {/* Grid cells using display: contents for grid participation */}
                         <div className="contents group">
-                          <div className="sticky left-0 z-10 border-b border-slate-200 bg-white px-3 py-2 shadow-[1px_0_0_rgba(15,23,42,0.08)] transition-colors group-hover:bg-slate-50">
-                            <div className="flex items-center justify-center">
-                              {renderRankBadge(student.rank)}
-                            </div>
+                          <div className="sticky left-0 z-10 flex items-center justify-center bg-white px-3 py-4 shadow-[1px_0_0_rgba(15,23,42,0.08)] transition-colors group-hover:bg-slate-50">
+                            {renderRankBadge(student.rank)}
                           </div>
 
                           {subTypeKeys.map((subType, subTypeIndex) => {
@@ -1061,7 +1219,7 @@ export function DistributionResultsPanel({
                             );
 
                             const cellClasses = [
-                              "relative border-b border-l border-slate-200 px-4 py-4 transition-colors overflow-visible",
+                              "relative px-4 py-4 transition-colors overflow-visible",
                               // Make eligible cells transparent to show the pill behind
                               eligible
                                 ? "bg-transparent"
@@ -1092,7 +1250,7 @@ export function DistributionResultsPanel({
                                             ? "已分配至本子項目"
                                             : "Allocated to this sub-type"}
                                         </span>
-                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                        <div className="ml-2 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                                       </div>
                                     }
                                   />
@@ -1133,7 +1291,7 @@ export function DistributionResultsPanel({
                             </div>
                           );
                         })}
-                        <div className="relative border-b border-l border-slate-200 px-4 py-4 transition-colors group-hover:bg-slate-50">
+                        <div className="relative px-4 py-4 transition-colors group-hover:bg-slate-50">
                           {isUnassigned ? (
                             <div className="relative" style={{ zIndex: Z_INDEX.CARD }}>
                               <StudentInfoCard

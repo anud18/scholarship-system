@@ -146,8 +146,8 @@ class GitHubIntegrationService:
             ranking_items = result.scalars().all()
 
             if ranking_items:
-                body_parts.append("| Rank | Student | Student ID | Score | Status | Allocation |")
-                body_parts.append("|------|---------|------------|-------|--------|------------|")
+                body_parts.append("| Rank | Student | Student ID | Status | Allocation |")
+                body_parts.append("|------|---------|------------|--------|------------|")
 
                 for item in ranking_items:
                     student_name = (
@@ -160,12 +160,11 @@ class GitHubIntegrationService:
                         if item.application.student_data
                         else "N/A"
                     )
-                    score = f"{item.total_score:.2f}" if item.total_score else "N/A"
                     status_emoji = "✅" if item.is_allocated else "❌"
                     allocation_status = "Allocated" if item.is_allocated else "Rejected"
 
                     body_parts.append(
-                        f"| {item.rank_position} | {student_name} | {student_id} | {score} | {status_emoji} | {allocation_status} |"
+                        f"| {item.rank_position} | {student_name} | {student_id} | {status_emoji} | {allocation_status} |"
                     )
                 body_parts.append("")
 
@@ -293,8 +292,8 @@ class GitHubIntegrationService:
 
         if ranking_items:
             body_parts.append("## Current Ranking Order")
-            body_parts.append("| Rank | Student | Student ID | Score | Review Status |")
-            body_parts.append("|------|---------|------------|-------|---------------|")
+            body_parts.append("| Rank | Student | Student ID | Review Status |")
+            body_parts.append("|------|---------|------------|---------------|")
 
             for item in ranking_items:
                 student_name = (
@@ -303,12 +302,9 @@ class GitHubIntegrationService:
                 student_id = (
                     item.application.student_data.get("std_stdcode", "N/A") if item.application.student_data else "N/A"
                 )
-                score = f"{item.total_score:.2f}" if item.total_score else "N/A"
                 review_status = item.college_review.review_status if item.college_review else "N/A"
 
-                body_parts.append(
-                    f"| {item.rank_position} | {student_name} | {student_id} | {score} | {review_status} |"
-                )
+                body_parts.append(f"| {item.rank_position} | {student_name} | {student_id} | {review_status} |")
 
         body_parts.append("")
         body_parts.append("---")
@@ -371,16 +367,15 @@ def generate_distribution_csv_content(ranking_items: List[CollegeRankingItem]) -
     """Generate CSV content for distribution results"""
 
     csv_lines = []
-    csv_lines.append("Rank,Student Name,Student ID,Score,Allocated,Status,Allocation Reason")
+    csv_lines.append("Rank,Student Name,Student ID,Allocated,Status,Allocation Reason")
 
     for item in sorted(ranking_items, key=lambda x: x.rank_position):
         student_name = item.application.student_data.get("std_cname", "N/A") if item.application.student_data else "N/A"
         student_id = item.application.student_data.get("std_stdcode", "N/A") if item.application.student_data else "N/A"
-        score = f"{item.total_score:.2f}" if item.total_score else "N/A"
         allocated = "Yes" if item.is_allocated else "No"
         status = item.status
         reason = item.allocation_reason or "N/A"
 
-        csv_lines.append(f"{item.rank_position},{student_name},{student_id},{score},{allocated},{status},{reason}")
+        csv_lines.append(f"{item.rank_position},{student_name},{student_id},{allocated},{status},{reason}")
 
     return "\n".join(csv_lines)

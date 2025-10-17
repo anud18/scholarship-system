@@ -137,34 +137,6 @@ class CollegeReview(Base):
         """Check if the application is recommended for approval"""
         return self.recommendation == "approve"
 
-    def calculate_total_score(self, weights: Optional[Dict[str, float]] = None) -> float:
-        """
-        Calculate total weighted score based on individual component scores
-
-        Args:
-            weights: Dictionary of scoring weights. If None, uses default weights.
-
-        Returns:
-            Total weighted score (0-100)
-        """
-        if not weights:
-            weights = {
-                "academic": 0.30,
-                "professor_review": 0.40,
-                "college_criteria": 0.20,
-                "special_circumstances": 0.10,
-            }
-
-        scores = {
-            "academic": self.academic_score or 0,
-            "professor_review": self.professor_review_score or 0,
-            "college_criteria": self.college_criteria_score or 0,
-            "special_circumstances": self.special_circumstances_score or 0,
-        }
-
-        total_score = sum(scores[key] * weights.get(key, 0) for key in scores)
-        return round(total_score, 2)
-
 
 class CollegeRanking(Base):
     """
@@ -256,8 +228,7 @@ class CollegeRankingItem(Base):
     is_allocated = Column(Boolean, default=False)  # Whether quota was allocated
     allocation_reason = Column(Text)  # Reason for allocation/rejection
 
-    # Scoring information (cached from college review)
-    total_score = Column(Numeric(8, 2))
+    # Tie-breaker information
     tie_breaker_applied = Column(Boolean, default=False)
     tie_breaker_reason = Column(Text)
 
@@ -396,7 +367,6 @@ Index(
     CollegeRankingItem.is_allocated,
     CollegeRankingItem.status,
 )
-Index("ix_college_ranking_items_score", CollegeRankingItem.total_score.desc())
 
 # Index for quota distribution tracking
 Index(
