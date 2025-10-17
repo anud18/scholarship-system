@@ -57,6 +57,7 @@ import {
   ApplicationStatus,
   formatFieldName,
 } from "@/lib/utils/application-helpers";
+import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
 
 interface ApplicationReviewDialogProps {
   application: Application | HistoricalApplication | null;
@@ -92,7 +93,16 @@ function StudentPreviewDisplay({
 
   useEffect(() => {
     if (studentId) {
-      fetchPreview(studentId, academicYear);
+      // If academicYear is not provided, use current academic year
+      let yearToUse = academicYear;
+      if (!yearToUse) {
+        // Get current semester (e.g., "114-1") and extract year
+        const currentSemester = getCurrentSemesterROC();
+        const [yearStr] = currentSemester.split("-");
+        yearToUse = parseInt(yearStr, 10);
+      }
+
+      fetchPreview(studentId, yearToUse);
     }
   }, [studentId, academicYear, fetchPreview]);
 
