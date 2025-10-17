@@ -140,7 +140,7 @@ function StudentPreviewDisplay({
                   : "2nd"}
             </span>
             <div className="flex items-center gap-3">
-              {term.gpa !== undefined && (
+              {term.gpa != null && (
                 <Badge variant="outline" className="text-xs">
                   GPA: {term.gpa.toFixed(2)}
                 </Badge>
