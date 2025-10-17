@@ -50,9 +50,8 @@ export function ApplicationFormDataDisplay({
       setIsLoading(true);
       const formatted: Record<string, any> = {};
 
-      // 處理表單資料，支援後端返回的結構：
-      // { submitted_form_data: { fields: { field_id: { value: "..." } } } }
-
+      // 只處理 submitted_form_data.fields 結構
+      // 這是學生在申請時填寫的表單欄位
       const dataToProcess: Record<string, any> = {};
 
       // 處理後端的 submitted_form_data.fields 結構
@@ -78,52 +77,10 @@ export function ApplicationFormDataDisplay({
             }
           }
         );
-      } else if (formData.fields) {
-        // 直接處理 fields 結構
-        Object.entries(formData.fields).forEach(
-          ([fieldId, fieldData]: [string, any]) => {
-            if (
-              fieldData &&
-              typeof fieldData === "object" &&
-              "value" in fieldData
-            ) {
-              const value = fieldData.value;
-              if (
-                value &&
-                value !== "" &&
-                fieldId !== "files" &&
-                fieldId !== "agree_terms"
-              ) {
-                dataToProcess[fieldId] = value;
-              }
-            }
-          }
-        );
-      } else if (formData.form_data && typeof formData.form_data === "object") {
-        // 前端扁平結構 - 只處理欄位，不處理文件
-        Object.entries(formData.form_data).forEach(([key, value]) => {
-          if (
-            value &&
-            value !== "" &&
-            key !== "files" &&
-            key !== "agree_terms"
-          ) {
-            dataToProcess[key] = value;
-          }
-        });
-      } else {
-        // 直接的表單資料 - 只處理欄位，不處理文件
-        Object.entries(formData).forEach(([key, value]) => {
-          if (
-            value &&
-            value !== "" &&
-            key !== "files" &&
-            key !== "agree_terms"
-          ) {
-            dataToProcess[key] = value;
-          }
-        });
       }
+      // 注意：移除了其他的 fallback 邏輯
+      // 表單內容應該只顯示 submitted_form_data.fields
+      // 系統欄位（id, status, created_at 等）不應該在這裡顯示
 
       for (const [key, value] of Object.entries(dataToProcess)) {
         if (key === "scholarship_type") {
@@ -170,41 +127,17 @@ export function ApplicationFormDataDisplay({
           }
         }
       );
-    } else if (formData.fields) {
-      // 直接處理 fields 結構
-      Object.entries(formData.fields).forEach(
-        ([fieldId, fieldData]: [string, any]) => {
-          if (
-            fieldData &&
-            typeof fieldData === "object" &&
-            "value" in fieldData
-          ) {
-            const value = fieldData.value;
-            if (
-              value &&
-              value !== "" &&
-              fieldId !== "files" &&
-              fieldId !== "agree_terms"
-            ) {
-              dataToShow[fieldId] = value;
-            }
-          }
-        }
+    }
+
+    // 如果沒有表單資料，顯示訊息
+    if (Object.keys(dataToShow).length === 0) {
+      return (
+        <div className="text-center py-8">
+          <p className="text-sm text-muted-foreground">
+            {locale === "zh" ? "無表單資料" : "No form data"}
+          </p>
+        </div>
       );
-    } else if (formData.form_data && typeof formData.form_data === "object") {
-      // 前端扁平結構 - 只處理欄位
-      Object.entries(formData.form_data).forEach(([key, value]) => {
-        if (value && value !== "" && key !== "files" && key !== "agree_terms") {
-          dataToShow[key] = value;
-        }
-      });
-    } else {
-      // 直接的表單資料 - 只處理欄位
-      Object.entries(formData).forEach(([key, value]) => {
-        if (value && value !== "" && key !== "files" && key !== "agree_terms") {
-          dataToShow[key] = value;
-        }
-      });
     }
 
     return (
@@ -230,6 +163,17 @@ export function ApplicationFormDataDisplay({
             </div>
           );
         })}
+      </div>
+    );
+  }
+
+  // 如果沒有表單資料，顯示訊息
+  if (Object.keys(formattedData).length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-sm text-muted-foreground">
+          {locale === "zh" ? "無表單資料" : "No form data"}
+        </p>
       </div>
     );
   }
