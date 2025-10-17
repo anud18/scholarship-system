@@ -76,6 +76,7 @@ export function RankingManagementPanel({
     getAcademicConfig,
     getScholarshipConfig,
     setActiveTab,
+    fetchCollegeApplications,
   } = useCollegeManagement();
 
   const { toast } = useToast();
@@ -187,16 +188,52 @@ export function RankingManagementPanel({
         academic_year: useYear,
         semester: useSemester === "YEARLY" ? null : useSemester.toLowerCase(),
         ranking_name: `${scholarshipType.name} - ${useYear} ${semesterName}`,
+        force_new: true, // Always create a new ranking when user clicks "建立新排名"
       });
 
       if (response.success && response.data) {
-        await fetchRankings();
-        setSelectedRanking(response.data.id);
-        await fetchRankingDetails(response.data.id);
+        try {
+          // Refresh rankings list
+          await fetchRankings();
+          // Select the newly created ranking
+          setSelectedRanking(response.data.id);
+          // Load ranking details
+          await fetchRankingDetails(response.data.id);
+
+          // Show success notification
+          toast({
+            title: locale === 'zh' ? '建立成功' : 'Created Successfully',
+            description: locale === 'zh'
+              ? `排名「${response.data.ranking_name || '新排名'}」已成功建立`
+              : `Ranking "${response.data.ranking_name || 'New Ranking'}" has been created successfully`,
+          });
+        } catch (fetchError) {
+          console.error("Failed to load ranking after creation:", fetchError);
+          toast({
+            title: locale === 'zh' ? '建立成功，但載入失敗' : 'Created but Failed to Load',
+            description: locale === 'zh'
+              ? '排名已建立，但無法自動載入。請手動重新整理頁面。'
+              : 'Ranking created but failed to load automatically. Please refresh the page manually.',
+            variant: "destructive",
+          });
+        }
+      } else {
+        // API returned success: false
+        toast({
+          title: locale === 'zh' ? '建立失敗' : 'Creation Failed',
+          description: response.message || (locale === 'zh' ? '無法建立排名' : 'Failed to create ranking'),
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error("Failed to create ranking:", error);
-      throw error;
+      toast({
+        title: locale === 'zh' ? '建立失敗' : 'Creation Failed',
+        description: error instanceof Error
+          ? error.message
+          : (locale === 'zh' ? '建立排名時發生錯誤' : 'An error occurred while creating the ranking'),
+        variant: "destructive",
+      });
     }
   }, [
     getAcademicConfig,
@@ -210,6 +247,8 @@ export function RankingManagementPanel({
     fetchRankings,
     setSelectedRanking,
     fetchRankingDetails,
+    toast,
+    locale,
   ]);
 
   const handleRankingChange = useCallback(async (newOrder: any[]) => {
@@ -229,14 +268,17 @@ export function RankingManagementPanel({
     saveTimeoutRef.current = setTimeout(async () => {
       setSaveStatus('saving');
       try {
-        const payload = newOrder.map((app, index) => ({
-          application_id: app.id,
-          rank_position: index + 1,
+        // Use ranking_item_id (CollegeRankingItem.id) not application_id
+        const rankingItems = newOrder.map((app, index) => ({
+          item_id: app.ranking_item_id,
+          position: index + 1,
         }));
 
-        const response = await apiClient.college.updateRanking(selectedRanking, {
-          items: payload,
-        } as any);
+        // Use updateRankingOrder API instead of updateRanking
+        const response = await apiClient.college.updateRankingOrder(
+          selectedRanking,
+          rankingItems
+        );
 
         if (response.success) {
           setSaveStatus('saved');
@@ -264,10 +306,16 @@ export function RankingManagementPanel({
       if (selectedRanking) {
         await fetchRankingDetails(selectedRanking);
       }
+      // 同時更新 Context 中的申請列表，讓學院審核管理頁面也能看到最新狀態
+      await fetchCollegeApplications(
+        selectedAcademicYear,
+        selectedSemester,
+        activeScholarshipTab
+      );
     } catch (error) {
       console.error("Failed to review application:", error);
     }
-  }, [selectedRanking, fetchRankingDetails]);
+  }, [selectedRanking, fetchRankingDetails, fetchCollegeApplications, selectedAcademicYear, selectedSemester, activeScholarshipTab]);
 
   const handleExecuteDistribution = useCallback(async () => {
     if (selectedRanking) {
