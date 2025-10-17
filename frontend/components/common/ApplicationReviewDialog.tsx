@@ -894,11 +894,30 @@ export function ApplicationReviewDialog({
                           </span>
                         </div>
                       ) : (
-                        <ApplicationFormDataDisplay
-                          formData={detailedApplication}
-                          locale={locale}
-                          fieldLabels={fieldLabels}
-                        />
+                        <>
+                          {/* Debug logging for form data */}
+                          {(() => {
+                            console.log(
+                              "🔍 Form Tab - detailedApplication:",
+                              detailedApplication
+                            );
+                            console.log(
+                              "🔍 Form Tab - submitted_form_data:",
+                              detailedApplication?.submitted_form_data
+                            );
+                            console.log(
+                              "🔍 Form Tab - fields:",
+                              detailedApplication?.submitted_form_data?.fields
+                            );
+                            return null;
+                          })()}
+
+                          <ApplicationFormDataDisplay
+                            formData={detailedApplication}
+                            locale={locale}
+                            fieldLabels={fieldLabels}
+                          />
+                        </>
                       )}
                     </CardContent>
                   </Card>

@@ -77,6 +77,52 @@ class ApplicationService:
             return None
         return user.nycu_id
 
+    def _normalize_submitted_form_data(self, form_data: dict) -> dict:
+        """
+        Normalize submitted_form_data to new format (with 'fields' and 'documents' keys)
+
+        Old format (flat structure):
+        {
+          "postal_account": "1212312312",
+          "advisor_name": null,
+          "custom_fields": {...}
+        }
+
+        New format (nested structure):
+        {
+          "fields": {
+            "postal_account": {"field_id": "postal_account", "field_type": "text", "value": "1212312312", ...},
+            ...
+          },
+          "documents": [...]
+        }
+        """
+        if not form_data:
+            return {"fields": {}, "documents": []}
+
+        # If already in new format (has 'fields' key), return as is
+        if "fields" in form_data and isinstance(form_data.get("fields"), dict):
+            return form_data
+
+        # Convert old format to new format
+        fields = {}
+        documents = form_data.get("documents", [])
+
+        for key, value in form_data.items():
+            # Skip special keys
+            if key in ["documents", "files", "agree_terms", "custom_fields"]:
+                continue
+
+            # Create field object for new format
+            fields[key] = {
+                "field_id": key,
+                "field_type": "text",  # Default type
+                "value": value,
+                "required": False,
+            }
+
+        return {"fields": fields, "documents": documents}
+
     async def _build_application_response(
         self, application: Application, user: Optional[User] = None
     ) -> ApplicationResponse:
@@ -92,8 +138,10 @@ class ApplicationService:
             result = await self.db.execute(stmt)
             user = result.scalar_one_or_none()
 
-        # Integrate file data from submitted_form_data.documents
-        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+        # Normalize submitted_form_data to new format
+        normalized_form_data = self._normalize_submitted_form_data(
+            application.submitted_form_data.copy() if application.submitted_form_data else {}
+        )
 
         return ApplicationResponse(
             id=application.id,
@@ -108,7 +156,7 @@ class ApplicationService:
             academic_year=application.academic_year,
             semester=self._convert_semester_to_string(application.semester),
             student_data=application.student_data or {},
-            submitted_form_data=integrated_form_data,
+            submitted_form_data=normalized_form_data,
             agree_terms=application.agree_terms,
             professor_id=application.professor_id,
             reviewer_id=application.reviewer_id,

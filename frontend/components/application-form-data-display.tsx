@@ -44,57 +44,71 @@ export function ApplicationFormDataDisplay({
 
   // Debug logging
   console.log("ApplicationFormDataDisplay received formData:", formData);
+  console.log("📋 submitted_form_data exists:", !!formData?.submitted_form_data);
+  console.log("📋 fields exists:", !!formData?.submitted_form_data?.fields);
+  console.log(
+    "📋 fields is object:",
+    typeof formData?.submitted_form_data?.fields === "object"
+  );
+  console.log(
+    "📋 fields keys:",
+    formData?.submitted_form_data?.fields
+      ? Object.keys(formData.submitted_form_data.fields)
+      : "N/A"
+  );
+  console.log(
+    "📋 Raw fields object:",
+    formData?.submitted_form_data?.fields
+  );
 
   useEffect(() => {
     const formatData = async () => {
       setIsLoading(true);
       const formatted: Record<string, any> = {};
 
-      // 只處理 submitted_form_data.fields 結構
-      // 這是學生在申請時填寫的表單欄位
-      const dataToProcess: Record<string, any> = {};
+      // 只處理新格式：submitted_form_data.fields
+      const fields = formData?.submitted_form_data?.fields || {};
 
-      // 處理後端的 submitted_form_data.fields 結構
-      if (formData.submitted_form_data && formData.submitted_form_data.fields) {
-        // 後端嵌套結構 - 只處理欄位，不處理文件
-        Object.entries(formData.submitted_form_data.fields).forEach(
-          ([fieldId, fieldData]: [string, any]) => {
-            if (
-              fieldData &&
-              typeof fieldData === "object" &&
-              "value" in fieldData
-            ) {
-              const value = fieldData.value;
-              // 跳過文件相關欄位和空值
-              if (
-                value &&
-                value !== "" &&
-                fieldId !== "files" &&
-                fieldId !== "agree_terms"
-              ) {
-                dataToProcess[fieldId] = value;
+      console.log("🔄 Processing fields:", fields);
+
+      for (const [fieldId, fieldData] of Object.entries(fields)) {
+        if (
+          fieldData &&
+          typeof fieldData === "object" &&
+          "value" in fieldData
+        ) {
+          const value = (fieldData as any).value;
+
+          // 跳過空值、files 欄位和 agree_terms
+          if (
+            value !== null &&
+            value !== undefined &&
+            value !== "" &&
+            fieldId !== "files" &&
+            fieldId !== "agree_terms"
+          ) {
+            if (fieldId === "scholarship_type") {
+              try {
+                formatted[fieldId] = await formatFieldValue(
+                  fieldId,
+                  value,
+                  locale
+                );
+              } catch (error) {
+                console.warn(
+                  `Failed to format scholarship type: ${value}`,
+                  error
+                );
+                formatted[fieldId] = value;
               }
+            } else {
+              formatted[fieldId] = value;
             }
           }
-        );
-      }
-      // 注意：移除了其他的 fallback 邏輯
-      // 表單內容應該只顯示 submitted_form_data.fields
-      // 系統欄位（id, status, created_at 等）不應該在這裡顯示
-
-      for (const [key, value] of Object.entries(dataToProcess)) {
-        if (key === "scholarship_type") {
-          try {
-            formatted[key] = await formatFieldValue(key, value, locale);
-          } catch (error) {
-            console.warn(`Failed to format scholarship type: ${value}`, error);
-            formatted[key] = value;
-          }
-        } else {
-          formatted[key] = value;
         }
       }
 
+      console.log("✅ Formatted data:", formatted);
       setFormattedData(formatted);
       setIsLoading(false);
     };
@@ -105,29 +119,22 @@ export function ApplicationFormDataDisplay({
   if (isLoading) {
     // 處理載入狀態的顯示
     const dataToShow: Record<string, any> = {};
+    const fields = formData?.submitted_form_data?.fields || {};
 
-    if (formData.submitted_form_data && formData.submitted_form_data.fields) {
-      // 後端嵌套結構 - 只處理欄位
-      Object.entries(formData.submitted_form_data.fields).forEach(
-        ([fieldId, fieldData]: [string, any]) => {
-          if (
-            fieldData &&
-            typeof fieldData === "object" &&
-            "value" in fieldData
-          ) {
-            const value = fieldData.value;
-            if (
-              value &&
-              value !== "" &&
-              fieldId !== "files" &&
-              fieldId !== "agree_terms"
-            ) {
-              dataToShow[fieldId] = value;
-            }
-          }
+    Object.entries(fields).forEach(([fieldId, fieldData]: [string, any]) => {
+      if (fieldData && typeof fieldData === "object" && "value" in fieldData) {
+        const value = fieldData.value;
+        if (
+          value !== null &&
+          value !== undefined &&
+          value !== "" &&
+          fieldId !== "files" &&
+          fieldId !== "agree_terms"
+        ) {
+          dataToShow[fieldId] = value;
         }
-      );
-    }
+      }
+    });
 
     // 如果沒有表單資料，顯示訊息
     if (Object.keys(dataToShow).length === 0) {
