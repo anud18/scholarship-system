@@ -1614,6 +1614,9 @@ export function CollegeDashboard({
                                 {locale === "zh" ? "就讀學期數" : "Terms"}
                               </TableHead>
                               <TableHead>
+                                {locale === "zh" ? "學院/系所" : "College/Dept"}
+                              </TableHead>
+                              <TableHead>
                                 {locale === "zh"
                                   ? "獎學金類型"
                                   : "Scholarship Type"}
@@ -1647,6 +1650,16 @@ export function CollegeDashboard({
                                 </TableCell>
                                 <TableCell>
                                   {app.student_termcount || "-"}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="font-medium text-sm">
+                                      {(app as any).academy_name || "-"}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {(app as any).department_name || "-"}
+                                    </span>
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   {app.scholarship_type_zh || app.scholarship_type}

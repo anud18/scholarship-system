@@ -78,6 +78,9 @@ interface Application {
   app_id: string;
   student_name: string;
   student_id: string;
+  academy_name?: string;
+  academy_code?: string;
+  department_name?: string;
   scholarship_type: string;
   sub_type: string;
   eligible_subtypes?: string[];  // Eligible sub-scholarship types
@@ -234,6 +237,17 @@ function SortableItem({
 
       <TableCell className="text-center text-sm text-gray-600">
         {application.student_id || (locale === "zh" ? "未提供" : "N/A")}
+      </TableCell>
+
+      <TableCell className="text-center">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium text-sm">
+            {application.academy_name || "-"}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {application.department_name || "-"}
+          </span>
+        </div>
       </TableCell>
 
       <TableCell className="text-center">
@@ -671,6 +685,9 @@ export function CollegeRankingTable({
                   </TableHead>
                   <TableHead className="w-36 text-center">
                     {locale === "zh" ? "學號" : "Student ID"}
+                  </TableHead>
+                  <TableHead className="w-40 text-center">
+                    {locale === "zh" ? "學院/系所" : "College/Dept"}
                   </TableHead>
                   <TableHead className="text-center">
                     {locale === "zh" ? "符合子類別" : "Eligible Types"}

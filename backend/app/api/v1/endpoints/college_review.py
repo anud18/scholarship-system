@@ -259,37 +259,41 @@ async def get_applications_for_review(
         # Create StudentService instance for dynamic student data fetching
         student_service = StudentService()
 
-        # Import Academy and Department models for name resolution
-        from app.models.student import Academy, Department
+        # Import Department model for name resolution
+        from app.models.student import Department
 
-        # Collect all unique academy and department codes for batch query
-        academy_codes = set()
+        # Collect all unique department codes for batch query
         department_codes = set()
         for app in applications:
             student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
             if student_data:
-                academy_code = student_data.get("std_academyno") or student_data.get("academy_code")
                 dept_code = student_data.get("std_depno") or student_data.get("dept_code")
-                if academy_code:
-                    academy_codes.add(academy_code)
                 if dept_code:
                     department_codes.add(dept_code)
 
-        # Query all academies at once to avoid N+1 queries
-        academy_map = {}
-        if academy_codes:
-            academy_stmt = select(Academy).where(Academy.code.in_(academy_codes))
-            academy_result = await db.execute(academy_stmt)
-            academies = academy_result.scalars().all()
-            academy_map = {academy.code: academy.name for academy in academies}
-
-        # Query all departments at once to avoid N+1 queries
+        # Query all departments with academy relationship to avoid N+1 queries
+        # Use the Department.academy_code foreign key to get academy information
         department_map = {}
         if department_codes:
-            dept_stmt = select(Department).where(Department.code.in_(department_codes))
+            from sqlalchemy.orm import selectinload
+
+            dept_stmt = (
+                select(Department)
+                .options(selectinload(Department.academy))
+                .where(Department.code.in_(department_codes))
+            )
             dept_result = await db.execute(dept_stmt)
             departments = dept_result.scalars().all()
-            department_map = {dept.code: dept.name for dept in departments}
+
+            # Build map with department name and academy information from relationship
+            department_map = {
+                dept.code: {
+                    "name": dept.name,
+                    "academy_code": dept.academy_code,
+                    "academy_name": dept.academy.name if dept.academy else None,
+                }
+                for dept in departments
+            }
 
         for app in applications:
             # Extract only necessary fields to minimize data exposure
@@ -363,33 +367,19 @@ async def get_applications_for_review(
                 (student_data.get("dept_code") or student_data.get("std_depno") or "N/A") if student_data else "N/A"
             )
 
-            # Extract academy code and name
-            academy_code = (
-                (student_data.get("std_academyno") or student_data.get("academy_code") or None)
-                if student_data
-                else None
-            )
-
-            academy_name = (
-                (
-                    student_data.get("aca_cname")
-                    or academy_map.get(academy_code)  # Prioritize API returned Chinese name
-                    or None  # Then lookup from database
-                )
-                if academy_code
-                else None
-            )
+            # Get department info from database (includes academy via Department.academy relationship)
+            dept_info = department_map.get(department_code) if department_code and department_code != "N/A" else None
 
             # Extract department name
-            department_name = (
-                (
-                    student_data.get("dep_depname")
-                    or department_map.get(department_code)  # Prioritize API returned Chinese name
-                    or None  # Then lookup from database
-                )
-                if department_code and department_code != "N/A"
-                else None
-            )
+            department_name = student_data.get("dep_depname") or (  # Prioritize API returned Chinese name
+                dept_info["name"] if dept_info else None
+            )  # Then lookup from database
+
+            # Extract academy code and name from Department.academy relationship
+            academy_code = dept_info["academy_code"] if dept_info else None
+            academy_name = student_data.get("aca_cname") or (  # Prioritize API returned Chinese name
+                dept_info["academy_name"] if dept_info else None
+            )  # Then lookup from Department.academy
 
             filtered_app = {
                 "id": app.get("id"),
@@ -761,7 +751,10 @@ async def create_ranking(
         logger.error(f"College review error creating ranking: {str(e)}")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
+        import traceback
+
         logger.error(f"Unexpected error creating ranking: {str(e)}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create ranking")
 
 

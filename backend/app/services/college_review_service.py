@@ -502,6 +502,10 @@ class CollegeReviewService:
         creator_college = creator.college_code if creator else None
 
         # Get all applications for the scholarship type (if sub_type_code is "default", include all sub-types)
+        logger.debug(
+            f"Building query for sub_type_code={sub_type_code}, semester_filter type={type(semester_filter)}, semester_filter={semester_filter}, creator_college={creator_college}"
+        )
+
         if sub_type_code == "default":
             # Include all applications for this scholarship type, regardless of sub-type
             conditions = [
@@ -519,16 +523,30 @@ class CollegeReviewService:
                     ]
                 ),
             ]
+            logger.debug(f"Initial conditions count: {len(conditions)}")
+
             # Add semester filter only if it's an actual SQL expression
             if semester_filter is not True:
+                logger.debug("Adding semester_filter to conditions")
                 conditions.append(semester_filter)
+            else:
+                logger.debug("Skipping semester_filter (is True)")
+
             # Filter by creator's college if available
             if creator_college:
-                conditions.append(Application.student_data["college_code"].astext == creator_college)
+                logger.debug(f"Adding college filter for college_code={creator_college}")
+                college_condition = (
+                    sa_func.json_extract_path_text(Application.student_data, "college_code") == creator_college
+                )
+                conditions.append(college_condition)
+                logger.debug("College condition added successfully")
 
+            logger.debug(f"Final conditions count: {len(conditions)}, building query...")
             apps_stmt = select(Application).where(and_(*conditions))
+            logger.debug("Query built successfully for default sub_type")
         else:
             # Only include applications for the specific sub-type
+            logger.debug(f"Building query for specific sub_type_code={sub_type_code}")
             conditions = [
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.sub_scholarship_type == sub_type_code,
@@ -545,14 +563,27 @@ class CollegeReviewService:
                     ]
                 ),
             ]
+            logger.debug(f"Initial conditions count: {len(conditions)}")
+
             # Add semester filter only if it's an actual SQL expression
             if semester_filter is not True:
+                logger.debug("Adding semester_filter to conditions")
                 conditions.append(semester_filter)
+            else:
+                logger.debug("Skipping semester_filter (is True)")
+
             # Filter by creator's college if available
             if creator_college:
-                conditions.append(Application.student_data["college_code"].astext == creator_college)
+                logger.debug(f"Adding college filter for college_code={creator_college}")
+                college_condition = (
+                    sa_func.json_extract_path_text(Application.student_data, "college_code") == creator_college
+                )
+                conditions.append(college_condition)
+                logger.debug("College condition added successfully")
 
+            logger.debug(f"Final conditions count: {len(conditions)}, building query...")
             apps_stmt = select(Application).where(and_(*conditions))
+            logger.debug("Query built successfully for specific sub_type")
 
         # Get college reviews for the scholarship type
         if sub_type_code == "default":
@@ -577,7 +608,9 @@ class CollegeReviewService:
                 review_conditions.append(semester_filter)
             # Filter by creator's college if available
             if creator_college:
-                review_conditions.append(Application.student_data["college_code"].astext == creator_college)
+                review_conditions.append(
+                    sa_func.json_extract_path_text(Application.student_data, "college_code") == creator_college
+                )
 
             college_reviews_stmt = select(CollegeReview).join(Application).where(and_(*review_conditions))
         else:
@@ -603,7 +636,9 @@ class CollegeReviewService:
                 review_conditions.append(semester_filter)
             # Filter by creator's college if available
             if creator_college:
-                review_conditions.append(Application.student_data["college_code"].astext == creator_college)
+                review_conditions.append(
+                    sa_func.json_extract_path_text(Application.student_data, "college_code") == creator_college
+                )
 
             college_reviews_stmt = select(CollegeReview).join(Application).where(and_(*review_conditions))
         apps_result = await self.db.execute(apps_stmt)
