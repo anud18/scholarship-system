@@ -471,7 +471,12 @@ class ApplicationService:
 
     def _integrate_application_file_data(self, application: Application, user: User) -> Dict[str, Any]:
         """Integrate application file information into form data"""
-        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+        # 先標準化資料格式（將舊格式轉換為新格式）
+        normalized_data = self._normalize_submitted_form_data(
+            application.submitted_form_data.copy() if application.submitted_form_data else {}
+        )
+
+        integrated_form_data = normalized_data
 
         if not application.files:
             return integrated_form_data
