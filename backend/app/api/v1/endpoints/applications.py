@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import get_current_user, require_staff, require_student
 from app.db.deps import get_db
+from app.models.audit_log import AuditAction
 from app.models.user import User
 from app.schemas.application import (
     ApplicationCreate,
@@ -33,6 +34,7 @@ async def create_application(
     is_draft: bool = Query(False, description="Save as draft"),
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Create a new scholarship application (draft or submitted)"""
     logger.debug(f"Received application creation request from user: {current_user.id}, is_draft: {is_draft}")
@@ -180,6 +182,17 @@ async def create_application(
         )
         logger.info(f"Application created successfully: {result.app_id}")
 
+        # Log audit trail for application creation
+        audit_service = ApplicationAuditService(db)
+        await audit_service.log_application_create(
+            application_id=result.id if hasattr(result, "id") else 0,
+            app_id=result.app_id if hasattr(result, "app_id") else "UNKNOWN",
+            user=current_user,
+            scholarship_type=result.main_scholarship_type if hasattr(result, "main_scholarship_type") else "UNKNOWN",
+            is_draft=is_draft,
+            request=request,
+        )
+
         # 包裝成 ApiResponse 格式
         from app.schemas.application import ApplicationResponse
 
@@ -285,10 +298,28 @@ async def update_application(
     update_data: ApplicationUpdate = Body(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Update application"""
     service = ApplicationService(db)
     result = await service.update_application(id, update_data, current_user)
+
+    # Log audit trail for application update
+    audit_service = ApplicationAuditService(db)
+    updated_fields = []
+    if hasattr(update_data, "model_dump"):
+        updated_fields = [k for k, v in update_data.model_dump(exclude_unset=True).items() if v is not None]
+    elif hasattr(update_data, "dict"):
+        updated_fields = [k for k, v in update_data.dict(exclude_unset=True).items() if v is not None]
+
+    await audit_service.log_application_update(
+        application_id=id,
+        app_id=result.app_id if hasattr(result, "app_id") else f"APP-{id}",
+        user=current_user,
+        updated_fields=updated_fields,
+        request=request,
+    )
+
     return {
         "success": True,
         "message": "更新成功",
@@ -375,10 +406,21 @@ async def withdraw_application(
     id: int = Path(..., description="Application ID"),
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Withdraw a submitted application"""
     service = ApplicationService(db)
     result = await service.withdraw_application(id, current_user)
+
+    # Log audit trail for application withdrawal
+    audit_service = ApplicationAuditService(db)
+    await audit_service.log_application_withdraw(
+        application_id=id,
+        app_id=result.app_id if hasattr(result, "app_id") else f"APP-{id}",
+        user=current_user,
+        request=request,
+    )
+
     return {
         "success": True,
         "message": "申請已撤回",
@@ -537,6 +579,7 @@ async def submit_professor_review(
     review_data: ProfessorReviewCreate = ...,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Submit professor's review and selected awards for an application"""
     if not current_user.is_professor():
@@ -545,6 +588,23 @@ async def submit_professor_review(
         raise HTTPException(status_code=403, detail="Only professors can submit this review.")
     service = ApplicationService(db)
     result = await service.create_professor_review(id, current_user, review_data)
+
+    # Log audit trail for professor review
+    audit_service = ApplicationAuditService(db)
+    await audit_service.log_application_operation(
+        application_id=id,
+        action=AuditAction.approve,
+        user=current_user,
+        request=request,
+        description=f"指導教授提交審查意見 {result.app_id if hasattr(result, 'app_id') else f'APP-{id}'}",
+        new_values={
+            "professor_id": current_user.id,
+            "professor_name": current_user.name,
+            "review_comment": review_data.professor_comment if hasattr(review_data, "professor_comment") else None,
+        },
+        meta_data={"app_id": result.app_id if hasattr(result, "app_id") else f"APP-{id}", "review_type": "professor"},
+    )
+
     return {
         "success": True,
         "message": "審查已提交",
@@ -589,17 +649,39 @@ async def update_student_data(
     refresh_from_api: bool = Query(False, description="是否重新從外部API獲取基本學生資料"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """更新申請的學生相關資料 (銀行帳號、指導教授資訊等)"""
     service = ApplicationService(db)
 
     try:
+        # Get app_id before update
+        app = await service.get_application_by_id(id, current_user)
+        app_id = app.app_id if hasattr(app, "app_id") else f"APP-{id}"
+
         await service.update_student_data(
             id=id,
             student_data_update=student_data,
             current_user=current_user,
             refresh_from_api=refresh_from_api,
         )
+
+        # Log audit trail for student data update
+        audit_service = ApplicationAuditService(db)
+        updated_fields = []
+        if hasattr(student_data, "model_dump"):
+            updated_fields = [k for k, v in student_data.model_dump(exclude_unset=True).items() if v is not None]
+        elif hasattr(student_data, "dict"):
+            updated_fields = [k for k, v in student_data.dict(exclude_unset=True).items() if v is not None]
+
+        await audit_service.log_student_data_update(
+            application_id=id,
+            app_id=app_id,
+            user=current_user,
+            updated_fields=updated_fields,
+            request=request,
+        )
+
         return {
             "success": True,
             "message": "學生資料更新成功",

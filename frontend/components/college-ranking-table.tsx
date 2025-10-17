@@ -72,6 +72,7 @@ import { getTranslation } from "@/lib/i18n";
 import { useToast } from "@/components/ui/use-toast";
 import { apiClient } from "@/lib/api";
 import * as XLSX from "xlsx";
+import { StudentPreviewCard } from "@/components/student-preview-card";
 
 interface Application {
   id: number;
@@ -119,6 +120,7 @@ function SortableItem({
   reviewScores,
   handleScoreUpdate,
   subTypeMeta,
+  academicYear,
 }: {
   application: Application;
   index: number;
@@ -129,6 +131,7 @@ function SortableItem({
   reviewScores: { [key: number]: any };
   handleScoreUpdate: (appId: number, field: string, value: any) => void;
   subTypeMeta?: Record<string, { label: string; label_en: string; code?: string }>;
+  academicYear: number;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: application.id.toString(), disabled: isFinalized });
@@ -230,7 +233,17 @@ function SortableItem({
 
       <TableCell>
         <div className="space-y-1">
-          <p className="font-medium">{application.student_name}</p>
+          <StudentPreviewCard
+            studentId={application.student_id}
+            studentName={application.student_name}
+            basicInfo={{
+              department_name: application.department_name,
+              academy_name: application.academy_name,
+              term_count: undefined, // Will be fetched from API
+            }}
+            academicYear={academicYear}
+            locale={locale}
+          />
           <p className="text-xs text-gray-400">{application.app_id}</p>
         </div>
       </TableCell>
@@ -858,6 +871,7 @@ export function CollegeRankingTable({
                       reviewScores={reviewScores}
                       handleScoreUpdate={handleScoreUpdate}
                       subTypeMeta={subTypeMeta}
+                      academicYear={academicYear}
                     />
                   ))}
                 </SortableContext>

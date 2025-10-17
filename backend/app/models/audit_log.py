@@ -27,6 +27,15 @@ class AuditAction(enum.Enum):
     import_ = "import"  # Use import_ to avoid Python keyword conflict
     request_documents = "request_documents"  # Request missing documents from student
 
+    # College-side operations
+    college_review = "college_review"  # College initial review (approve/reject/conditional)
+    college_review_update = "college_review_update"  # Update existing review
+    finalize_ranking = "finalize_ranking"  # Lock ranking (make read-only)
+    unfinalize_ranking = "unfinalize_ranking"  # Unlock ranking
+    execute_distribution = "execute_distribution"  # Execute quota distribution
+    delete_ranking = "delete_ranking"  # Delete ranking
+    withdraw = "withdraw"  # Withdraw application
+
 
 class AuditLog(Base):
     """Audit log model for tracking user activities"""

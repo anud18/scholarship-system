@@ -276,6 +276,98 @@ class ApplicationAuditService:
             meta_data={"app_id": app_id},
         )
 
+    async def log_application_create(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        scholarship_type: str,
+        is_draft: bool = False,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄申請建立"""
+        status_text = "草稿" if is_draft else "申請"
+        description = f"建立{status_text} {app_id} ({scholarship_type})"
+
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.create,
+            user=user,
+            request=request,
+            description=description,
+            new_values={
+                "app_id": app_id,
+                "scholarship_type": scholarship_type,
+                "is_draft": is_draft,
+                "created_by": user.id,
+            },
+            meta_data={"app_id": app_id, "is_draft": is_draft},
+        )
+
+    async def log_application_update(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        updated_fields: Optional[List[str]] = None,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄申請更新"""
+        description = f"更新申請 {app_id}"
+        if updated_fields:
+            description += f"，變更欄位: {', '.join(updated_fields)}"
+
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.update,
+            user=user,
+            request=request,
+            description=description,
+            new_values={"updated_fields": updated_fields},
+            meta_data={"app_id": app_id, "update_type": "form_data"},
+        )
+
+    async def log_application_withdraw(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄申請撤回"""
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.withdraw,
+            user=user,
+            request=request,
+            description=f"撤回申請 {app_id}",
+            new_values={"withdrawn_by": user.id},
+            meta_data={"app_id": app_id},
+        )
+
+    async def log_student_data_update(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        updated_fields: Optional[List[str]] = None,
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄學生資料更新 (銀行帳號、指導教授資訊等)"""
+        description = f"更新學生資料 {app_id}"
+        if updated_fields:
+            description += f"，變更欄位: {', '.join(updated_fields)}"
+
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.update,
+            user=user,
+            request=request,
+            description=description,
+            new_values={"updated_fields": updated_fields},
+            meta_data={"app_id": app_id, "update_type": "student_data"},
+        )
+
     async def get_application_audit_trail(
         self,
         application_id: int,

@@ -4517,6 +4517,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/students/{student_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Student Preview
+         * @description Get student preview information for college review
+         *
+         *     Returns basic student information and recent term data.
+         *     College users can only preview students in applications they manage.
+         */
+        get: operations["get_student_preview_api_v1_college_review_students__student_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/batch-import/upload-data": {
         parameters: {
             query?: never;
@@ -17834,6 +17857,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_student_preview_api_v1_college_review_students__student_id__preview_get: {
+        parameters: {
+            query?: {
+                /** @description Current academic year for term data */
+                academic_year?: number | null;
+            };
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

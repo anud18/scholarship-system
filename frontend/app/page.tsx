@@ -30,7 +30,7 @@ import { EnhancedStudentPortal } from "@/components/enhanced-student-portal";
 import { AdminScholarshipDashboard } from "@/components/admin-scholarship-dashboard";
 import { AdminManagementShell } from "@/components/admin/AdminManagementShell";
 import { ProfessorReviewComponent } from "@/components/professor-review-component";
-import { CollegeDashboard } from "@/components/college-dashboard";
+import { CollegeDashboard } from "@/components/college/CollegeManagementShell";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { RosterManagementDashboard } from "@/components/roster-management-dashboard";
 import { BatchImportPanel } from "@/components/batch-import-panel";

@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import apiClient, {
   HistoricalApplication,
   HistoricalApplicationFilters,
@@ -37,7 +38,7 @@ import {
   ApplicationStatus,
 } from "@/lib/utils/application-helpers";
 import { Locale } from "@/lib/validators";
-import { AlertCircle, FileText, RefreshCw } from "lucide-react";
+import { AlertCircle, Eye, FileText, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 interface User {
@@ -99,6 +100,9 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
       semester: "",
       search: "",
     });
+
+  // Selected application for viewing details
+  const [selectedApplication, setSelectedApplication] = useState<HistoricalApplication | null>(null);
 
   // 獲取歷史申請資料
   const fetchHistoricalApplications = useCallback(async () => {
@@ -438,13 +442,14 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                           <TableHead>狀態</TableHead>
                           <TableHead>申請時間</TableHead>
                           <TableHead>金額</TableHead>
+                          <TableHead>操作</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {historicalApplications.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={7}
+                              colSpan={8}
                               className="text-center py-8 text-gray-500"
                             >
                               沒有找到符合條件的申請記錄
@@ -541,6 +546,16 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                 ) : (
                                   <span className="text-gray-400">-</span>
                                 )}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSelectedApplication(application)}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  查看詳情
+                                </Button>
                               </TableCell>
                             </TableRow>
                           ))
@@ -736,6 +751,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                         <TableHead>狀態</TableHead>
                         <TableHead>申請時間</TableHead>
                         <TableHead>金額</TableHead>
+                        <TableHead>操作</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -743,7 +759,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                       0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={6}
+                            colSpan={7}
                             className="text-center py-8 text-gray-500"
                           >
                             沒有找到 {scholarshipType} 的申請記錄
@@ -820,6 +836,16 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                   <span className="text-gray-400">-</span>
                                 )}
                               </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSelectedApplication(application)}
+                                >
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  查看詳情
+                                </Button>
+                              </TableCell>
                             </TableRow>
                           )
                         )
@@ -831,6 +857,17 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
             </TabsContent>
           ))}
         </Tabs>
+
+        {/* Application Review Dialog */}
+        <ApplicationReviewDialog
+          application={selectedApplication}
+          role="admin"
+          open={!!selectedApplication}
+          onOpenChange={(open) => !open && setSelectedApplication(null)}
+          locale={locale}
+          academicYear={selectedApplication?.academic_year}
+          user={user}
+        />
       </CardContent>
     </Card>
   );

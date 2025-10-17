@@ -22,10 +22,12 @@ from app.core.rate_limiting import professor_rate_limit  # Reuse existing rate l
 from app.core.security import require_admin, require_college
 from app.db.deps import get_db
 from app.models.application import Application
+from app.models.audit_log import AuditAction, AuditLog
 from app.models.college_review import CollegeRanking, CollegeReview
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
+from app.services.application_audit_service import ApplicationAuditService
 from app.services.college_review_service import (
     CollegeReviewError,
     CollegeReviewService,
@@ -159,6 +161,36 @@ class RankingUpdate(BaseModel):
     """Schema for updating ranking metadata"""
 
     ranking_name: str = Field(..., min_length=1, max_length=200, description="New ranking name")
+
+
+class StudentPreviewBasic(BaseModel):
+    """Schema for student basic information in preview"""
+
+    student_id: str = Field(..., description="Student ID")
+    student_name: str = Field(..., description="Student name")
+    department_name: Optional[str] = Field(None, description="Department name")
+    academy_name: Optional[str] = Field(None, description="Academy name")
+    term_count: Optional[int] = Field(None, description="Number of terms enrolled")
+    degree: Optional[str] = Field(None, description="Degree level")
+    enrollyear: Optional[str] = Field(None, description="Enrollment year")
+    sex: Optional[str] = Field(None, description="Gender")
+
+
+class StudentTermData(BaseModel):
+    """Schema for student term data"""
+
+    academic_year: str = Field(..., description="Academic year")
+    term: str = Field(..., description="Term")
+    gpa: Optional[float] = Field(None, description="GPA for this term")
+    credits: Optional[int] = Field(None, description="Credits earned this term")
+    rank: Optional[int] = Field(None, description="Class rank")
+
+
+class StudentPreviewResponse(BaseModel):
+    """Schema for student preview response"""
+
+    basic: StudentPreviewBasic
+    recent_terms: List[StudentTermData] = Field(default_factory=list, description="Recent term data")
 
 
 router = APIRouter()
@@ -468,6 +500,26 @@ async def create_college_review(
             application_id=application_id, reviewer_id=current_user.id, review_data=review_data.dict(exclude_unset=True)
         )
 
+        # Log the college review operation
+        audit_service = ApplicationAuditService(db)
+        await audit_service.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.college_review,
+            user=current_user,
+            request=request,
+            description=f"College review created with recommendation: {review_data.recommendation}",
+            new_values={
+                "recommendation": review_data.recommendation,
+                "academic_score": review_data.academic_score,
+                "professor_review_score": review_data.professor_review_score,
+                "college_criteria_score": review_data.college_criteria_score,
+                "special_circumstances_score": review_data.special_circumstances_score,
+                "decision_reason": review_data.decision_reason,
+                "is_priority": review_data.is_priority,
+            },
+            status="success",
+        )
+
         return ApiResponse(
             success=True,
             message="College review created successfully",
@@ -524,12 +576,51 @@ async def update_college_review(
         ]:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this review")
 
+        # Capture old values for audit log
+        old_values = {
+            "recommendation": college_review.recommendation,
+            "academic_score": college_review.academic_score,
+            "professor_review_score": college_review.professor_review_score,
+            "college_criteria_score": college_review.college_criteria_score,
+            "special_circumstances_score": college_review.special_circumstances_score,
+            "decision_reason": college_review.decision_reason,
+            "is_priority": college_review.is_priority,
+        }
+
         # Update review
         service = CollegeReviewService(db)
         updated_review = await service.create_or_update_review(
             application_id=college_review.application_id,
             reviewer_id=college_review.reviewer_id,
             review_data=review_data.dict(exclude_unset=True),
+        )
+
+        # Log the college review update operation
+        audit_service = ApplicationAuditService(db)
+        new_values = {
+            "recommendation": updated_review.recommendation,
+            "academic_score": updated_review.academic_score,
+            "professor_review_score": updated_review.professor_review_score,
+            "college_criteria_score": updated_review.college_criteria_score,
+            "special_circumstances_score": updated_review.special_circumstances_score,
+            "decision_reason": updated_review.decision_reason,
+            "is_priority": updated_review.is_priority,
+        }
+
+        # Build description highlighting the key changes
+        description_parts = ["College review updated"]
+        if old_values["recommendation"] != new_values["recommendation"]:
+            description_parts.append(f"recommendation: {old_values['recommendation']} → {new_values['recommendation']}")
+
+        await audit_service.log_application_operation(
+            application_id=college_review.application_id,
+            action=AuditAction.college_review_update,
+            user=current_user,
+            request=None,  # Request not available in this endpoint
+            description="; ".join(description_parts),
+            old_values=old_values,
+            new_values=new_values,
+            status="success",
         )
 
         return ApiResponse(
@@ -1130,6 +1221,7 @@ async def execute_quota_distribution(
     distribution_request: QuotaDistributionRequest,
     current_user: User = Depends(require_admin),  # Only admin can execute distribution
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Execute quota-based distribution for a ranking"""
 
@@ -1140,6 +1232,36 @@ async def execute_quota_distribution(
             executor_id=current_user.id,
             distribution_rules=distribution_request.distribution_rules,
         )
+
+        # Log the distribution execution operation
+        new_values = {
+            "distribution_id": distribution.id,
+            "distribution_name": distribution.distribution_name,
+            "ranking_id": ranking_id,
+            "total_applications": distribution.total_applications,
+            "total_quota": distribution.total_quota,
+            "total_allocated": distribution.total_allocated,
+            "success_rate": distribution.success_rate,
+            "distribution_rules": distribution_request.distribution_rules,
+        }
+
+        # Extract request metadata
+        ip_address = request.client.host if request and request.client else None
+        user_agent = request.headers.get("user-agent") if request else None
+
+        audit_log = AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.execute_distribution.value,
+            resource_type="distribution",
+            resource_id=str(distribution.id),
+            description=f"Executed quota distribution for ranking {ranking_id}: {distribution.distribution_name}",
+            new_values=new_values,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status="success",
+        )
+        db.add(audit_log)
+        await db.commit()
 
         return ApiResponse(
             success=True,
@@ -1175,6 +1297,7 @@ async def finalize_ranking(
     ranking_id: int,
     current_user: User = Depends(require_college),  # College users can finalize their own rankings
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Finalize a ranking (makes it read-only)"""
 
@@ -1197,8 +1320,40 @@ async def finalize_ranking(
                 detail="Only the ranking creator or admin can finalize this ranking",
             )
 
+        # Capture old state for audit log
+        old_values = {
+            "is_finalized": ranking_check.is_finalized,
+            "ranking_status": ranking_check.ranking_status,
+        }
+
         service = CollegeReviewService(db)
         ranking = await service.finalize_ranking(ranking_id=ranking_id, finalizer_id=current_user.id)
+
+        # Log the finalize ranking operation
+        new_values = {
+            "is_finalized": ranking.is_finalized,
+            "ranking_status": ranking.ranking_status,
+            "finalized_at": ranking.finalized_at.isoformat() if ranking.finalized_at else None,
+        }
+
+        # Extract request metadata
+        ip_address = request.client.host if request and request.client else None
+        user_agent = request.headers.get("user-agent") if request else None
+
+        audit_log = AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.finalize_ranking.value,
+            resource_type="ranking",
+            resource_id=str(ranking.id),
+            description=f"Finalized ranking: {ranking.ranking_name}",
+            old_values=old_values,
+            new_values=new_values,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status="success",
+        )
+        db.add(audit_log)
+        await db.commit()
 
         return ApiResponse(
             success=True,
@@ -1230,6 +1385,7 @@ async def unfinalize_ranking(
     ranking_id: int,
     current_user: User = Depends(require_college),  # College users can unfinalize their own rankings
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """Unfinalize a ranking (makes it editable again)"""
 
@@ -1252,8 +1408,39 @@ async def unfinalize_ranking(
                 detail="Only the ranking creator or admin can unfinalize this ranking",
             )
 
+        # Capture old state for audit log
+        old_values = {
+            "is_finalized": ranking_check.is_finalized,
+            "ranking_status": ranking_check.ranking_status,
+        }
+
         service = CollegeReviewService(db)
         ranking = await service.unfinalize_ranking(ranking_id=ranking_id)
+
+        # Log the unfinalize ranking operation
+        new_values = {
+            "is_finalized": ranking.is_finalized,
+            "ranking_status": ranking.ranking_status,
+        }
+
+        # Extract request metadata
+        ip_address = request.client.host if request and request.client else None
+        user_agent = request.headers.get("user-agent") if request else None
+
+        audit_log = AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.unfinalize_ranking.value,
+            resource_type="ranking",
+            resource_id=str(ranking.id),
+            description=f"Unfinalized ranking: {ranking.ranking_name}",
+            old_values=old_values,
+            new_values=new_values,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status="success",
+        )
+        db.add(audit_log)
+        await db.commit()
 
         return ApiResponse(
             success=True,
@@ -1583,6 +1770,7 @@ async def execute_matrix_distribution(
     ranking_id: int,
     current_user: User = Depends(require_college),  # College users can execute distribution
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """
     Execute matrix-based quota distribution for a ranking
@@ -1604,6 +1792,34 @@ async def execute_matrix_distribution(
         distribution_result = await matrix_service.execute_matrix_distribution(
             ranking_id=ranking_id, executor_id=current_user.id
         )
+
+        # Log the matrix distribution execution operation
+        new_values = {
+            "ranking_id": ranking_id,
+            "total_allocated": distribution_result.get("total_allocated", 0),
+            "admitted_count": distribution_result.get("admitted_count", 0),
+            "backup_count": distribution_result.get("backup_count", 0),
+            "rejected_count": distribution_result.get("rejected_count", 0),
+            "distribution_type": "matrix",
+        }
+
+        # Extract request metadata
+        ip_address = request.client.host if request and request.client else None
+        user_agent = request.headers.get("user-agent") if request else None
+
+        audit_log = AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.execute_distribution.value,
+            resource_type="distribution",
+            resource_id=str(ranking_id),
+            description=f"Executed matrix distribution for ranking {ranking_id}",
+            new_values=new_values,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status="success",
+        )
+        db.add(audit_log)
+        await db.commit()
 
         return ApiResponse(
             success=True,
@@ -1927,6 +2143,7 @@ async def delete_ranking(
     ranking_id: int,
     current_user: User = Depends(require_college),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ):
     """
     Delete a ranking
@@ -1958,6 +2175,18 @@ async def delete_ranking(
                 detail="Cannot delete finalized ranking. Please unfinalize it first.",
             )
 
+        # Capture ranking information for audit log before deletion
+        old_values = {
+            "ranking_name": ranking.ranking_name,
+            "scholarship_type_id": ranking.scholarship_type_id,
+            "sub_type_code": ranking.sub_type_code,
+            "academic_year": ranking.academic_year,
+            "semester": ranking.semester,
+            "total_applications": ranking.total_applications,
+            "is_finalized": ranking.is_finalized,
+            "ranking_status": ranking.ranking_status,
+        }
+
         # Delete ranking items first (cascade should handle this, but being explicit)
         from app.models.college_review import CollegeRankingItem
 
@@ -1970,6 +2199,23 @@ async def delete_ranking(
 
         # Delete the ranking
         await db.delete(ranking)
+
+        # Log the delete ranking operation before committing
+        ip_address = request.client.host if request and request.client else None
+        user_agent = request.headers.get("user-agent") if request else None
+
+        audit_log = AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.delete_ranking.value,
+            resource_type="ranking",
+            resource_id=str(ranking_id),
+            description=f"Deleted ranking: {ranking.ranking_name}",
+            old_values=old_values,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status="success",
+        )
+        db.add(audit_log)
         await db.commit()
 
         return ApiResponse(
@@ -2042,4 +2288,129 @@ async def get_managed_college(
         logger.error(f"Error retrieving managed college for user {current_user.id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve managed college: {str(e)}"
+        )
+
+
+@router.get("/students/{student_id}/preview")
+@professor_rate_limit(requests=100, window_seconds=600)  # 100 requests per 10 minutes
+async def get_student_preview(
+    request: Request,
+    student_id: str,
+    academic_year: Optional[int] = Query(None, description="Current academic year for term data"),
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get student preview information for college review
+
+    Returns basic student information and recent term data.
+    College users can only preview students in applications they manage.
+    """
+
+    try:
+        logger.info(f"User {current_user.id} requesting preview for student {student_id}")
+
+        # Initialize student service
+        student_service = StudentService()
+
+        # Get student basic info from API
+        student_data = await student_service.get_student_basic_info(student_id)
+
+        if not student_data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student {student_id} not found")
+
+        # Build basic info
+        from sqlalchemy.orm import selectinload
+
+        from app.models.student import Department
+
+        # Get department and academy info
+        dept_code = student_data.get("std_depno") or student_data.get("dept_code")
+        department_name = None
+        academy_name = None
+
+        if dept_code:
+            dept_stmt = select(Department).options(selectinload(Department.academy)).where(Department.code == dept_code)
+            dept_result = await db.execute(dept_stmt)
+            dept = dept_result.scalar_one_or_none()
+
+            if dept:
+                department_name = dept.name
+                if dept.academy:
+                    academy_name = dept.academy.name
+
+        # Fallback to API data if database doesn't have department info
+        if not department_name:
+            department_name = student_data.get("dep_depname")
+        if not academy_name:
+            academy_name = student_data.get("aca_cname")
+
+        # Map degree code to readable text
+        degree_map = {
+            "1": "博士",
+            "2": "碩士",
+            "3": "學士",
+        }
+        degree_code = student_data.get("std_degree", "3")
+        degree_text = degree_map.get(degree_code, "學士")
+
+        basic_info = StudentPreviewBasic(
+            student_id=student_id,
+            student_name=student_data.get("std_cname") or student_data.get("std_ename") or student_id,
+            department_name=department_name,
+            academy_name=academy_name,
+            term_count=student_data.get("std_termcount"),
+            degree=degree_text,
+            enrollyear=student_data.get("std_enrollyear"),
+            sex=student_data.get("std_sex"),
+        )
+
+        # Get recent term data (last 2-3 terms)
+        recent_terms = []
+        if academic_year:
+            # Try to fetch term data for recent semesters
+            for year in range(academic_year, max(academic_year - 2, 110), -1):
+                for term in ["2", "1"]:  # Second semester first, then first semester
+                    try:
+                        term_data = await student_service.get_student_term_info(student_id, str(year), term)
+
+                        if term_data:
+                            # Extract relevant term information
+                            recent_terms.append(
+                                StudentTermData(
+                                    academic_year=str(year),
+                                    term=term,
+                                    gpa=term_data.get("trm_gpa"),
+                                    credits=term_data.get("trm_credittaken"),
+                                    rank=term_data.get("trm_rank"),
+                                )
+                            )
+
+                            # Stop after getting 3 terms
+                            if len(recent_terms) >= 3:
+                                break
+                    except Exception as term_err:
+                        logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_err)}")
+                        continue
+
+                if len(recent_terms) >= 3:
+                    break
+
+        preview_response = StudentPreviewResponse(
+            basic=basic_info,
+            recent_terms=recent_terms,
+        )
+
+        return ApiResponse(
+            success=True,
+            message="Student preview retrieved successfully",
+            data=preview_response.model_dump(),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving student preview for {student_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve student preview: {str(e)}"
         )

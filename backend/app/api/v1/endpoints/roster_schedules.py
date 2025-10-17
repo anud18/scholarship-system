@@ -17,9 +17,9 @@ from app.core.security import check_user_roles
 from app.db.deps import get_db
 from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
 from app.models.user import User, UserRole
+from app.schemas.response import ApiResponse
 from app.schemas.roster_schedule import (
     RosterScheduleCreate,
-    RosterScheduleListResponse,
     RosterScheduleResponse,
     RosterScheduleStatusUpdate,
     RosterScheduleUpdate,
@@ -88,7 +88,16 @@ async def list_roster_schedules(
 
             schedule_data.append(schedule_dict)
 
-        return RosterScheduleListResponse(schedules=schedule_data, total=total, skip=skip, limit=limit)
+        return ApiResponse(
+            success=True,
+            message="查詢成功",
+            data={
+                "items": schedule_data,
+                "total": total or 0,
+                "skip": skip,
+                "limit": limit,
+            },
+        )
 
     except Exception as e:
         logger.error(f"Error listing roster schedules: {e}")
@@ -156,7 +165,12 @@ async def create_roster_schedule(
 
         logger.info(f"Created roster schedule {new_schedule.id} by user {current_user.id}")
 
-        return RosterScheduleResponse(**new_schedule.to_dict())
+        response_data = RosterScheduleResponse(**new_schedule.to_dict())
+        return ApiResponse(
+            success=True,
+            message="建立成功",
+            data=response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+        )
 
     except HTTPException:
         raise
@@ -194,11 +208,11 @@ async def get_roster_schedule(
         schedule_dict["scheduler_info"] = scheduler_status
 
     response_data = RosterScheduleResponse(**schedule_dict)
-    return {
-        "success": True,
-        "message": "查詢成功",
-        "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
-    }
+    return ApiResponse(
+        success=True,
+        message="查詢成功",
+        data=response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+    )
 
 
 @router.put("/{schedule_id}")
@@ -252,11 +266,11 @@ async def update_roster_schedule(
         logger.info(f"Updated roster schedule {schedule_id} by user {current_user.id}")
 
         response_data = RosterScheduleResponse(**schedule.to_dict())
-        return {
-            "success": True,
-            "message": "更新成功",
-            "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
-        }
+        return ApiResponse(
+            success=True,
+            message="更新成功",
+            data=response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+        )
 
     except HTTPException:
         raise
@@ -315,11 +329,11 @@ async def update_schedule_status(
         logger.info(f"Updated schedule {schedule_id} status from {old_status} to {status_data.status}")
 
         response_data = RosterScheduleResponse(**schedule.to_dict())
-        return {
-            "success": True,
-            "message": "狀態更新成功",
-            "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
-        }
+        return ApiResponse(
+            success=True,
+            message="狀態更新成功",
+            data=response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+        )
 
     except HTTPException:
         raise
@@ -360,7 +374,7 @@ async def delete_roster_schedule(
 
         logger.info(f"Deleted roster schedule {schedule_id} by user {current_user.id}")
 
-        return {"success": True, "message": "Roster schedule deleted successfully"}
+        return ApiResponse(success=True, message="Roster schedule deleted successfully")
 
     except HTTPException:
         raise
@@ -397,7 +411,11 @@ async def execute_schedule_now(
 
         logger.info(f"Manually triggered schedule {schedule_id} by user {current_user.id}")
 
-        return {"success": True, "message": "Schedule execution triggered successfully", "schedule_id": schedule_id}
+        return ApiResponse(
+            success=True,
+            message="Schedule execution triggered successfully",
+            data={"schedule_id": schedule_id},
+        )
 
     except Exception as e:
         logger.error(f"Error executing schedule {schedule_id}: {e}")
@@ -432,17 +450,20 @@ async def get_scheduler_status(
         # Get jobstore info
         jobstore_info = {"class": "MemoryJobStore", "connected": scheduler_running}
 
-        return {
-            "success": True,
-            "scheduler_running": scheduler_running,
-            "scheduler_state": scheduler_state,
-            "job_count": len(jobs),
-            "active_jobs": active_jobs,
-            "pending_jobs": pending_jobs,
-            "executor_info": executor_info,
-            "jobstore_info": jobstore_info,
-            "jobs": jobs,
-        }
+        return ApiResponse(
+            success=True,
+            message="Scheduler status retrieved successfully",
+            data={
+                "scheduler_running": scheduler_running,
+                "scheduler_state": scheduler_state,
+                "job_count": len(jobs),
+                "active_jobs": active_jobs,
+                "pending_jobs": pending_jobs,
+                "executor_info": executor_info,
+                "jobstore_info": jobstore_info,
+                "jobs": jobs,
+            },
+        )
 
     except Exception as e:
         logger.error(f"Error getting scheduler status: {e}")
