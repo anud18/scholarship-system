@@ -30,7 +30,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Copy frontend email templates
-COPY ../frontend/emails /frontend/emails
+COPY emails /frontend/emails
 
 # Create uploads directory
 RUN mkdir -p uploads

@@ -113,6 +113,10 @@ jobs:
             type=raw,value=${{ needs.pre-deployment.outputs.version }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
+      - name: Copy email templates for backend build
+        if: matrix.component == 'backend'
+        run: cp -r frontend/emails backend/emails
+
       - name: Build and push ${{ matrix.component }} image
         id: docker_build
         uses: docker/build-push-action@v5
