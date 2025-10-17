@@ -93,6 +93,12 @@ export function ApplicationReviewPanel({
     try {
       await updateApplicationStatus(appId, "approved", "學院核准通過");
       console.log(`College approved application ${appId}`);
+      // 重新載入申請列表以顯示最新狀態
+      await fetchCollegeApplications(
+        selectedAcademicYear,
+        selectedSemester,
+        activeScholarshipTab
+      );
     } catch (error) {
       console.error("Failed to approve application:", error);
     }
@@ -102,6 +108,12 @@ export function ApplicationReviewPanel({
     try {
       await updateApplicationStatus(appId, "rejected", "學院駁回申請");
       console.log(`College rejected application ${appId}`);
+      // 重新載入申請列表以顯示最新狀態
+      await fetchCollegeApplications(
+        selectedAcademicYear,
+        selectedSemester,
+        activeScholarshipTab
+      );
     } catch (error) {
       console.error("Failed to reject application:", error);
     }
