@@ -676,6 +676,34 @@ export function CollegeRankingTable({
             </div>
 
             <div className="flex gap-2">
+              {!isFinalized && saveStatus !== 'idle' && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-gray-50 border">
+                  {saveStatus === 'saving' && (
+                    <>
+                      <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse" />
+                      <span className="text-sm text-blue-700">
+                        {locale === 'zh' ? '儲存中...' : 'Saving...'}
+                      </span>
+                    </>
+                  )}
+                  {saveStatus === 'saved' && (
+                    <>
+                      <div className="h-2 w-2 bg-green-500 rounded-full" />
+                      <span className="text-sm text-green-700">
+                        {locale === 'zh' ? '已儲存' : 'Saved'}
+                      </span>
+                    </>
+                  )}
+                  {saveStatus === 'error' && (
+                    <>
+                      <div className="h-2 w-2 bg-red-500 rounded-full" />
+                      <span className="text-sm text-red-700">
+                        {locale === 'zh' ? '儲存失敗' : 'Save Failed'}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
               {!isFinalized && (
                 <>
                   <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>

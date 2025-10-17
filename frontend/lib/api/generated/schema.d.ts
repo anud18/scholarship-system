@@ -4318,6 +4318,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/rankings/{ranking_id}/unfinalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unfinalize Ranking
+         * @description Unfinalize a ranking (makes it editable again)
+         */
+        post: operations["unfinalize_ranking_api_v1_college_review_rankings__ranking_id__unfinalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/quota-status": {
         parameters: {
             query?: never;
@@ -17530,6 +17550,37 @@ export interface operations {
         };
     };
     finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unfinalize_ranking_api_v1_college_review_rankings__ranking_id__unfinalize_post: {
         parameters: {
             query?: never;
             header?: never;

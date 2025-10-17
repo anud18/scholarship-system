@@ -2384,30 +2384,6 @@ export function CollegeDashboard({
                 {/* Ranking Details */}
                 {selectedRanking && rankingData && (
                   <div className="space-y-6">
-                    {/* Save Status Indicator */}
-                    {saveStatus !== 'idle' && !rankingData.isFinalized && (
-                      <div className="flex items-center justify-end gap-2 px-1">
-                        {saveStatus === 'saving' && (
-                          <div className="flex items-center gap-2 text-sm text-slate-600">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            <span>{locale === 'zh' ? '儲存中...' : 'Saving...'}</span>
-                          </div>
-                        )}
-                        {saveStatus === 'saved' && (
-                          <div className="flex items-center gap-2 text-sm text-green-600">
-                            <CheckCircle className="h-3 w-3" />
-                            <span>{locale === 'zh' ? '已儲存' : 'Saved'}</span>
-                          </div>
-                        )}
-                        {saveStatus === 'error' && (
-                          <div className="flex items-center gap-2 text-sm text-red-600">
-                            <XCircle className="h-3 w-3" />
-                            <span>{locale === 'zh' ? '儲存失敗' : 'Save failed'}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
                     {isRankingLoading ? (
                       <div className="flex items-center justify-center p-8">
                         <Loader2 className="h-8 w-8 animate-spin" />
@@ -2428,6 +2404,7 @@ export function CollegeDashboard({
                       onImportExcel={handleImportExcel}
                       locale={locale}
                       subTypeMeta={rankingData.subTypeMetadata}
+                      saveStatus={saveStatus}
                     />
                   )}
                 </div>
