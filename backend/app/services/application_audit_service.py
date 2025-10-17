@@ -390,8 +390,11 @@ class ApplicationAuditService:
             List[AuditLog]: 稽核日誌列表（包含使用者資訊）
         """
         try:
+            from sqlalchemy.orm import selectinload
+
             query = (
                 select(AuditLog)
+                .options(selectinload(AuditLog.user))  # Eager load user to avoid lazy loading issues in async
                 .where(AuditLog.resource_type == "application")
                 .where(AuditLog.resource_id == str(application_id))
             )

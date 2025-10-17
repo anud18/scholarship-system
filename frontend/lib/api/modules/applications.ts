@@ -111,21 +111,32 @@ export function createApplicationsApi() {
     },
 
     /**
-     * Update application status
-     * NOTE: Endpoint /api/v1/applications/{id}/status not in OpenAPI schema
-     * TODO: Either add backend endpoint or use alternative status update method
+     * Update application status (staff/admin only)
+     * Type-safe: Path parameter and body validated against OpenAPI
+     *
+     * @param id - Application ID
+     * @param statusData - Status update data with status and optional comments
+     */
+    updateApplicationStatus: async (
+      id: number,
+      statusData: { status: string; comments?: string; score?: number; rejection_reason?: string }
+    ): Promise<ApiResponse<Application>> => {
+      const response = await typedClient.raw.PUT('/api/v1/applications/{id}/status', {
+        params: { path: { id } },
+        body: statusData as any,
+      });
+      return toApiResponse<Application>(response);
+    },
+
+    /**
+     * Update application status (backward compatibility)
+     * @deprecated Use updateApplicationStatus instead
      */
     updateStatus: async (
       id: number,
       statusData: { status: string; comments?: string }
     ): Promise<ApiResponse<Application>> => {
-      // NOTE: Endpoint /api/v1/applications/{id}/status not in OpenAPI schema
-      // Fallback: Use PUT /api/v1/applications/{id} with status field
-      const response = await typedClient.raw.PUT('/api/v1/applications/{id}', {
-        params: { path: { id } },
-        body: { status: statusData.status } as any,
-      });
-      return toApiResponse<Application>(response);
+      return this.updateApplicationStatus(id, statusData);
     },
 
     /**
