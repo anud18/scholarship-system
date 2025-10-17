@@ -253,7 +253,10 @@ export function ApplicationReviewDialog({
         }
       );
 
-      if (response.success) {
+      console.log("Approval response:", response);
+
+      // 檢查是否成功（success 為 true 或 response 中有 data）
+      if (response?.success || response?.data) {
         toast({
           title: locale === "zh" ? "核准成功" : "Approval Successful",
           description: locale === "zh" ? "申請已核准" : "Application has been approved",
@@ -266,7 +269,7 @@ export function ApplicationReviewDialog({
       } else {
         toast({
           title: locale === "zh" ? "核准失敗" : "Approval Failed",
-          description: response.message || (locale === "zh" ? "無法核准此申請" : "Could not approve this application"),
+          description: response?.message || (locale === "zh" ? "無法核准此申請" : "Could not approve this application"),
           variant: "destructive",
         });
       }
@@ -296,7 +299,10 @@ export function ApplicationReviewDialog({
         }
       );
 
-      if (response.success) {
+      console.log("Rejection response:", response);
+
+      // 檢查是否成功（success 為 true 或 response 中有 data）
+      if (response?.success || response?.data) {
         toast({
           title: locale === "zh" ? "駁回成功" : "Rejection Successful",
           description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
@@ -309,7 +315,7 @@ export function ApplicationReviewDialog({
       } else {
         toast({
           title: locale === "zh" ? "駁回失敗" : "Rejection Failed",
-          description: response.message || (locale === "zh" ? "無法駁回此申請" : "Could not reject this application"),
+          description: response?.message || (locale === "zh" ? "無法駁回此申請" : "Could not reject this application"),
           variant: "destructive",
         });
       }
