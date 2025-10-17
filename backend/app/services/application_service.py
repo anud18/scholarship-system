@@ -864,7 +864,7 @@ class ApplicationService:
             "academic_year": application.academic_year,
             "semester": self._convert_semester_to_string(application.semester),
             "student_data": application.student_data or {},
-            "submitted_form_data": application.submitted_form_data or {},
+            "submitted_form_data": integrated_form_data,
             "agree_terms": application.agree_terms,
             "professor_id": application.professor_id,
             "reviewer_id": application.reviewer_id,
