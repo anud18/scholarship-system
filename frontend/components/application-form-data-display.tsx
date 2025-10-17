@@ -55,10 +55,8 @@ export function ApplicationFormDataDisplay({
   const [isLoading, setIsLoading] = useState(true);
 
   // Debug logging
-  console.log("📝 ApplicationFormDataDisplay 接收到的 formData:", formData);
-  console.log("📋 submitted_form_data 存在:", !!formData?.submitted_form_data);
-  console.log("📋 fields 存在:", !!formData?.submitted_form_data?.fields);
-  console.log(
+
+    console.log(
     "📋 fields 是物件:",
     typeof formData?.submitted_form_data?.fields === "object"
   );

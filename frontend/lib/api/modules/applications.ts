@@ -136,7 +136,11 @@ export function createApplicationsApi() {
       id: number,
       statusData: { status: string; comments?: string }
     ): Promise<ApiResponse<Application>> => {
-      return this.updateApplicationStatus(id, statusData);
+      const response = await typedClient.raw.PUT('/api/v1/applications/{id}/status', {
+        params: { path: { id } },
+        body: statusData as any,
+      });
+      return toApiResponse<Application>(response);
     },
 
     /**

@@ -6963,11 +6963,6 @@ export interface components {
              */
             comments?: string | null;
             /**
-             * Score
-             * @description Review score
-             */
-            score?: number | string | null;
-            /**
              * Rejection Reason
              * @description Reason for rejection
              */

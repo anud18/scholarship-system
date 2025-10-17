@@ -147,7 +147,7 @@ describe("ApplicationFormDataDisplay", () => {
       submitted_form_data: {
         fields: {
           name: { value: "測試" },
-          email: { value: "" }, // Empty value
+          email: { value: "" }, // Empty value - will show as unfilled
           files: { value: "some_file.pdf" }, // Should be excluded
           agree_terms: { value: true }, // Should be excluded
         },
@@ -163,10 +163,20 @@ describe("ApplicationFormDataDisplay", () => {
     );
 
     await waitFor(() => {
+      // Filled field should be shown
       expect(screen.getByText("測試")).toBeInTheDocument();
-      expect(screen.queryByText("電子郵件")).not.toBeInTheDocument();
+
+      // Empty field (in fieldLabels but empty value) should show as unfilled
+      const emailLabels = screen.getAllByText("電子郵件");
+      expect(emailLabels.length).toBeGreaterThan(0);
+
+      // Excluded fields should not appear
       expect(screen.queryByText("some_file.pdf")).not.toBeInTheDocument();
       expect(screen.queryByText("true")).not.toBeInTheDocument();
+
+      // Unfilled message should appear for empty fields (multiple times)
+      const unfilledMessages = screen.getAllByText("未填寫");
+      expect(unfilledMessages.length).toBeGreaterThan(0);
     });
   });
 
