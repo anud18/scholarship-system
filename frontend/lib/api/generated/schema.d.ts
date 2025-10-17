@@ -4203,6 +4203,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/students/{student_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Student Preview
+         * @description Get student preview information for college review
+         *
+         *     Returns basic student information and recent term data.
+         *     College users can only preview students in applications they manage.
+         */
+        get: operations["get_student_preview_api_v1_college_review_students__student_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/rankings": {
         parameters: {
             query?: never;
@@ -4278,26 +4301,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college-review/rankings/{ranking_id}/distribute": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Execute Quota Distribution
-         * @description Execute quota-based distribution for a ranking
-         */
-        post: operations["execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/college-review/rankings/{ranking_id}/finalize": {
         parameters: {
             query?: never;
@@ -4338,6 +4341,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/college-review/rankings/{ranking_id}/import-excel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Ranking From Excel
+         * @description Import ranking data from Excel
+         *
+         *     Expected Excel columns: 學號, 姓名, 排名
+         *     This endpoint updates the rank_position of existing ranking items based on student IDs
+         */
+        post: operations["import_ranking_from_excel_api_v1_college_review_rankings__ranking_id__import_excel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/rankings/{ranking_id}/distribute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute Quota Distribution
+         * @description Execute quota-based distribution for a ranking
+         */
+        post: operations["execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/rankings/{ranking_id}/execute-matrix-distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute Matrix Distribution
+         * @description Execute matrix-based quota distribution for a ranking
+         *
+         *     This uses the matrix distribution algorithm which:
+         *     - Processes sub-types in fixed priority order
+         *     - Allocates students to sub-type × college matrix quotas
+         *     - Tracks admitted (正取) and backup (備取) positions
+         *     - Checks eligibility rules before allocation
+         */
+        post: operations["execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/quota-status": {
         parameters: {
             query?: never;
@@ -4350,6 +4422,31 @@ export interface paths {
          * @description Get quota status for a scholarship type
          */
         get: operations["get_quota_status_api_v1_college_review_quota_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/rankings/{ranking_id}/distribution-details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution Details
+         * @description Get detailed distribution results for a ranking
+         *
+         *     Returns allocation details by sub-type and college including:
+         *     - Admitted students (正取)
+         *     - Backup students (備取) with positions
+         *     - Rejected students
+         */
+        get: operations["get_distribution_details_api_v1_college_review_rankings__ranking_id__distribution_details_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4398,80 +4495,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college-review/rankings/{ranking_id}/import-excel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Import Ranking From Excel
-         * @description Import ranking data from Excel
-         *
-         *     Expected Excel columns: 學號, 姓名, 排名
-         *     This endpoint updates the rank_position of existing ranking items based on student IDs
-         */
-        post: operations["import_ranking_from_excel_api_v1_college_review_rankings__ranking_id__import_excel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/college-review/rankings/{ranking_id}/execute-matrix-distribution": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Execute Matrix Distribution
-         * @description Execute matrix-based quota distribution for a ranking
-         *
-         *     This uses the matrix distribution algorithm which:
-         *     - Processes sub-types in fixed priority order
-         *     - Allocates students to sub-type × college matrix quotas
-         *     - Tracks admitted (正取) and backup (備取) positions
-         *     - Checks eligibility rules before allocation
-         */
-        post: operations["execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/college-review/rankings/{ranking_id}/distribution-details": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Distribution Details
-         * @description Get detailed distribution results for a ranking
-         *
-         *     Returns allocation details by sub-type and college including:
-         *     - Admitted students (正取)
-         *     - Backup students (備取) with positions
-         *     - Rejected students
-         */
-        get: operations["get_distribution_details_api_v1_college_review_rankings__ranking_id__distribution_details_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/college-review/sub-type-translations": {
         parameters: {
             query?: never;
@@ -4509,29 +4532,6 @@ export interface paths {
          *     when college users are created or assigned to colleges.
          */
         get: operations["get_managed_college_api_v1_college_review_managed_college_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/college-review/students/{student_id}/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Student Preview
-         * @description Get student preview information for college review
-         *
-         *     Returns basic student information and recent term data.
-         *     College users can only preview students in applications they manage.
-         */
-        get: operations["get_student_preview_api_v1_college_review_students__student_id__preview_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -17338,6 +17338,40 @@ export interface operations {
             };
         };
     };
+    get_student_preview_api_v1_college_review_students__student_id__preview_get: {
+        parameters: {
+            query?: {
+                /** @description Current academic year for term data */
+                academic_year?: number | null;
+            };
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_rankings_api_v1_college_review_rankings_get: {
         parameters: {
             query?: {
@@ -17537,41 +17571,6 @@ export interface operations {
             };
         };
     };
-    execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QuotaDistributionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
         parameters: {
             query?: never;
@@ -17634,6 +17633,107 @@ export interface operations {
             };
         };
     };
+    import_ranking_from_excel_api_v1_college_review_rankings__ranking_id__import_excel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RankingImportItem"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuotaDistributionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_quota_status_api_v1_college_review_quota_status_get: {
         parameters: {
             query: {
@@ -17646,6 +17746,37 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_distribution_details_api_v1_college_review_rankings__ranking_id__distribution_details_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -17724,103 +17855,6 @@ export interface operations {
             };
         };
     };
-    import_ranking_from_excel_api_v1_college_review_rankings__ranking_id__import_excel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RankingImportItem"][];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    execute_matrix_distribution_api_v1_college_review_rankings__ranking_id__execute_matrix_distribution_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_distribution_details_api_v1_college_review_rankings__ranking_id__distribution_details_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_sub_type_translations_api_v1_college_review_sub_type_translations_get: {
         parameters: {
             query?: never;
@@ -17857,40 +17891,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_student_preview_api_v1_college_review_students__student_id__preview_get: {
-        parameters: {
-            query?: {
-                /** @description Current academic year for term data */
-                academic_year?: number | null;
-            };
-            header?: never;
-            path: {
-                student_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
