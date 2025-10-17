@@ -159,6 +159,10 @@ class MatrixDistributionService:
                     if item.allocated_sub_type is not None:
                         continue
 
+                    # Check if application was rejected by review
+                    if app.status == "rejected":
+                        continue
+
                     # Check if student applied for this sub-type
                     if not self._student_applied_for_sub_type(app, sub_type_code):
                         continue
@@ -214,12 +218,13 @@ class MatrixDistributionService:
                 college_summary["backup_count"] = backup_count
                 distribution_summary[sub_type_code]["colleges"][college_code] = college_summary
 
-        # Mark items not allocated to any sub-type
+        # Mark items not allocated to any sub-type with specific rejection reasons
         for item in sorted_items:
             if item.allocated_sub_type is None:
                 item.is_allocated = False
                 item.status = "rejected"
-                item.allocation_reason = "無符合的子類別或超出配額"
+                # Determine specific rejection reason
+                item.allocation_reason = self._determine_rejection_reason(item, item.application, quota_matrix)
 
         # Flush changes to database
         await self.db.flush()
@@ -302,3 +307,61 @@ class MatrixDistributionService:
             or app.student_data.get("student_name")
             or "Unknown"
         )
+
+    def _get_student_college(self, app: Application) -> Optional[str]:
+        """Extract student college code from application"""
+        if not app.student_data or not isinstance(app.student_data, dict):
+            return None
+
+        return (
+            app.student_data.get("college_code")
+            or app.student_data.get("std_college")
+            or app.student_data.get("academy_code")
+        )
+
+    def _determine_rejection_reason(
+        self, item: CollegeRankingItem, app: Application, quota_matrix: Dict[str, Any]
+    ) -> str:
+        """
+        Determine specific rejection reason for an unallocated student
+
+        Possible reasons:
+        1. 申請已被駁回 - Application status is rejected
+        2. 未申請任何合適的子類別 - Student didn't apply for any available sub-types
+        3. 所屬學院無配額 - Student's college has no quota
+        4. 所有申請的子類別配額已滿 - All applied sub-types are full
+        """
+        # Check if application was rejected by review
+        if app.status == "rejected":
+            return "申請已被駁回"
+
+        # Check if student applied for any sub-types
+        if (
+            not app.scholarship_subtype_list
+            or not isinstance(app.scholarship_subtype_list, list)
+            or len(app.scholarship_subtype_list) == 0
+        ):
+            return "未申請任何合適的子類別"
+
+        # Get student's college
+        student_college = self._get_student_college(app)
+        if not student_college:
+            return "學生資料不完整（缺少學院資訊）"
+
+        # Check if student's college has quota in any applied sub-type
+        has_college_quota = False
+        for sub_type_code in app.scholarship_subtype_list:
+            sub_type_lower = sub_type_code.lower()
+            if sub_type_lower in quota_matrix:
+                college_quotas = quota_matrix[sub_type_lower]
+                # Case-insensitive comparison for college codes
+                college_codes_upper = [c.upper() for c in college_quotas.keys()]
+                if student_college.upper() in college_codes_upper:
+                    has_college_quota = True
+                    break
+
+        if not has_college_quota:
+            return "所屬學院無配額"
+
+        # If we get here, the most likely reason is quota exceeded
+        return "所有申請的子類別配額已滿"
