@@ -496,6 +496,10 @@ async def get_student_preview(
         degree_code = student_data.get("std_degree", "3")
         degree_text = degree_map.get(degree_code, "學士")
 
+        # Convert integer values to strings for Pydantic validation
+        enrollyear_value = student_data.get("std_enrollyear")
+        sex_value = student_data.get("std_sex")
+
         basic_info = StudentPreviewBasic(
             student_id=student_id,
             student_name=student_data.get("std_cname") or student_data.get("std_ename") or student_id,
@@ -503,8 +507,8 @@ async def get_student_preview(
             academy_name=academy_name,
             term_count=student_data.get("std_termcount"),
             degree=degree_text,
-            enrollyear=student_data.get("std_enrollyear"),
-            sex=student_data.get("std_sex"),
+            enrollyear=str(enrollyear_value) if enrollyear_value is not None else None,
+            sex=str(sex_value) if sex_value is not None else None,
         )
 
         # Get recent term data (last 2-3 terms)

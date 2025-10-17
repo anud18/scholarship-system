@@ -1174,6 +1174,14 @@ async def get_batch_import_history(
     count_result = await db.execute(count_stmt)
     total = len(count_result.scalars().all())
 
+    # Get importer names using explicit query (avoid lazy loading)
+    importer_ids = set(batch.importer_id for batch in batch_imports if batch.importer_id)
+    importer_map = {}
+    if importer_ids:
+        importer_stmt = select(User.id, User.name).where(User.id.in_(importer_ids))
+        importer_result = await db.execute(importer_stmt)
+        importer_map = {row[0]: row[1] for row in importer_result.fetchall()}
+
     # Build response
     items = []
     for batch in batch_imports:
@@ -1190,7 +1198,7 @@ async def get_batch_import_history(
                 failed_count=batch.failed_count,
                 import_status=batch.import_status.value if batch.import_status else "unknown",
                 created_at=batch.created_at,
-                importer_name=batch.importer.name if batch.importer else None,
+                importer_name=importer_map.get(batch.importer_id) if batch.importer_id else None,
             )
         )
 

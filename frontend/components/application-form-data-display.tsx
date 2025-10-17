@@ -75,13 +75,10 @@ export function ApplicationFormDataDisplay({
     "🏷️ fieldLabels 鍵值:",
     fieldLabels ? Object.keys(fieldLabels) : "沒有標籤"
   );
-  console.log("📋 整個 formData 物件的所有鍵:", Object.keys(formData));
-  console.log("📝 scholarship_type:", formData?.scholarship_type);
-  console.log("📝 form_data 是否存在:", !!formData?.form_data);
-  console.log("📝 form_data 內容:", formData?.form_data);
-  console.log("📝 student_data 內容:", formData?.student_data);
-  if (formData?.submitted_form_data) {
-    console.log("📝 submitted_form_data 完整結構:", JSON.stringify(formData.submitted_form_data, null, 2));
+
+
+    if (formData?.submitted_form_data) {
+
   }
 
   useEffect(() => {
@@ -92,7 +89,7 @@ export function ApplicationFormDataDisplay({
       // 只處理新格式：submitted_form_data.fields
       const fields = formData?.submitted_form_data?.fields || {};
 
-      console.log("🔄 Complete submitted_form_data object:", formData?.submitted_form_data);
+
       console.log("🔄 Processing fields:", fields);
       console.log("🔄 Fields entries count:", Object.entries(fields).length);
       console.log("🔄 All field keys:", Object.keys(fields));
