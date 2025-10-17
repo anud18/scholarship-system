@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ApplicationFileUploadDialog } from "@/components/application-file-upload-dialog";
+import { DeleteApplicationDialog } from "@/components/delete-application-dialog";
 import type { Application } from "@/lib/api";
 
 interface BatchApplicationFileUploadProps {
@@ -55,6 +56,10 @@ export function BatchApplicationFileUpload({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
+
+  // Delete dialog state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [applicationToDelete, setApplicationToDelete] = useState<{ id: number; name: string } | null>(null);
 
   // Fetch application details on mount
   useEffect(() => {
@@ -192,47 +197,27 @@ export function BatchApplicationFileUpload({
     }
   };
 
-  const handleDelete = async (appId: number) => {
-    if (
-      !window.confirm(
-        locale === "zh"
-          ? "確定要刪除此申請嗎？此操作無法復原。"
-          : "Are you sure you want to delete this application? This action cannot be undone."
-      )
-    ) {
-      return;
-    }
+  const handleDelete = (appId: number, studentName: string) => {
+    setApplicationToDelete({ id: appId, name: studentName });
+    setShowDeleteDialog(true);
+  };
 
-    setError(null);
+  const handleDeleteSuccess = () => {
+    if (applicationToDelete) {
+      // Remove from application states
+      setApplicationStates((prev) => {
+        const updated = new Map(prev);
+        updated.delete(applicationToDelete.id);
+        return updated;
+      });
 
-    try {
-      const response = await apiClient.applications.deleteApplication(appId);
-
-      if (response.success) {
-        // Remove from application states
-        setApplicationStates((prev) => {
-          const updated = new Map(prev);
-          updated.delete(appId);
-          return updated;
-        });
-
-        // Notify completion (optional - refresh parent data)
-        if (onUploadComplete) {
-          onUploadComplete();
-        }
-      } else {
-        setError(
-          response.message ||
-            (locale === "zh" ? "刪除失敗" : "Failed to delete application")
-        );
+      // Notify completion (optional - refresh parent data)
+      if (onUploadComplete) {
+        onUploadComplete();
       }
-    } catch (err: any) {
-      setError(
-        err.message ||
-          (locale === "zh"
-            ? "刪除時發生錯誤"
-            : "Error occurred during deletion")
-      );
+
+      // Reset delete state
+      setApplicationToDelete(null);
     }
   };
 
@@ -327,9 +312,7 @@ export function BatchApplicationFileUpload({
                      state.application.scholarship_subtype_list.length > 0 ? (
                       state.application.scholarship_subtype_list.map((subType: string) => (
                         <Badge key={subType} variant="secondary" className="text-xs">
-                          {locale === "zh"
-                            ? state.application?.sub_type_labels?.[subType]?.zh || subType
-                            : state.application?.sub_type_labels?.[subType]?.en || subType}
+                          {state.application?.sub_type_labels?.[subType]?.zh || subType}
                         </Badge>
                       ))
                     ) : (
@@ -365,7 +348,7 @@ export function BatchApplicationFileUpload({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(appId)}
+                        onClick={() => handleDelete(appId, state.application?.student_name || "未知學生")}
                         className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
                         <Trash2 className="h-3 w-3 mr-1" />
@@ -395,6 +378,20 @@ export function BatchApplicationFileUpload({
         scholarshipDocuments={scholarshipDocuments}
         onUploadComplete={handleUploadComplete}
         locale={locale}
+      />
+
+      {/* Delete Dialog */}
+      <DeleteApplicationDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          setShowDeleteDialog(open);
+          if (!open) setApplicationToDelete(null);
+        }}
+        applicationId={applicationToDelete?.id || 0}
+        applicationName={applicationToDelete?.name || ""}
+        onSuccess={handleDeleteSuccess}
+        locale={locale}
+        requireReason={true}
       />
     </div>
   );
