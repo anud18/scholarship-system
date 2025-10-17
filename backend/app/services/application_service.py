@@ -759,10 +759,13 @@ class ApplicationService:
         if not application:
             return None
 
-        # 整合文件資訊到 submitted_form_data.documents
-        if application.submitted_form_data and application.files:
-            integrated_form_data = application.submitted_form_data.copy()
+        # 先標準化表單資料格式
+        integrated_form_data = self._normalize_submitted_form_data(
+            application.submitted_form_data.copy() if application.submitted_form_data else {}
+        )
 
+        # 然後整合文件資訊到 submitted_form_data.documents
+        if application.files:
             # 生成文件訪問 token
             from app.core.config import settings
             from app.core.security import create_access_token
