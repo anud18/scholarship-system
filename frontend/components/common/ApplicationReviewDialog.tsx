@@ -1208,15 +1208,17 @@ export function ApplicationReviewDialog({
                                         </p>
                                       )}
                                       {(detailedApplication as Application).meta_data?.bank_verification_details
-                                        .confidence_score && (
+                                        ?.confidence_score !== null &&
+                                        (detailedApplication as Application).meta_data?.bank_verification_details
+                                          ?.confidence_score !== undefined && (
                                         <p>
                                           {locale === "zh"
                                             ? "信心分數: "
                                             : "Confidence score: "}
                                           {(
-                                            (detailedApplication as Application).meta_data
+                                            ((detailedApplication as Application).meta_data
                                               ?.bank_verification_details
-                                              .confidence_score * 100
+                                              ?.confidence_score ?? 0) * 100
                                           ).toFixed(1)}
                                           %
                                         </p>
