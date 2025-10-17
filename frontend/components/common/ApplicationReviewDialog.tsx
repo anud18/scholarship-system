@@ -1184,18 +1184,18 @@ export function ApplicationReviewDialog({
                                         : "Verification Details"}
                                     </h4>
                                     <div className="text-sm text-muted-foreground space-y-1">
-                                      {(detailedApplication as Application).meta_data.bank_verification_details
-                                        .verified_at && (
+                                      {(detailedApplication as Application).meta_data?.bank_verification_details
+                                        ?.verified_at && (
                                         <p>
                                           {locale === "zh"
                                             ? "驗證時間: "
                                             : "Verified at: "}
                                           {new Date(
-                                            (detailedApplication as Application).meta_data.bank_verification_details.verified_at
+                                            (detailedApplication as Application).meta_data?.bank_verification_details.verified_at
                                           ).toLocaleString()}
                                         </p>
                                       )}
-                                      {(detailedApplication as Application).meta_data.bank_verification_details
+                                      {(detailedApplication as Application).meta_data?.bank_verification_details
                                         .account_holder && (
                                         <p>
                                           {locale === "zh"
@@ -1203,11 +1203,11 @@ export function ApplicationReviewDialog({
                                             : "Account holder: "}
                                           {
                                             (detailedApplication as Application).meta_data
-                                              .bank_verification_details.account_holder
+                                              ?.bank_verification_details.account_holder
                                           }
                                         </p>
                                       )}
-                                      {(detailedApplication as Application).meta_data.bank_verification_details
+                                      {(detailedApplication as Application).meta_data?.bank_verification_details
                                         .confidence_score && (
                                         <p>
                                           {locale === "zh"
@@ -1215,7 +1215,7 @@ export function ApplicationReviewDialog({
                                             : "Confidence score: "}
                                           {(
                                             (detailedApplication as Application).meta_data
-                                              .bank_verification_details
+                                              ?.bank_verification_details
                                               .confidence_score * 100
                                           ).toFixed(1)}
                                           %
@@ -1234,7 +1234,7 @@ export function ApplicationReviewDialog({
                                         {locale === "zh"
                                           ? "驗證失敗原因: "
                                           : "Verification failed: "}
-                                        {(detailedApplication as Application).meta_data.bank_verification_error}
+                                        {(detailedApplication as Application).meta_data?.bank_verification_error}
                                       </AlertDescription>
                                     </Alert>
                                   )}

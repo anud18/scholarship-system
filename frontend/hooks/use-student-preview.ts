@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { createCollegeApi } from '@/lib/api/modules/college';
 
 interface StudentPreviewBasic {
   student_id: string;
@@ -34,6 +35,8 @@ interface UseStudentPreviewReturn {
 // Cache to store fetched preview data
 const previewCache = new Map<string, StudentPreviewData>();
 
+const collegeApi = createCollegeApi();
+
 export function useStudentPreview(): UseStudentPreviewReturn {
   const [previewData, setPreviewData] = useState<StudentPreviewData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,28 +65,7 @@ export function useStudentPreview(): UseStudentPreviewReturn {
     setError(null);
 
     try {
-      // Build URL with query params
-      const params = new URLSearchParams();
-      if (academicYear) {
-        params.append('academic_year', academicYear.toString());
-      }
-
-      const url = `/api/v1/college-review/students/${encodeURIComponent(studentId)}/preview${params.toString() ? `?${params.toString()}` : ''}`;
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        signal: abortControllerRef.current.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch student preview: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      const result = await collegeApi.getStudentPreview(studentId, academicYear);
 
       if (result.success && result.data) {
         const data = result.data as StudentPreviewData;

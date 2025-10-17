@@ -189,3 +189,56 @@ def check_scholarship_permission(user: User, scholarship_type_id: int) -> None:
     """Check if user has permission for a scholarship type and raise exception if not"""
     if not user.has_scholarship_permission(scholarship_type_id):
         raise AuthorizationError(f"Access denied. No permission to manage scholarship type {scholarship_type_id}")
+
+
+# College Review Permission Checks
+async def check_college_scholarship_permission(user: User, scholarship_type_id: int, db: AsyncSession) -> bool:
+    """Check if college user has permission for specific scholarship type"""
+    if user.role in [UserRole.admin, UserRole.super_admin]:
+        return True
+
+    # Check if user is assigned to this scholarship type
+    from app.models.user import AdminScholarship
+
+    stmt = select(AdminScholarship).where(
+        (AdminScholarship.admin_id == user.id) & (AdminScholarship.scholarship_id == scholarship_type_id)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none() is not None
+
+
+async def check_college_academic_year_permission(user: User, academic_year: int, db: AsyncSession) -> bool:
+    """Check if user has permission for specific academic year"""
+    if user.role in [UserRole.admin, UserRole.super_admin]:
+        return True
+
+    # College users can only access current and previous academic year
+    current_year = datetime.now().year - 1911  # ROC year
+    allowed_years = [current_year - 1, current_year, current_year + 1]
+    return academic_year in allowed_years
+
+
+async def check_college_application_review_permission(user: User, application_id: int, db: AsyncSession) -> bool:
+    """Check if user can review specific application"""
+    if user.role in [UserRole.admin, UserRole.super_admin]:
+        return True
+
+    # Get application details to check permissions
+    from app.models.application import Application
+
+    stmt = select(Application).where(Application.id == application_id)
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+
+    if not application:
+        return False
+
+    # Check scholarship type permission
+    if application.scholarship_type_id:
+        return await check_college_scholarship_permission(user, application.scholarship_type_id, db)
+
+    # Check academic year permission
+    if application.academic_year:
+        return await check_college_academic_year_permission(user, application.academic_year, db)
+
+    return True  # Default allow if no specific restrictions

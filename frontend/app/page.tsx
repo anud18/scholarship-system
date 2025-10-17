@@ -399,7 +399,7 @@ export default function ScholarshipManagementSystem() {
 
     if (user.role === "admin") {
       return (
-        <TabsList className="grid w-full grid-cols-4 bg-nycu-blue-50 border border-nycu-blue-200">
+        <TabsList className="grid w-full grid-cols-5 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
             value="dashboard"
             className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
@@ -413,6 +413,13 @@ export default function ScholarshipManagementSystem() {
           >
             <Users className="h-4 w-4" />
             審核管理
+          </TabsTrigger>
+          <TabsTrigger
+            value="batch-import"
+            className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:text-nycu-blue-700"
+          >
+            <Upload className="h-4 w-4" />
+            批次匯入
           </TabsTrigger>
           <TabsTrigger
             value="roster"
@@ -579,7 +586,7 @@ export default function ScholarshipManagementSystem() {
           </TabsContent>
 
           {/* 批次匯入 - college 和 super_admin 角色可見 */}
-          {(user.role === "college" || user.role === "super_admin") && (
+          {(user.role === "college" || user.role === "admin" || user.role === "super_admin") && (
             <TabsContent value="batch-import" className="space-y-4">
               <BatchImportPanel locale={locale} />
             </TabsContent>

@@ -404,9 +404,9 @@ export function UserPermissionManagement() {
       chinese_name: user.chinese_name || "",
       english_name: user.english_name || "",
       password: "",
-      student_no: user.student_no || "",
-    });
-
+          student_no: user.student_no || "",
+          college_code: user.college_code || "",
+        });
     setShowUserForm(true);
   };
 

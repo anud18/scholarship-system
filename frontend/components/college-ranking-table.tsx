@@ -73,6 +73,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { apiClient } from "@/lib/api";
 import * as XLSX from "xlsx";
 import { StudentPreviewCard } from "@/components/student-preview-card";
+import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
+import { Application as ApplicationType, User } from "@/lib/api";
 
 interface Application {
   id: number;
@@ -121,6 +123,7 @@ function SortableItem({
   handleScoreUpdate,
   subTypeMeta,
   academicYear,
+  onViewDetails,
 }: {
   application: Application;
   index: number;
@@ -132,6 +135,7 @@ function SortableItem({
   handleScoreUpdate: (appId: number, field: string, value: any) => void;
   subTypeMeta?: Record<string, { label: string; label_en: string; code?: string }>;
   academicYear: number;
+  onViewDetails: (app: Application) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: application.id.toString(), disabled: isFinalized });
@@ -287,70 +291,13 @@ function SortableItem({
 
       <TableCell className="text-center">
         <div className="flex justify-center gap-1">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <Eye className="h-4 w-4" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>{application.student_name} - 審查詳情</DialogTitle>
-                <DialogDescription>
-                  {application.app_id} | 排名: #{application.rank_position}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                {/* Review Comments */}
-                <div>
-                  <label className="text-sm font-medium">審查意見</label>
-                  <Textarea
-                    value={reviewScores[application.id]?.comments || ""}
-                    onChange={e =>
-                      handleScoreUpdate(
-                        application.id,
-                        "comments",
-                        e.target.value
-                      )
-                    }
-                    disabled={isFinalized}
-                    rows={4}
-                    placeholder="請輸入審查意見..."
-                  />
-                </div>
-
-                {/* Action Buttons */}
-                {!isFinalized && (
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => onReviewApplication(
-                        application.id,
-                        'approve',
-                        reviewScores[application.id]?.comments
-                      )}
-                      className="flex-1"
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      核准
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={() => onReviewApplication(
-                        application.id,
-                        'reject',
-                        reviewScores[application.id]?.comments
-                      )}
-                      className="flex-1"
-                    >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      駁回
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onViewDetails(application)}
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
         </div>
       </TableCell>
     </TableRow>
@@ -402,6 +349,8 @@ export function CollegeRankingTable({
   const [reviewScores, setReviewScores] = useState<{ [key: number]: any }>({});
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [selectedAppForDialog, setSelectedAppForDialog] =
+    useState<Application | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -872,6 +821,7 @@ export function CollegeRankingTable({
                       handleScoreUpdate={handleScoreUpdate}
                       subTypeMeta={subTypeMeta}
                       academicYear={academicYear}
+                      onViewDetails={setSelectedAppForDialog}
                     />
                   ))}
                 </SortableContext>
@@ -895,6 +845,20 @@ export function CollegeRankingTable({
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Application Review Dialog */}
+      {selectedAppForDialog && (
+        <ApplicationReviewDialog
+          application={selectedAppForDialog as unknown as ApplicationType}
+          role="college"
+          open={!!selectedAppForDialog}
+          onOpenChange={(open) => !open && setSelectedAppForDialog(null)}
+          locale={locale}
+          academicYear={academicYear}
+          onApprove={(id) => onReviewApplication(id, 'approve')}
+          onReject={(id) => onReviewApplication(id, 'reject')}
+        />
       )}
     </div>
   );

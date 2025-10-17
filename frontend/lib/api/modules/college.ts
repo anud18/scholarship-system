@@ -326,5 +326,22 @@ export function createCollegeApi() {
         scholarship_count: number;
       } | null>(response);
     },
+
+    /**
+     * Get student preview information for college review
+     * Type-safe: Path and query parameters validated against OpenAPI
+     */
+    getStudentPreview: async (
+      studentId: string,
+      academicYear?: number
+    ): Promise<ApiResponse<SchemaComponents['schemas']['StudentPreviewResponse']>> => {
+      const response = await typedClient.raw.GET('/api/v1/college-review/students/{student_id}/preview', {
+        params: {
+          path: { student_id: studentId },
+          query: { academic_year: academicYear },
+        },
+      });
+      return toApiResponse<SchemaComponents['schemas']['StudentPreviewResponse']>(response);
+    },
   };
 }

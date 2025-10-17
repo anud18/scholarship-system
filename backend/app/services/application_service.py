@@ -85,13 +85,14 @@ class ApplicationService:
         {
           "postal_account": "1212312312",
           "advisor_name": null,
-          "custom_fields": {...}
+          "custom_fields": {"master_school_info": "交大資工所"}
         }
 
         New format (nested structure):
         {
           "fields": {
             "postal_account": {"field_id": "postal_account", "field_type": "text", "value": "1212312312", ...},
+            "master_school_info": {"field_id": "master_school_info", "field_type": "text", "value": "交大資工所", ...},
             ...
           },
           "documents": [...]
@@ -110,7 +111,18 @@ class ApplicationService:
 
         for key, value in form_data.items():
             # Skip special keys
-            if key in ["documents", "files", "agree_terms", "custom_fields"]:
+            if key in ["documents", "files", "agree_terms"]:
+                continue
+
+            # Handle custom_fields: merge them into fields
+            if key == "custom_fields" and isinstance(value, dict):
+                for custom_key, custom_value in value.items():
+                    fields[custom_key] = {
+                        "field_id": custom_key,
+                        "field_type": "text",  # Default type
+                        "value": custom_value,
+                        "required": False,
+                    }
                 continue
 
             # Create field object for new format

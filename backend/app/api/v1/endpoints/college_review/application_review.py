@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.rate_limiting import professor_rate_limit
-from app.core.security import require_college
+from app.core.security import require_college, require_roles
 from app.db.deps import get_db
 from app.models.application import Application
 from app.models.audit_log import AuditAction
@@ -444,7 +444,7 @@ async def get_student_preview(
     request: Request,
     student_id: str,
     academic_year: Optional[int] = Query(None, description="Current academic year for term data"),
-    current_user: User = Depends(require_college),
+    current_user: User = Depends(require_roles(UserRole.college, UserRole.admin, UserRole.super_admin)),
     db: AsyncSession = Depends(get_db),
 ):
     """

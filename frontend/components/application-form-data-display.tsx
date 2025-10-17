@@ -15,11 +15,23 @@ const getFieldLabel = (
   fieldLabels?: { [key: string]: { zh?: string; en?: string } }
 ) => {
   if (fieldLabels && fieldLabels[fieldName]) {
-    return locale === "zh"
+    const label = locale === "zh"
       ? fieldLabels[fieldName].zh
       : fieldLabels[fieldName].en || fieldLabels[fieldName].zh || fieldName;
+    console.log(
+      `🏷️ Found label for "${fieldName}":`,
+      label,
+      "from:",
+      fieldLabels[fieldName]
+    );
+    return label;
   }
-  return formatFieldName(fieldName, locale);
+  const fallbackLabel = formatFieldName(fieldName, locale);
+  console.log(
+    `🏷️ No label found for "${fieldName}", using fallback:`,
+    fallbackLabel
+  );
+  return fallbackLabel;
 };
 
 interface ApplicationFormDataDisplayProps {
@@ -43,23 +55,36 @@ export function ApplicationFormDataDisplay({
   const [isLoading, setIsLoading] = useState(true);
 
   // Debug logging
-  console.log("ApplicationFormDataDisplay received formData:", formData);
-  console.log("📋 submitted_form_data exists:", !!formData?.submitted_form_data);
-  console.log("📋 fields exists:", !!formData?.submitted_form_data?.fields);
+  console.log("📝 ApplicationFormDataDisplay 接收到的 formData:", formData);
+  console.log("📋 submitted_form_data 存在:", !!formData?.submitted_form_data);
+  console.log("📋 fields 存在:", !!formData?.submitted_form_data?.fields);
   console.log(
-    "📋 fields is object:",
+    "📋 fields 是物件:",
     typeof formData?.submitted_form_data?.fields === "object"
   );
   console.log(
-    "📋 fields keys:",
+    "📋 fields 鍵值:",
     formData?.submitted_form_data?.fields
       ? Object.keys(formData.submitted_form_data.fields)
       : "N/A"
   );
   console.log(
-    "📋 Raw fields object:",
+    "📋 原始 fields 物件:",
     formData?.submitted_form_data?.fields
   );
+  console.log("🏷️ 接收到的 fieldLabels:", fieldLabels);
+  console.log(
+    "🏷️ fieldLabels 鍵值:",
+    fieldLabels ? Object.keys(fieldLabels) : "沒有標籤"
+  );
+  console.log("📋 整個 formData 物件的所有鍵:", Object.keys(formData));
+  console.log("📝 scholarship_type:", formData?.scholarship_type);
+  console.log("📝 form_data 是否存在:", !!formData?.form_data);
+  console.log("📝 form_data 內容:", formData?.form_data);
+  console.log("📝 student_data 內容:", formData?.student_data);
+  if (formData?.submitted_form_data) {
+    console.log("📝 submitted_form_data 完整結構:", JSON.stringify(formData.submitted_form_data, null, 2));
+  }
 
   useEffect(() => {
     const formatData = async () => {
@@ -69,7 +94,10 @@ export function ApplicationFormDataDisplay({
       // 只處理新格式：submitted_form_data.fields
       const fields = formData?.submitted_form_data?.fields || {};
 
+      console.log("🔄 Complete submitted_form_data object:", formData?.submitted_form_data);
       console.log("🔄 Processing fields:", fields);
+      console.log("🔄 Fields entries count:", Object.entries(fields).length);
+      console.log("🔄 All field keys:", Object.keys(fields));
 
       for (const [fieldId, fieldData] of Object.entries(fields)) {
         if (
@@ -201,6 +229,31 @@ export function ApplicationFormDataDisplay({
                 {typeof value === "string" && value.length > 100
                   ? `${value.substring(0, 100)}...`
                   : String(value)}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* 顯示 fieldLabels 中存在但 formattedData 中沒有值的字段 */}
+      {fieldLabels && Object.entries(fieldLabels).map(([fieldName, labels]) => {
+        // 如果這個字段已經在 formattedData 中，跳過
+        if (fieldName in formattedData) {
+          return null;
+        }
+
+        // 顯示未填寫的字段
+        return (
+          <div
+            key={fieldName}
+            className="flex items-start justify-between p-3 bg-gray-100 rounded-lg opacity-60"
+          >
+            <div className="flex-1">
+              <Label className="text-sm font-medium text-gray-500">
+                {getFieldLabel(fieldName, locale, fieldLabels)}
+              </Label>
+              <p className="text-sm text-gray-400 mt-1 italic">
+                {locale === "zh" ? "未填寫" : "Not filled"}
               </p>
             </div>
           </div>

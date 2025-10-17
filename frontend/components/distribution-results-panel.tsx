@@ -144,6 +144,59 @@ const REJECTED_STATUSES = new Set([
 const normalizeStatus = (status?: string) =>
   typeof status === "string" ? status.toLowerCase() : "";
 
+/**
+ * Get styled rejection reason with icon and color
+ */
+const getRejectionReasonDisplay = (reason: string, locale: "zh" | "en") => {
+  const reasonMap: Record<string, { icon: string; color: string; labelZh: string; labelEn: string }> = {
+    "申請已被駁回": {
+      icon: "❌",
+      color: "text-rose-600",
+      labelZh: "申請已被駁回",
+      labelEn: "Application Rejected"
+    },
+    "未申請任何合適的子類別": {
+      icon: "🚫",
+      color: "text-amber-600",
+      labelZh: "未申請合適的子類別",
+      labelEn: "No Suitable Sub-type Applied"
+    },
+    "所屬學院無配額": {
+      icon: "🏫",
+      color: "text-slate-600",
+      labelZh: "所屬學院無名額",
+      labelEn: "No Quota for College"
+    },
+    "所有申請的子類別配額已滿": {
+      icon: "📊",
+      color: "text-blue-600",
+      labelZh: "申請類別名額已滿",
+      labelEn: "All Quotas Exceeded"
+    },
+    "學生資料不完整（缺少學院資訊）": {
+      icon: "⚠️",
+      color: "text-orange-600",
+      labelZh: "學生資料不完整",
+      labelEn: "Incomplete Student Data"
+    },
+  };
+
+  // Try to find matching reason
+  for (const [key, value] of Object.entries(reasonMap)) {
+    if (reason.includes(key)) {
+      const label = locale === "zh" ? value.labelZh : value.labelEn;
+      return { icon: value.icon, color: value.color, label };
+    }
+  }
+
+  // Fallback for unknown reasons
+  return {
+    icon: "ℹ️",
+    color: "text-slate-600",
+    label: reason,
+  };
+};
+
 const normalizeSubtypeEntries = (value: any): string[] => {
   if (!value) {
     return [];
@@ -921,16 +974,16 @@ export function DistributionResultsPanel({
         <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
 
         {/* Content */}
-        <div className="relative p-2.5">
+        <div className="relative px-3 py-3.5">
           {/* 分發狀態：右上角絕對定位 */}
           {footer && (
-            <div className="absolute top-1.5 right-2 z-10">
+            <div className="absolute top-2 right-2.5 z-10 max-w-[calc(100%-5rem)]">
               <div className="text-[9px]">{footer}</div>
             </div>
           )}
 
           {/* 第一行：姓名 - 學號 */}
-          <p className={`text-xs font-bold ${handleStyles.textColor} tracking-tight pr-12`}>
+          <p className={`text-xs font-bold ${handleStyles.textColor} tracking-tight pr-14`}>
             {student.studentName}
             {student.studentId && (
               <span className="font-medium"> - {student.studentId}</span>
@@ -944,7 +997,7 @@ export function DistributionResultsPanel({
 
           {/* 申請編號：右下角絕對定位 */}
           {student.appId && (
-            <div className="absolute bottom-1.5 right-2 text-[9px] text-slate-400 opacity-70">
+            <div className="absolute bottom-2 right-2.5 text-[9px] text-slate-400 opacity-70">
               {student.appId}
             </div>
           )}
@@ -1298,20 +1351,48 @@ export function DistributionResultsPanel({
                                 student={student}
                                 tone="muted"
                                 footer={
-                                  <div className="flex items-center justify-between">
-                                    <span
-                                      className={`text-xs ${student.rejection ? "text-rose-600" : "text-slate-600"}`}
-                                    >
-                                      {student.rejection
-                                        ? (locale === "zh"
-                                            ? `未獲分發：${student.rejection.reason}`
-                                            : `Not allocated: ${student.rejection.reason}`)
-                                        : locale === "zh"
-                                          ? "尚未分發"
-                                          : "Awaiting allocation"}
-                                    </span>
-                                    {student.rejection && (
-                                      <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                                  <div className="flex items-start gap-2">
+                                    {student.rejection ? (
+                                      <>
+                                        <span
+                                          className={`flex-1 text-[10px] leading-snug font-medium ${
+                                            getRejectionReasonDisplay(student.rejection.reason, locale).color
+                                          }`}
+                                          style={{
+                                            display: "-webkit-box",
+                                            WebkitLineClamp: 2,
+                                            WebkitBoxOrient: "vertical",
+                                            overflow: "hidden",
+                                            textOverflow: "ellipsis",
+                                            maxWidth: "160px",
+                                          }}
+                                          title={
+                                            locale === "zh"
+                                              ? `未獲分發：${getRejectionReasonDisplay(student.rejection.reason, locale).label}`
+                                              : `Not allocated: ${getRejectionReasonDisplay(student.rejection.reason, locale).label}`
+                                          }
+                                        >
+                                          <span className="text-[11px] mr-1">
+                                            {getRejectionReasonDisplay(student.rejection.reason, locale).icon}
+                                          </span>
+                                          {getRejectionReasonDisplay(student.rejection.reason, locale).label}
+                                        </span>
+                                        <div className={`w-2 h-2 rounded-full animate-pulse flex-shrink-0 mt-0.5 ${
+                                          getRejectionReasonDisplay(student.rejection.reason, locale).color.includes('rose')
+                                            ? 'bg-rose-500'
+                                            : getRejectionReasonDisplay(student.rejection.reason, locale).color.includes('amber')
+                                            ? 'bg-amber-500'
+                                            : getRejectionReasonDisplay(student.rejection.reason, locale).color.includes('blue')
+                                            ? 'bg-blue-500'
+                                            : getRejectionReasonDisplay(student.rejection.reason, locale).color.includes('orange')
+                                            ? 'bg-orange-500'
+                                            : 'bg-slate-500'
+                                        }`} />
+                                      </>
+                                    ) : (
+                                      <span className="flex-1 text-[10px] leading-snug text-slate-600">
+                                        {locale === "zh" ? "尚未分發" : "Awaiting allocation"}
+                                      </span>
                                     )}
                                   </div>
                                 }
@@ -1378,8 +1459,15 @@ export function DistributionResultsPanel({
                     <TableCell className="text-sm text-gray-600">
                       {student.student_id}
                     </TableCell>
-                    <TableCell className="text-sm text-red-600">
-                      {student.reason}
+                    <TableCell className="text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">
+                          {getRejectionReasonDisplay(student.reason, locale).icon}
+                        </span>
+                        <span className={`font-medium ${getRejectionReasonDisplay(student.reason, locale).color}`}>
+                          {getRejectionReasonDisplay(student.reason, locale).label}
+                        </span>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

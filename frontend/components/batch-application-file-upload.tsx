@@ -17,6 +17,7 @@ import {
   Loader2,
   AlertTriangle,
   Trash2,
+  RotateCcw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ApplicationFileUploadDialog } from "@/components/application-file-upload-dialog";
@@ -221,6 +222,50 @@ export function BatchApplicationFileUpload({
     }
   };
 
+  const handleRestore = async (appId: number) => {
+    try {
+      const response = await apiClient.applications.updateApplication(appId, {
+        status: "draft",
+      });
+
+      if (response.success) {
+        // Refresh application data
+        const refreshResponse = await apiClient.applications.getApplicationById(appId);
+        if (refreshResponse.success && refreshResponse.data) {
+          setApplicationStates((prev) => {
+            const updated = new Map(prev);
+            const state = updated.get(appId);
+            if (state) {
+              updated.set(appId, {
+                ...state,
+                application: refreshResponse.data || null,
+              });
+            }
+            return updated;
+          });
+        }
+
+        // Notify completion
+        if (onUploadComplete) {
+          onUploadComplete();
+        }
+      } else {
+        setError(
+          locale === "zh"
+            ? `恢復申請失敗: ${response.message}`
+            : `Failed to restore application: ${response.message}`
+        );
+      }
+    } catch (err) {
+      console.error(`Failed to restore application ${appId}:`, err);
+      setError(
+        locale === "zh"
+          ? "恢復申請失敗，請稍後再試"
+          : "Failed to restore application, please try again"
+      );
+    }
+  };
+
   if (applicationIds.length === 0) {
     return (
       <Alert>
@@ -273,14 +318,26 @@ export function BatchApplicationFileUpload({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {Array.from(applicationStates.entries()).map(([appId, state]) => (
-              <TableRow key={appId}>
+            {Array.from(applicationStates.entries()).map(([appId, state]) => {
+              const isDeleted = (state.application?.status as ApplicationStatus) === 'deleted';
+              return (
+              <TableRow
+                key={appId}
+                className={isDeleted ? "bg-gray-50 opacity-70" : ""}
+              >
                 {/* Student ID */}
                 <TableCell className="font-mono text-sm">
                   {state.loading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : state.application ? (
-                    state.application.student_id
+                    <div className="flex items-center gap-2">
+                      <span>{state.application.student_id}</span>
+                      {isDeleted && (
+                        <Badge variant="destructive" className="text-xs">
+                          {locale === "zh" ? "已刪除" : "Deleted"}
+                        </Badge>
+                      )}
+                    </div>
                   ) : (
                     <span className="text-red-500 text-xs">
                       {locale === "zh" ? "載入失敗" : "Error"}
@@ -302,7 +359,7 @@ export function BatchApplicationFileUpload({
 
                 {/* Postal Account */}
                 <TableCell className="text-sm font-mono">
-                  {state.application?.submitted_form_data?.postal_account || "-"}
+                    {state.application?.submitted_form_data?.fields?.postal_account?.value || "-"}
                 </TableCell>
 
                 {/* Sub Scholarship Types */}
@@ -341,24 +398,38 @@ export function BatchApplicationFileUpload({
                           }
                         }}
                         className="h-8"
+                        disabled={isDeleted}
                       >
                         <Upload className="h-3 w-3 mr-1" />
                         {locale === "zh" ? "上傳文件" : "Upload"}
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(appId, state.application?.student_name || "未知學生")}
-                        className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" />
-                        {locale === "zh" ? "刪除申請" : "Delete"}
-                      </Button>
+                      {!isDeleted ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(appId, state.application?.student_name || "未知學生")}
+                          className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          {locale === "zh" ? "刪除申請" : "Delete"}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRestore(appId)}
+                          className="h-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          {locale === "zh" ? "恢復申請" : "Restore"}
+                        </Button>
+                      )}
                     </div>
                   )}
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>

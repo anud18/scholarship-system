@@ -272,7 +272,7 @@ class ApplicationFieldService:
         return {
             "id": 0,  # Temporary ID for fixed field
             "scholarship_type": scholarship_type,
-            "field_name": "bank_account",
+            "field_name": "postal_account",
             "field_label": "郵局帳號",
             "field_label_en": "Post Office/ESUN Bank Account Number",
             "field_type": "text",

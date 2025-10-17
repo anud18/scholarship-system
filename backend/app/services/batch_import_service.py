@@ -11,11 +11,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ServiceUnavailableError
 from app.models.application import Application, ApplicationStatus
+from app.models.application_sequence import ApplicationSequence
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus, Semester
 from app.models.scholarship import ScholarshipType
@@ -795,8 +796,44 @@ class BatchImportService:
 
                 user = user_map[student_id]
 
-                # Generate app_id
-                app_id = f"APP-{academic_year}-{ApplicationStatus.submitted.value[:3].upper()}-{user.id:06d}"
+                # Generate app_id using the shared sequence, and append 'U' for upload/batch.
+                # This logic is adapted from ApplicationService._generate_app_id
+                temp_semester = semester
+                if temp_semester is None:
+                    temp_semester = "yearly"
+
+                # Lock the sequence record for the duration of this transaction
+                stmt = (
+                    select(ApplicationSequence)
+                    .where(
+                        and_(
+                            ApplicationSequence.academic_year == academic_year,
+                            ApplicationSequence.semester == temp_semester,
+                        )
+                    )
+                    .with_for_update()
+                )
+
+                result = await self.db.execute(stmt)
+                seq_record = result.scalar_one_or_none()
+
+                # Create sequence record if it doesn't exist
+                if not seq_record:
+                    seq_record = ApplicationSequence(
+                        academic_year=academic_year, semester=temp_semester, last_sequence=0
+                    )
+                    self.db.add(seq_record)
+                    await self.db.flush()  # Flush to get the record in the session
+
+                # Increment sequence
+                seq_record.last_sequence += 1
+                sequence_num = seq_record.last_sequence
+
+                # Format and return app_id
+                # NOTE: We do NOT commit here. The lock is held for the entire batch transaction
+                # to ensure atomicity. This will block online applications during the import.
+                base_app_id = ApplicationSequence.format_app_id(academic_year, temp_semester, sequence_num)
+                app_id = f"{base_app_id}U"
 
                 # Create application
                 student_payload = {

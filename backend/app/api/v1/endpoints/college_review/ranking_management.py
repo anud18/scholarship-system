@@ -559,7 +559,6 @@ async def update_ranking(
 
 
 @router.put("/rankings/{ranking_id}/order")
-@professor_rate_limit(requests=30, window_seconds=600)  # 30 ranking updates per 10 minutes
 async def update_ranking_order(
     request: Request,
     ranking_id: int,

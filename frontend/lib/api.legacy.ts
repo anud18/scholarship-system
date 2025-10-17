@@ -85,7 +85,8 @@ export type ApplicationStatus =
   | "withdrawn"
   | "cancelled"
   | "pending"
-  | "completed";
+  | "completed"
+  | "deleted";
 
 export interface Application {
   id: number;
@@ -153,6 +154,10 @@ export interface Application {
     requires_college_review: boolean;
     config_name: string;
   }; // 獎學金配置資訊
+
+  // Academic information
+  academic_year?: number;
+  semester?: string;
 }
 
 export interface ApplicationCreate {
@@ -785,7 +790,7 @@ export interface HistoricalApplication {
   is_renewal?: boolean;
 
   // Academic information
-  academic_year: number;
+  academic_year?: number;
   semester?: string;
 
   // Important dates

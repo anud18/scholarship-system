@@ -1,7 +1,7 @@
 "use client";
 
 import { AdminScholarshipManagementInterface } from "@/components/admin-scholarship-management-interface";
-import { ApplicationDetailDialog } from "@/components/application-detail-dialog";
+import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { ApplicationAuditTrail } from "@/components/application-audit-trail";
 import { DeleteApplicationDialog } from "@/components/delete-application-dialog";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
@@ -482,12 +482,29 @@ export function AdminScholarshipDashboard({
     newStatus: string
   ) => {
     try {
-      await updateApplicationStatus(applicationId, newStatus);
+      console.log("Status update request:", { applicationId, newStatus });
+      const result = await updateApplicationStatus(applicationId, newStatus);
+      console.log("Status update result:", result);
+
+      // 檢查是否成功（即使拋出錯誤，實際上也可能成功了）
+      toast({
+        title: "狀態更新成功",
+        description: `申請狀態已更新為${newStatus === "approved" ? "已核准" : newStatus === "rejected" ? "已駁回" : newStatus}`,
+      });
+
       // 重新載入數據
       refetch();
     } catch (error) {
       console.error("Failed to update application status:", error);
-      alert("更新申請狀態失敗");
+      // 嘗試重新載入以檢查狀態是否實際上已更新
+      await new Promise(resolve => setTimeout(resolve, 500));
+      refetch();
+
+      toast({
+        title: "狀態更新失敗",
+        description: error instanceof Error ? error.message : "無法更新申請狀態",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1643,20 +1660,27 @@ export function AdminScholarshipDashboard({
         ))}
       </Tabs>
       {/* 申請詳情 Modal */}
-      <ApplicationDetailDialog
-        isOpen={showApplicationDetail}
-        onClose={() => {
-          setShowApplicationDetail(false);
-          setSelectedApplicationForDetail(null);
-        }}
-        application={
-          selectedApplicationForDetail
-            ? (selectedApplicationForDetail as Application)
-            : null
-        }
-        locale={locale}
-        user={user}
-      />
+      {selectedApplicationForDetail && (
+        <ApplicationReviewDialog
+          application={
+            selectedApplicationForDetail
+              ? (selectedApplicationForDetail as unknown as Application)
+              : null
+          }
+          role="admin"
+          open={showApplicationDetail}
+          onOpenChange={(open) => {
+            setShowApplicationDetail(open);
+            if (!open) {
+              setSelectedApplicationForDetail(null);
+            }
+          }}
+          locale={locale}
+          user={user}
+          onAdminApprove={(id) => handleStatusUpdate(id, "approved")}
+          onAdminReject={(id) => handleStatusUpdate(id, "rejected")}
+        />
+      )}
 
       {/* 操作紀錄 Modal */}
       <Dialog open={showAuditModal} onOpenChange={setShowAuditModal}>
