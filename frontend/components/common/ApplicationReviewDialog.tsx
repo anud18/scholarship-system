@@ -98,9 +98,12 @@ function StudentPreviewDisplay({
 
   if (isLoading) {
     return (
-      <div className="space-y-2">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
+      <div className="space-y-4">
+        <div>
+          <Skeleton className="h-16 w-full mb-2" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+        <Skeleton className="h-20 w-full" />
       </div>
     );
   }
@@ -108,57 +111,107 @@ function StudentPreviewDisplay({
   if (error) {
     return (
       <p className="text-sm text-red-500">
-        {locale === "zh" ? "無法載入學期資料" : "Failed to load term data"}
+        {locale === "zh" ? "無法載入學生資料" : "Failed to load student data"}
       </p>
     );
   }
 
-  if (!previewData?.recent_terms || previewData.recent_terms.length === 0) {
+  if (!previewData) {
     return (
       <p className="text-sm text-muted-foreground">
-        {locale === "zh" ? "無學期資料" : "No term data available"}
+        {locale === "zh" ? "無學生資料可用" : "No student data available"}
       </p>
     );
   }
 
+  // Display basic info
   return (
-    <div className="space-y-2">
-      {previewData.recent_terms.map((term) => (
-        <div
-          key={`${term.academic_year}-${term.term}`}
-          className="bg-muted/50 rounded-md p-3"
-        >
-          <div className="flex items-center justify-between mb-1">
-            <span className="font-medium text-sm">
-              {term.academic_year}-
-              {term.term === "1"
-                ? locale === "zh"
-                  ? "上"
-                  : "1st"
-                : locale === "zh"
-                  ? "下"
-                  : "2nd"}
-            </span>
-            <div className="flex items-center gap-3">
-              {term.gpa != null && (
-                <Badge variant="outline" className="text-xs">
-                  GPA: {term.gpa.toFixed(2)}
-                </Badge>
-              )}
-              {term.credits !== undefined && (
-                <span className="text-sm text-muted-foreground">
-                  {term.credits} {locale === "zh" ? "學分" : "cr"}
-                </span>
-              )}
+    <div className="space-y-4">
+      {/* Basic Information Section */}
+      {previewData.basic && (
+        <div>
+          <h4 className="text-sm font-semibold mb-3">
+            {locale === "zh" ? "基本資訊" : "Basic Information"}
+          </h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-2 bg-muted/50 rounded">
+              <p className="text-xs text-muted-foreground">
+                {locale === "zh" ? "學號" : "Student ID"}
+              </p>
+              <p className="text-sm font-medium">{previewData.basic.student_id || "-"}</p>
+            </div>
+            <div className="p-2 bg-muted/50 rounded">
+              <p className="text-xs text-muted-foreground">
+                {locale === "zh" ? "姓名" : "Name"}
+              </p>
+              <p className="text-sm font-medium">{previewData.basic.student_name || "-"}</p>
+            </div>
+            <div className="p-2 bg-muted/50 rounded">
+              <p className="text-xs text-muted-foreground">
+                {locale === "zh" ? "就讀學期數" : "Terms"}
+              </p>
+              <p className="text-sm font-medium">{previewData.basic.term_count || "-"}</p>
+            </div>
+            <div className="p-2 bg-muted/50 rounded">
+              <p className="text-xs text-muted-foreground">
+                {locale === "zh" ? "系所" : "Department"}
+              </p>
+              <p className="text-sm font-medium">{previewData.basic.department_name || "-"}</p>
             </div>
           </div>
-          {term.rank !== undefined && (
-            <p className="text-sm text-muted-foreground">
-              {locale === "zh" ? "排名" : "Rank"}: {term.rank}
-            </p>
-          )}
         </div>
-      ))}
+      )}
+
+      {/* Recent Term Data Section */}
+      {previewData.recent_terms && previewData.recent_terms.length > 0 ? (
+        <div>
+          <h4 className="text-sm font-semibold mb-3">
+            {locale === "zh" ? "近期學期成績" : "Recent Term Grades"}
+          </h4>
+          <div className="space-y-2">
+            {previewData.recent_terms.map((term) => (
+              <div
+                key={`${term.academic_year}-${term.term}`}
+                className="bg-muted/50 rounded-md p-3"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-medium text-sm">
+                    {term.academic_year}-
+                    {term.term === "1"
+                      ? locale === "zh"
+                        ? "上"
+                        : "1st"
+                      : locale === "zh"
+                        ? "下"
+                        : "2nd"}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {term.gpa != null && (
+                      <Badge variant="outline" className="text-xs">
+                        GPA: {term.gpa.toFixed(2)}
+                      </Badge>
+                    )}
+                    {term.credits !== undefined && (
+                      <span className="text-sm text-muted-foreground">
+                        {term.credits} {locale === "zh" ? "學分" : "cr"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {term.rank !== undefined && (
+                  <p className="text-sm text-muted-foreground">
+                    {locale === "zh" ? "排名" : "Rank"}: {term.rank}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {locale === "zh" ? "無學期資料" : "No term data available"}
+        </p>
+      )}
     </div>
   );
 }
@@ -994,43 +1047,7 @@ export function ApplicationReviewDialog({
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">
-                        {locale === "zh" ? "學生基本資訊" : "Student Basic Information"}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-sm font-medium text-muted-foreground">
-                            {locale === "zh" ? "學號" : "Student ID"}
-                          </Label>
-                          <p className="text-sm font-medium mt-1">{displayData.student_id || "-"}</p>
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium text-muted-foreground">
-                            {locale === "zh" ? "姓名" : "Name"}
-                          </Label>
-                          <p className="text-sm font-medium mt-1">{displayData.student_name || "-"}</p>
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium text-muted-foreground">
-                            {locale === "zh" ? "就讀學期數" : "Terms"}
-                          </Label>
-                          <p className="text-sm font-medium mt-1">{displayData.student_termcount || "-"}</p>
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium text-muted-foreground">
-                            {locale === "zh" ? "系所" : "Department"}
-                          </Label>
-                          <p className="text-sm font-medium mt-1">{displayData.department || "-"}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">
-                        {locale === "zh" ? "近期學期成績" : "Recent Term Grades"}
+                        {locale === "zh" ? "學生資訊" : "Student Information"}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
