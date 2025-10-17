@@ -119,7 +119,7 @@ export function createApplicationsApi() {
      */
     updateApplicationStatus: async (
       id: number,
-      statusData: { status: string; comments?: string; score?: number; rejection_reason?: string }
+      statusData: { status: string; comments?: string; rejection_reason?: string }
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}/status', {
         params: { path: { id } },

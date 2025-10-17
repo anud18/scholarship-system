@@ -438,7 +438,6 @@ class ApplicationStatusUpdate(BaseModel):
 
     status: str = Field(..., description="New status")
     comments: Optional[str] = Field(None, description="Review comments")
-    score: Optional[Decimal] = Field(None, description="Review score")
     rejection_reason: Optional[str] = Field(None, description="Reason for rejection")
 
 
