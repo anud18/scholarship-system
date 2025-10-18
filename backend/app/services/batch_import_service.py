@@ -723,16 +723,30 @@ class BatchImportService:
             for row in parsed_data:
                 student_id = row["student_id"]
                 if student_id in missing_student_ids:
+                    # Attempt to fetch SIS data for new users
+                    sis_data = None
+                    try:
+                        sis_data = await self.student_service.get_student_basic_info(student_id)
+                    except ServiceUnavailableError:
+                        logger.warning(
+                            f"SIS API unavailable for student {student_id}. Creating user with batch import data."
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Error fetching SIS data for student {student_id}: {e}. Creating user with batch import data."
+                        )
+
                     new_user = User(
                         nycu_id=student_id,
-                        name=row["student_name"],
-                        email=f"{student_id}@nycu.edu.tw",
+                        name=sis_data.get("std_cname") if sis_data else row["student_name"],
+                        email=sis_data.get("com_email") if sis_data and sis_data.get("com_email") else None,
                         user_type="student",
                         role="student",
-                        dept_code=row.get("dept_code"),
+                        dept_code=sis_data.get("std_depno") if sis_data else row.get("dept_code"),
                         raw_data={
                             "imported_from_batch": True,
                             "batch_import_data": row,
+                            "raw_sis_data": sis_data if sis_data else None,
                         },
                     )
                     new_users.append(new_user)
@@ -836,14 +850,41 @@ class BatchImportService:
                 app_id = f"{base_app_id}U"
 
                 # Create application
+                # Fetch student data from SIS API, prioritizing it over batch import data
+                sis_data = None
+                try:
+                    sis_data = await self.student_service.get_student_basic_info(student_id)
+                except ServiceUnavailableError:
+                    logger.warning(
+                        f"SIS API unavailable for student {student_id}. Using batch import data as fallback."
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error fetching SIS data for student {student_id}: {e}. Using batch import data as fallback."
+                    )
+
+                # Construct student_payload, prioritizing SIS data
                 student_payload = {
                     "nycu_id": student_id,
-                    "name": row_data["student_name"],
+                    "name": sis_data.get("std_cname") if sis_data else row_data["student_name"],
+                    "dept_code": sis_data.get("std_depno") if sis_data else row_data.get("dept_code"),
+                    "college_code": sis_data.get("std_academyno") if sis_data else batch_import.college_code,
+                    "raw_sis_data": sis_data if sis_data else None,  # Store raw SIS data for reference
                 }
-                if row_data.get("dept_code"):
-                    student_payload["dept_code"] = row_data.get("dept_code")
-                if batch_import.college_code:
-                    student_payload["college_code"] = batch_import.college_code
+
+                # Construct submitted_form_data, primarily from batch import, but override dept_code if SIS has it
+                submitted_form_data = {
+                    "postal_account": row_data.get("postal_account"),
+                    "advisor_name": row_data.get("advisor_name"),
+                    "advisor_email": row_data.get("advisor_email"),
+                    "advisor_nycu_id": row_data.get("advisor_nycu_id"),
+                    "custom_fields": row_data.get("custom_fields", {}),
+                }
+                # Override dept_code in submitted_form_data if SIS data is available and different
+                if sis_data and sis_data.get("std_depno"):
+                    submitted_form_data["dept_code"] = sis_data.get("std_depno")
+                elif row_data.get("dept_code"):
+                    submitted_form_data["dept_code"] = row_data.get("dept_code")
 
                 application = Application(
                     app_id=app_id,
@@ -866,13 +907,7 @@ class BatchImportService:
                     document_status="pending_documents",
                     submitted_at=datetime.now(timezone.utc),
                     student_data=student_payload,
-                    submitted_form_data={
-                        "postal_account": row_data.get("postal_account"),
-                        "advisor_name": row_data.get("advisor_name"),
-                        "advisor_email": row_data.get("advisor_email"),
-                        "advisor_nycu_id": row_data.get("advisor_nycu_id"),
-                        "custom_fields": row_data.get("custom_fields", {}),
-                    },
+                    submitted_form_data=submitted_form_data,
                 )
                 applications.append(application)
                 self.db.add(application)
