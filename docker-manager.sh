@@ -132,6 +132,9 @@ start_services() {
             log_info "Creating required directories for production app..."
             mkdir -p logs/{backend,nginx}
             ;;
+        "dev")
+            # mkdir -p backend/emails
+            cp -r frontend/emails backend/emails
     esac
 
     # Start services

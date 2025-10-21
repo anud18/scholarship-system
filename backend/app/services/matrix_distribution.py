@@ -22,15 +22,44 @@ from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 
 logger = logging.getLogger(__name__)
 
-# Fixed sub-type priority order (NSTC → MOE_1W → MOE_2W → ...)
-SUB_TYPE_PRIORITY = ["nstc", "moe_1w", "moe_2w", "general"]
-
 
 class MatrixDistributionService:
     """Service for matrix-based quota distribution"""
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _get_sub_type_priority(self, scholarship_type_id: int) -> List[str]:
+        """
+        從資料庫獲取子項目優先順序（按 display_order 排序）
+
+        Args:
+            scholarship_type_id: 獎學金類型 ID
+
+        Returns:
+            List[str]: 按照 display_order 排序的子項目代碼列表
+
+        Raises:
+            ValueError: 如果獎學金類型不存在
+        """
+        from app.models.scholarship import ScholarshipType
+
+        stmt = (
+            select(ScholarshipType)
+            .options(selectinload(ScholarshipType.sub_type_configs))
+            .where(ScholarshipType.id == scholarship_type_id)
+        )
+        result = await self.db.execute(stmt)
+        scholarship_type = result.scalar_one_or_none()
+
+        if not scholarship_type:
+            raise ValueError(f"Scholarship type {scholarship_type_id} not found")
+
+        # 使用已有的方法獲取按 display_order 排序的子類型配置
+        configs = scholarship_type.get_active_sub_type_configs()
+
+        # 返回子類型代碼列表
+        return [config.sub_type_code for config in configs]
 
     async def execute_matrix_distribution(
         self,
@@ -133,8 +162,23 @@ class MatrixDistributionService:
         distribution_summary = {}
         total_allocated = 0
 
+        # 動態從資料庫讀取子項目優先順序
+        sub_type_priority = await self._get_sub_type_priority(ranking.scholarship_type_id)
+        logger.info(f"Sub-type priority order for ranking {ranking_id}: {sub_type_priority}")
+
+        # Reset all ranking items to initial state before distribution
+        # This ensures re-distribution doesn't duplicate allocations
+        logger.info(f"Resetting allocation status for {len(sorted_items)} items before distribution")
+        for item in sorted_items:
+            item.is_allocated = False
+            item.allocated_sub_type = None
+            item.backup_position = None
+            item.backup_allocations = None
+            item.status = "ranked"
+            item.allocation_reason = None
+
         # Process each sub-type按優先順序
-        for sub_type_code in SUB_TYPE_PRIORITY:
+        for sub_type_code in sub_type_priority:
             if sub_type_code not in quota_matrix:
                 continue
 
@@ -155,8 +199,9 @@ class MatrixDistributionService:
                 for item in sorted_items:
                     app = item.application
 
-                    # Check if already allocated to another sub-type
-                    if item.allocated_sub_type is not None:
+                    # Check if already allocated (正取) - skip if already admitted
+                    # Note: items with backup_allocations will still be processed
+                    if item.is_allocated:
                         continue
 
                     # Check if application was rejected by review
@@ -199,11 +244,28 @@ class MatrixDistributionService:
                     else:
                         # Backup (備取)
                         backup_count += 1
-                        item.allocated_sub_type = sub_type_code
-                        item.is_allocated = False
-                        item.backup_position = backup_count
+
+                        # Initialize backup_allocations if needed
+                        if item.backup_allocations is None:
+                            item.backup_allocations = []
+
+                        # Add to backup allocations list
+                        item.backup_allocations.append(
+                            {
+                                "sub_type": sub_type_code,
+                                "backup_position": backup_count,
+                                "college": college_code,
+                                "allocation_reason": f"備取第{backup_count}名 {sub_type_code}-{college_code}",
+                            }
+                        )
+
+                        # Keep old field for backward compatibility (use first backup)
+                        if item.backup_position is None:
+                            item.backup_position = backup_count
+
+                        # Do NOT set allocated_sub_type for backup
+                        # This allows further processing of lower priority sub-types
                         item.status = "waitlisted"
-                        item.allocation_reason = f"備取第{backup_count}名 {sub_type_code}-{college_code}"
 
                         college_summary["backup"].append(
                             {
@@ -220,11 +282,14 @@ class MatrixDistributionService:
 
         # Mark items not allocated to any sub-type with specific rejection reasons
         for item in sorted_items:
-            if item.allocated_sub_type is None:
-                item.is_allocated = False
-                item.status = "rejected"
-                # Determine specific rejection reason
-                item.allocation_reason = self._determine_rejection_reason(item, item.application, quota_matrix)
+            if not item.is_allocated:
+                # If has backup allocations but no admitted, keep as waitlisted
+                if item.backup_allocations and len(item.backup_allocations) > 0:
+                    item.status = "waitlisted"
+                else:
+                    item.status = "rejected"
+                    # Determine specific rejection reason only if no backup either
+                    item.allocation_reason = self._determine_rejection_reason(item, item.application, quota_matrix)
 
         # Flush changes to database
         await self.db.flush()

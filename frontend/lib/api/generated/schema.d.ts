@@ -726,6 +726,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/applications/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Application
+         * @description Restore a deleted application to draft status
+         *
+         *     Permission Control:
+         *     - Students: Can only restore their own deleted applications
+         *     - Staff (professor/college/admin): Can restore any application
+         */
+        post: operations["restore_application_api_v1_applications__id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/applications/{id}/files": {
         parameters: {
             query?: never;
@@ -10992,6 +11016,38 @@ export interface operations {
         };
     };
     withdraw_application_api_v1_applications__id__withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Application ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_application_api_v1_applications__id__restore_post: {
         parameters: {
             query?: never;
             header?: never;

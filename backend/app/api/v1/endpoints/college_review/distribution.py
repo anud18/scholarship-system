@@ -390,9 +390,6 @@ async def get_distribution_details(
                 or "N/A"
             )
 
-            sub_type = item.allocated_sub_type or "unallocated"
-            item_status = item.status
-
             student_info = {
                 "rank_position": item.rank_position,
                 "student_id": student_id,
@@ -401,7 +398,72 @@ async def get_distribution_details(
                 "app_id": app.app_id,
             }
 
-            if item_status == "rejected" or not item.allocated_sub_type:
+            # Handle primary allocation (正取)
+            if item.is_allocated and item.allocated_sub_type:
+                sub_type = item.allocated_sub_type
+                entry = ensure_summary_entry(sub_type)
+                colleges = entry.setdefault("colleges", {})
+
+                if college_code not in colleges:
+                    quota_value = 0
+                    if sub_type in quota_matrix and isinstance(quota_matrix[sub_type], dict):
+                        quota_value = _normalize_quota_value(quota_matrix[sub_type].get(college_code))
+                    colleges[college_code] = {
+                        "quota": quota_value,
+                        "admitted_count": 0,
+                        "backup_count": 0,
+                        "admitted": [],
+                        "backup": [],
+                    }
+
+                college_entry = colleges[college_code]
+                college_entry["admitted"].append(student_info)
+                college_entry["admitted_count"] += 1
+                entry["admitted_total"] += 1
+                admitted_total_counter += 1
+            # Handle backup allocations (備取) from backup_allocations array
+            # Use independent if (not elif) to allow both primary and backup allocations to be shown
+            if (
+                item.backup_allocations
+                and isinstance(item.backup_allocations, list)
+                and len(item.backup_allocations) > 0
+            ):
+                for backup_alloc in item.backup_allocations:
+                    if not isinstance(backup_alloc, dict):
+                        continue
+
+                    sub_type = backup_alloc.get("sub_type")
+                    backup_college = backup_alloc.get("college")
+                    backup_position = backup_alloc.get("backup_position")
+
+                    if not sub_type:
+                        continue
+
+                    entry = ensure_summary_entry(sub_type)
+                    colleges = entry.setdefault("colleges", {})
+
+                    if backup_college not in colleges:
+                        quota_value = 0
+                        if sub_type in quota_matrix and isinstance(quota_matrix[sub_type], dict):
+                            quota_value = _normalize_quota_value(quota_matrix[sub_type].get(backup_college))
+                        colleges[backup_college] = {
+                            "quota": quota_value,
+                            "admitted_count": 0,
+                            "backup_count": 0,
+                            "admitted": [],
+                            "backup": [],
+                        }
+
+                    college_entry = colleges[backup_college]
+                    backup_student_info = student_info.copy()
+                    backup_student_info["backup_position"] = backup_position
+                    college_entry["backup"].append(backup_student_info)
+                    college_entry["backup_count"] += 1
+                    entry["backup_total"] += 1
+
+            # Handle rejected students (no allocation or backup)
+            # Only process as rejected if student has neither primary allocation nor any backup allocations
+            if not item.is_allocated and (not item.backup_allocations or len(item.backup_allocations) == 0):
                 rejection_reason = item.allocation_reason or "未獲分配（原因未記錄）"
                 rejected_students.append(
                     {
@@ -412,35 +474,6 @@ async def get_distribution_details(
                         "reason": rejection_reason,
                     }
                 )
-                continue
-
-            entry = ensure_summary_entry(sub_type)
-            colleges = entry.setdefault("colleges", {})
-
-            if college_code not in colleges:
-                quota_value = 0
-                if sub_type in quota_matrix and isinstance(quota_matrix[sub_type], dict):
-                    quota_value = _normalize_quota_value(quota_matrix[sub_type].get(college_code))
-                colleges[college_code] = {
-                    "quota": quota_value,
-                    "admitted_count": 0,
-                    "backup_count": 0,
-                    "admitted": [],
-                    "backup": [],
-                }
-
-            college_entry = colleges[college_code]
-
-            if item_status == "allocated" and item.is_allocated:
-                college_entry["admitted"].append(student_info)
-                college_entry["admitted_count"] += 1
-                entry["admitted_total"] += 1
-                admitted_total_counter += 1
-            elif item_status == "waitlisted":
-                student_info["backup_position"] = item.backup_position
-                college_entry["backup"].append(student_info)
-                college_entry["backup_count"] += 1
-                entry["backup_total"] += 1
 
         return ApiResponse(
             success=True,

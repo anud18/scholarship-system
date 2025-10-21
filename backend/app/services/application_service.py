@@ -1774,6 +1774,67 @@ class ApplicationService:
 
         return application
 
+    async def restore_application(self, application_id: int, current_user: User) -> Application:
+        """
+        Restore a deleted application to draft status
+
+        Permission Control:
+        - Students: Can only restore their own deleted applications
+        - Staff (professor/college/admin): Can restore any application
+
+        Args:
+            application_id: ID of application to restore
+            current_user: User performing the restoration
+
+        Returns:
+            Restored application object
+        """
+        # Get application with eagerly loaded relationships
+        stmt = (
+            select(Application)
+            .options(
+                selectinload(Application.reviews),
+                selectinload(Application.professor_reviews),
+            )
+            .where(Application.id == application_id)
+        )
+        result = await self.db.execute(stmt)
+        application = result.scalar_one_or_none()
+
+        if not application:
+            raise NotFoundError("Application", application_id)
+
+        # Check if already deleted
+        if application.status != ApplicationStatus.deleted.value:
+            raise ValidationError("Only deleted applications can be restored")
+
+        # Check if user has permission to restore this application
+        if current_user.role == UserRole.student:
+            if application.user_id != current_user.id:
+                raise AuthorizationError("You can only restore your own applications")
+        elif current_user.role not in [UserRole.professor, UserRole.college, UserRole.admin, UserRole.super_admin]:
+            raise AuthorizationError("You don't have permission to restore applications")
+
+        # Restore application to appropriate status based on submission history
+        # If the application was previously submitted, restore it to under_review status
+        # so it will appear in the college review list
+        if application.submitted_at:
+            # Application was previously submitted - restore to under_review
+            application.status = ApplicationStatus.under_review.value
+        else:
+            # Application was never submitted - restore to draft
+            application.status = ApplicationStatus.draft.value
+
+        # Clear deletion metadata
+        application.deleted_at = None
+        application.deleted_by_id = None
+        application.deletion_reason = None
+
+        await self.db.commit()
+        await self.db.refresh(application)
+
+        return application
+
     async def _clone_user_profile_documents(self, application: Application, user: User):
         """
         Clone all fixed documents from user profile to application-specific paths

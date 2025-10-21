@@ -232,6 +232,33 @@ async def get_applications_for_review(
                     "files_count": len(app.get("files", [])),
                 },
             }
+
+            # Fetch recent term data for the student
+            recent_terms = []
+            if academic_year and student_id and student_id != "N/A":
+                for year_offset in range(5):  # Look back up to 5 academic years
+                    current_academic_year = academic_year - year_offset
+                    for term_code in ["2", "1"]:  # Second semester then first semester
+                        try:
+                            term_data = await student_service.get_student_term_info(
+                                student_id, str(current_academic_year), term_code
+                            )
+                            if term_data:
+                                recent_terms.append(
+                                    {
+                                        "academic_year": term_data.get("trm_year"),
+                                        "semester": term_data.get("trm_term"),
+                                        "gpa": term_data.get("trm_ascore_gpa"),
+                                        "term_count": term_data.get("trm_termcount"),
+                                        "status": term_data.get("trm_studystatus"),
+                                    }
+                                )
+                        except Exception as term_err:
+                            logger.debug(
+                                f"Could not fetch term data for {student_id} {current_academic_year}-{term_code}: {str(term_err)}"
+                            )
+                            continue
+            filtered_app["recent_terms"] = recent_terms
             filtered_applications.append(filtered_app)
 
         return ApiResponse(

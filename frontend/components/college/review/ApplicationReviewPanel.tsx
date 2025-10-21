@@ -47,6 +47,7 @@ import {
   Building,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useReferenceData, getStudyingStatusName } from "@/hooks/use-reference-data";
 import * as XLSX from "xlsx";
 
 interface ApplicationReviewPanelProps {
@@ -88,6 +89,9 @@ export function ApplicationReviewPanel({
   } = useCollegeManagement();
 
   const { toast } = useToast();
+
+  // Fetch reference data (studying statuses, etc.)
+  const { studyingStatuses } = useReferenceData();
 
   const handleApprove = async (appId: number) => {
     try {
@@ -498,6 +502,9 @@ export function ApplicationReviewPanel({
                       {locale === "zh" ? "申請類別" : "Type"}
                     </TableHead>
                     <TableHead>
+                      {locale === "zh" ? "在學資訊" : "Enrollment Info"}
+                    </TableHead>
+                    <TableHead>
                       {locale === "zh" ? "狀態" : "Status"}
                     </TableHead>
                     <TableHead>
@@ -543,22 +550,41 @@ export function ApplicationReviewPanel({
                         </Badge>
                       </TableCell>
                       <TableCell>
+                        {app.recent_terms && app.recent_terms.length > 0 ? (
+                          <div className="flex flex-col gap-1 text-xs">
+                            {app.recent_terms.map((term: any, index: number) => {
+                              // Use dynamic studying status from database
+                              const displayStatus = getStudyingStatusName(term.status, studyingStatuses);
+
+                              return (
+                                <div key={index} className="flex items-center gap-1">
+                                  <span className="font-medium">
+                                    {term.academic_year}-{term.semester}
+                                  </span>
+                                  {term.gpa !== undefined && (
+                                    <span className="text-muted-foreground">
+                                      GPA: {term.gpa?.toFixed(2)}
+                                    </span>
+                                  )}
+                                  {term.status !== undefined && (
+                                    <span className="text-muted-foreground">
+                                      ({displayStatus})
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          "無"
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <Badge
                           variant={getStatusColor(app.status as ApplicationStatus)}
                         >
                           {app.status_zh || getStatusName(app.status as ApplicationStatus, locale)}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {app.created_at
-                          ? new Date(
-                              app.created_at
-                            ).toLocaleDateString("zh-TW", {
-                              year: "numeric",
-                              month: "2-digit",
-                              day: "2-digit",
-                            })
-                          : "未知日期"}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -609,6 +635,13 @@ export function ApplicationReviewPanel({
         applicationId={applicationToDelete?.id}
         applicationName={applicationToDelete?.student_name}
         onSuccess={() => {
+          // Close the ApplicationReviewDialog
+          setSelectedApplication(null);
+
+          // Clear delete state
+          setApplicationToDelete(null);
+
+          // Refresh the applications list
           fetchCollegeApplications(
             selectedAcademicYear,
             selectedSemester,

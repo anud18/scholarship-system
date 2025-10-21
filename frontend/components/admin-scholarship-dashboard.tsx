@@ -65,6 +65,7 @@ import { useEffect, useState } from "react";
 
 // Use the Application type from the API
 import { useScholarshipPermissions } from "@/hooks/use-scholarship-permissions";
+import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import { Application } from "@/lib/api";
 import { User as UserType } from "@/types/user";
 
@@ -280,12 +281,8 @@ export function AdminScholarshipDashboard({
   // Locale state for internationalization (管理員頁面固定使用中文)
   const [locale] = useState<Locale>("zh");
 
-  // State for sub-type translations from backend
-  const [subTypeTranslations, setSubTypeTranslations] = useState<
-    Record<string, Record<string, string>>
-  >({});
-  const [translationsLoading, setTranslationsLoading] = useState(false);
-  const [translationsLoaded, setTranslationsLoaded] = useState(false);
+  // ✨ Use SWR hook to fetch scholarship data and translations (auto-detects user role)
+  const { subTypeTranslations } = useScholarshipData();
 
   // Debug logging
   console.log("ScholarshipSpecificDashboard render:", {
@@ -377,36 +374,8 @@ export function AdminScholarshipDashboard({
     setSelectedCombination(undefined);
   }, [activeTab]);
 
-  // 載入子類型翻譯
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadSubTypeTranslations = async () => {
-      if (Object.keys(subTypeTranslations).length > 0) return; // 已經載入過
-
-      setTranslationsLoading(true);
-      try {
-        const response = await apiClient.admin.getSubTypeTranslations();
-        if (response.success && response.data && isMounted) {
-          // 儲存完整的翻譯資料
-          setSubTypeTranslations(response.data);
-          setTranslationsLoaded(true);
-        }
-      } catch (error) {
-        console.error("Failed to load sub-type translations:", error);
-      } finally {
-        if (isMounted) {
-          setTranslationsLoading(false);
-        }
-      }
-    };
-
-    loadSubTypeTranslations();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [subTypeTranslations]);
+  // ✨ Translations are now loaded automatically via useScholarshipData hook
+  // No need for manual useEffect anymore!
 
   // 搜尋和篩選邏輯
   const filterApplications = (applications: DashboardApplication[]) => {
@@ -458,18 +427,17 @@ export function AdminScholarshipDashboard({
 
   // 獲取子類型顯示名稱（從後端獲取）
   const getSubTypeDisplayName = (subType: string, lang: string = locale) => {
+    // Type-safe access to translations
+    const currentLangDict = lang === "zh" || lang === "en" ? subTypeTranslations[lang] : subTypeTranslations.zh;
+
     // 使用後端翻譯
-    if (subTypeTranslations[lang] && subTypeTranslations[lang][subType]) {
-      return subTypeTranslations[lang][subType];
+    if (currentLangDict && currentLangDict[subType]) {
+      return currentLangDict[subType];
     }
 
     // 如果當前語言沒有翻譯，嘗試使用中文
-    if (
-      lang !== "zh" &&
-      subTypeTranslations["zh"] &&
-      subTypeTranslations["zh"][subType]
-    ) {
-      return subTypeTranslations["zh"][subType];
+    if (lang !== "zh" && subTypeTranslations.zh && subTypeTranslations.zh[subType]) {
+      return subTypeTranslations.zh[subType];
     }
 
     // 如果沒有翻譯，顯示原始代碼

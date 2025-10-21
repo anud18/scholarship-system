@@ -158,6 +158,14 @@ export interface Application {
   // Academic information
   academic_year?: number;
   semester?: string;
+
+  recent_terms?: Array<{
+    academic_year?: number;
+    semester?: number;
+    gpa?: number;
+    term_count?: number;
+    status?: number;
+  }>;
 }
 
 export interface ApplicationCreate {

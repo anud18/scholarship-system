@@ -238,6 +238,9 @@ class CollegeRankingItem(Base):
     # Matrix distribution fields
     allocated_sub_type = Column(String(50), nullable=True)  # Sub-type code allocated to (e.g., 'nstc', 'moe_1w')
     backup_position = Column(Integer, nullable=True)  # Backup position (NULL for admitted, 1, 2, 3... for backup)
+    backup_allocations = Column(
+        JSONB, nullable=True
+    )  # Array of backup allocations: [{sub_type, backup_position, college, allocation_reason}, ...]
 
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())

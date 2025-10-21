@@ -208,6 +208,19 @@ export function createApplicationsApi() {
     },
 
     /**
+     * Restore a deleted application to draft status
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    restoreApplication: async (
+      applicationId: number
+    ): Promise<ApiResponse<Application>> => {
+      const response = await typedClient.raw.POST('/api/v1/applications/{id}/restore', {
+        params: { path: { id: applicationId } },
+      });
+      return toApiResponse<Application>(response);
+    },
+
+    /**
      * Upload document to application
      * Type-safe: Path and query parameters validated, FormData properly typed
      */

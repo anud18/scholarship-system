@@ -35,6 +35,7 @@ import {
 } from "@/lib/constants/allocation-matrix-layout";
 import { useGridMetrics } from "@/hooks/useGridMetrics";
 import { usePillMetrics } from "@/hooks/usePillMetrics";
+import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
 
@@ -286,8 +287,10 @@ export function DistributionResultsPanel({
     useState<DistributionDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [subTypeTranslations, setSubTypeTranslations] =
-    useState<SubTypeTranslations>({ zh: {}, en: {} });
+
+  // ✨ Use SWR hook to fetch sub-type translations (auto-detects user role)
+  const { subTypeTranslations } = useScholarshipData();
+
   const { toast } = useToast();
 
   const handleExportDistribution = () => {
@@ -363,20 +366,25 @@ export function DistributionResultsPanel({
       // Sheet 2: Details (詳細清單)
       const detailsData = studentRows.map((student) => {
         const allocation = student.allocation;
-        const backupInfo = student.backupEntries.length > 0 ? student.backupEntries[0] : null;
+        const hasBackups = student.backupEntries.length > 0;
 
         let allocationType = "-";
         let allocatedSubType = "-";
-        let backupSubType = "-";
-        let backupPosition = "-";
+        let backupSubTypes = "-";
+        let backupPositions = "-";
 
         if (allocation) {
           allocationType = locale === "zh" ? "正取" : "Admitted";
           allocatedSubType = getColumnLabel(allocation.subType);
-        } else if (backupInfo) {
+        } else if (hasBackups) {
           allocationType = locale === "zh" ? "備取" : "Backup";
-          backupSubType = getColumnLabel(backupInfo.subType);
-          backupPosition = backupInfo.backupPosition?.toString() || "-";
+          // Show all backup sub-types and positions
+          backupSubTypes = student.backupEntries
+            .map((entry) => getColumnLabel(entry.subType))
+            .join(", ");
+          backupPositions = student.backupEntries
+            .map((entry) => entry.backupPosition?.toString() || "-")
+            .join(", ");
         } else if (student.rejection) {
           allocationType = locale === "zh" ? "未獲分配" : "Not Allocated";
         } else {
@@ -391,8 +399,8 @@ export function DistributionResultsPanel({
           '符合子項目': student.eligibleLabels.join(", ") || "-",
           '分配狀態': allocationType,
           '正取子項目': allocatedSubType,
-          '備取子項目': backupSubType,
-          '備取順位': backupPosition,
+          '備取子項目': backupSubTypes,
+          '備取順位': backupPositions,
           '申請編號': student.appId || "-",
         };
       });
@@ -461,27 +469,8 @@ export function DistributionResultsPanel({
     fetchDistributionDetails();
   }, [rankingId]);
 
-  useEffect(() => {
-    let isMounted = true;
-    const loadTranslations = async () => {
-      try {
-        const response = await apiClient.college.getSubTypeTranslations();
-        if (response.success && response.data && isMounted) {
-          setSubTypeTranslations({
-            zh: response.data.zh || {},
-            en: response.data.en || {},
-          });
-        }
-      } catch (err) {
-        console.error("Failed to load sub-type translations:", err);
-      }
-    };
-
-    loadTranslations();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  // ✨ Translations are now loaded automatically via useScholarshipData hook
+  // No need for manual useEffect anymore!
 
   const subTypeMetaMap = useMemo(() => {
     if (!distributionData?.sub_type_metadata) {

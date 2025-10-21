@@ -428,6 +428,57 @@ async def withdraw_application(
     }
 
 
+@router.post("/{id}/restore")
+async def restore_application(
+    id: int = Path(..., description="Application ID"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+):
+    """Restore a deleted application to draft status
+
+    Permission Control:
+    - Students: Can only restore their own deleted applications
+    - Staff (professor/college/admin): Can restore any application
+    """
+    service = ApplicationService(db)
+
+    try:
+        result = await service.restore_application(id, current_user)
+
+        # Log audit trail for application restoration
+        audit_service = ApplicationAuditService(db)
+        await audit_service.log_status_update(
+            application_id=id,
+            app_id=result.app_id if hasattr(result, "app_id") else f"APP-{id}",
+            old_status="deleted",
+            new_status="draft",
+            user=current_user,
+            reason="Application restored from deleted status",
+            request=request,
+        )
+
+        # Convert to ApplicationResponse for serialization
+        from app.schemas.application import ApplicationResponse
+
+        response_data = ApplicationResponse.from_orm(result)
+
+        return {
+            "success": True,
+            "message": "申請已恢復",
+            "data": response_data.dict() if hasattr(response_data, "dict") else response_data.model_dump(),
+        }
+    except (NotFoundError, ValidationError, AuthorizationError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST
+            if isinstance(e, ValidationError)
+            else status.HTTP_404_NOT_FOUND
+            if isinstance(e, NotFoundError)
+            else status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+
+
 @router.get("/{id}/files")
 async def get_application_files(
     id: int = Path(..., description="Application ID"),

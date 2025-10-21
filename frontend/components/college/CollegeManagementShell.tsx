@@ -76,6 +76,8 @@ function CollegeManagementContent({ user }: { user: User }) {
     fetchAvailableOptions,
     getScholarshipConfig,
     setManagedCollege,
+    scholarshipConfigError,
+    refreshPermissions,
   } = useCollegeManagement();
 
   // Fetch managed college information on component mount
@@ -162,6 +164,88 @@ function CollegeManagementContent({ user }: { user: User }) {
     setSelectedCombination,
     fetchCollegeApplications,
   ]);
+
+  if (scholarshipConfigError) {
+    return (
+      <div className="flex items-center justify-center py-12 px-4">
+        <div className="w-full max-w-md bg-white rounded-lg border border-red-200 shadow-lg overflow-hidden">
+          {/* Header */}
+          <div className="bg-red-50 px-6 py-4 border-b border-red-200">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-red-800">
+                  {locale === "zh" ? "權限設置問題" : "Permission Issue"}
+                </p>
+                <p className="text-sm text-red-700 mt-1">
+                  {locale === "zh" ? "無法存取獎學金資訊" : "Unable to access scholarship information"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-6 space-y-4">
+            <p className="text-gray-700 text-sm leading-relaxed">
+              {scholarshipConfigError}
+            </p>
+
+            {/* Suggestions */}
+            <div className="bg-blue-50 border border-blue-200 rounded p-4">
+              <p className="text-sm font-semibold text-blue-900 mb-2">
+                {locale === "zh" ? "可能的解決方案：" : "Possible solutions:"}
+              </p>
+              <ul className="text-sm text-blue-800 space-y-1 ml-4 list-disc">
+                <li>
+                  {locale === "zh"
+                    ? "請確認您已被指派至正確的學院"
+                    : "Verify that you are assigned to the correct college"}
+                </li>
+                <li>
+                  {locale === "zh"
+                    ? "確認已獲得至少一個獎學金的管理權限"
+                    : "Ensure you have management permission for at least one scholarship"}
+                </li>
+                <li>
+                  {locale === "zh"
+                    ? "重新登入以重整權限設置"
+                    : "Log in again to refresh your permissions"}
+                </li>
+              </ul>
+            </div>
+
+            <div className="pt-2 border-t border-gray-200">
+              <p className="text-xs text-gray-500">
+                {locale === "zh"
+                  ? "如問題持續，請聯絡系統管理員。"
+                  : "If the issue persists, please contact your system administrator."}
+              </p>
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex gap-2">
+            <button
+              onClick={() => refreshPermissions()}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition"
+            >
+              {locale === "zh" ? "重新整理權限" : "Refresh Permissions"}
+            </button>
+            <button
+              onClick={() => window.location.href = "/"}
+              className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded hover:bg-gray-300 transition"
+            >
+              {locale === "zh" ? "回首頁" : "Home"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!availableOptions?.scholarship_types || availableOptions.scholarship_types.length === 0) {
     return (

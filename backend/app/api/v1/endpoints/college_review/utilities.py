@@ -108,25 +108,30 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
     """Get available combinations of scholarship types, academic years, and semesters from configurations"""
 
     try:
-        logger.info("College user requesting available combinations from configurations")
+        logger.info(f"College user {current_user.nycu_id} (ID: {current_user.id}) requesting available combinations")
 
         # Get scholarship IDs that the user has permission to access
         permission_query = select(AdminScholarship.scholarship_id).where(AdminScholarship.admin_id == current_user.id)
         permission_result = await db.execute(permission_query)
         allowed_scholarship_ids = [row[0] for row in permission_result.fetchall()]
 
-        logger.info(f"User {current_user.id} has permission for scholarships: {allowed_scholarship_ids}")
+        logger.info(
+            f"User {current_user.nycu_id} (ID: {current_user.id}) has permission for "
+            f"{len(allowed_scholarship_ids)} scholarship(s): {allowed_scholarship_ids}"
+        )
 
         # If user has specific permissions, filter by those
-        # If user has no permissions set (empty list), show all (for backward compatibility or super admin)
+        # If user has no permissions set (empty list), show no scholarships
         if allowed_scholarship_ids:
             scholarship_query = select(ScholarshipType).where(
                 ScholarshipType.status == "active", ScholarshipType.id.in_(allowed_scholarship_ids)
             )
         else:
-            # No specific permissions - could mean all or none depending on your business logic
-            # For college users without permissions, show no scholarships
-            logger.warning(f"College user {current_user.id} has no scholarship permissions set")
+            # No specific permissions - for college users without permissions, show no scholarships
+            logger.warning(
+                f"College user {current_user.nycu_id} (ID: {current_user.id}, College: {current_user.college_code}) "
+                f"has no scholarship permissions set. Please contact administrator."
+            )
             scholarship_query = select(ScholarshipType).where(ScholarshipType.id == -1)  # No results
 
         scholarship_result = await db.execute(scholarship_query)
@@ -263,11 +268,16 @@ async def get_managed_college(
     """
 
     try:
-        logger.info(f"User {current_user.id} requesting managed college information")
+        logger.info(
+            f"College user {current_user.nycu_id} (ID: {current_user.id}) requesting managed college information"
+        )
 
         # Check if user has college_code set
         if not current_user.college_code:
-            logger.warning(f"College user {current_user.id} has no college_code assigned")
+            logger.warning(
+                f"College user {current_user.nycu_id} (ID: {current_user.id}) has no college_code assigned. "
+                f"Please contact administrator to assign a college."
+            )
             return ApiResponse(success=True, message="No college assigned to this user", data=None)
 
         # Get college information from Academy table
@@ -276,7 +286,10 @@ async def get_managed_college(
         academy = academy_result.scalar_one_or_none()
 
         if not academy:
-            logger.error(f"College code {current_user.college_code} not found in Academy table")
+            logger.error(
+                f"College code '{current_user.college_code}' assigned to user {current_user.nycu_id} "
+                f"(ID: {current_user.id}) not found in Academy table"
+            )
             return ApiResponse(
                 success=True, message=f"College information not found for code: {current_user.college_code}", data=None
             )
@@ -294,12 +307,17 @@ async def get_managed_college(
             "scholarship_count": len(admin_scholarships),
         }
 
-        logger.info(f"User {current_user.id} manages college: {academy.code} ({academy.name})")
+        logger.info(
+            f"User {current_user.nycu_id} (ID: {current_user.id}) manages college: {academy.code} ({academy.name}) "
+            f"with {len(admin_scholarships)} scholarship permission(s)"
+        )
 
         return ApiResponse(success=True, message="Managed college retrieved successfully", data=managed_college_data)
 
     except Exception as e:
-        logger.error(f"Error retrieving managed college for user {current_user.id}: {str(e)}")
+        logger.error(
+            f"Error retrieving managed college for user {current_user.nycu_id} (ID: {current_user.id}): {str(e)}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve managed college: {str(e)}"
         )
