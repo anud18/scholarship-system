@@ -44,6 +44,21 @@ def get_json_type():
         return JSON  # Fallback to standard JSON
 
 
+def get_inet_type():
+    """Get appropriate INET type based on database dialect"""
+    try:
+        from sqlalchemy.dialects.postgresql import INET
+
+        from app.core.config import settings
+
+        if "postgresql" in settings.database_url.lower():
+            return INET
+        else:
+            return String  # SQLite doesn't have INET, use String
+    except Exception:
+        return String  # Fallback to String
+
+
 class CollegeReview(Base):
     """
     College review model for scholarship applications
