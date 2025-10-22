@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { ProgressTimeline } from "@/components/progress-timeline";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display";
@@ -48,7 +48,7 @@ import { Locale } from "@/lib/validators";
 import { Application, HistoricalApplication, User } from "@/lib/api";
 import api from "@/lib/api";
 import { useStudentPreview } from "@/hooks/use-student-preview";
-import { useReferenceData, getStudyingStatusName, getDegreeName } from "@/hooks/use-reference-data";
+import { useReferenceData, getStudyingStatusName, getDegreeName, getDepartmentName } from "@/hooks/use-reference-data";
 import {
   getApplicationTimeline,
   getStatusColor,
@@ -70,8 +70,8 @@ interface ApplicationReviewDialogProps {
   user?: User;
 
   // College-specific handlers (optional)
-  onApprove?: (id: number) => void;
-  onReject?: (id: number) => void;
+  onApprove?: (id: number, comments?: string) => void;
+  onReject?: (id: number, comments?: string) => void;
   onRequestDocs?: (app: Application) => void;
   onDelete?: (app: Application) => void;
 
@@ -111,13 +111,18 @@ function StudentPreviewDisplay({
   studentId,
   academicYear,
   locale = "zh",
+  studyingStatuses,
+  degrees,
+  departments,
 }: {
   studentId: string;
   academicYear?: number;
   locale?: "zh" | "en";
+  studyingStatuses: Array<{ id: number; name: string }>;
+  degrees: Array<{ id: number; name: string }>;
+  departments: Array<{ id: number; code: string; name: string; academy_code?: string | null }>;
 }) {
   const { previewData, isLoading, error, fetchPreview } = useStudentPreview();
-  const { studyingStatuses, degrees } = useReferenceData();
 
   useEffect(() => {
     if (studentId) {
@@ -385,6 +390,8 @@ export function ApplicationReviewDialog({
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const { studyingStatuses, degrees, departments } = useReferenceData();
+
   // Admin management states
   const [professorInfo, setProfessorInfo] = useState<any>(null);
   const [bankVerificationLoading, setBankVerificationLoading] = useState(false);
@@ -441,29 +448,33 @@ export function ApplicationReviewDialog({
 
       // 檢查是否成功（success 為 true 或 response 中有 data）
       if (response?.success || response?.data) {
-        toast({
-          title: locale === "zh" ? "核准成功" : "Approval Successful",
-          description: locale === "zh" ? "申請已核准" : "Application has been approved",
-        });
+        toast.success(
+          locale === "zh" ? "核准成功" : "Approval Successful",
+          {
+            description: locale === "zh" ? "申請已核准" : "Application has been approved",
+          }
+        );
         setAdminComments("");
         // Refresh application data
         loadApplicationDetails(detailedApplication.id);
         // Call the callback if provided
         onAdminApprove?.(detailedApplication.id);
       } else {
-        toast({
-          title: locale === "zh" ? "核准失敗" : "Approval Failed",
-          description: response?.message || (locale === "zh" ? "無法核准此申請" : "Could not approve this application"),
-          variant: "destructive",
-        });
+        toast.error(
+          locale === "zh" ? "核准失敗" : "Approval Failed",
+          {
+            description: response?.message || (locale === "zh" ? "無法核准此申請" : "Could not approve this application"),
+          }
+        );
       }
     } catch (error) {
       console.error("Admin approve error:", error);
-      toast({
-        title: locale === "zh" ? "錯誤" : "Error",
-        description: error instanceof Error ? error.message : (locale === "zh" ? "核准過程中發生錯誤" : "An error occurred during approval"),
-        variant: "destructive",
-      });
+      toast.error(
+        locale === "zh" ? "錯誤" : "Error",
+        {
+          description: error instanceof Error ? error.message : (locale === "zh" ? "核准過程中發生錯誤" : "An error occurred during approval"),
+        }
+      );
     } finally {
       setIsSubmittingStatus(false);
     }
@@ -487,29 +498,33 @@ export function ApplicationReviewDialog({
 
       // 檢查是否成功（success 為 true 或 response 中有 data）
       if (response?.success || response?.data) {
-        toast({
-          title: locale === "zh" ? "駁回成功" : "Rejection Successful",
-          description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
-        });
+        toast.success(
+          locale === "zh" ? "駁回成功" : "Rejection Successful",
+          {
+            description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
+          }
+        );
         setAdminComments("");
         // Refresh application data
         loadApplicationDetails(detailedApplication.id);
         // Call the callback if provided
         onAdminReject?.(detailedApplication.id);
       } else {
-        toast({
-          title: locale === "zh" ? "駁回失敗" : "Rejection Failed",
-          description: response?.message || (locale === "zh" ? "無法駁回此申請" : "Could not reject this application"),
-          variant: "destructive",
-        });
+        toast.error(
+          locale === "zh" ? "駁回失敗" : "Rejection Failed",
+          {
+            description: response?.message || (locale === "zh" ? "無法駁回此申請" : "Could not reject this application"),
+          }
+        );
       }
     } catch (error) {
       console.error("Admin reject error:", error);
-      toast({
-        title: locale === "zh" ? "錯誤" : "Error",
-        description: error instanceof Error ? error.message : (locale === "zh" ? "駁回過程中發生錯誤" : "An error occurred during rejection"),
-        variant: "destructive",
-      });
+      toast.error(
+        locale === "zh" ? "錯誤" : "Error",
+        {
+          description: error instanceof Error ? error.message : (locale === "zh" ? "駁回過程中發生錯誤" : "An error occurred during rejection"),
+        }
+      );
     } finally {
       setIsSubmittingStatus(false);
     }
@@ -525,28 +540,32 @@ export function ApplicationReviewDialog({
         detailedApplication.id
       );
       if (response.success) {
-        toast({
-          title: locale === "zh" ? "銀行驗證成功" : "Bank Verification Successful",
-          description: locale === "zh" ? "銀行帳戶驗證已完成" : "Bank account verification completed",
-        });
+        toast.success(
+          locale === "zh" ? "銀行驗證成功" : "Bank Verification Successful",
+          {
+            description: locale === "zh" ? "銀行帳戶驗證已完成" : "Bank account verification completed",
+          }
+        );
         // Refresh application data
         if (detailedApplication) {
           loadApplicationDetails(detailedApplication.id);
         }
       } else {
-        toast({
-          title: locale === "zh" ? "銀行驗證失敗" : "Bank Verification Failed",
-          description: response.message || (locale === "zh" ? "無法完成銀行帳戶驗證" : "Could not complete bank account verification"),
-          variant: "destructive",
-        });
+        toast.error(
+          locale === "zh" ? "銀行驗證失敗" : "Bank Verification Failed",
+          {
+            description: response.message || (locale === "zh" ? "無法完成銀行帳戶驗證" : "Could not complete bank account verification"),
+          }
+        );
       }
     } catch (error) {
       console.error("Bank verification error:", error);
-      toast({
-        title: locale === "zh" ? "銀行驗證錯誤" : "Bank Verification Error",
-        description: locale === "zh" ? "銀行帳戶驗證過程中發生錯誤" : "An error occurred during bank account verification",
-        variant: "destructive",
-      });
+      toast.error(
+        locale === "zh" ? "銀行驗證錯誤" : "Bank Verification Error",
+        {
+          description: locale === "zh" ? "銀行帳戶驗證過程中發生錯誤" : "An error occurred during bank account verification",
+        }
+      );
     } finally {
       setBankVerificationLoading(false);
     }
@@ -623,11 +642,12 @@ export function ApplicationReviewDialog({
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      toast({
-        title: locale === "zh" ? "錯誤" : "Error",
-        description: err instanceof Error ? err.message : "Could not fetch application details",
-        variant: "destructive",
-      });
+      toast.error(
+        locale === "zh" ? "錯誤" : "Error",
+        {
+          description: err instanceof Error ? err.message : "Could not fetch application details",
+        }
+      );
     } finally {
       setIsLoading(false);
     }
@@ -637,8 +657,14 @@ export function ApplicationReviewDialog({
   useEffect(() => {
     if (open && application) {
       loadApplicationDetails(application.id);
+      // Reset review comment when opening a new application
+      setReviewComment("");
+      setAdminComments("");
     } else {
       setDetailedApplication(null);
+      // Clear form state when dialog closes
+      setReviewComment("");
+      setAdminComments("");
     }
   }, [open, application]);
 
@@ -811,14 +837,14 @@ export function ApplicationReviewDialog({
   // Handle approve
   const handleApprove = () => {
     if (detailedApplication && onApprove) {
-      onApprove(detailedApplication.id);
+      onApprove(detailedApplication.id, reviewComment);
     }
   };
 
   // Handle reject
   const handleReject = () => {
     if (detailedApplication && onReject) {
-      onReject(detailedApplication.id);
+      onReject(detailedApplication.id, reviewComment);
     }
   };
 
@@ -853,8 +879,8 @@ export function ApplicationReviewDialog({
     gpa: detailedApplication?.gpa ?? (application as Application).gpa,
     class_ranking_percent: detailedApplication?.class_ranking_percent ?? (application as Application).class_ranking_percent,
     dept_ranking_percent: detailedApplication?.dept_ranking_percent ?? (application as Application).dept_ranking_percent,
-    student_termcount: detailedApplication?.student_termcount ?? (application as Application).student_termcount,
-    department: detailedApplication?.department ?? (application as Application).department ?? (application as HistoricalApplication).student_department,
+    student_termcount: detailedApplication?.student_data?.term_count ?? (application as Application).student_data?.term_count,
+    department: getDepartmentName(detailedApplication?.student_data?.dept_code, departments) ?? detailedApplication?.student_data?.dept_code,
   };
 
   return (
@@ -1186,6 +1212,9 @@ export function ApplicationReviewDialog({
                         studentId={displayData.student_id}
                         academicYear={academicYear}
                         locale={locale}
+                        studyingStatuses={studyingStatuses}
+                        degrees={degrees}
+                        departments={departments}
                       />
                     </CardContent>
                   </Card>

@@ -47,7 +47,7 @@ import {
   Award,
   Building,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useReferenceData, getStudyingStatusName, getAcademyName, getDepartmentName } from "@/hooks/use-reference-data";
 import * as XLSX from "xlsx";
 
@@ -89,8 +89,6 @@ export function ApplicationReviewPanel({
     setApplicationToRequestDocs,
   } = useCollegeManagement();
 
-  const { toast } = useToast();
-
   // Fetch reference data (studying statuses, academies, departments, etc.)
   const { studyingStatuses, academies, departments } = useReferenceData();
 
@@ -106,10 +104,22 @@ export function ApplicationReviewPanel({
     return app.status === statusFilter;
   });
 
-  const handleApprove = async (appId: number) => {
+  const handleApprove = async (appId: number, comments?: string) => {
     try {
-      await updateApplicationStatus(appId, "approved", "學院核准通過");
+      await updateApplicationStatus(appId, "approved", comments || "學院核准通過");
       console.log(`College approved application ${appId}`);
+
+      // 顯示成功提示
+      toast.success(
+        locale === "zh" ? "核准成功" : "Approval Successful",
+        {
+          description: locale === "zh" ? "申請已核准" : "Application has been approved",
+        }
+      );
+
+      // 關閉 dialog
+      setSelectedApplication(null);
+
       // 重新載入申請列表以顯示最新狀態
       await fetchCollegeApplications(
         selectedAcademicYear,
@@ -118,13 +128,31 @@ export function ApplicationReviewPanel({
       );
     } catch (error) {
       console.error("Failed to approve application:", error);
+      toast.error(
+        locale === "zh" ? "核准失敗" : "Approval Failed",
+        {
+          description: error instanceof Error ? error.message : (locale === "zh" ? "無法核准此申請" : "Could not approve this application"),
+        }
+      );
     }
   };
 
-  const handleReject = async (appId: number) => {
+  const handleReject = async (appId: number, comments?: string) => {
     try {
-      await updateApplicationStatus(appId, "rejected", "學院駁回申請");
+      await updateApplicationStatus(appId, "rejected", comments || "學院駁回申請");
       console.log(`College rejected application ${appId}`);
+
+      // 顯示成功提示
+      toast.success(
+        locale === "zh" ? "駁回成功" : "Rejection Successful",
+        {
+          description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
+        }
+      );
+
+      // 關閉 dialog
+      setSelectedApplication(null);
+
       // 重新載入申請列表以顯示最新狀態
       await fetchCollegeApplications(
         selectedAcademicYear,
@@ -133,17 +161,24 @@ export function ApplicationReviewPanel({
       );
     } catch (error) {
       console.error("Failed to reject application:", error);
+      toast.error(
+        locale === "zh" ? "駁回失敗" : "Rejection Failed",
+        {
+          description: error instanceof Error ? error.message : (locale === "zh" ? "無法駁回此申請" : "Could not reject this application"),
+        }
+      );
     }
   };
 
   const handleExportApplications = () => {
     try {
       if (applications.length === 0) {
-        toast({
-          title: locale === "zh" ? "無資料可匯出" : "No data to export",
-          description: locale === "zh" ? "目前沒有申請資料" : "No applications available",
-          variant: "destructive",
-        });
+        toast.error(
+          locale === "zh" ? "無資料可匯出" : "No data to export",
+          {
+            description: locale === "zh" ? "目前沒有申請資料" : "No applications available",
+          }
+        );
         return;
       }
 
@@ -216,19 +251,22 @@ export function ApplicationReviewPanel({
       // Download file
       XLSX.writeFile(workbook, filename);
 
-      toast({
-        title: locale === "zh" ? "匯出成功" : "Export successful",
-        description: locale === "zh"
-          ? `已匯出 ${exportData.length} 筆申請資料`
-          : `Exported ${exportData.length} applications`,
-      });
+      toast.success(
+        locale === "zh" ? "匯出成功" : "Export successful",
+        {
+          description: locale === "zh"
+            ? `已匯出 ${exportData.length} 筆申請資料`
+            : `Exported ${exportData.length} applications`,
+        }
+      );
     } catch (error) {
       console.error('Export error:', error);
-      toast({
-        title: locale === "zh" ? "匯出失敗" : "Export failed",
-        description: error instanceof Error ? error.message : (locale === "zh" ? "無法匯出資料" : "Failed to export data"),
-        variant: "destructive",
-      });
+      toast.error(
+        locale === "zh" ? "匯出失敗" : "Export failed",
+        {
+          description: error instanceof Error ? error.message : (locale === "zh" ? "無法匯出資料" : "Failed to export data"),
+        }
+      );
     }
   };
 

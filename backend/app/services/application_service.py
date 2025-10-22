@@ -173,9 +173,6 @@ class ApplicationService:
             professor_id=application.professor_id,
             reviewer_id=application.reviewer_id,
             final_approver_id=application.final_approver_id,
-            review_score=application.review_score,
-            review_comments=application.review_comments,
-            rejection_reason=application.rejection_reason,
             submitted_at=application.submitted_at,
             reviewed_at=application.reviewed_at,
             approved_at=application.approved_at,
@@ -567,9 +564,6 @@ class ApplicationService:
             professor_id=application.professor_id,
             reviewer_id=application.reviewer_id,
             final_approver_id=application.final_approver_id,
-            review_score=application.review_score,
-            review_comments=application.review_comments,
-            rejection_reason=application.rejection_reason,
             submitted_at=application.submitted_at,
             reviewed_at=application.reviewed_at,
             approved_at=application.approved_at,
@@ -698,9 +692,6 @@ class ApplicationService:
                 professor_id=application.professor_id,
                 reviewer_id=application.reviewer_id,
                 final_approver_id=application.final_approver_id,
-                review_score=application.review_score,
-                review_comments=application.review_comments,
-                rejection_reason=application.rejection_reason,
                 submitted_at=application.submitted_at,
                 reviewed_at=application.reviewed_at,
                 approved_at=application.approved_at,
@@ -881,9 +872,6 @@ class ApplicationService:
             "professor_id": application.professor_id,
             "reviewer_id": application.reviewer_id,
             "final_approver_id": application.final_approver_id,
-            "review_score": application.review_score,
-            "review_comments": application.review_comments,
-            "rejection_reason": application.rejection_reason,
             "submitted_at": application.submitted_at,
             "reviewed_at": application.reviewed_at,
             "approved_at": application.approved_at,
@@ -1202,9 +1190,6 @@ class ApplicationService:
             "professor_id": application.professor_id,
             "reviewer_id": application.reviewer_id,
             "final_approver_id": application.final_approver_id,
-            "review_score": application.review_score,
-            "review_comments": application.review_comments,
-            "rejection_reason": application.rejection_reason,
             "submitted_at": application.submitted_at,
             "reviewed_at": application.reviewed_at,
             "approved_at": application.approved_at,
@@ -1353,9 +1338,6 @@ class ApplicationService:
                 professor_id=application.professor_id,
                 reviewer_id=application.reviewer_id,
                 final_approver_id=application.final_approver_id,
-                review_score=application.review_score,
-                review_comments=application.review_comments,
-                rejection_reason=application.rejection_reason,
                 submitted_at=application.submitted_at,
                 reviewed_at=application.reviewed_at,
                 approved_at=application.approved_at,
@@ -1398,11 +1380,24 @@ class ApplicationService:
             application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.approved.value)
         elif status_update.status == ApplicationStatus.rejected.value:
             application.status_name = ScholarshipI18n.get_application_status_text(ApplicationStatus.rejected.value)
-            if hasattr(status_update, "rejection_reason") and status_update.rejection_reason:
-                application.rejection_reason = status_update.rejection_reason
 
-        if hasattr(status_update, "comments") and status_update.comments:
-            application.review_comments = status_update.comments
+        # Create/update ApplicationReview record for comments and rejection reason
+        # instead of storing directly on Application
+        if hasattr(status_update, "comments") or hasattr(status_update, "rejection_reason"):
+            from app.models.application import ApplicationReview, ReviewStatus
+
+            review = ApplicationReview(
+                application_id=application.id,
+                reviewer_id=user.id,
+                review_stage="status_update",
+                review_status=ReviewStatus.APPROVED.value
+                if status_update.status == ApplicationStatus.approved.value
+                else ReviewStatus.REJECTED.value,
+                comments=getattr(status_update, "comments", None),
+                decision_reason=getattr(status_update, "rejection_reason", None),
+                reviewed_at=datetime.utcnow(),
+            )
+            self.db.add(review)
 
         application.reviewed_at = datetime.utcnow()
 
@@ -1704,9 +1699,6 @@ class ApplicationService:
                 professor_id=application.professor_id,
                 reviewer_id=application.reviewer_id,
                 final_approver_id=application.final_approver_id,
-                review_score=application.review_score,
-                review_comments=application.review_comments,
-                rejection_reason=application.rejection_reason,
                 submitted_at=application.submitted_at,
                 reviewed_at=application.reviewed_at,
                 approved_at=application.approved_at,
@@ -2138,9 +2130,7 @@ class ApplicationService:
                         professor_id=app.professor_id,
                         reviewer_id=app.reviewer_id,
                         final_approver_id=app.final_approver_id,
-                        review_score=app.review_score,
-                        review_comments=app.review_comments,
-                        rejection_reason=app.rejection_reason,
+                        # Note: review_score, review_comments, rejection_reason removed
                         submitted_at=app.submitted_at,
                         reviewed_at=app.reviewed_at,
                         approved_at=app.approved_at,

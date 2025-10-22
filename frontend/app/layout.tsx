@@ -7,6 +7,7 @@ import { SessionExpiredProvider } from "@/contexts/session-expired-context";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { DebugPanelWrapper } from "@/components/debug-panel-wrapper";
 import { SWRProvider } from "@/components/providers/swr-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "獎學金申請與簽核系統 | 國立陽明交通大學教務處",
@@ -49,6 +50,7 @@ export default function RootLayout({
                 <SessionExpiredProvider>
                   {children}
                   <DebugPanelWrapper />
+                  <Toaster />
                 </SessionExpiredProvider>
               </NotificationProvider>
             </AuthProvider>
