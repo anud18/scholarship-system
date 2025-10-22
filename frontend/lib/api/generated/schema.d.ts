@@ -4846,6 +4846,8 @@ export interface paths {
          *     - 子類型欄位: 根據獎學金類型動態生成（使用繁體中文）
          *     - 自訂欄位: 根據 ApplicationField 配置動態生成（使用繁體中文）
          *
+         *     **注意**: 系所代碼會自動從學籍系統獲取，不需要在檔案中提供
+         *
          *     **權限**: 僅限 college 角色
          */
         get: operations["download_batch_import_template_api_v1_college_review_batch_import_template_get"];
