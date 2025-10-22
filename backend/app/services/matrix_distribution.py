@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
+from app.utils.application_helpers import get_college_code_from_data, get_snapshot_student_name
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +239,7 @@ class MatrixDistributionService:
                             {
                                 "rank_position": item.rank_position,
                                 "application_id": app.id,
-                                "student_name": self._get_student_name(app),
+                                "student_name": get_snapshot_student_name(app),
                             }
                         )
                     else:
@@ -272,7 +273,7 @@ class MatrixDistributionService:
                                 "rank_position": item.rank_position,
                                 "backup_position": backup_count,
                                 "application_id": app.id,
-                                "student_name": self._get_student_name(app),
+                                "student_name": get_snapshot_student_name(app),
                             }
                         )
 
@@ -361,29 +362,6 @@ class MatrixDistributionService:
 
         return True, "All rules passed"
 
-    def _get_student_name(self, app: Application) -> str:
-        """Extract student name from application"""
-        if not app.student_data or not isinstance(app.student_data, dict):
-            return "Unknown"
-
-        return (
-            app.student_data.get("std_cname")
-            or app.student_data.get("name")
-            or app.student_data.get("student_name")
-            or "Unknown"
-        )
-
-    def _get_student_college(self, app: Application) -> Optional[str]:
-        """Extract student college code from application"""
-        if not app.student_data or not isinstance(app.student_data, dict):
-            return None
-
-        return (
-            app.student_data.get("college_code")
-            or app.student_data.get("std_college")
-            or app.student_data.get("academy_code")
-        )
-
     def _determine_rejection_reason(
         self, item: CollegeRankingItem, app: Application, quota_matrix: Dict[str, Any]
     ) -> str:
@@ -409,7 +387,7 @@ class MatrixDistributionService:
             return "未申請任何合適的子類別"
 
         # Get student's college
-        student_college = self._get_student_college(app)
+        student_college = get_college_code_from_data(app.student_data or {})
         if not student_college:
             return "學生資料不完整（缺少學院資訊）"
 

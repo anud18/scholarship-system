@@ -240,7 +240,11 @@ async def get_scholarship_eligibility(
         )
         response_data.append(response_item)
 
-    return response_data
+    return ApiResponse(
+        success=True,
+        message="Eligible scholarships retrieved successfully",
+        data=response_data,
+    )
 
 
 @router.get("/{id}")
@@ -314,7 +318,11 @@ async def get_scholarship_detail(id: int, db: AsyncSession = Depends(get_db)):
         "updated_by": scholarship.updated_by,
     }
 
-    return ScholarshipTypeResponse(**response_data)
+    return ApiResponse(
+        success=True,
+        message="Scholarship details retrieved successfully",
+        data=ScholarshipTypeResponse(**response_data),
+    )
 
 
 @router.post("/dev/reset-application-periods")

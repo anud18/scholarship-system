@@ -131,13 +131,32 @@ class StudentPreviewBasic(BaseModel):
 
 
 class StudentTermData(BaseModel):
-    """Schema for student term data"""
+    """Schema for student term data - includes all available fields from student API"""
 
+    # Basic term info
     academic_year: str = Field(..., description="Academic year")
     term: str = Field(..., description="Term")
+    term_count: Optional[int] = Field(None, description="Total terms enrolled")
+
+    # Academic performance
     gpa: Optional[float] = Field(None, description="GPA for this term")
-    credits: Optional[int] = Field(None, description="Credits earned this term")
-    rank: Optional[int] = Field(None, description="Class rank")
+    ascore_gpa: Optional[float] = Field(None, description="Alternative score GPA")
+
+    # Rankings
+    placings: Optional[int] = Field(None, description="Overall ranking position")
+    placings_rate: Optional[float] = Field(None, description="Overall ranking percentage")
+    dept_placing: Optional[int] = Field(None, description="Department ranking position")
+    dept_placing_rate: Optional[float] = Field(None, description="Department ranking percentage")
+
+    # Student status
+    studying_status: Optional[int] = Field(None, description="Studying status code")
+    degree: Optional[int] = Field(None, description="Degree level code")
+
+    # Academic organization
+    academy_no: Optional[str] = Field(None, description="Academy/College code")
+    academy_name: Optional[str] = Field(None, description="Academy/College name")
+    dept_no: Optional[str] = Field(None, description="Department code")
+    dept_name: Optional[str] = Field(None, description="Department name")
 
 
 class StudentPreviewResponse(BaseModel):

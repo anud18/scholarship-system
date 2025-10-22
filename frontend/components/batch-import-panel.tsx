@@ -21,6 +21,7 @@ import {
 import { BatchDocumentUpload } from "@/components/batch-document-upload";
 import { BatchApplicationFileUpload } from "@/components/batch-application-file-upload";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getTranslation } from "@/lib/i18n";
 
 interface BatchImportPanelProps {
   locale?: "zh" | "en";
@@ -397,6 +398,14 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
 
     const columns = Object.keys(uploadedBatch.preview_data[0]);
 
+    // Helper function to get translated field label
+    const getFieldLabel = (fieldName: string): string => {
+      const translationKey = `batch_import.field_labels.${fieldName}`;
+      const translated = getTranslation(locale, translationKey);
+      // If translation not found, return original field name
+      return translated === translationKey ? fieldName : translated;
+    };
+
     return (
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
@@ -404,7 +413,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
             <tr className="bg-nycu-blue-50">
               {columns.map((col) => (
                 <th key={col} className="border border-nycu-blue-200 px-4 py-2 text-left text-sm font-semibold">
-                  {col}
+                  {getFieldLabel(col)}
                 </th>
               ))}
             </tr>

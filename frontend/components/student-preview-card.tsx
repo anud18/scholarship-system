@@ -182,18 +182,8 @@ export function StudentPreviewCard({
                             GPA: {formatGPA(term.gpa)}
                           </Badge>
                         )}
-                        {term.credits !== undefined && (
-                          <span className="text-muted-foreground">
-                            {term.credits} {locale === "zh" ? "學分" : "cr"}
-                          </span>
-                        )}
                       </div>
                     </div>
-                    {term.rank !== undefined && (
-                      <p className="text-muted-foreground mt-1">
-                        {locale === "zh" ? "排名" : "Rank"}: {term.rank}
-                      </p>
-                    )}
                   </div>
                 ))}
               </div>

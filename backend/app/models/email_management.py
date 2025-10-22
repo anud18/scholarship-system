@@ -6,11 +6,11 @@ import enum
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+from app.models.college_review import get_inet_type, get_json_type
 
 
 class EmailStatus(enum.Enum):
@@ -227,8 +227,8 @@ class EmailTestModeAudit(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # Configuration snapshots (for state change events)
-    config_before = Column(JSONB, nullable=True)
-    config_after = Column(JSONB, nullable=True)
+    config_before = Column(get_json_type(), nullable=True)
+    config_after = Column(get_json_type(), nullable=True)
 
     # Email interception details (for email_intercepted events)
     original_recipient = Column(String(255), nullable=True)
@@ -237,7 +237,7 @@ class EmailTestModeAudit(Base):
     session_id = Column(String(100), nullable=True, index=True)
 
     # Request metadata
-    ip_address = Column(INET, nullable=True)
+    ip_address = Column(get_inet_type(), nullable=True)
     user_agent = Column(Text, nullable=True)
 
     # Relationships

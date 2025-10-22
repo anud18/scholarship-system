@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
 import {
@@ -47,7 +48,7 @@ import {
   Building,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useReferenceData, getStudyingStatusName } from "@/hooks/use-reference-data";
+import { useReferenceData, getStudyingStatusName, getAcademyName, getDepartmentName } from "@/hooks/use-reference-data";
 import * as XLSX from "xlsx";
 
 interface ApplicationReviewPanelProps {
@@ -90,8 +91,20 @@ export function ApplicationReviewPanel({
 
   const { toast } = useToast();
 
-  // Fetch reference data (studying statuses, etc.)
-  const { studyingStatuses } = useReferenceData();
+  // Fetch reference data (studying statuses, academies, departments, etc.)
+  const { studyingStatuses, academies, departments } = useReferenceData();
+
+  // Local state for status filter
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Filter applications based on status
+  const filteredApplications = applications.filter(app => {
+    if (statusFilter === "all") return true;
+    if (statusFilter === "pending") {
+      return app.status === "recommended" || app.status === "submitted";
+    }
+    return app.status === statusFilter;
+  });
 
   const handleApprove = async (appId: number) => {
     try {
@@ -139,16 +152,6 @@ export function ApplicationReviewPanel({
         // Format status
         const statusText = app.status_zh || getStatusName(app.status as ApplicationStatus, locale);
 
-        // Format review status (學院審核狀態)
-        let collegeReviewStatus = "-";
-        if (app.college_review_completed) {
-          collegeReviewStatus = locale === "zh" ? "已審核" : "Reviewed";
-        } else if (app.status === "recommended" || app.status === "submitted") {
-          collegeReviewStatus = locale === "zh" ? "待審核" : "Pending";
-        } else if (app.status === "under_review") {
-          collegeReviewStatus = locale === "zh" ? "審核中" : "Under Review";
-        }
-
         // Format application type
         const applicationType = app.is_renewal
           ? (locale === "zh" ? "續領" : "Renewal")
@@ -163,16 +166,21 @@ export function ApplicationReviewPanel({
             })
           : "-";
 
+        // Format scholarship period status (獎學金期間在學狀態)
+        const studyingStatus = (app as any).scholarship_period_status !== undefined && (app as any).scholarship_period_status !== null
+          ? getStudyingStatusName((app as any).scholarship_period_status, studyingStatuses)
+          : "-";
+
         return {
           '學生姓名': app.student_name || "-",
           '學號': app.student_id || "-",
-          '就讀學期數': app.student_termcount || "-",
-          '學院': (app as any).academy_name || "-",
-          '系所': (app as any).department_name || "-",
+          '學院': getAcademyName((app as any).academy_code, academies),
+          '系所': getDepartmentName((app as any).department_code, departments),
+          '在學學期數': app.student_termcount || "-",
+          '在學狀態': studyingStatus,
           '獎學金類型': app.scholarship_type_zh || app.scholarship_type || "-",
           '申請類別': applicationType,
           '狀態': statusText,
-          '學院審核狀態': collegeReviewStatus,
           '申請時間': applicationDate,
         };
       });
@@ -184,13 +192,13 @@ export function ApplicationReviewPanel({
       worksheet['!cols'] = [
         { wch: 20 }, // 學生姓名
         { wch: 15 }, // 學號
-        { wch: 12 }, // 就讀學期數
         { wch: 25 }, // 學院
         { wch: 30 }, // 系所
+        { wch: 12 }, // 在學學期數
+        { wch: 12 }, // 在學狀態
         { wch: 25 }, // 獎學金類型
         { wch: 12 }, // 申請類別
         { wch: 15 }, // 狀態
-        { wch: 15 }, // 學院審核狀態
         { wch: 12 }, // 申請時間
       ];
 
@@ -449,7 +457,7 @@ export function ApplicationReviewPanel({
                 className="pl-8"
               />
             </div>
-            <Select defaultValue="all">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
@@ -488,21 +496,19 @@ export function ApplicationReviewPanel({
                       {locale === "zh" ? "學生" : "Student"}
                     </TableHead>
                     <TableHead>
-                      {locale === "zh" ? "就讀學期數" : "Terms"}
+                      {locale === "zh" ? "學院系所" : "College/Dept"}
                     </TableHead>
                     <TableHead>
-                      {locale === "zh" ? "學院/系所" : "College/Dept"}
+                      {locale === "zh" ? "在學學期數" : "Terms"}
                     </TableHead>
                     <TableHead>
-                      {locale === "zh"
-                        ? "獎學金類型"
-                        : "Scholarship Type"}
+                      {locale === "zh" ? "在學狀態" : "Status"}
+                    </TableHead>
+                    <TableHead>
+                      {locale === "zh" ? "獎學金類型" : "Scholarship"}
                     </TableHead>
                     <TableHead>
                       {locale === "zh" ? "申請類別" : "Type"}
-                    </TableHead>
-                    <TableHead>
-                      {locale === "zh" ? "在學資訊" : "Enrollment Info"}
                     </TableHead>
                     <TableHead>
                       {locale === "zh" ? "狀態" : "Status"}
@@ -516,8 +522,9 @@ export function ApplicationReviewPanel({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {applications.map(app => (
+                  {filteredApplications.map(app => (
                     <TableRow key={app.id}>
+                      {/* 1. 學生 */}
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <span className="font-medium">
@@ -528,57 +535,44 @@ export function ApplicationReviewPanel({
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {app.student_termcount || "-"}
-                      </TableCell>
+
+                      {/* 2. 學院系所 */}
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium text-sm">
-                            {(app as any).academy_name || "-"}
+                            {getAcademyName((app as any).academy_code, academies)}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            {(app as any).department_name || "-"}
+                            {getDepartmentName((app as any).department_code, departments)}
                           </span>
                         </div>
                       </TableCell>
+
+                      {/* 3. 在學學期數 */}
+                      <TableCell>
+                        {app.student_termcount || "-"}
+                      </TableCell>
+
+                      {/* 4. 在學狀態（獎學金期間） */}
+                      <TableCell>
+                        {(app as any).scholarship_period_status !== undefined && (app as any).scholarship_period_status !== null
+                          ? getStudyingStatusName((app as any).scholarship_period_status, studyingStatuses)
+                          : "-"}
+                      </TableCell>
+
+                      {/* 5. 獎學金類型 */}
                       <TableCell>
                         {app.scholarship_type_zh || app.scholarship_type}
                       </TableCell>
+
+                      {/* 6. 申請類別 */}
                       <TableCell>
                         <Badge variant={app.is_renewal ? "secondary" : "default"}>
                           {app.is_renewal ? "續領" : "初領"}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        {app.recent_terms && app.recent_terms.length > 0 ? (
-                          <div className="flex flex-col gap-1 text-xs">
-                            {app.recent_terms.map((term: any, index: number) => {
-                              // Use dynamic studying status from database
-                              const displayStatus = getStudyingStatusName(term.status, studyingStatuses);
 
-                              return (
-                                <div key={index} className="flex items-center gap-1">
-                                  <span className="font-medium">
-                                    {term.academic_year}-{term.semester}
-                                  </span>
-                                  {term.gpa !== undefined && (
-                                    <span className="text-muted-foreground">
-                                      GPA: {term.gpa?.toFixed(2)}
-                                    </span>
-                                  )}
-                                  {term.status !== undefined && (
-                                    <span className="text-muted-foreground">
-                                      ({displayStatus})
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          "無"
-                        )}
-                      </TableCell>
+                      {/* 7. 狀態 */}
                       <TableCell>
                         <Badge
                           variant={getStatusColor(app.status as ApplicationStatus)}
@@ -586,6 +580,19 @@ export function ApplicationReviewPanel({
                           {app.status_zh || getStatusName(app.status as ApplicationStatus, locale)}
                         </Badge>
                       </TableCell>
+
+                      {/* 8. 申請時間 */}
+                      <TableCell>
+                        {app.created_at
+                          ? new Date(app.created_at).toLocaleDateString("zh-TW", {
+                              year: "numeric",
+                              month: "2-digit",
+                              day: "2-digit",
+                            })
+                          : "-"}
+                      </TableCell>
+
+                      {/* 9. 操作 */}
                       <TableCell>
                         <Button
                           variant="outline"

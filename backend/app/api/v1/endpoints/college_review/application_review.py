@@ -75,6 +75,7 @@ async def get_applications_for_review(
         raise ReviewPermissionError(f"User {current_user.id} not authorized for academic year {academic_year}")
 
     try:
+        # Get raw applications from service
         service = CollegeReviewService(db)
         applications = await service.get_applications_for_review(
             scholarship_type_id=scholarship_type_id,
@@ -85,184 +86,14 @@ async def get_applications_for_review(
             semester=semester,
         )
 
-        # Create lightweight DTOs with field-level filtering for security
-        filtered_applications = []
+        # Enrich applications with student data and scholarship period info (parallel processing)
+        from app.services.application_enricher_service import ApplicationEnricherService
 
-        # Create StudentService instance for dynamic student data fetching
-        student_service = StudentService()
-
-        # Collect all unique department codes for batch query
-        department_codes = set()
-        for app in applications:
-            student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
-            if student_data:
-                dept_code = student_data.get("std_depno") or student_data.get("dept_code")
-                if dept_code:
-                    department_codes.add(dept_code)
-
-        # Query all departments with academy relationship to avoid N+1 queries
-        department_map = {}
-        if department_codes:
-            dept_stmt = (
-                select(Department)
-                .options(selectinload(Department.academy))
-                .where(Department.code.in_(department_codes))
-            )
-            dept_result = await db.execute(dept_stmt)
-            departments = dept_result.scalars().all()
-
-            # Build map with department name and academy information from relationship
-            department_map = {
-                dept.code: {
-                    "name": dept.name,
-                    "academy_code": dept.academy_code,
-                    "academy_name": dept.academy.name if dept.academy else None,
-                }
-                for dept in departments
-            }
-
-        for app in applications:
-            # Extract only necessary fields to minimize data exposure
-            student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}
-
-            # Check if student_data is empty or missing critical fields
-            # If so, try to fetch from external API using application's student_id
-            if (
-                not student_data
-                or (
-                    not student_data.get("nycu_id")
-                    and not student_data.get("std_stdcode")
-                    and not student_data.get("name")
-                    and not student_data.get("std_cname")
-                )
-            ) and app.get("student_id"):
-                # Only fetch if API is available
-                if student_service.is_api_available():
-                    try:
-                        logger.info(
-                            f"Fetching student data from API for student_id: {app.get('student_id')} (application {app.get('id')})"
-                        )
-                        fetched_data = await student_service.get_student_basic_info(app.get("student_id"))
-
-                        if fetched_data:
-                            logger.info(f"Successfully fetched student data for {app.get('student_id')}")
-                            student_data = fetched_data
-
-                            # Optionally update database with fetched data for future requests
-                            try:
-                                app_stmt = select(Application).where(Application.id == app.get("id"))
-                                app_result = await db.execute(app_stmt)
-                                app_obj = app_result.scalar_one_or_none()
-
-                                if app_obj:
-                                    app_obj.student_data = fetched_data
-                                    await db.commit()
-                                    logger.info(f"Updated application {app.get('id')} with fetched student data")
-                            except Exception as db_err:
-                                logger.warning(
-                                    f"Failed to update application {app.get('id')} with student data: {str(db_err)}"
-                                )
-                        else:
-                            logger.warning(f"No student data found in API for {app.get('student_id')}")
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch student data for {app.get('student_id')}: {str(e)}")
-                else:
-                    logger.debug(f"Student API not available, using existing data for application {app.get('id')}")
-
-            # Extract student info with fallback for both old and new field names
-            student_id = (
-                (student_data.get("nycu_id") or student_data.get("std_stdcode") or "未提供學號") if student_data else "N/A"
-            )
-
-            student_name = (
-                (student_data.get("name") or student_data.get("std_cname") or student_data.get("std_ename") or "未提供姓名")
-                if student_data
-                else "未提供學生資料"
-            )
-
-            student_termcount = (
-                (student_data.get("term_count") or student_data.get("std_termcount") or "N/A")
-                if student_data
-                else "N/A"
-            )
-
-            department_code = (
-                (student_data.get("dept_code") or student_data.get("std_depno") or "N/A") if student_data else "N/A"
-            )
-
-            # Get department info from database (includes academy via Department.academy relationship)
-            dept_info = department_map.get(department_code) if department_code and department_code != "N/A" else None
-
-            # Extract department name
-            department_name = student_data.get("dep_depname") or (  # Prioritize API returned Chinese name
-                dept_info["name"] if dept_info else None
-            )  # Then lookup from database
-
-            # Extract academy code and name from Department.academy relationship
-            academy_code = dept_info["academy_code"] if dept_info else None
-            academy_name = student_data.get("aca_cname") or (  # Prioritize API returned Chinese name
-                dept_info["academy_name"] if dept_info else None
-            )  # Then lookup from Department.academy
-
-            filtered_app = {
-                "id": app.get("id"),
-                "app_id": app.get("app_id"),
-                "status": app.get("status"),
-                "status_zh": ScholarshipI18n.get_application_status_text(app.get("status", "")),
-                "scholarship_type": app.get("scholarship_type"),
-                "scholarship_type_zh": app.get("scholarship_type_zh", app.get("scholarship_type")),
-                "sub_type": app.get("sub_type"),
-                "academic_year": app.get("academic_year"),
-                "semester": app.get("semester"),
-                "is_renewal": app.get("is_renewal", False),
-                "created_at": app.get("created_at"),
-                "submitted_at": app.get("submitted_at"),
-                # Student info in flat format for frontend compatibility
-                "student_id": student_id,
-                "student_name": student_name,
-                "student_termcount": student_termcount,
-                "department_code": department_code,
-                "department_name": department_name,
-                "academy_code": academy_code,
-                "academy_name": academy_name,
-                # Add review status for UI purposes
-                "review_status": {
-                    "has_professor_review": len(app.get("professor_reviews", [])) > 0,
-                    "professor_review_count": len(app.get("professor_reviews", [])),
-                    "files_count": len(app.get("files", [])),
-                },
-            }
-
-            # Fetch recent term data for the student
-            recent_terms = []
-            if academic_year and student_id and student_id != "N/A":
-                for year_offset in range(5):  # Look back up to 5 academic years
-                    current_academic_year = academic_year - year_offset
-                    for term_code in ["2", "1"]:  # Second semester then first semester
-                        try:
-                            term_data = await student_service.get_student_term_info(
-                                student_id, str(current_academic_year), term_code
-                            )
-                            if term_data:
-                                recent_terms.append(
-                                    {
-                                        "academic_year": term_data.get("trm_year"),
-                                        "semester": term_data.get("trm_term"),
-                                        "gpa": term_data.get("trm_ascore_gpa"),
-                                        "term_count": term_data.get("trm_termcount"),
-                                        "status": term_data.get("trm_studystatus"),
-                                    }
-                                )
-                        except Exception as term_err:
-                            logger.debug(
-                                f"Could not fetch term data for {student_id} {current_academic_year}-{term_code}: {str(term_err)}"
-                            )
-                            continue
-            filtered_app["recent_terms"] = recent_terms
-            filtered_applications.append(filtered_app)
+        enricher = ApplicationEnricherService(db)
+        enriched_applications = await enricher.enrich_applications_for_review(applications)
 
         return ApiResponse(
-            success=True, message="Applications for review retrieved successfully", data=filtered_applications
+            success=True, message="Applications for review retrieved successfully", data=enriched_applications
         )
 
     except HTTPException:
@@ -548,14 +379,29 @@ async def get_student_preview(
                         term_data = await student_service.get_student_term_info(student_id, str(year), term)
 
                         if term_data:
-                            # Extract relevant term information
+                            # Extract ALL available term information from external API
                             recent_terms.append(
                                 StudentTermData(
+                                    # Basic term info
                                     academic_year=str(year),
                                     term=term,
-                                    gpa=term_data.get("trm_gpa"),
-                                    credits=term_data.get("trm_credittaken"),
-                                    rank=term_data.get("trm_rank"),
+                                    term_count=term_data.get("trm_termcount"),
+                                    # Academic performance
+                                    gpa=term_data.get("trm_ascore_gpa"),  # API only provides ascore_gpa
+                                    ascore_gpa=term_data.get("trm_ascore_gpa"),
+                                    # Rankings
+                                    placings=term_data.get("trm_placings"),
+                                    placings_rate=term_data.get("trm_placingsrate"),
+                                    dept_placing=term_data.get("trm_depplacing"),
+                                    dept_placing_rate=term_data.get("trm_depplacingrate"),
+                                    # Student status
+                                    studying_status=term_data.get("trm_studystatus"),
+                                    degree=term_data.get("trm_degree"),
+                                    # Academic organization
+                                    academy_no=term_data.get("trm_academyno"),
+                                    academy_name=term_data.get("trm_academyname"),
+                                    dept_no=term_data.get("trm_depno"),
+                                    dept_name=term_data.get("trm_depname"),
                                 )
                             )
 

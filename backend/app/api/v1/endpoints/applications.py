@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, Request, UploadFile, status
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthorizationError, NotFoundError
@@ -220,6 +221,29 @@ async def create_application(
                 "received_data": application_data.dict(exclude_none=True),
             },
         )
+    except HTTPException:
+        # Re-raise HTTPException directly as they are already properly formatted
+        raise
+    except IntegrityError as e:
+        logger.error(f"Database integrity error during application creation: {str(e)}")
+        # Check for specific constraint violations if needed, e.g., unique constraint
+        if "duplicate key value violates unique constraint" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": "Duplicate entry: An application with these details already exists.",
+                    "error_code": "DUPLICATE_ENTRY",
+                    "detail": str(e),
+                },
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": "A database integrity error occurred.",
+                "error_code": "DATABASE_INTEGRITY_ERROR",
+                "detail": str(e),
+            },
+        )
     except Exception as e:
         logger.error(f"Unexpected error during application creation: {str(e)}")
         import traceback
@@ -229,9 +253,8 @@ async def create_application(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
-                "message": "An error occurred while creating the application",
-                "error_code": "INTERNAL_SERVER_ERROR",
-                "error": str(e),
+                "message": "An unexpected error occurred while creating the application. Please try again later.",
+                "error_code": "UNEXPECTED_ERROR",
                 "error_type": type(e).__name__,
             },
         )

@@ -303,25 +303,19 @@ class TestBatchImportService:
 
     @pytest.mark.asyncio
     async def test_bulk_validate_missing_student_with_dept(self):
-        """Missing students should pass when dept_code verifies college."""
+        """Missing students should be marked as valid and will be created later with SIS data."""
         from app.models.student import Department
 
         db_mock = AsyncMock()
         service = BatchImportService(db_mock)
 
-        department = Mock(spec=Department)
-        department.code = "5201"
-        department.academy_code = "C"
-
+        # Mock: no existing users in database
         user_result = Mock()
         user_scalars = Mock()
         user_scalars.all.return_value = []
         user_result.scalars.return_value = user_scalars
 
-        dept_result = Mock()
-        dept_result.scalar_one_or_none.return_value = department
-
-        db_mock.execute.side_effect = [user_result, dept_result]
+        db_mock.execute.side_effect = [user_result]
 
         permission_results, duplicate_results, warnings = await service.bulk_validate_permissions_and_duplicates(
             student_ids=["111111111"],
@@ -334,8 +328,9 @@ class TestBatchImportService:
 
         assert permission_results["111111111"] == (True, None)
         assert duplicate_results["111111111"] == (False, None)
-        assert warnings
-        assert any(w.get("warning_type") == "student_not_in_system" for w in warnings)
+        # New students should not generate "student_not_in_system" warning
+        # They will be created later by _get_or_create_users_bulk with SIS data
+        assert not any(w.get("warning_type") == "student_not_in_system" for w in warnings)
 
     @pytest.mark.asyncio
     async def test_bulk_validate_existing_student_uses_file_dept(self):

@@ -224,14 +224,6 @@ class BatchImportService:
                         "custom_fields": {},
                     }
 
-                    # Optional department code columns
-                    for dept_col in DEPT_CODE_COLUMNS:
-                        if dept_col in df.columns:
-                            dept_value = _normalize_optional(row.get(dept_col))
-                            if dept_value:
-                                data_row["dept_code"] = dept_value
-                                break
-
                     # Parse sub_types from Chinese column names
                     for chinese_label, sub_type_code in sub_type_labels.items():
                         if chinese_label in df.columns:
@@ -259,14 +251,6 @@ class BatchImportService:
                         "sub_types": [],
                         "custom_fields": {},
                     }
-
-                    # Optional department code columns
-                    for dept_col in DEPT_CODE_COLUMNS:
-                        if dept_col in df.columns:
-                            dept_value = _normalize_optional(row.get(dept_col))
-                            if dept_value:
-                                data_row["dept_code"] = dept_value
-                                break
 
                     # Parse sub_types from English column names (sub_type_*)
                     for col in df.columns:
@@ -478,85 +462,9 @@ class BatchImportService:
         students = students_result.scalars().all()
         student_map = {s.nycu_id: s for s in students}
 
-        # Find missing students
-        for student_id in student_ids:
-            if student_id not in student_map:
-                dept_code = _normalize_optional(student_dept_map.get(student_id))
-                if not dept_code:
-                    add_warning(
-                        student_id, "student_not_in_system", f"查無學號 {student_id} 的使用者資料（可能尚未透過 Portal 登入本系統），將於後續確認"
-                    )
-                    duplicate_results[student_id] = (False, None)
-                    continue
-
-                dept = await get_department_by_code(dept_code)
-
-                if not dept:
-                    add_warning(
-                        student_id,
-                        "department_not_found",
-                        f"系所代碼 {dept_code} 不存在，請後續確認學生系所資訊。",
-                    )
-                elif college_code and dept.academy_code != college_code:
-                    # Get academy names for better error message
-                    dept_academy = await get_academy_by_code(dept.academy_code) if dept.academy_code else None
-                    current_academy = await get_academy_by_code(college_code)
-                    dept_academy_name = dept_academy.name if dept_academy else dept.academy_code
-                    current_academy_name = current_academy.name if current_academy else college_code
-
-                    add_warning(
-                        student_id,
-                        "college_mismatch_local",
-                        f"學生 {student_id} 的系所 ({dept.name}) 隸屬 {dept_academy_name}，與目前學院 {current_academy_name} 不符。",
-                    )
-
-                duplicate_results[student_id] = (False, None)
-
-        # Get department info for permission validation
-        for student_id, student in student_map.items():
-            # Get student's department from raw_data JSON or dept_code column
-            if student.raw_data and isinstance(student.raw_data, dict):
-                student_dept = student.raw_data.get("deptCode") or student.dept_code
-            else:
-                student_dept = student.dept_code
-
-            if not student_dept:
-                fallback_dept = _normalize_optional(student_dept_map.get(student_id))
-                if fallback_dept:
-                    student_dept = fallback_dept
-                else:
-                    add_warning(
-                        student_id,
-                        "missing_department_local",
-                        f"學生 {student_id} 無系所資料，請後續確認。",
-                    )
-                    continue
-
-            dept = await get_department_by_code(student_dept)
-
-            if not dept:
-                add_warning(
-                    student_id,
-                    "department_not_found",
-                    f"系所代碼 {student_dept} 不存在，請後續確認。",
-                )
-                continue
-
-            # Validate college permission
-            if college_code and dept.academy_code != college_code:
-                # Get academy names for better error message
-                dept_academy = await get_academy_by_code(dept.academy_code) if dept.academy_code else None
-                current_academy = await get_academy_by_code(college_code)
-                dept_academy_name = dept_academy.name if dept_academy else dept.academy_code
-                current_academy_name = current_academy.name if current_academy else college_code
-
-                add_warning(
-                    student_id,
-                    "college_mismatch_local",
-                    f"學生 {student_id} 的系所 ({dept.name}) 隸屬 {dept_academy_name}，與目前學院 {current_academy_name} 不符。",
-                )
-
-        # Query student API for latest department info
+        # Query SIS API first for ALL students (both existing and new)
+        # This allows us to validate new students using current SIS data
+        sis_data_map: Dict[str, Optional[Dict[str, Any]]] = {}
         api_codes: Dict[str, str] = {}
         if getattr(self.student_service, "api_enabled", False):
             api_failed = False
@@ -579,6 +487,7 @@ class BatchImportService:
                         "student_api_error",
                         f"查詢學生 {student_id} 的學籍資料時發生錯誤，請後續確認。",
                     )
+                    sis_data_map[student_id] = None
                     continue
 
                 if not api_data:
@@ -587,7 +496,11 @@ class BatchImportService:
                         "student_api_not_found",
                         f"學籍系統查無學號 {student_id}，請後續確認。",
                     )
+                    sis_data_map[student_id] = None
                     continue
+
+                # Store SIS data for later validation
+                sis_data_map[student_id] = api_data
 
                 dep_code = _normalize_optional(api_data.get("std_depno"))
                 if not dep_code:
@@ -629,6 +542,13 @@ class BatchImportService:
                         "college_mismatch_api",
                         f"學籍系統顯示學生 {student_id} 的系所 ({dept.name}) 隸屬 {dept_academy_name}，與目前學院 {current_academy_name} 不符。",
                     )
+
+        # For new students (not in database), mark them as valid for duplicate check
+        # They will be created later by _get_or_create_users_bulk with SIS data
+        for student_id in student_ids:
+            if student_id not in student_map:
+                # Mark as no duplicate (they're new students)
+                duplicate_results[student_id] = (False, None)
 
         # Batch query: Check for duplicate applications
         user_ids = [s.id for s in students]

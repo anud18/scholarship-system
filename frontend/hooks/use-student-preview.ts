@@ -13,11 +13,30 @@ interface StudentPreviewBasic {
 }
 
 interface StudentTermData {
+  // Basic term info
   academic_year: string;
   term: string;
+  term_count?: number;
+
+  // Academic performance
   gpa?: number;
-  credits?: number;
-  rank?: number;
+  ascore_gpa?: number;
+
+  // Rankings
+  placings?: number;
+  placings_rate?: number;
+  dept_placing?: number;
+  dept_placing_rate?: number;
+
+  // Student status
+  studying_status?: number;
+  degree?: number;
+
+  // Academic organization
+  academy_no?: string;
+  academy_name?: string;
+  dept_no?: string;
+  dept_name?: string;
 }
 
 interface StudentPreviewData {

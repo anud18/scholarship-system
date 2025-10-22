@@ -48,6 +48,7 @@ import { Locale } from "@/lib/validators";
 import { Application, HistoricalApplication, User } from "@/lib/api";
 import api from "@/lib/api";
 import { useStudentPreview } from "@/hooks/use-student-preview";
+import { useReferenceData, getStudyingStatusName, getDegreeName } from "@/hooks/use-reference-data";
 import {
   getApplicationTimeline,
   getStatusColor,
@@ -79,6 +80,32 @@ interface ApplicationReviewDialogProps {
   onAdminReject?: (id: number) => void;
 }
 
+// Helper component to display a single field with fallback
+function FieldDisplay({
+  label,
+  value,
+  locale = "zh",
+}: {
+  label: string;
+  value: any;
+  locale?: "zh" | "en";
+}) {
+  const displayValue = value !== null && value !== undefined ? String(value) : null;
+
+  return (
+    <div className="p-2 bg-muted/50 rounded">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      {displayValue !== null ? (
+        <p className="text-sm font-medium">{displayValue}</p>
+      ) : (
+        <p className="text-sm text-orange-600">
+          {locale === "zh" ? "無法獲取" : "Unavailable"}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // Student Preview Display Component
 function StudentPreviewDisplay({
   studentId,
@@ -90,6 +117,7 @@ function StudentPreviewDisplay({
   locale?: "zh" | "en";
 }) {
   const { previewData, isLoading, error, fetchPreview } = useStudentPreview();
+  const { studyingStatuses, degrees } = useReferenceData();
 
   useEffect(() => {
     if (studentId) {
@@ -109,118 +137,211 @@ function StudentPreviewDisplay({
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div>
-          <Skeleton className="h-16 w-full mb-2" />
-          <Skeleton className="h-16 w-full" />
-        </div>
-        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-24 w-full mb-2" />
+        <Skeleton className="h-32 w-full" />
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <p className="text-sm text-red-500">
-        {locale === "zh" ? "無法載入學生資料" : "Failed to load student data"}
-      </p>
-    );
-  }
-
-  if (!previewData) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        {locale === "zh" ? "無學生資料可用" : "No student data available"}
-      </p>
-    );
-  }
-
-  // Display basic info
+  // Display basic info - always show fields even if there's an error
   return (
     <div className="space-y-4">
+      {/* Error Alert - show at top if there's an error */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {locale === "zh" ? "無法載入學生資料" : "Failed to load student data"}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Basic Information Section */}
-      {previewData.basic && (
-        <div>
+      <div>
           <h4 className="text-sm font-semibold mb-3">
             {locale === "zh" ? "基本資訊" : "Basic Information"}
           </h4>
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-2 bg-muted/50 rounded">
-              <p className="text-xs text-muted-foreground">
-                {locale === "zh" ? "學號" : "Student ID"}
-              </p>
-              <p className="text-sm font-medium">{previewData.basic.student_id || "-"}</p>
-            </div>
-            <div className="p-2 bg-muted/50 rounded">
-              <p className="text-xs text-muted-foreground">
-                {locale === "zh" ? "姓名" : "Name"}
-              </p>
-              <p className="text-sm font-medium">{previewData.basic.student_name || "-"}</p>
-            </div>
-            <div className="p-2 bg-muted/50 rounded">
-              <p className="text-xs text-muted-foreground">
-                {locale === "zh" ? "就讀學期數" : "Terms"}
-              </p>
-              <p className="text-sm font-medium">{previewData.basic.term_count || "-"}</p>
-            </div>
-            <div className="p-2 bg-muted/50 rounded">
-              <p className="text-xs text-muted-foreground">
-                {locale === "zh" ? "系所" : "Department"}
-              </p>
-              <p className="text-sm font-medium">{previewData.basic.department_name || "-"}</p>
-            </div>
+            <FieldDisplay
+              label={locale === "zh" ? "學號" : "Student ID"}
+              value={previewData?.basic?.student_id}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "姓名" : "Name"}
+              value={previewData?.basic?.student_name}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "就讀學期數" : "Terms Enrolled"}
+              value={previewData?.basic?.term_count}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "系所" : "Department"}
+              value={previewData?.basic?.department_name}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "學院" : "Academy"}
+              value={previewData?.basic?.academy_name}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "學位" : "Degree"}
+              value={previewData?.basic?.degree}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "註冊年份" : "Enrollment Year"}
+              value={previewData?.basic?.enrollyear}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "性別" : "Gender"}
+              value={previewData?.basic?.sex}
+              locale={locale}
+            />
           </div>
         </div>
-      )}
 
-      {/* Recent Term Data Section */}
-      {previewData.recent_terms && previewData.recent_terms.length > 0 ? (
+      {/* Term Data Section with Tabs */}
+      {previewData?.recent_terms && previewData.recent_terms.length > 0 ? (
         <div>
           <h4 className="text-sm font-semibold mb-3">
-            {locale === "zh" ? "近期學期成績" : "Recent Term Grades"}
+            {locale === "zh" ? "學期資料" : "Term Data"}
           </h4>
-          <div className="space-y-2">
-            {previewData.recent_terms.map((term) => (
-              <div
-                key={`${term.academic_year}-${term.term}`}
-                className="bg-muted/50 rounded-md p-3"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-sm">
-                    {term.academic_year}-
-                    {term.term === "1"
-                      ? locale === "zh"
-                        ? "上"
-                        : "1st"
-                      : locale === "zh"
-                        ? "下"
-                        : "2nd"}
-                  </span>
-                  <div className="flex items-center gap-3">
-                    {term.gpa != null && (
-                      <Badge variant="outline" className="text-xs">
-                        GPA: {term.gpa.toFixed(2)}
-                      </Badge>
-                    )}
-                    {term.credits !== undefined && (
-                      <span className="text-sm text-muted-foreground">
-                        {term.credits} {locale === "zh" ? "學分" : "cr"}
-                      </span>
-                    )}
+          <Tabs defaultValue="0" className="w-full">
+            <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${previewData?.recent_terms?.length || 0}, 1fr)` }}>
+              {previewData?.recent_terms?.map((term, index) => (
+                <TabsTrigger key={index} value={String(index)}>
+                  {term.academic_year}-
+                  {term.term === "1" ? (locale === "zh" ? "上" : "1st") : (locale === "zh" ? "下" : "2nd")}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {previewData?.recent_terms?.map((term, index) => (
+              <TabsContent key={index} value={String(index)} className="space-y-4 mt-4">
+                {/* Basic Term Info */}
+                <div>
+                  <h5 className="text-xs font-semibold mb-2 text-muted-foreground">
+                    {locale === "zh" ? "基本資訊" : "Basic Information"}
+                  </h5>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldDisplay
+                      label={locale === "zh" ? "學年度" : "Academic Year"}
+                      value={term.academic_year}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "學期" : "Term"}
+                      value={term.term === "1" ? (locale === "zh" ? "上學期" : "1st Semester") : (locale === "zh" ? "下學期" : "2nd Semester")}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "就讀學期數" : "Term Count"}
+                      value={term.term_count}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "在學狀態" : "Studying Status"}
+                      value={term.studying_status !== null && term.studying_status !== undefined ? getStudyingStatusName(term.studying_status, studyingStatuses) : null}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "學位" : "Degree"}
+                      value={term.degree !== null && term.degree !== undefined ? getDegreeName(term.degree, degrees) : null}
+                      locale={locale}
+                    />
                   </div>
                 </div>
-                {term.rank !== undefined && (
-                  <p className="text-sm text-muted-foreground">
-                    {locale === "zh" ? "排名" : "Rank"}: {term.rank}
-                  </p>
-                )}
-              </div>
+
+                {/* Academic Organization */}
+                <div>
+                  <h5 className="text-xs font-semibold mb-2 text-muted-foreground">
+                    {locale === "zh" ? "學院系所" : "Academy & Department"}
+                  </h5>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldDisplay
+                      label={locale === "zh" ? "學院代碼" : "Academy Code"}
+                      value={term.academy_no}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "學院名稱" : "Academy Name"}
+                      value={term.academy_name}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "系所代碼" : "Department Code"}
+                      value={term.dept_no}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "系所名稱" : "Department Name"}
+                      value={term.dept_name}
+                      locale={locale}
+                    />
+                  </div>
+                </div>
+
+                {/* Academic Performance */}
+                <div>
+                  <h5 className="text-xs font-semibold mb-2 text-muted-foreground">
+                    {locale === "zh" ? "成績資訊" : "Academic Performance"}
+                  </h5>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldDisplay
+                      label="GPA"
+                      value={term.gpa !== null && term.gpa !== undefined ? term.gpa.toFixed(2) : null}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "學業成績 GPA" : "A-Score GPA"}
+                      value={term.ascore_gpa !== null && term.ascore_gpa !== undefined ? term.ascore_gpa.toFixed(2) : null}
+                      locale={locale}
+                    />
+                  </div>
+                </div>
+
+                {/* Ranking Information */}
+                <div>
+                  <h5 className="text-xs font-semibold mb-2 text-muted-foreground">
+                    {locale === "zh" ? "排名資訊" : "Ranking Information"}
+                  </h5>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FieldDisplay
+                      label={locale === "zh" ? "全校排名" : "Overall Ranking"}
+                      value={term.placings}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "全校排名百分比" : "Overall Ranking %"}
+                      value={term.placings_rate !== null && term.placings_rate !== undefined ? `${(term.placings_rate * 100).toFixed(1)}%` : null}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "系所排名" : "Department Ranking"}
+                      value={term.dept_placing}
+                      locale={locale}
+                    />
+                    <FieldDisplay
+                      label={locale === "zh" ? "系所排名百分比" : "Department Ranking %"}
+                      value={term.dept_placing_rate !== null && term.dept_placing_rate !== undefined ? `${(term.dept_placing_rate * 100).toFixed(1)}%` : null}
+                      locale={locale}
+                    />
+                  </div>
+                </div>
+              </TabsContent>
             ))}
-          </div>
+          </Tabs>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          {locale === "zh" ? "無學期資料" : "No term data available"}
-        </p>
+        <div className="text-center py-8 bg-muted/30 rounded-lg">
+          <p className="text-sm text-muted-foreground">
+            {locale === "zh" ? "無學期資料" : "No term data available"}
+          </p>
+        </div>
       )}
     </div>
   );

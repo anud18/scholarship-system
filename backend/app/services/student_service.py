@@ -172,16 +172,22 @@ class StudentService:
                     code = result.get("code")
                     if (code == 200 or code == "200") and result.get("data"):
                         return result["data"][0]  # Return first term record
+                    elif code == 403 or code == "403":
+                        # 403 means no data for this term - return None to allow fallback logic
+                        logger.info(f"Student term data not available for {student_code} (403 - 無資料)")
+                        return None
                     elif code == 404 or code == "404":
-                        logger.info(f"Student term data not found for {student_code}")
+                        # 404 means student not found - return None
+                        logger.info(f"Student term data not found for {student_code} (404)")
                         return None
                     else:
-                        logger.warning(
-                            f"Student term API returned unexpected response - "
+                        # Other error codes should raise exception
+                        logger.error(
+                            f"Student term API returned error - "
                             f"code: {code} (type: {type(code).__name__}), "
                             f"msg: {result.get('msg')}, student_code: {student_code}"
                         )
-                        return None
+                        raise ServiceUnavailableError(f"Student term API error: {result.get('msg')}")
                 else:
                     logger.error(f"Student term API request failed: {response.status_code}")
                     raise ServiceUnavailableError("Student API is unavailable")

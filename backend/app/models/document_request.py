@@ -6,17 +6,12 @@ Tracks requests for missing or additional documents from students
 
 import enum
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from app.db.base_class import Base
-
-if TYPE_CHECKING:
-    from app.models.application import Application
-    from app.models.user import User
+from app.models.college_review import get_json_type
 
 
 class DocumentRequestStatus(enum.Enum):
@@ -47,7 +42,7 @@ class DocumentRequest(Base):
 
     # Request details
     requested_documents = Column(
-        JSONB,
+        get_json_type(),
         nullable=False,
         comment="List of document types/categories needed, e.g., ['transcript', 'recommendation_letter', 'research_plan']",
     )

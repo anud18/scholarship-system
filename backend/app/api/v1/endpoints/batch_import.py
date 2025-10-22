@@ -1316,7 +1316,10 @@ async def download_batch_import_file(
         from app.core.config import settings
 
         minio_service = MinIOService()
-        file_data = minio_service.get_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
+        response = minio_service.get_file_stream(object_name=batch_import.file_path)
+        file_data = response.read()
+        response.close()
+        response.release_conn()
 
         # Determine content type
         if batch_import.file_name.endswith(".xlsx"):
@@ -1435,6 +1438,8 @@ async def download_batch_import_template(
     - 子類型欄位: 根據獎學金類型動態生成（使用繁體中文）
     - 自訂欄位: 根據 ApplicationField 配置動態生成（使用繁體中文）
 
+    **注意**: 系所代碼會自動從學籍系統獲取，不需要在檔案中提供
+
     **權限**: 僅限 college 角色
     """
     from app.models.application_field import ApplicationField
@@ -1454,7 +1459,6 @@ async def download_batch_import_template(
     columns = [
         "學號",  # student_id - 必填
         "學生姓名",  # student_name - 必填
-        "系所代碼",  # dept_code - 建議提供以利權限驗證
         "郵局帳號",  # postal_account - 可選
     ]
 
@@ -1462,7 +1466,6 @@ async def download_batch_import_template(
     column_mapping = {
         "學號": "student_id",
         "學生姓名": "student_name",
-        "系所代碼": "dept_code",
         "郵局帳號": "postal_account",
     }
 
@@ -1523,13 +1526,11 @@ async def download_batch_import_template(
         {
             "學號": "111111111",
             "學生姓名": "王小明",
-            "系所代碼": "5201",
             "郵局帳號": "1234567890123",
         },
         {
             "學號": "222222222",
             "學生姓名": "陳小華",
-            "系所代碼": "5401",
             "郵局帳號": "9876543210987",
         },
     ]

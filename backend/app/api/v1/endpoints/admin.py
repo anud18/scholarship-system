@@ -10,10 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc
 from sqlalchemy import func as sa_func
 from sqlalchemy import or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
+from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import check_scholarship_permission, get_current_user, require_admin, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
@@ -41,7 +43,6 @@ from app.schemas.common import (
     ApiResponse,
     EmailTemplateSchema,
     EmailTemplateUpdateSchema,
-    MessageResponse,
     PaginatedResponse,
     SystemSettingSchema,
 )
@@ -1173,7 +1174,7 @@ async def delete_announcement(id: int, current_user: User = Depends(require_admi
     await db.delete(announcement)
     await db.commit()
 
-    return {"success": True, "message": "系統公告已成功刪除", "data": MessageResponse(message="系統公告已成功刪除")}
+    return {"success": True, "message": "系統公告已成功刪除", "data": None}
 
 
 @router.get("/scholarships/stats")
@@ -1819,11 +1820,7 @@ async def delete_sub_type_config(
     config.updated_by = current_user.id
     await db.commit()
 
-    return {
-        "success": True,
-        "message": "Sub-type configuration deleted successfully",
-        "data": MessageResponse(message="Sub-type configuration deleted successfully"),
-    }
+    return {"success": True, "message": "Sub-type configuration deleted successfully", "data": None}
 
 
 # === 獎學金權限管理相關 API === #
@@ -2119,11 +2116,7 @@ async def delete_scholarship_permission(
     await db.delete(permission)
     await db.commit()
 
-    return {
-        "success": True,
-        "message": "Scholarship permission deleted successfully",
-        "data": {"message": "Permission deleted successfully"},
-    }
+    return {"success": True, "message": "Scholarship permission deleted successfully", "data": None}
 
 
 @router.get("/scholarships/all-for-permissions")
@@ -3154,10 +3147,17 @@ async def get_available_professors(
 
         return {"success": True, "message": f"Retrieved {len(serialized)} professors", "data": serialized}
 
-    except Exception as exc:  # pragma: no cover - unexpected failure path
-        logger.error(f"Error fetching professors: {exc}")
+    except SQLAlchemyError as exc:
+        logger.error(f"Database error fetching professors: {exc}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to fetch professors: {exc}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch professors due to a database error.",
+        ) from exc
+    except Exception as exc:  # pragma: no cover - unexpected failure path
+        logger.error(f"Unexpected error fetching professors: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch professors due to an unexpected error.",
         ) from exc
 
 
@@ -3217,10 +3217,22 @@ async def assign_professor_to_application(
             "data": response_data,
         }
 
-    except Exception as e:
-        logger.error(f"Error assigning professor: {str(e)}")
+    except (NotFoundError, AuthorizationError) as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to assign professor: {str(e)}"
+            status_code=status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
+    except SQLAlchemyError as e:
+        logger.error(f"Database error assigning professor: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to assign professor due to a database error.",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error assigning professor: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to assign professor due to an unexpected error.",
         )
 
 
@@ -3318,10 +3330,17 @@ async def get_all_configurations(
 
         return {"success": True, "message": "Configurations retrieved successfully", "data": result}
 
-    except Exception as e:
-        logger.error(f"Error retrieving configurations: {str(e)}")
+    except SQLAlchemyError as e:
+        logger.error(f"Database error retrieving configurations: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configurations: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve configurations due to a database error.",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving configurations: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve configurations due to an unexpected error.",
         )
 
 
@@ -3382,10 +3401,17 @@ async def create_configuration(
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error creating configuration: {str(e)}")
+    except SQLAlchemyError as e:
+        logger.error(f"Database error creating configuration: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create configuration due to a database error.",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error creating configuration: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create configuration due to an unexpected error.",
         )
 
 
@@ -3470,10 +3496,17 @@ async def bulk_update_configurations(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error in bulk configuration update: {str(e)}")
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in bulk configuration update: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configurations: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update configurations due to a database error.",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in bulk configuration update: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update configurations due to an unexpected error.",
         )
 
 
@@ -3510,9 +3543,10 @@ async def validate_configuration(
         return {"success": True, "message": "Validation completed", "data": result}
 
     except Exception as e:
-        logger.error(f"Error validating configuration: {str(e)}")
+        logger.error(f"Unexpected error validating configuration: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to validate configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to validate configuration due to an unexpected error.",
         )
 
 
@@ -3536,10 +3570,17 @@ async def delete_configuration(
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error deleting configuration: {str(e)}")
+    except SQLAlchemyError as e:
+        logger.error(f"Database error deleting configuration: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete configuration: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete configuration due to a database error.",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error deleting configuration: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete configuration due to an unexpected error.",
         )
 
 
@@ -3569,9 +3610,10 @@ async def verify_bank_account(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
-        logger.error(f"Error in bank verification: {str(e)}")
+        logger.error(f"Unexpected error in bank verification: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to verify bank account: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to verify bank account due to an unexpected error.",
         )
 
 
@@ -3621,9 +3663,10 @@ async def batch_verify_bank_accounts(
         }
 
     except Exception as e:
-        logger.error(f"Error in batch bank verification: {str(e)}")
+        logger.error(f"Unexpected error in batch bank verification: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to perform batch verification: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to perform batch verification due to an unexpected error.",
         )
 
 

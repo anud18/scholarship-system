@@ -23,6 +23,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+from app.models.college_review import get_json_type
 
 
 class RosterCycle(enum.Enum):
@@ -214,6 +215,18 @@ class PaymentRosterItem(Base):
     rule_validation_result = Column(JSON)  # 完整的規則驗證結果
     failed_rules = Column(JSON)  # 未通過的規則清單
     warning_rules = Column(JSON)  # 警告規則清單
+
+    # 備取資訊（結構化）
+    backup_info = Column(get_json_type(), nullable=True)  # 備取位置資訊
+    # Format: [
+    #   {
+    #     "sub_type": "nstc",
+    #     "backup_position": 1,
+    #     "college": "EE",
+    #     "allocation_reason": "備取第1名 nstc-EE"
+    #   },
+    #   ...
+    # ]
 
     # 時間戳記
     created_at = Column(DateTime(timezone=True), default=func.now())

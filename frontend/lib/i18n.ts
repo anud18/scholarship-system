@@ -303,6 +303,21 @@ export const translations = {
       load_error: "載入錯誤",
     },
 
+    // 批次匯入
+    batch_import: {
+      field_labels: {
+        student_id: "學號",
+        student_name: "姓名",
+        postal_account: "郵局帳號",
+        advisor_name: "指導教授姓名",
+        advisor_email: "指導教授Email",
+        advisor_nycu_id: "指導教授本校人事編號",
+        sub_types: "子類型",
+        custom_fields: "其他欄位",
+        row_number: "行號",
+      },
+    },
+
     // 通用訊息
     messages: {
       no_eligible_scholarships: "目前沒有符合資格的獎學金",
@@ -630,6 +645,21 @@ export const translations = {
       loading: "Loading...",
       retry: "Retry",
       load_error: "Load Error",
+    },
+
+    // Batch Import
+    batch_import: {
+      field_labels: {
+        student_id: "Student ID",
+        student_name: "Name",
+        postal_account: "Postal Account",
+        advisor_name: "Advisor Name",
+        advisor_email: "Advisor Email",
+        advisor_nycu_id: "Advisor NYCU ID",
+        sub_types: "Sub Types",
+        custom_fields: "Custom Fields",
+        row_number: "Row Number",
+      },
     },
 
     // General messages

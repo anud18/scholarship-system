@@ -199,3 +199,55 @@ export function getSchoolIdentityName(
 
   return `未知學校身份 (${schoolIdentityId})`;
 }
+
+/**
+ * Helper to get academy/college name by code
+ *
+ * @param academyCode - The academy code to look up
+ * @param academies - Array of academies (from useReferenceData)
+ * @returns Display name or fallback message
+ * @example
+ * const name = getAcademyName("C", academies);
+ * // Returns: "資訊學院"
+ */
+export function getAcademyName(
+  academyCode: string | undefined | null,
+  academies: Array<{ code: string; name: string }>
+): string {
+  if (!academyCode) {
+    return '-';
+  }
+
+  const academy = academies.find(a => a.code === academyCode);
+  if (academy) {
+    return academy.name;
+  }
+
+  return academyCode;
+}
+
+/**
+ * Helper to get department name by code
+ *
+ * @param deptCode - The department code to look up
+ * @param departments - Array of departments (from useReferenceData)
+ * @returns Display name or fallback message
+ * @example
+ * const name = getDepartmentName("4551", departments);
+ * // Returns: "資訊工程學系"
+ */
+export function getDepartmentName(
+  deptCode: string | undefined | null,
+  departments: Array<{ code: string; name: string }>
+): string {
+  if (!deptCode) {
+    return '-';
+  }
+
+  const department = departments.find(d => d.code === deptCode);
+  if (department) {
+    return department.name;
+  }
+
+  return deptCode;
+}
