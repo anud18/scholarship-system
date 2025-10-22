@@ -520,8 +520,9 @@ class ScholarshipApplicationService:
         if status:
             stmt = stmt.where(Application.status == status)
 
-        # Order by priority score (higher first), then by submission time (earlier first)
-        stmt = stmt.order_by(desc(Application.priority_score), asc(Application.submitted_at)).limit(limit)
+        # Note: priority_score removed - order by submission time and renewal status only
+        # Order by renewal status (renewals first), then by submission time (earlier first)
+        stmt = stmt.order_by(desc(Application.is_renewal), asc(Application.submitted_at)).limit(limit)
 
         result = await self.db.execute(stmt)
         return result.scalars().all()
@@ -530,6 +531,7 @@ class ScholarshipApplicationService:
         """Process renewal applications with higher priority"""
 
         # Get all submitted renewal applications for the semester
+        # Note: priority_score removed - order by submission time
         stmt = (
             select(Application)
             .where(
@@ -539,7 +541,7 @@ class ScholarshipApplicationService:
                     Application.status == ApplicationStatus.submitted,
                 )
             )
-            .order_by(desc(Application.priority_score))
+            .order_by(asc(Application.submitted_at))
         )
         result = await self.db.execute(stmt)
         renewal_apps = result.scalars().all()
@@ -765,6 +767,7 @@ class ScholarshipQuotaService:
             return {"processed": 0, "approved": 0, "message": "No remaining quota"}
 
         # Get applications ordered by priority (renewal first, then by submission time)
+        # Note: priority_score removed from ordering
         stmt = (
             select(Application)
             .where(
@@ -782,8 +785,7 @@ class ScholarshipQuotaService:
             )
             .order_by(
                 desc(Application.is_renewal),  # Renewals first
-                desc(Application.priority_score),
-                asc(Application.submitted_at),
+                asc(Application.submitted_at),  # Then by submission time
             )
         )
         result = await self.db.execute(stmt)
@@ -804,9 +806,23 @@ class ScholarshipQuotaService:
                 remaining_quota -= 1
             else:
                 # Reject due to quota limit
+                # Note: rejection_reason moved to ApplicationReview model
                 app.status = ApplicationStatus.rejected.value
-                app.rejection_reason = "Quota limit reached"
                 app.decision_date = datetime.now(timezone.utc)
+
+                # Create ApplicationReview record to store rejection reason
+                from app.models.application import ApplicationReview, ReviewStatus
+
+                review = ApplicationReview(
+                    application_id=app.id,
+                    reviewer_id=1,  # System reviewer
+                    review_stage="quota_processing",
+                    review_status=ReviewStatus.REJECTED.value,
+                    recommendation="reject",
+                    decision_reason="Quota limit reached",
+                    reviewed_at=datetime.now(timezone.utc),
+                )
+                self.db.add(review)
 
         await self.db.commit()
 

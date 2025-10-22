@@ -15,7 +15,7 @@ class BatchImportUploadResponse(BaseModel):
     batch_id: int = Field(..., description="批次匯入ID")
     file_name: str = Field(..., description="檔案名稱")
     total_records: int = Field(..., description="總筆數")
-    preview_data: List[Dict[str, Any]] = Field(..., description="預覽資料（前10筆）")
+    preview_data: List[Dict[str, Any]] = Field(..., description="預覽資料")
     validation_summary: Dict[str, Any] = Field(..., description="驗證摘要")
 
 
@@ -102,9 +102,6 @@ class ApplicationDataRow(BaseModel):
     student_id: str = Field(..., description="學號", min_length=1, max_length=20)
     student_name: str = Field(..., description="姓名", min_length=1, max_length=100)
 
-    # 系所欄位（供權限驗證使用）
-    dept_code: Optional[str] = Field(None, description="系所代碼", max_length=20)
-
     # 子類型
     sub_types: List[str] = Field(default=[], description="子類型列表")
 
@@ -121,19 +118,6 @@ class ApplicationDataRow(BaseModel):
         v = v.strip()
         if not re.match(r"^[A-Za-z0-9]+$", v):
             raise ValueError("學號僅能包含英文字母和數字")
-        return v
-
-    @field_validator("dept_code")
-    @classmethod
-    def validate_dept_code(cls, v: Optional[str]) -> Optional[str]:
-        """Normalize and validate department code when provided"""
-        if v is None:
-            return v
-        v = v.strip()
-        if not v:
-            return None
-        if not re.match(r"^[A-Za-z0-9_-]+$", v):
-            raise ValueError("系所代碼僅能包含英數字、底線或連字號")
         return v
 
     @field_validator("student_name")

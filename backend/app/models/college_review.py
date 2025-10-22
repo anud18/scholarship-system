@@ -7,19 +7,7 @@ including ranking, quota distribution, and final allocation decisions.
 
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    CheckConstraint,
-    Column,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    Numeric,
-    String,
-    Text,
-)
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -73,19 +61,15 @@ class CollegeReview(Base):
     application_id = Column(Integer, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, unique=True)
     reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # Ranking and scoring
-    ranking_score = Column(Numeric(8, 2))  # Overall ranking score (0-100)
-    academic_score = Column(Numeric(5, 2))  # Academic performance score (0-100)
-    professor_review_score = Column(Numeric(5, 2))  # Weighted professor review score (0-100)
-    college_criteria_score = Column(Numeric(5, 2))  # College-specific criteria score (0-100)
-    special_circumstances_score = Column(Numeric(5, 2))  # Special circumstances score (0-100)
+    # Note: 評分欄位已全部移除 (ranking_score, academic_score, professor_review_score, etc.)
+    # 審核機制簡化為：排名位置 + 審核意見
 
     # Review details
     review_comments = Column(Text)  # Detailed review comments
     recommendation = Column(String(20))  # 'approve', 'reject', 'conditional'
     decision_reason = Column(Text)  # Reason for the recommendation
 
-    # Ranking information
+    # Ranking information (positions, not scores)
     preliminary_rank = Column(Integer)  # Initial ranking within sub-type
     final_rank = Column(Integer)  # Final ranking after adjustments
     sub_type_group = Column(String(50))  # Sub-type group for ranking
@@ -95,9 +79,6 @@ class CollegeReview(Base):
     is_priority = Column(Boolean, default=False)  # Priority application flag
     needs_special_attention = Column(Boolean, default=False)  # Flag for special review
 
-    # Scoring weights used (for audit trail)
-    scoring_weights = Column(get_json_type())  # Store the weights used for this review
-
     # Time tracking
     review_started_at = Column(DateTime(timezone=True))
     reviewed_at = Column(DateTime(timezone=True))
@@ -105,28 +86,7 @@ class CollegeReview(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Database-level constraints for data integrity
-    __table_args__ = (
-        CheckConstraint(
-            "academic_score IS NULL OR (academic_score >= 0 AND academic_score <= 100)",
-            name="check_academic_score_range",
-        ),
-        CheckConstraint(
-            "professor_review_score IS NULL OR (professor_review_score >= 0 AND professor_review_score <= 100)",
-            name="check_professor_score_range",
-        ),
-        CheckConstraint(
-            "college_criteria_score IS NULL OR (college_criteria_score >= 0 AND college_criteria_score <= 100)",
-            name="check_college_score_range",
-        ),
-        CheckConstraint(
-            "special_circumstances_score IS NULL OR (special_circumstances_score >= 0 AND special_circumstances_score <= 100)",
-            name="check_special_score_range",
-        ),
-        CheckConstraint(
-            "ranking_score IS NULL OR (ranking_score >= 0 AND ranking_score <= 100)",
-            name="check_ranking_score_range",
-        ),
-    )
+    # Note: Score-related constraints removed (評分相關約束已移除)
 
     # Relationships using string references to avoid circular dependencies
     application = relationship(
@@ -138,9 +98,7 @@ class CollegeReview(Base):
     reviewer = relationship("User", lazy="select", foreign_keys=[reviewer_id], back_populates="college_reviews")
 
     def __repr__(self):
-        return (
-            f"<CollegeReview(id={self.id}, application_id={self.application_id}, ranking_score={self.ranking_score})>"
-        )
+        return f"<CollegeReview(id={self.id}, application_id={self.application_id}, final_rank={self.final_rank})>"
 
     @property
     def is_completed(self) -> bool:
@@ -348,7 +306,8 @@ Index(
     CollegeReview.application_id,
     CollegeReview.reviewer_id,
 )
-Index("ix_college_reviews_ranking_score", CollegeReview.ranking_score.desc())  # For ranking queries
+# Note: ranking_score index removed (評分索引已移除)
+# Use final_rank for ranking queries instead
 Index(
     "ix_college_reviews_recommendation_status",
     CollegeReview.recommendation,

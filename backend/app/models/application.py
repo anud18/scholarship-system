@@ -127,7 +127,6 @@ class Application(Base):
     sub_scholarship_type = Column(String(50), default="GENERAL")  # GENERAL, NSTC, MOE_1W, MOE_2W
     is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
     previous_application_id = Column(Integer, ForeignKey("applications.id"))
-    priority_score = Column(Integer, default=0)
     review_deadline = Column(DateTime(timezone=True))
     decision_date = Column(DateTime(timezone=True))
 
@@ -153,13 +152,9 @@ class Application(Base):
     reviewer_id = Column(Integer, ForeignKey("users.id"))  # 審核者
     final_approver_id = Column(Integer, ForeignKey("users.id"))  # 最終核准者
 
-    # 審核結果
-    review_score = Column(Numeric(5, 2))
-    review_comments = Column(Text)
-    rejection_reason = Column(Text)
-
     # 學院審查相關 (College Review)
-    college_ranking_score = Column(Numeric(8, 2))  # 學院排名分數
+    # Note: 評分欄位已移除 (review_score, college_ranking_score)
+    # 審核意見和拒絕原因改從 ApplicationReview 表取得
     final_ranking_position = Column(Integer)  # 最終排名位置
     quota_allocation_status = Column(String(20))  # 'allocated', 'rejected', 'waitlisted'
 
@@ -265,23 +260,6 @@ class Application(Base):
         if not self.review_deadline:
             return False
         return bool(datetime.now().replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
-
-    def calculate_priority_score(self) -> int:
-        """Calculate priority score based on business rules for issue #10"""
-        score = self.priority_score or 0
-
-        # Renewal applications get higher priority
-        if self.is_renewal:
-            score += 100
-
-        # Add score based on submission time (earlier = higher priority)
-        if self.submitted_at:
-            from datetime import datetime, timezone
-
-            days_since_submission = (datetime.now(timezone.utc) - self.submitted_at).days
-            score += max(0, 30 - days_since_submission)
-
-        return score
 
     def get_main_type_enum(self) -> Optional["ScholarshipMainType"]:
         """Get main scholarship type as enum"""
@@ -415,13 +393,11 @@ class ApplicationReview(Base):
     review_status = Column(String(20), default=ReviewStatus.PENDING.value)
 
     # 審核結果
-    score = Column(Numeric(5, 2))
+    # Note: 評分欄位已移除 (score, criteria_scores)
+    # 審核機制簡化為：推薦/意見/決定模式
     comments = Column(Text)
     recommendation = Column(Text)
-    decision_reason = Column(Text)
-
-    # 審核標準
-    criteria_scores = Column(JSON)  # 各項評分標準的分數
+    decision_reason = Column(Text)  # 包含拒絕原因
 
     # 時間資訊
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())

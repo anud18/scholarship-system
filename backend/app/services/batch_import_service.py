@@ -27,18 +27,6 @@ from app.services.student_service import StudentService
 logger = logging.getLogger(__name__)
 
 
-DEPT_CODE_COLUMNS = [
-    "dept_code",
-    "deptCode",
-    "系所代碼",
-    "系所代號",
-    "科系代碼",
-    "科系代號",
-    "學系代碼",
-    "學系代號",
-]
-
-
 def _normalize_identifier(value: Any) -> str:
     """Convert cell value to trimmed string identifier."""
     if value is None:
@@ -662,7 +650,7 @@ class BatchImportService:
                         email=sis_data.get("com_email") if sis_data and sis_data.get("com_email") else None,
                         user_type="student",
                         role="student",
-                        dept_code=sis_data.get("std_depno") if sis_data else row.get("dept_code"),
+                        dept_code=sis_data.get("std_depno") if sis_data else None,
                         raw_data={
                             "imported_from_batch": True,
                             "batch_import_data": row,
@@ -787,8 +775,9 @@ class BatchImportService:
                 student_payload = {
                     "nycu_id": student_id,
                     "name": sis_data.get("std_cname") if sis_data else row_data["student_name"],
-                    "dept_code": sis_data.get("std_depno") if sis_data else row_data.get("dept_code"),
+                    "dept_code": sis_data.get("std_depno") if sis_data else None,
                     "college_code": sis_data.get("std_academyno") if sis_data else batch_import.college_code,
+                    "term_count": sis_data.get("term_count") if sis_data else None,
                     "raw_sis_data": sis_data if sis_data else None,  # Store raw SIS data for reference
                 }
 
@@ -803,8 +792,6 @@ class BatchImportService:
                 # Override dept_code in submitted_form_data if SIS data is available and different
                 if sis_data and sis_data.get("std_depno"):
                     submitted_form_data["dept_code"] = sis_data.get("std_depno")
-                elif row_data.get("dept_code"):
-                    submitted_form_data["dept_code"] = row_data.get("dept_code")
 
                 application = Application(
                     app_id=app_id,

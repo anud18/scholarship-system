@@ -291,7 +291,7 @@ async def upload_batch_import_data(
         batch_id=batch_import.id,
         file_name=file.filename,
         total_records=len(parsed_data),
-        preview_data=parsed_data[:10],
+        preview_data=parsed_data,
         validation_summary={
             "valid_count": len(parsed_data) - len(validation_errors),
             "invalid_count": len(validation_errors),
@@ -1313,8 +1313,6 @@ async def download_batch_import_file(
 
     # Get file from MinIO
     try:
-        from app.core.config import settings
-
         minio_service = MinIOService()
         response = minio_service.get_file_stream(object_name=batch_import.file_path)
         file_data = response.read()

@@ -285,7 +285,100 @@ async def _generate_app_id(self, academic_year: int, semester: Optional[str]) ->
 #### Migration
 Migration `6b5cb44d2fe3` creates the `application_sequences` table and initializes sequences from existing applications.
 
-### 7. OpenAPI Type Generation
+### 7. Application Data Structure Principles
+
+**CRITICAL**: Clear separation between API data snapshot and student-submitted data.
+
+#### student_data (JSON Field)
+**Purpose**: Pure SIS API data snapshot at time of application submission.
+
+**Contents**:
+- API 1: `ScholarshipStudent` - Basic student information
+- API 2: `ScholarshipStudentTerm` - Semester-specific data (申請當時的學期資料)
+- **Internal metadata**: `_api_fetched_at`, `_term_data_status`, `_term_error_message`
+
+**Does NOT include**:
+- ❌ Student-filled form data (bank account, contact phone, etc.)
+- ❌ Application-specific data (scholarship type, application status, etc.)
+
+**Schema Definition**: `backend/app/schemas/student_snapshot.py`
+
+```python
+# Example student_data structure
+{
+    # API 1: 學生基本資料
+    "std_stdcode": "310460031",
+    "std_cname": "王小明",
+    "com_email": "nctutest@g2.nctu.edu.tw",
+    "std_academyno": "A",
+    "std_depno": "4460",
+    # ... all API 1 fields
+
+    # API 2: 學生學期資料 (申請當時)
+    "trm_year": 114,
+    "trm_term": 1,
+    "trm_academyname": "人社院",
+    "trm_depname": "教育博",
+    "trm_ascore_gpa": 3.8,
+    # ... all API 2 fields
+
+    # Internal metadata
+    "_api_fetched_at": "2025-10-22T17:27:08Z",
+    "_term_data_status": "success"
+}
+```
+
+#### submitted_form_data (JSON Field)
+**Purpose**: Student-filled dynamic form data.
+
+**Contents**:
+- Dynamic form fields (bank_account, contact_phone, etc.)
+- Uploaded document metadata
+
+**Schema**: See `ApplicationFormData` in `backend/app/schemas/application.py`
+
+```python
+# Example submitted_form_data structure
+{
+    "fields": {
+        "bank_account": {
+            "field_id": "bank_account",
+            "field_type": "text",
+            "value": "123456789",
+            "required": true
+        }
+    },
+    "documents": [
+        {
+            "document_id": "bank_account_cover",
+            "file_path": "...",
+            "upload_time": "2024-03-19T10:00:00Z"
+        }
+    ]
+}
+```
+
+#### Review Data Principles
+**No Scoring System**: Review mechanism simplified to recommendation/ranking mode.
+
+**Application Table**:
+- ❌ Removed: `review_score`, `review_comments`, `rejection_reason`, `priority_score`, `college_ranking_score`
+- ✅ Kept: `final_ranking_position` (position number, not score)
+
+**ApplicationReview Table**:
+- ❌ Removed: `score`, `criteria_scores`
+- ✅ Kept: `comments`, `recommendation`, `decision_reason` (包含拒絕原因)
+
+**CollegeReview Table**:
+- ❌ Removed: `ranking_score`, `academic_score`, `professor_review_score`, etc.
+- ✅ Kept: `preliminary_rank`, `final_rank` (positions, not scores)
+
+**Review Flow**:
+1. Professor Review: Recommend (yes/no) + comments
+2. College Review: Ranking position + comments
+3. Final Decision: Approve/Reject + reason
+
+### 8. OpenAPI Type Generation
 
 **When modifying API endpoints/schemas**, regenerate TypeScript types to maintain type safety:
 

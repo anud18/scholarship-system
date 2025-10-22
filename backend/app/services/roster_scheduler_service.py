@@ -148,9 +148,9 @@ class RosterSchedulerService:
 
         return {"minute": minute, "hour": hour, "day": day, "month": month, "day_of_week": day_of_week}
 
-    async def _execute_roster_generation(self, schedule_id: int):
+    async def _execute_roster_generation(self, schedule_id: int, force_regenerate: bool = False):
         """執行造冊產生"""
-        logger.info(f"Executing roster generation for schedule {schedule_id}")
+        logger.info(f"Executing roster generation for schedule {schedule_id} (force_regenerate={force_regenerate})")
 
         error_message = None
         success = False
@@ -165,8 +165,8 @@ class RosterSchedulerService:
                 if not schedule:
                     raise Exception(f"Schedule {schedule_id} not found")
 
-                # 執行造冊產生
-                result = await self._create_roster_from_schedule(schedule)
+                # 執行造冊產生（傳遞 force_regenerate 參數）
+                result = await self._create_roster_from_schedule(schedule, force_regenerate=force_regenerate)
 
                 if result and result.get("success"):
                     success = True
@@ -222,16 +222,20 @@ class RosterSchedulerService:
 
         await db.commit()
 
-    async def _create_roster_from_schedule(self, schedule: Dict) -> Dict:
+    async def _create_roster_from_schedule(self, schedule: Dict, force_regenerate: bool = False) -> Dict:
         """從排程建立造冊"""
         try:
             # 取得當前學年度（這裡需要根據系統邏輯調整）
             from datetime import datetime
 
+            from app.db.session import get_sync_db_session
+
             current_year = datetime.now().year
 
             # 根據月份判斷學年度（假設9月開始新學年）
-            academic_year = current_year if datetime.now().month >= 9 else current_year - 1
+            western_academic_year = current_year if datetime.now().month >= 9 else current_year - 1
+            # 轉換為民國年
+            academic_year = western_academic_year - 1911
 
             # 轉換 roster_cycle 字串為 enum
             roster_cycle_value = schedule["roster_cycle"]
@@ -240,8 +244,8 @@ class RosterSchedulerService:
             else:
                 roster_cycle = roster_cycle_value
 
-            # 產生期間標記
-            with get_db_session() as db:
+            # 產生期間標記 - 使用同步的 session
+            with get_sync_db_session() as db:
                 roster_service = RosterService(db)
 
                 # 從排程產生期間標記
@@ -249,16 +253,16 @@ class RosterSchedulerService:
                     roster_cycle=roster_cycle, target_date=datetime.now()
                 )
 
-                # 呼叫 RosterService 建立造冊
+                # 呼叫 RosterService 建立造冊（使用傳入的 force_regenerate 參數）
                 roster = roster_service.generate_roster(
                     scholarship_configuration_id=schedule["scholarship_configuration_id"],
                     period_label=period_label,
                     roster_cycle=roster_cycle,
-                    academic_year=academic_year + 113,  # 轉換為民國年
+                    academic_year=academic_year,  # 已經是民國年
                     created_by_user_id=schedule["created_by_user_id"],
                     trigger_type=RosterTriggerType.SCHEDULED,
                     student_verification_enabled=schedule.get("student_verification_enabled", True),
-                    force_regenerate=False,
+                    force_regenerate=force_regenerate,  # 使用參數而非硬編碼
                 )
 
                 return {

@@ -29,6 +29,7 @@ class StubSession:
         self._results = list(results or [])
         self.commits = 0
         self.rollbacks = 0
+        self.added_objects = []
 
     async def execute(self, stmt):
         if not self._results:
@@ -40,6 +41,10 @@ class StubSession:
 
     async def rollback(self):
         self.rollbacks += 1
+
+    def add(self, obj):
+        """Add object to session (for ApplicationReview records)"""
+        self.added_objects.append(obj)
 
 
 class StubNotificationService:
@@ -118,7 +123,7 @@ async def test_bulk_approve_applications_success(monkeypatch):
     assert result["notifications_sent"] == 1
     assert result["notifications_failed"] == 1
     assert session.commits == 2
-    assert app1.calculate_calls == 1
+    # Note: priority_score calculation removed - no longer needed
     assert all(item["new_status"] == ApplicationStatus.approved.value for item in result["successful_approvals"])
 
 
@@ -210,7 +215,9 @@ async def test_bulk_reject_applications_success():
 
     assert len(result["successful_rejections"]) == 1
     assert result["notifications_sent"] == 1
-    assert app.rejection_reason == "missing docs"
+    # Note: rejection_reason moved to ApplicationReview model
+    assert len(session.added_objects) == 1  # ApplicationReview record created
+    assert session.added_objects[0].decision_reason == "missing docs"
 
 
 @pytest.mark.asyncio

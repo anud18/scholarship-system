@@ -156,10 +156,7 @@ class CollegeReviewService:
                 f"Application {application_id} is not in reviewable state (current status: {application.status})"
             )
 
-        # Calculate scores if not provided
-        if not review_data.get("ranking_score"):
-            ranking_score = self._calculate_ranking_score(review_data)
-            review_data["ranking_score"] = ranking_score
+        # Note: Scoring fields removed. Review is based on ranking position and comments only.
 
         if existing_review:
             # Update existing review
@@ -184,8 +181,7 @@ class CollegeReviewService:
             )
             self.db.add(college_review)
 
-        # Update application's college review fields
-        application.college_ranking_score = college_review.ranking_score
+        # Note: college_ranking_score field removed from Application model
 
         # Set application status based on review recommendation
         recommendation = review_data.get("recommendation", "")
@@ -254,7 +250,6 @@ class CollegeReviewService:
                     "student_name": student.name if student else "Unknown",
                     "student_email": student.email if student else "",
                     "college_name": reviewer.college if reviewer and hasattr(reviewer, "college") else "",
-                    "ranking_score": college_review.ranking_score,
                     "recommendation": review_data.get("recommendation", ""),
                     "comments": review_data.get("comments", ""),
                     "reviewer_name": reviewer.name if reviewer else "Unknown",
@@ -272,32 +267,8 @@ class CollegeReviewService:
 
         return college_review
 
-    def _calculate_ranking_score(self, review_data: Dict[str, Any]) -> float:
-        """Calculate overall ranking score based on component scores"""
-
-        # Default scoring weights
-        weights = {
-            "academic": 0.30,
-            "professor_review": 0.40,
-            "college_criteria": 0.20,
-            "special_circumstances": 0.10,
-        }
-
-        # Use custom weights if provided
-        if "scoring_weights" in review_data:
-            weights.update(review_data["scoring_weights"])
-
-        # Extract component scores
-        scores = {
-            "academic": review_data.get("academic_score", 0),
-            "professor_review": review_data.get("professor_review_score", 0),
-            "college_criteria": review_data.get("college_criteria_score", 0),
-            "special_circumstances": review_data.get("special_circumstances_score", 0),
-        }
-
-        # Calculate weighted total
-        total_score = sum(scores[key] * weights[key] for key in scores)
-        return round(total_score, 2)
+    # Note: _calculate_ranking_score() method removed
+    # Review system no longer uses scoring - uses ranking positions instead
 
     async def get_applications_for_review(
         self,
@@ -307,6 +278,7 @@ class CollegeReviewService:
         reviewer_id: Optional[int] = None,
         academic_year: Optional[int] = None,
         semester: Optional[str] = None,
+        college_code: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Get applications that are ready for college review"""
         logger.info(
@@ -373,6 +345,11 @@ class CollegeReviewService:
                     # If invalid semester value, only show yearly scholarships
                     stmt = stmt.where(Application.semester.is_(None))
 
+        # Apply college filter if provided (for college role users)
+        if college_code:
+            logger.info(f"Filtering applications by college_code={college_code}")
+            stmt = stmt.where(sa_func.json_extract_path_text(Application.student_data, "college_code") == college_code)
+
         # Order by submission date (FIFO)
         stmt = stmt.order_by(asc(Application.submitted_at))
 
@@ -430,7 +407,8 @@ class CollegeReviewService:
                 "is_renewal": app.is_renewal if hasattr(app, "is_renewal") else False,
                 "professor_review_completed": len(app.professor_reviews) > 0,
                 "college_review_completed": college_review is not None,
-                "college_review_score": college_review.ranking_score if college_review else None,
+                # Note: college_review_score removed - use final_rank instead
+                "college_review_rank": college_review.final_rank if college_review else None,
             }
             formatted_applications.append(app_data)
 
@@ -661,7 +639,7 @@ class CollegeReviewService:
                     application_id=app.id,
                     reviewer_id=creator_id,  # Use the ranking creator as default reviewer
                     review_status="pending",
-                    ranking_score=0.0,  # Default score
+                    # Note: ranking_score field removed - use preliminary_rank/final_rank instead
                     review_comments="Auto-created for ranking purposes",
                 )
                 self.db.add(default_review)
@@ -720,19 +698,20 @@ class CollegeReviewService:
         await self.db.flush()  # Flush within transaction context
         await self.db.refresh(ranking)
 
-        # Create ranking items - sort by college review score (if available), then by submission date
+        # Create ranking items - sort by final_rank (if available), then by submission date
         def sort_key(item):
             app, college_review = item
-            # If college review exists, use its ranking score; otherwise use 0 (lowest priority)
-            score = college_review.ranking_score if college_review else 0
-            # Use submitted_at as secondary sort (earlier submissions get higher priority if same score)
+            # If college review exists and has final_rank, use it; otherwise use a large number (lowest priority)
+            # Lower rank number = higher priority (rank 1 is best)
+            rank = college_review.final_rank if college_review and college_review.final_rank else 999999
+            # Use submitted_at as secondary sort (earlier submissions get higher priority if same rank)
             submitted_at = app.submitted_at or app.created_at
             return (
-                score,
-                -submitted_at.timestamp(),
-            )  # Negative timestamp for descending order
+                rank,  # Ascending order: lower rank number comes first
+                submitted_at.timestamp(),  # Ascending: earlier submission comes first
+            )
 
-        applications_with_reviews.sort(key=sort_key, reverse=True)
+        applications_with_reviews.sort(key=sort_key, reverse=False)  # Ascending order
 
         for rank_position, (app, college_review) in enumerate(applications_with_reviews, 1):
             ranking_item = CollegeRankingItem(
@@ -1119,14 +1098,15 @@ class QuotaDistributionService:
     ) -> List[Dict[str, Any]]:
         """Distribute quota based on ranking order"""
 
-        # Sort applications by ranking score (descending)
+        # Note: college_ranking_score field removed - sort by final_ranking_position instead
+        # Sort applications by ranking position (ascending - lower rank number is better)
         sorted_apps = sorted(
             applications,
             key=lambda x: (
-                x.college_ranking_score or 0,
-                -(x.submitted_at.timestamp() if x.submitted_at else 0),  # Tie-breaker: earlier submission
+                x.final_ranking_position if x.final_ranking_position else 999999,  # Unranked go to end
+                x.submitted_at.timestamp() if x.submitted_at else 0,  # Tie-breaker: earlier submission
             ),
-            reverse=True,
+            reverse=False,  # Ascending order
         )
 
         # Allocate quota
@@ -1138,7 +1118,8 @@ class QuotaDistributionService:
                 "application_id": app.id,
                 "rank_position": i + 1,
                 "is_allocated": is_allocated,
-                "ranking_score": app.college_ranking_score,
+                # Note: ranking_score field removed
+                "final_ranking_position": app.final_ranking_position,
                 "allocation_reason": "Within quota" if is_allocated else "Quota exceeded",
             }
             results.append(result)
@@ -1180,14 +1161,15 @@ class QuotaDistributionService:
             for college, college_apps in colleges.items():
                 college_quota = sub_type_quota.get(college, 0)
 
-                # Sort applications within this group
+                # Note: college_ranking_score field removed - sort by final_ranking_position instead
+                # Sort applications within this group by ranking position (ascending)
                 sorted_apps = sorted(
                     college_apps,
                     key=lambda x: (
-                        x.college_ranking_score or 0,
-                        -(x.submitted_at.timestamp() if x.submitted_at else 0),
+                        x.final_ranking_position if x.final_ranking_position else 999999,  # Unranked go to end
+                        x.submitted_at.timestamp() if x.submitted_at else 0,
                     ),
-                    reverse=True,
+                    reverse=False,  # Ascending order
                 )
 
                 # Allocate quota for this group
@@ -1200,7 +1182,8 @@ class QuotaDistributionService:
                         "college": college,
                         "rank_position": i + 1,
                         "is_allocated": is_allocated,
-                        "ranking_score": app.college_ranking_score,
+                        # Note: ranking_score field removed
+                        "final_ranking_position": app.final_ranking_position,
                         "quota_available": college_quota,
                         "allocation_reason": f"Within {sub_type}-{college} quota"
                         if is_allocated

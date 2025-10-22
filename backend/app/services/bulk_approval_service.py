@@ -85,8 +85,7 @@ class BulkApprovalService:
                     if approval_notes:
                         application.admin_notes = approval_notes
 
-                    # Calculate final priority score
-                    application.priority_score = application.calculate_priority_score()
+                    # Note: priority_score field removed from Application model
 
                     await self.db.commit()
 
@@ -100,7 +99,7 @@ class BulkApprovalService:
                             "previous_status": old_status,
                             "new_status": application.status,
                             "approved_at": application.approved_at.isoformat(),
-                            "priority_score": application.priority_score,
+                            # Note: priority_score field removed
                         }
                     )
 
@@ -183,7 +182,21 @@ class BulkApprovalService:
                     application.status = ApplicationStatus.rejected.value
                     application.decision_date = datetime.now(timezone.utc)
                     application.reviewer_id = rejector_user_id
-                    application.rejection_reason = rejection_reason
+
+                    # Note: rejection_reason moved to ApplicationReview model
+                    # Create ApplicationReview record to store rejection reason
+                    from app.models.application import ApplicationReview, ReviewStatus
+
+                    review = ApplicationReview(
+                        application_id=application.id,
+                        reviewer_id=rejector_user_id,
+                        review_stage="bulk_rejection",
+                        review_status=ReviewStatus.REJECTED.value,
+                        recommendation="reject",
+                        decision_reason=rejection_reason,
+                        reviewed_at=datetime.now(timezone.utc),
+                    )
+                    self.db.add(review)
 
                     await self.db.commit()
 
@@ -269,13 +282,13 @@ class BulkApprovalService:
             if semester:
                 stmt = stmt.where(Application.semester == semester)
 
-            if min_priority_score > 0:
-                stmt = stmt.where(Application.priority_score >= min_priority_score)
+            # Note: min_priority_score parameter deprecated (priority_score field removed)
+            # if min_priority_score > 0:
+            #     stmt = stmt.where(Application.priority_score >= min_priority_score)
 
-            # Order by priority score (highest first) and renewal status
+            # Order by renewal status and submission date (priority_score field removed)
             stmt = stmt.order_by(
                 Application.is_renewal.desc(),
-                Application.priority_score.desc(),
                 Application.submitted_at.asc(),
             )
 
@@ -313,7 +326,7 @@ class BulkApprovalService:
                             "student_id": application.student_data.get("student_id")
                             if application.student_data
                             else None,
-                            "priority_score": application.priority_score,
+                            # Note: priority_score field removed
                             "is_renewal": application.is_renewal,
                             "auto_approved_at": application.approved_at.isoformat(),
                         }
@@ -436,10 +449,10 @@ class BulkApprovalService:
                 if criteria["require_renewal"] and not application.is_renewal:
                     return False
 
-            # Check priority score if specified
-            if "min_priority_score" in criteria:
-                if (application.priority_score or 0) < criteria["min_priority_score"]:
-                    return False
+            # Note: min_priority_score criteria deprecated (priority_score field removed)
+            # if "min_priority_score" in criteria:
+            #     if (application.priority_score or 0) < criteria["min_priority_score"]:
+            #         return False
 
             # Check document completeness if specified
             if "require_complete_documents" in criteria and criteria["require_complete_documents"]:

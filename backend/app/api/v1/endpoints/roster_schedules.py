@@ -369,7 +369,7 @@ async def delete_roster_schedule(
         await roster_scheduler.remove_schedule(schedule_id)
 
         # Delete from database
-        db.delete(schedule)
+        await db.delete(schedule)
         await db.commit()
 
         logger.info(f"Deleted roster schedule {schedule_id} by user {current_user.id}")
@@ -389,12 +389,16 @@ async def delete_roster_schedule(
 @router.post("/{schedule_id}/execute")
 async def execute_schedule_now(
     schedule_id: int,
+    force_regenerate: bool = Query(True, description="是否強制重新產生造冊（覆蓋已存在的造冊）"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     立即執行排程
     Execute schedule immediately (manual trigger)
+
+    Parameters:
+    - force_regenerate: 是否強制重新產生造冊。預設為 True，表示手動執行時會覆蓋已存在的造冊。
     """
     check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
@@ -406,15 +410,17 @@ async def execute_schedule_now(
         if not schedule:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Roster schedule not found")
 
-        # Execute immediately in background
-        await roster_scheduler._execute_roster_generation(schedule_id)
+        # Execute immediately with force_regenerate parameter
+        await roster_scheduler._execute_roster_generation(schedule_id, force_regenerate=force_regenerate)
 
-        logger.info(f"Manually triggered schedule {schedule_id} by user {current_user.id}")
+        logger.info(
+            f"Manually triggered schedule {schedule_id} by user {current_user.id} (force_regenerate={force_regenerate})"
+        )
 
         return ApiResponse(
             success=True,
             message="Schedule execution triggered successfully",
-            data={"schedule_id": schedule_id},
+            data={"schedule_id": schedule_id, "force_regenerate": force_regenerate},
         )
 
     except Exception as e:

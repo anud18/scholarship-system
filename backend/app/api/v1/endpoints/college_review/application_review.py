@@ -19,7 +19,6 @@ from sqlalchemy.orm import selectinload
 from app.core.rate_limiting import professor_rate_limit
 from app.core.security import require_college, require_roles
 from app.db.deps import get_db
-from app.models.application import Application
 from app.models.audit_log import AuditAction
 from app.models.college_review import CollegeReview
 from app.models.student import Department
@@ -36,7 +35,6 @@ from app.schemas.response import ApiResponse
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.college_review_service import CollegeReviewService, ReviewPermissionError
 from app.services.student_service import StudentService
-from app.utils.i18n import ScholarshipI18n
 
 from ._helpers import (
     _check_academic_year_permission,
@@ -75,6 +73,9 @@ async def get_applications_for_review(
         raise ReviewPermissionError(f"User {current_user.id} not authorized for academic year {academic_year}")
 
     try:
+        # Get college code for filtering (None for super_admin to see all)
+        college_code = current_user.college_code if current_user.role == UserRole.college else None
+
         # Get raw applications from service
         service = CollegeReviewService(db)
         applications = await service.get_applications_for_review(
@@ -84,6 +85,7 @@ async def get_applications_for_review(
             reviewer_id=current_user.id,
             academic_year=academic_year,
             semester=semester,
+            college_code=college_code,
         )
 
         # Enrich applications with student data and scholarship period info (parallel processing)
@@ -369,11 +371,15 @@ async def get_student_preview(
             sex=str(sex_value) if sex_value is not None else None,
         )
 
-        # Get recent term data (last 2-3 terms)
+        # Get recent term data from current academic year back to enrollment year
         recent_terms = []
         if academic_year:
-            # Try to fetch term data for recent semesters
-            for year in range(academic_year, max(academic_year - 2, 110), -1):
+            enroll_year = int(
+                student_data.get("std_enrollyear", academic_year)
+            )  # Get enrollment year, fallback to current academic_year
+
+            # Loop from current academic year down to enrollment year
+            for year in range(academic_year, enroll_year - 1, -1):
                 for term in ["2", "1"]:  # Second semester first, then first semester
                     try:
                         term_data = await student_service.get_student_term_info(student_id, str(year), term)
@@ -404,16 +410,9 @@ async def get_student_preview(
                                     dept_name=term_data.get("trm_depname"),
                                 )
                             )
-
-                            # Stop after getting 3 terms
-                            if len(recent_terms) >= 3:
-                                break
                     except Exception as term_err:
                         logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_err)}")
                         continue
-
-                if len(recent_terms) >= 3:
-                    break
 
         preview_response = StudentPreviewResponse(
             basic=basic_info,

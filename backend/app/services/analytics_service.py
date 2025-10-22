@@ -273,15 +273,7 @@ class ScholarshipAnalyticsService:
             new_approved = len([app for app in new_apps if app.status == ApplicationStatus.approved.value])
             renewal_analysis["new_application_approval_rate"] = new_approved / len(new_apps) * 100
 
-        # Priority score comparison
-        renewal_priority_scores = [app.priority_score for app in renewal_apps if app.priority_score]
-        new_priority_scores = [app.priority_score for app in new_apps if app.priority_score]
-
-        if renewal_priority_scores:
-            renewal_analysis["average_renewal_priority"] = sum(renewal_priority_scores) / len(renewal_priority_scores)
-
-        if new_priority_scores:
-            renewal_analysis["average_new_priority"] = sum(new_priority_scores) / len(new_priority_scores)
+        # Note: Priority score comparison removed (priority_score field removed from Application model)
 
         return renewal_analysis
 
@@ -303,28 +295,13 @@ class ScholarshipAnalyticsService:
             ]
         )
 
-        # Priority score distribution
-        priority_scores = [app.priority_score for app in applications if app.priority_score is not None]
-        priority_distribution = {
-            "high_priority": len([score for score in priority_scores if score >= 100]),
-            "medium_priority": len([score for score in priority_scores if 50 <= score < 100]),
-            "low_priority": len([score for score in priority_scores if score < 50]),
-        }
-
-        # Average scores by status
-        status_priority_avg = {}
-        for status in ApplicationStatus:
-            status_apps = [app for app in applications if app.status == status.value and app.priority_score is not None]
-            if status_apps:
-                avg_priority = sum(app.priority_score for app in status_apps) / len(status_apps)
-                status_priority_avg[status.value] = round(avg_priority, 1)
+        # Note: Priority score distribution removed (priority_score field removed from Application model)
+        # Performance metrics now focus on processing efficiency and timeliness
 
         return {
             "overdue_applications": overdue_applications,
-            "priority_distribution": priority_distribution,
-            "average_priority_by_status": status_priority_avg,
-            "applications_with_priority_scores": len(priority_scores),
-            "average_overall_priority": round(sum(priority_scores) / len(priority_scores), 1) if priority_scores else 0,
+            # Note: priority_distribution, average_priority_by_status removed
+            "note": "Priority score metrics removed - system no longer uses scoring",
         }
 
     def _analyze_geographic_distribution(self, applications: List[Application]) -> Dict[str, Any]:
@@ -359,20 +336,8 @@ class ScholarshipAnalyticsService:
             else 0,
         }
 
-        # Priority score correlation
-        approved_priorities = [app.priority_score for app in approved_apps if app.priority_score is not None]
-        rejected_priorities = [app.priority_score for app in rejected_apps if app.priority_score is not None]
-
-        if approved_priorities and rejected_priorities:
-            success_factors["priority_correlation"] = {
-                "avg_approved_priority": round(sum(approved_priorities) / len(approved_priorities), 1),
-                "avg_rejected_priority": round(sum(rejected_priorities) / len(rejected_priorities), 1),
-                "priority_difference": round(
-                    sum(approved_priorities) / len(approved_priorities)
-                    - sum(rejected_priorities) / len(rejected_priorities),
-                    1,
-                ),
-            }
+        # Note: Priority score correlation removed (priority_score field removed from Application model)
+        # Success factors now focus on renewal status and submission timing
 
         # Submission timing correlation placeholder; requires additional data to categorize early vs late
 

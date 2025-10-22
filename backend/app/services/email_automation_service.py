@@ -461,7 +461,8 @@ class EmailAutomationService:
             "student_name": review_data.get("student_name", ""),
             "student_email": review_data.get("student_email", ""),
             "college_name": review_data.get("college_name", ""),
-            "college_ranking_score": review_data.get("ranking_score"),
+            # Note: college_ranking_score removed - use final_rank instead
+            "college_final_rank": review_data.get("final_rank"),
             "college_recommendation": review_data.get("recommendation", ""),
             "college_comments": review_data.get("comments", ""),
             "reviewer_name": review_data.get("reviewer_name", ""),

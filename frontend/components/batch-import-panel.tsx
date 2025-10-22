@@ -406,21 +406,66 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
       return translated === translationKey ? fieldName : translated;
     };
 
+    const handleDeleteRecord = async (index: number) => {
+      const confirmMessage = locale === "zh"
+        ? `確定要刪除第 ${index + 1} 筆資料嗎？此操作無法復原。`
+        : `Are you sure you want to delete record ${index + 1}? This action cannot be undone.`;
+
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+
+      try {
+        const response = await apiClient.batchImport.deleteRecord(uploadedBatch.batch_id, index);
+        if (response.success) {
+          // Revalidate batch data after deletion
+          const revalidateResponse = await apiClient.batchImport.revalidate(uploadedBatch.batch_id);
+          if (revalidateResponse.success && revalidateResponse.data) {
+            // Update uploadedBatch with new data
+            setUploadedBatch({
+              ...uploadedBatch,
+              total_records: revalidateResponse.data.total_records,
+              preview_data: uploadedBatch.preview_data.filter((_, i) => i !== index),
+              validation_summary: {
+                valid_count: revalidateResponse.data.valid_count,
+                invalid_count: revalidateResponse.data.invalid_count,
+                warnings: revalidateResponse.data.warnings || [],
+                errors: revalidateResponse.data.errors || [],
+              },
+            });
+          }
+        } else {
+          setError(response.message || (locale === "zh" ? "刪除失敗" : "Delete failed"));
+        }
+      } catch (error: any) {
+        setError(error.message || (locale === "zh" ? "刪除時發生錯誤" : "Error during deletion"));
+      }
+    };
+
     return (
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-nycu-blue-50">
+              <th className="border border-nycu-blue-200 px-4 py-2 text-left text-sm font-semibold">
+                {locale === "zh" ? "序號" : "#"}
+              </th>
               {columns.map((col) => (
                 <th key={col} className="border border-nycu-blue-200 px-4 py-2 text-left text-sm font-semibold">
                   {getFieldLabel(col)}
                 </th>
               ))}
+              <th className="border border-nycu-blue-200 px-4 py-2 text-left text-sm font-semibold">
+                {locale === "zh" ? "操作" : "Actions"}
+              </th>
             </tr>
           </thead>
           <tbody>
             {uploadedBatch.preview_data.map((row, idx) => (
               <tr key={idx} className="hover:bg-gray-50">
+                <td className="border border-gray-200 px-4 py-2 text-sm font-medium">
+                  {locale === "zh" ? `第 ${idx + 1} 筆` : `#${idx + 1}`}
+                </td>
                 {columns.map((col) => (
                   <td key={col} className="border border-gray-200 px-4 py-2 text-sm">
                     {typeof row[col] === 'object' && row[col] !== null
@@ -428,6 +473,17 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                       : row[col] ?? ''}
                   </td>
                 ))}
+                <td className="border border-gray-200 px-4 py-2 text-sm">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteRecord(idx)}
+                    title={locale === "zh" ? "刪除此筆資料" : "Delete this record"}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -650,7 +706,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                   <ul className="list-disc list-inside space-y-1 text-sm">
                     {errorItems.slice(0, 5).map((err, idx) => (
                       <li key={idx}>
-                        {locale === "zh" ? "第" : "Row"} {err.row} {locale === "zh" ? "行" : ""}{err.field ? ` (${err.field})` : ""}: {err.message}
+                        {locale === "zh" ? `第 ${err.row} 筆資料` : `Record ${err.row}`}{err.field ? ` (${err.field})` : ""}: {err.message}
                       </li>
                     ))}
                     {errorItems.length > 5 && (
@@ -673,8 +729,8 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                     {warningItems.map((warning, idx) => {
                       const rowLabel = warning.row
                         ? locale === "zh"
-                          ? `第 ${warning.row} 行`
-                          : `Row ${warning.row}`
+                          ? `第 ${warning.row} 筆資料`
+                          : `Record ${warning.row}`
                         : locale === "zh"
                           ? "資料"
                           : "Entry";
@@ -697,7 +753,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
             {/* Preview Table */}
             <div>
               <h3 className="font-semibold text-gray-700 mb-2">
-                {locale === "zh" ? "資料預覽 (前 10 筆)" : "Data Preview (First 10 rows)"}
+                {locale === "zh" ? `資料預覽 (共 ${uploadedBatch.total_records} 筆)` : `Data Preview (${uploadedBatch.total_records} records)`}
               </h3>
               {renderPreviewTable()}
             </div>

@@ -331,12 +331,11 @@ export function useCollegeApplications() {
       try {
         setError(null);
 
-        // For college role, we might need a different endpoint or the same admin one
-        // For now, using admin endpoint - this should be role-based in backend
-        const response = await apiClient.admin.updateApplicationStatus(
+        // Use the applications endpoint which allows staff (including college role)
+        // This endpoint uses require_staff permission instead of require_admin
+        const response = await apiClient.applications.updateApplicationStatus(
           applicationId,
-          status,
-          reviewNotes
+          { status, comments: reviewNotes }
         );
 
         if (response.success && response.data) {

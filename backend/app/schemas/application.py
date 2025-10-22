@@ -239,8 +239,10 @@ class ApplicationReviewResponse(BaseModel):
     reviewer_id: int
     review_stage: str
     review_status: str
-    score: Optional[Decimal]
+    # Note: score removed (評分已移除)
     comments: Optional[str]
+    recommendation: Optional[str]
+    decision_reason: Optional[str]  # 包含拒絕原因
     reviewed_at: Optional[datetime]
 
 
@@ -312,9 +314,8 @@ class ApplicationResponse(BaseModel):
     professor_id: Optional[int] = None
     reviewer_id: Optional[int] = None
     final_approver_id: Optional[int] = None
-    review_score: Optional[Decimal] = None
-    review_comments: Optional[str] = None
-    rejection_reason: Optional[str] = None
+    # Note: review_score, review_comments, rejection_reason removed
+    # Get these from reviews relationship if needed
     submitted_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
     approved_at: Optional[datetime] = None
@@ -389,9 +390,8 @@ class ApplicationListResponse(BaseModel):
     professor_id: Optional[int] = None
     reviewer_id: Optional[int] = None
     final_approver_id: Optional[int] = None
-    review_score: Optional[Decimal] = None
-    review_comments: Optional[str] = None
-    rejection_reason: Optional[str] = None
+    # Note: review_score, review_comments, rejection_reason removed
+    # Get these from ApplicationReview.reviews relationship if needed
     submitted_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
     approved_at: Optional[datetime] = None
@@ -506,9 +506,8 @@ class HistoricalApplicationResponse(BaseModel):
     # Review information
     professor_name: Optional[str] = None
     reviewer_name: Optional[str] = None
-    review_score: Optional[Decimal] = None
-    review_comments: Optional[str] = None
-    rejection_reason: Optional[str] = None
+    # Note: review_score, review_comments, rejection_reason removed
+    # Get these from ApplicationReview if needed
 
     # Status helpers
     @classmethod

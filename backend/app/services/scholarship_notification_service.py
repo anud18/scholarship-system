@@ -173,6 +173,16 @@ class ScholarshipNotificationService:
                 },
             )
 
+            # Note: rejection_reason moved to ApplicationReview model
+            # Get rejection reason from latest ApplicationReview if applicable
+            rejection_reason = None
+            if new_status == ApplicationStatus.rejected.value and application.reviews:
+                # Get the latest review with a decision_reason
+                for review in reversed(application.reviews):
+                    if review.decision_reason:
+                        rejection_reason = review.decision_reason
+                        break
+
             subject = f"{status_info['title']} - {application.app_id}"
 
             html_content = f"""
@@ -196,7 +206,7 @@ class ScholarshipNotificationService:
 
                 {"<div style='background-color: #f0fff4; padding: 15px; border-radius: 5px; margin: 15px 0; border: 1px solid #9ae6b4;'><p style='margin: 0; color: #22543d;'><strong>Next Steps:</strong> Please log in to your student portal to view full details and any required actions.</p></div>" if new_status in [ApplicationStatus.approved.value, ApplicationStatus.returned.value] else ""}
 
-                {f"<div style='background-color: #fef5e7; padding: 15px; border-radius: 5px; margin: 15px 0;'><p style='margin: 0;'><strong>Rejection Reason:</strong> {application.rejection_reason}</p></div>" if new_status == ApplicationStatus.rejected.value and application.rejection_reason else ""}
+                {f"<div style='background-color: #fef5e7; padding: 15px; border-radius: 5px; margin: 15px 0;'><p style='margin: 0;'><strong>Rejection Reason:</strong> {rejection_reason}</p></div>" if new_status == ApplicationStatus.rejected.value and rejection_reason else ""}
 
                 <p>For questions or concerns, please contact the scholarship office.</p>
 

@@ -2,7 +2,7 @@
 Database session management
 """
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -131,6 +131,29 @@ async def get_db_session():
         raise
     finally:
         await session.close()
+
+
+@contextmanager
+def get_sync_db_session():
+    """
+    Get a synchronous database session with proper error handling
+
+    This function provides a synchronous database session for use in
+    contexts where async is not available (e.g., APScheduler jobs).
+
+    Usage:
+        with get_sync_db_session() as session:
+            # use session
+    """
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 async def invalidate_connection_pools():

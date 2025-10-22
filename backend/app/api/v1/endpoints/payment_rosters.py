@@ -12,7 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.functions import count
 
 from app.core.deps import get_current_user
@@ -28,6 +28,7 @@ from app.models.payment_roster import (
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
 from app.schemas.roster import (
+    RosterAuditLogResponse,
     RosterCreateRequest,
     RosterExportRequest,
     RosterItemResponse,
@@ -118,8 +119,13 @@ async def list_payment_rosters(
     Get payment roster list
     """
     try:
-        # Build query
-        stmt = select(PaymentRoster)
+        # Build query with eager loading to avoid MissingGreenlet errors
+        stmt = select(PaymentRoster).options(
+            selectinload(PaymentRoster.items),
+            selectinload(PaymentRoster.audit_logs),
+            selectinload(PaymentRoster.creator),
+            selectinload(PaymentRoster.locker),
+        )
 
         # 套用篩選條件
         if scholarship_configuration_id:
@@ -141,9 +147,35 @@ async def list_payment_rosters(
         result = await db.execute(stmt)
         rosters = result.scalars().all()
 
-        response_data = RosterListResponse(
-            items=[RosterResponse.from_orm(roster) for roster in rosters], total=total or 0, skip=skip, limit=limit
-        )
+        # 手動構造回應字典以正確映射字段名稱
+        roster_responses = []
+        for roster in rosters:
+            roster_dict = {
+                "id": roster.id,
+                "roster_code": roster.roster_code,
+                "scholarship_configuration_id": roster.scholarship_configuration_id,
+                "period_label": roster.period_label,
+                "roster_cycle": roster.roster_cycle,
+                "academic_year": roster.academic_year,
+                "status": roster.status,
+                "trigger_type": roster.trigger_type,
+                "qualified_count": roster.qualified_count,
+                "disqualified_count": roster.disqualified_count,
+                "total_amount": roster.total_amount,
+                "created_by_user_id": roster.created_by,  # 字段名稱映射
+                "created_at": roster.created_at,
+                "updated_at": roster.updated_at,
+                "locked_at": roster.locked_at,
+                "locked_by_user_id": roster.locked_by,
+                # Optional relationships (已 eager loaded，避免 MissingGreenlet)
+                "items": [RosterItemResponse.from_orm(item) for item in roster.items] if roster.items else None,
+                "audit_logs": (
+                    [RosterAuditLogResponse.from_orm(log) for log in roster.audit_logs] if roster.audit_logs else None
+                ),
+            }
+            roster_responses.append(RosterResponse(**roster_dict))
+
+        response_data = RosterListResponse(items=roster_responses, total=total or 0, skip=skip, limit=limit)
         return ApiResponse(
             success=True,
             message="查詢成功",
@@ -729,7 +761,7 @@ async def delete_roster(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="無法刪除已鎖定的造冊")
 
         # 刪除造冊項目和稽核記錄（透過cascade）
-        db.delete(roster)
+        await db.delete(roster)
         await db.commit()
 
         logger.info(f"Roster {roster.roster_code} deleted by user {current_user.id}")
