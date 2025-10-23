@@ -347,18 +347,12 @@ async def get_student_preview(
         if not academy_name:
             academy_name = student_data.get("aca_cname")
 
-        # Map degree code to readable text
-        degree_map = {
-            "1": "博士",
-            "2": "碩士",
-            "3": "學士",
-        }
+        # Get degree and sex codes (keep as codes for frontend to convert using SWR)
         degree_code = student_data.get("std_degree", "3")
-        degree_text = degree_map.get(degree_code, "學士")
+        sex_code = student_data.get("std_sex")
 
-        # Convert integer values to strings for Pydantic validation
+        # Convert values to strings for Pydantic validation
         enrollyear_value = student_data.get("std_enrollyear")
-        sex_value = student_data.get("std_sex")
 
         basic_info = StudentPreviewBasic(
             student_id=student_id,
@@ -366,9 +360,9 @@ async def get_student_preview(
             department_name=department_name,
             academy_name=academy_name,
             term_count=student_data.get("std_termcount"),
-            degree=degree_text,
+            degree=str(degree_code) if degree_code is not None else None,
             enrollyear=str(enrollyear_value) if enrollyear_value is not None else None,
-            sex=str(sex_value) if sex_value is not None else None,
+            sex=str(sex_code) if sex_code is not None else None,
         )
 
         # Get recent term data from current academic year back to enrollment year
