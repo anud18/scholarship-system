@@ -23,6 +23,7 @@ type ReferenceDataAll = {
   identities: Array<{ id: number; name: string }>;
   studying_statuses: Array<{ id: number; name: string }>;
   school_identities: Array<{ id: number; name: string }>;
+  genders: Array<{ id: number; name: string }>;
   enroll_types: Array<{
     degree_id: number;
     code: string;
@@ -87,6 +88,7 @@ export function useReferenceData() {
     identities: data?.identities || [],
     studyingStatuses: data?.studying_statuses || [],
     schoolIdentities: data?.school_identities || [],
+    genders: data?.genders || [],
     academies: data?.academies || [],
     departments: data?.departments || [],
     enrollTypes: data?.enroll_types || [],
@@ -250,4 +252,30 @@ export function getDepartmentName(
   }
 
   return deptCode;
+}
+
+/**
+ * Helper to get gender name by ID
+ *
+ * @param genderId - The gender ID to look up (1: 男性, 2: 女性)
+ * @param genders - Array of genders (from useReferenceData)
+ * @returns Display name or fallback message
+ * @example
+ * const name = getGenderName(1, genders);
+ * // Returns: "男性"
+ */
+export function getGenderName(
+  genderId: number | undefined,
+  genders: Array<{ id: number; name: string }>
+): string {
+  if (genderId === undefined || genderId === null) {
+    return '-';
+  }
+
+  const gender = genders.find(g => g.id === genderId);
+  if (gender) {
+    return gender.name;
+  }
+
+  return `未知性別 (${genderId})`;
 }

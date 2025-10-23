@@ -341,7 +341,12 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => window.open(`/api/v1/payment-rosters/${roster.id}/preview`, '_blank')}
+                            onClick={() => {
+                              // Get token from localStorage, following CLAUDE.md pattern
+                              const token = localStorage.getItem("auth_token") ||
+                                            localStorage.getItem("token") || "";
+                              window.open(`/api/v1/preview?type=roster&rosterId=${roster.id}&token=${token}`, '_blank')
+                            }}
                           >
                             <Eye className="mr-2 h-4 w-4" />
                             預覽造冊

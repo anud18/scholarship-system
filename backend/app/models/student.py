@@ -52,6 +52,15 @@ class SchoolIdentity(Base):
     name = Column(String(50))
 
 
+class Gender(Base):
+    """性別表"""
+
+    __tablename__ = "genders"
+
+    id = Column(SmallInteger, primary_key=True)
+    name = Column(String(20), nullable=False)
+
+
 class Academy(Base):
     """學院表"""
 

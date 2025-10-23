@@ -34,6 +34,7 @@ type ReferenceDataAll = {
   identities: Array<{ id: number; name: string }>;
   studying_statuses: Array<{ id: number; name: string }>;
   school_identities: Array<{ id: number; name: string }>;
+  genders: Array<{ id: number; name: string }>;
   enroll_types: Array<{
     degree_id: number;
     code: string;

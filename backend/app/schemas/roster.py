@@ -46,9 +46,9 @@ class RosterItemResponse(BaseModel):
     student_name: str
     scholarship_amount: Decimal
     verification_status: StudentVerificationStatus
-    verification_result: Optional[Dict[str, Any]] = None
-    is_qualified: bool
-    disqualification_reason: Optional[str] = None
+    verification_snapshot: Optional[Dict[str, Any]] = None  # 對應 model 欄位名稱
+    is_included: bool  # 對應 model 欄位名稱
+    exclusion_reason: Optional[str] = None  # 對應 model 欄位名稱
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -90,6 +90,12 @@ class RosterResponse(BaseModel):
     updated_at: Optional[datetime] = None
     locked_at: Optional[datetime] = None
     locked_by_user_id: Optional[int] = None
+
+    # 前端需要的額外欄位
+    scholarship_config_name: Optional[str] = None
+    student_count: Optional[int] = None
+    roster_name: Optional[str] = None  # 對應 roster_code
+    roster_period: Optional[str] = None  # 對應 roster_cycle.value
 
     # 關聯資料（選用）
     items: Optional[List[RosterItemResponse]] = None

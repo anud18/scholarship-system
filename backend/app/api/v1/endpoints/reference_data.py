@@ -15,7 +15,7 @@ from app.core.deps import get_db
 from app.models.application import Application
 from app.models.enums import ApplicationCycle, Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
-from app.models.student import Academy, Degree, Department, EnrollType, Identity, SchoolIdentity, StudyingStatus
+from app.models.student import Academy, Degree, Department, EnrollType, Gender, Identity, SchoolIdentity, StudyingStatus
 from app.schemas.common import ApiResponse
 
 func: Any = sa_func
@@ -65,6 +65,17 @@ async def get_school_identities(
     school_identities = result.scalars().all()
 
     return [{"id": school_identity.id, "name": school_identity.name} for school_identity in school_identities]
+
+
+@router.get("/genders")
+async def get_genders(
+    session: AsyncSession = Depends(get_db),
+) -> List[dict]:
+    """Get all gender types"""
+    result = await session.execute(select(Gender))
+    genders = result.scalars().all()
+
+    return [{"id": gender.id, "name": gender.name} for gender in genders]
 
 
 @router.get("/academies")
@@ -136,6 +147,7 @@ async def get_all_reference_data(
     identities_result = await session.execute(select(Identity))
     statuses_result = await session.execute(select(StudyingStatus))
     school_identities_result = await session.execute(select(SchoolIdentity))
+    genders_result = await session.execute(select(Gender))
     academies_result = await session.execute(select(Academy).order_by(Academy.code))
     departments_result = await session.execute(select(Department).order_by(Department.code))
     enroll_types_result = await session.execute(
@@ -146,6 +158,7 @@ async def get_all_reference_data(
     identities = identities_result.scalars().all()
     statuses = statuses_result.scalars().all()
     school_identities = school_identities_result.scalars().all()
+    genders = genders_result.scalars().all()
     academies = academies_result.scalars().all()
     departments = departments_result.scalars().all()
     enroll_types = enroll_types_result.scalars().all()
@@ -157,6 +170,7 @@ async def get_all_reference_data(
         "school_identities": [
             {"id": school_identity.id, "name": school_identity.name} for school_identity in school_identities
         ],
+        "genders": [{"id": gender.id, "name": gender.name} for gender in genders],
         "academies": [{"id": academy.id, "code": academy.code, "name": academy.name} for academy in academies],
         "departments": [
             {"id": department.id, "code": department.code, "name": department.name} for department in departments
