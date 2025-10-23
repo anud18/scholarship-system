@@ -176,9 +176,9 @@ COPY public.configuration_audit_logs (id, setting_key, old_value, new_value, act
 --
 
 COPY public.degrees (id, name) FROM stdin;
-1	學士
+1	博士
 2	碩士
-3	博士
+3	學士
 \.
 
 
@@ -690,4 +690,3 @@ SELECT pg_catalog.setval('public.users_id_seq', 20, true);
 --
 -- PostgreSQL database dump complete
 --
-

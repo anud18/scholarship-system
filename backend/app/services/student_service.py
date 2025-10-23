@@ -202,15 +202,21 @@ class StudentService:
             logger.error(f"Unexpected error fetching student term data for {student_code}: {str(e)}")
             raise ServiceUnavailableError(f"Failed to fetch student term data: {str(e)}")
 
-    async def get_student_snapshot(self, student_code: str) -> Dict[str, Any]:
+    async def get_student_snapshot(
+        self, student_code: str, academic_year: Optional[str] = None, semester: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Get student data snapshot for application storage
 
+        Fetches both basic student info (API 1) and term-specific data (API 2).
+
         Args:
             student_code: Student ID code
+            academic_year: Academic year (e.g., '114') for term data query
+            semester: Semester ('first', 'second', or None for yearly scholarships)
 
         Returns:
-            Student data snapshot dictionary
+            Student data snapshot dictionary with both std_* and trm_* fields
 
         Raises:
             NotFoundError: If student not found
@@ -219,47 +225,113 @@ class StudentService:
         if not self.api_enabled:
             raise ServiceUnavailableError("Student API is not configured")
 
+        # Fetch basic student info (API 1)
         student_data = await self.get_student_basic_info(student_code)
 
         if not student_data:
             raise NotFoundError(f"Student {student_code} not found in external API")
 
+        # Fetch term-specific data (API 2) if academic_year is provided
+        term_data = None
+        term_data_status = "not_requested"
+        term_error_message = None
+
+        if academic_year:
+            try:
+                if semester == "first":
+                    # Semester-based: query first semester only
+                    logger.info(f"Fetching term data for {student_code}: {academic_year} term 1")
+                    term_data = await self.get_student_term_info(student_code, academic_year, "1")
+                    term_data_status = "success" if term_data else "error"
+                    if not term_data:
+                        term_error_message = f"No data for {academic_year} term 1"
+
+                elif semester == "second":
+                    # Semester-based: query second semester only
+                    logger.info(f"Fetching term data for {student_code}: {academic_year} term 2")
+                    term_data = await self.get_student_term_info(student_code, academic_year, "2")
+                    term_data_status = "success" if term_data else "error"
+                    if not term_data:
+                        term_error_message = f"No data for {academic_year} term 2"
+
+                else:
+                    # Yearly scholarship: try term 2 first, then term 1
+                    logger.info(f"Fetching term data for {student_code}: {academic_year} (yearly, trying term 2 first)")
+                    term_data = await self.get_student_term_info(student_code, academic_year, "2")
+
+                    if not term_data:
+                        logger.info(f"Term 2 not found for {student_code}, trying term 1")
+                        term_data = await self.get_student_term_info(student_code, academic_year, "1")
+
+                    if term_data:
+                        term_data_status = "success"
+                    else:
+                        term_data_status = "error"
+                        term_error_message = f"No data for {academic_year} in both term 1 and 2"
+
+            except Exception as e:
+                logger.warning(f"Failed to fetch term data for {student_code}: {e}")
+                term_data_status = "error"
+                term_error_message = str(e)
+
         # Create snapshot with consistent field mapping
         snapshot = {
+            # API 1: Basic student info (std_* fields)
             "std_stdno": student_data.get("std_stdno"),
             "std_stdcode": student_data.get("std_stdcode"),
             "std_pid": student_data.get("std_pid"),
             "std_cname": student_data.get("std_cname"),
             "std_ename": student_data.get("std_ename"),
-            "std_bdate": student_data.get("std_bdate"),  # New field
+            "std_bdate": student_data.get("std_bdate"),
             "std_degree": student_data.get("std_degree"),
-            "std_studingstatus": student_data.get("std_studingstatus"),  # Updated field
+            "std_studingstatus": student_data.get("std_studingstatus"),
             "std_sex": student_data.get("std_sex"),
             "std_enrollyear": student_data.get("std_enrollyear"),
             "std_enrollterm": student_data.get("std_enrollterm"),
-            "term_count": student_data.get("trm_termcount") or student_data.get("std_termcount"),
+            "std_termcount": student_data.get("std_termcount"),
             "std_nation": student_data.get("std_nation"),
             "std_schoolid": student_data.get("std_schoolid"),
             "std_identity": student_data.get("std_identity"),
             "std_depno": student_data.get("std_depno"),
-            "trm_depname": student_data.get("trm_depname"),
             "std_academyno": student_data.get("std_academyno"),
-            "aca_cname": student_data.get("aca_cname"),
             "std_enrolltype": student_data.get("std_enrolltype"),
             "std_directmemo": student_data.get("std_directmemo"),
             "std_highestschname": student_data.get("std_highestschname"),
+            "std_enrolldate": student_data.get("std_enrolldate"),
+            "std_overseaplace": student_data.get("std_overseaplace"),
             "com_cellphone": student_data.get("com_cellphone"),
             "com_email": student_data.get("com_email"),
             "com_commzip": student_data.get("com_commzip"),
             "com_commadd": student_data.get("com_commadd"),
-            "std_enrolldate": student_data.get("std_enrolldate"),
-            "std_overseaplace": student_data.get("std_overseaplace"),
             "mgd_title": student_data.get("mgd_title"),
             "ToDoctor": student_data.get("ToDoctor"),
             # Metadata
-            "api_fetched_at": datetime.now(timezone.utc).isoformat(),
-            "api_source": self.api_base_url,
+            "_api_fetched_at": datetime.now(timezone.utc).isoformat(),
+            "_api_source": self.api_base_url,
+            "_term_data_status": term_data_status,
+            "_term_error_message": term_error_message,
         }
+
+        # API 2: Term-specific data (trm_* fields) - add if available
+        if term_data:
+            snapshot.update(
+                {
+                    "trm_year": term_data.get("trm_year"),
+                    "trm_term": term_data.get("trm_term"),
+                    "trm_termcount": term_data.get("trm_termcount"),
+                    "trm_studystatus": term_data.get("trm_studystatus"),
+                    "trm_degree": term_data.get("trm_degree"),
+                    "trm_academyno": term_data.get("trm_academyno"),
+                    "trm_academyname": term_data.get("trm_academyname"),
+                    "trm_depno": term_data.get("trm_depno"),
+                    "trm_depname": term_data.get("trm_depname"),
+                    "trm_placings": term_data.get("trm_placings"),
+                    "trm_placingsrate": term_data.get("trm_placingsrate"),
+                    "trm_depplacing": term_data.get("trm_depplacing"),
+                    "trm_depplacingrate": term_data.get("trm_depplacingrate"),
+                    "trm_ascore_gpa": term_data.get("trm_ascore_gpa"),
+                }
+            )
 
         return snapshot
 

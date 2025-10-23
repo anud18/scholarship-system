@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
 from app.models.application import Application, ApplicationStatus, ProfessorReview, ProfessorReviewItem
+from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
@@ -312,16 +313,27 @@ class ApplicationService:
         # Note: Check for existing applications is now handled at the API endpoint level
         # where user_id is available from the authenticated user context
 
-    async def _get_user_and_student_data(self, user_id: int, student_code: str) -> Tuple[User, Dict[str, Any]]:
+    async def _get_user_and_student_data(
+        self, user_id: int, student_code: str, academic_year: int, semester: Optional[Semester]
+    ) -> Tuple[User, Dict[str, Any]]:
         """Get user and fetch student data from external API"""
         # Get user
         stmt = select(User).where(User.id == user_id)
         result = await self.db.execute(stmt)
         user = result.scalar_one()
 
-        # Get student data from external API
-        logger.debug(f"Fetching student data for student_code={student_code}")
-        student_snapshot = await self.student_service.get_student_snapshot(student_code)
+        # Convert semester enum to string for API call
+        semester_str = None
+        if semester:
+            semester_str = semester.value  # "first" or "second"
+
+        # Get student data from external API with term data
+        logger.debug(
+            f"Fetching student data for student_code={student_code}, year={academic_year}, semester={semester_str}"
+        )
+        student_snapshot = await self.student_service.get_student_snapshot(
+            student_code, academic_year=str(academic_year), semester=semester_str
+        )
         logger.debug(f"Student snapshot: {student_snapshot}")
 
         return user, student_snapshot
@@ -426,11 +438,14 @@ class ApplicationService:
         )
         logger.debug(f"Application data received: {application_data.dict(exclude_none=True)}")
 
-        # Get user and student data
-        user, student_snapshot = await self._get_user_and_student_data(user_id, student_code)
-
-        # Get and validate scholarship type and configuration
+        # Get and validate scholarship type and configuration first
+        # (needed to determine academic_year and semester for student snapshot)
         scholarship, config = await self._get_scholarship_and_config(application_data)
+
+        # Get user and student data with term information
+        user, student_snapshot = await self._get_user_and_student_data(
+            user_id, student_code, config.academic_year, config.semester
+        )
 
         # Eligibility verification
         eligibility_service = EligibilityService(self.db)

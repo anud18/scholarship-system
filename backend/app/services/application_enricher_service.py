@@ -149,7 +149,8 @@ class ApplicationEnricherService:
         task_keys = []
 
         for app in applications:
-            if not app.get("academic_year") or app.get("semester") is None:
+            # Skip only if academic_year is missing (semester can be None for yearly scholarships)
+            if not app.get("academic_year"):
                 continue
 
             student_data = app.get("student_data", {}) if isinstance(app.get("student_data"), dict) else {}

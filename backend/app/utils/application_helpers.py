@@ -291,6 +291,8 @@ def get_term_count_from_data(student_data: Dict[str, Any]) -> Optional[str]:
     """
     從學生資料字典中提取學期數
 
+    優先使用申請當下學期資料 (trm_termcount)，其次使用基本資料 (std_termcount)
+
     Args:
         student_data: 學生資料字典（來自 API）
 
@@ -300,7 +302,8 @@ def get_term_count_from_data(student_data: Dict[str, Any]) -> Optional[str]:
     if not student_data or not isinstance(student_data, dict):
         return None
 
-    return student_data.get("term_count") or student_data.get("std_termcount")
+    # Priority: trm_termcount (term data) > std_termcount (basic data) > term_count (legacy)
+    return student_data.get("trm_termcount") or student_data.get("std_termcount") or student_data.get("term_count")
 
 
 def get_enrollment_info_from_data(student_data: Dict[str, Any]) -> Dict[str, Any]:

@@ -59,9 +59,9 @@ async def seed_lookup_tables(session: AsyncSession):
             text(
                 """
             INSERT INTO degrees (id, name) VALUES
-            (1, '學士'),
+            (1, '博士'),
             (2, '碩士'),
-            (3, '博士')
+            (3, '學士')
             ON CONFLICT (id) DO NOTHING
         """
             )
