@@ -14,23 +14,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import DatabaseError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.rate_limiting import professor_rate_limit
 from app.core.security import require_college, require_roles
 from app.db.deps import get_db
 from app.models.audit_log import AuditAction
 from app.models.college_review import CollegeReview
-from app.models.student import Department
 from app.models.user import User, UserRole
-from app.schemas.college_review import (
-    CollegeReviewCreate,
-    CollegeReviewResponse,
-    CollegeReviewUpdate,
-    StudentPreviewBasic,
-    StudentPreviewResponse,
-    StudentTermData,
-)
+from app.schemas.college_review import CollegeReviewCreate, CollegeReviewResponse, CollegeReviewUpdate, StudentTermData
 from app.schemas.response import ApiResponse
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.college_review_service import CollegeReviewService, ReviewPermissionError
@@ -326,45 +317,6 @@ async def get_student_preview(
         if not student_data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student {student_id} not found")
 
-        # Get department and academy info
-        dept_code = student_data.get("dept_code")
-        department_name = None
-        academy_name = None
-
-        if dept_code:
-            dept_stmt = select(Department).options(selectinload(Department.academy)).where(Department.code == dept_code)
-            dept_result = await db.execute(dept_stmt)
-            dept = dept_result.scalar_one_or_none()
-
-            if dept:
-                department_name = dept.name
-                if dept.academy:
-                    academy_name = dept.academy.name
-
-        # Fallback to API data if database doesn't have department info
-        if not department_name:
-            department_name = student_data.get("dep_depname")
-        if not academy_name:
-            academy_name = student_data.get("aca_cname")
-
-        # Get degree and sex codes (keep as codes for frontend to convert using SWR)
-        degree_code = student_data.get("std_degree", "3")
-        sex_code = student_data.get("std_sex")
-
-        # Convert values to strings for Pydantic validation
-        enrollyear_value = student_data.get("std_enrollyear")
-
-        basic_info = StudentPreviewBasic(
-            student_id=student_id,
-            student_name=student_data.get("std_cname") or student_data.get("std_ename") or student_id,
-            department_name=department_name,
-            academy_name=academy_name,
-            term_count=student_data.get("std_termcount"),
-            degree=str(degree_code) if degree_code is not None else None,
-            enrollyear=str(enrollyear_value) if enrollyear_value is not None else None,
-            sex=str(sex_code) if sex_code is not None else None,
-        )
-
         # Get recent term data from current academic year back to enrollment year
         recent_terms = []
         if academic_year:
@@ -408,15 +360,13 @@ async def get_student_preview(
                         logger.debug(f"Could not fetch term data for {student_id} {year}-{term}: {str(term_err)}")
                         continue
 
-        preview_response = StudentPreviewResponse(
-            basic=basic_info,
-            recent_terms=recent_terms,
-        )
-
         return ApiResponse(
             success=True,
             message="Student preview retrieved successfully",
-            data=preview_response.model_dump(),
+            data={
+                "basic": student_data,
+                "recent_terms": [term.model_dump() for term in recent_terms],
+            },
         )
 
     except HTTPException:
