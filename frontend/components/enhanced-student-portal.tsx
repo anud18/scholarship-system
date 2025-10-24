@@ -87,6 +87,7 @@ interface EnhancedStudentPortalProps {
   };
   locale: Locale;
   initialTab?: "scholarship-list" | "new-application" | "applications";
+  onApplicationSubmitted?: () => void;
 }
 
 type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
@@ -95,6 +96,7 @@ export function EnhancedStudentPortal({
   user,
   locale,
   initialTab = "scholarship-list",
+  onApplicationSubmitted,
 }: EnhancedStudentPortalProps) {
   const t = (key: string) => getTranslation(locale, key);
   const validator = useMemo(() => new FormValidator(locale), [locale]);
@@ -739,6 +741,9 @@ export function EnhancedStudentPortal({
       // 重新載入申請列表
       await fetchApplications();
       setActiveTab("applications");
+
+      // 通知父組件切換到「我的申請」tab
+      onApplicationSubmitted?.();
 
       alert(
         locale === "zh"

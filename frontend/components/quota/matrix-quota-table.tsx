@@ -24,11 +24,10 @@ import {
   getWarningColor,
 } from "@/types/quota";
 import {
-  getCollegeName,
-  getCollegeCodes,
+  useReferenceData,
+  getAcademyName,
   getSubTypeName,
-  getSubTypeCodes,
-} from "@/lib/college-mappings";
+} from "@/hooks/use-reference-data";
 import { quotaApi } from "@/services/api/quotaApi";
 
 interface MatrixQuotaTableProps {
@@ -53,6 +52,7 @@ export function MatrixQuotaTable({
   currentPeriod,
 }: MatrixQuotaTableProps) {
   const { toast } = useToast();
+  const { academies, subTypeTranslations } = useReferenceData();
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [savingCell, setSavingCell] = useState<string | null>(null);
   const [localData, setLocalData] = useState<MatrixQuotaData | null>(data);
@@ -61,7 +61,10 @@ export function MatrixQuotaTable({
     setLocalData(data);
   }, [data]);
 
-  // Get colleges and sub-types from the actual data, fallback to static lists if no data
+  // Get college codes from academies reference data
+  const academyCodes = academies.map(a => a.code).sort();
+
+  // Get colleges and sub-types from the actual data, fallback to reference data if no data
   const colleges =
     localData && Object.keys(localData.phd_quotas).length > 0
       ? Array.from(
@@ -71,10 +74,10 @@ export function MatrixQuotaTable({
             )
           )
         ).sort()
-      : getCollegeCodes();
+      : academyCodes;
   const subTypes = localData
     ? Object.keys(localData.phd_quotas)
-    : getSubTypeCodes();
+    : Object.keys(subTypeTranslations.zh);
 
   const handleEditStart = (
     subType: string,
@@ -167,7 +170,7 @@ export function MatrixQuotaTable({
 
         toast({
           title: "更新成功",
-          description: `${getSubTypeName(editingCell.subType)} - ${getCollegeName(editingCell.college)}: ${response.data.old_quota} → ${response.data.new_quota}`,
+          description: `${getSubTypeName(editingCell.subType, subTypeTranslations, "zh")} - ${getAcademyName(editingCell.college, academies)}: ${response.data.old_quota} → ${response.data.new_quota}`,
         });
       } else {
         throw new Error(response.message || "更新失敗");
@@ -264,7 +267,7 @@ export function MatrixQuotaTable({
             {colleges.map(college => (
               <TableHead key={college} className="text-center min-w-[100px]">
                 <div className="flex flex-col">
-                  <span className="font-medium">{getCollegeName(college)}</span>
+                  <span className="font-medium">{getAcademyName(college, academies)}</span>
                   <span className="text-xs text-gray-500">({college})</span>
                 </div>
               </TableHead>
@@ -281,7 +284,7 @@ export function MatrixQuotaTable({
               <TableRow key={subType}>
                 <TableCell className="font-medium sticky left-0 bg-white z-10">
                   <div className="flex flex-col">
-                    <span>{getSubTypeName(subType)}</span>
+                    <span>{getSubTypeName(subType, subTypeTranslations, "zh")}</span>
                     <span className="text-xs text-gray-500">({subType})</span>
                   </div>
                 </TableCell>

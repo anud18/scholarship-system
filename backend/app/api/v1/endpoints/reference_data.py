@@ -14,7 +14,12 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import get_db
 from app.models.application import Application
 from app.models.enums import ApplicationCycle, Semester
-from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
+from app.models.scholarship import (
+    ScholarshipConfiguration,
+    ScholarshipStatus,
+    ScholarshipSubTypeConfig,
+    ScholarshipType,
+)
 from app.models.student import Academy, Degree, Department, EnrollType, Gender, Identity, SchoolIdentity, StudyingStatus
 from app.schemas.common import ApiResponse
 
@@ -154,6 +159,17 @@ async def get_all_reference_data(
         select(EnrollType).options(selectinload(EnrollType.degree)).order_by(EnrollType.degreeId, EnrollType.code)
     )
 
+    # Get scholarship sub-type configurations
+    sub_type_configs_result = await session.execute(
+        select(ScholarshipSubTypeConfig)
+        .join(ScholarshipType)
+        .where(
+            ScholarshipType.status == ScholarshipStatus.active.value,
+            ScholarshipSubTypeConfig.is_active == True,
+        )
+        .order_by(ScholarshipSubTypeConfig.display_order)
+    )
+
     degrees = degrees_result.scalars().all()
     identities = identities_result.scalars().all()
     statuses = statuses_result.scalars().all()
@@ -162,6 +178,14 @@ async def get_all_reference_data(
     academies = academies_result.scalars().all()
     departments = departments_result.scalars().all()
     enroll_types = enroll_types_result.scalars().all()
+    sub_type_configs = sub_type_configs_result.scalars().all()
+
+    # Build sub-type translations dictionary
+    sub_type_translations = {"zh": {}, "en": {}}
+    for config in sub_type_configs:
+        if config.sub_type_code not in sub_type_translations["zh"]:
+            sub_type_translations["zh"][config.sub_type_code] = config.name
+            sub_type_translations["en"][config.sub_type_code] = config.name_en or config.name
 
     return {
         "degrees": [{"id": degree.id, "name": degree.name} for degree in degrees],
@@ -185,6 +209,7 @@ async def get_all_reference_data(
             }
             for enroll_type in enroll_types
         ],
+        "sub_type_translations": sub_type_translations,
     }
 
 

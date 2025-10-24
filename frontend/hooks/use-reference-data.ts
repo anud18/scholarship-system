@@ -31,6 +31,10 @@ type ReferenceDataAll = {
     name_en?: string;
     degree_name?: string;
   }>;
+  sub_type_translations?: {
+    zh: Record<string, string>;
+    en: Record<string, string>;
+  };
 };
 
 /**
@@ -92,6 +96,7 @@ export function useReferenceData() {
     academies: data?.academies || [],
     departments: data?.departments || [],
     enrollTypes: data?.enroll_types || [],
+    subTypeTranslations: data?.sub_type_translations || { zh: {}, en: {} },
 
     // Full data object
     data,
@@ -326,4 +331,31 @@ export function getEnrollTypeName(
   }
 
   return `未知入學方式 (${enrollTypeCode})`;
+}
+
+/**
+ * Helper to get scholarship sub-type name by code
+ *
+ * @param subTypeCode - The sub-type code to look up (e.g., "nstc", "moe_1w", "general")
+ * @param translations - Sub-type translations object (from useReferenceData)
+ * @param locale - Language locale ("zh" or "en")
+ * @returns Display name or fallback to code
+ * @example
+ * const name = getSubTypeName("nstc", subTypeTranslations, "zh");
+ * // Returns: "國科會"
+ */
+export function getSubTypeName(
+  subTypeCode: string | undefined,
+  translations: { zh: Record<string, string>; en: Record<string, string> },
+  locale: "zh" | "en" = "zh"
+): string {
+  if (!subTypeCode) {
+    return '-';
+  }
+
+  const translation = locale === "zh"
+    ? translations.zh[subTypeCode]
+    : translations.en[subTypeCode];
+
+  return translation || subTypeCode;
 }

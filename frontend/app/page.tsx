@@ -535,6 +535,7 @@ export default function ScholarshipManagementSystem() {
                   }
                   locale={locale}
                   initialTab="scholarship-list"
+                  onApplicationSubmitted={() => setActiveTab("applications")}
                 />
               </TabsContent>
 
@@ -548,6 +549,7 @@ export default function ScholarshipManagementSystem() {
                   }
                   locale={locale}
                   initialTab="new-application"
+                  onApplicationSubmitted={() => setActiveTab("applications")}
                 />
               </TabsContent>
 

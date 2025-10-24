@@ -41,6 +41,13 @@ import {
   ApplicationStatus,
   formatFieldName,
 } from "@/lib/utils/application-helpers";
+import { useReferenceData, getDegreeName } from "@/hooks/use-reference-data";
+import {
+  getAcademyName,
+  getDepartmentName,
+  getDegreeCode,
+  getTermCount,
+} from "@/lib/utils/student-data-helpers";
 
 interface ApplicationDetailDialogProps {
   isOpen: boolean;
@@ -79,6 +86,9 @@ export function ApplicationDetailDialog({
   const [professorInfo, setProfessorInfo] = useState<any>(null);
   const [professorReview, setProfessorReview] = useState<any>(null);
   const [bankVerificationLoading, setBankVerificationLoading] = useState(false);
+
+  // Get reference data for degree names
+  const { degrees } = useReferenceData();
 
   // 獲取欄位標籤（優先使用動態標籤，後備使用靜態標籤）
   const getFieldLabel = (
@@ -565,26 +575,66 @@ export function ApplicationDetailDialog({
                         "N/A"}
                     </p>
                   </div>
+                  {/* 學院 - 只在有資料時顯示 */}
+                  {getAcademyName(application.student_data) && (
+                    <div>
+                      <Label className="font-medium">
+                        {locale === "zh" ? "學院" : "Academy"}
+                      </Label>
+                      <p className="text-sm">{getAcademyName(application.student_data)}</p>
+                    </div>
+                  )}
+                  {/* 系所 - 只在有資料時顯示 */}
+                  {getDepartmentName(application.student_data) && (
+                    <div>
+                      <Label className="font-medium">
+                        {locale === "zh" ? "系所" : "Department"}
+                      </Label>
+                      <p className="text-sm">{getDepartmentName(application.student_data)}</p>
+                    </div>
+                  )}
+                  {/* 學位 - 只在有資料時顯示 */}
+                  {getDegreeCode(application.student_data) && (
+                    <div>
+                      <Label className="font-medium">
+                        {locale === "zh" ? "學位" : "Degree"}
+                      </Label>
+                      <p className="text-sm">
+                        {getDegreeName(getDegreeCode(application.student_data)!, degrees)}
+                      </p>
+                    </div>
+                  )}
+                  {/* 就讀學期數 - 只在有資料時顯示 */}
+                  {getTermCount(application.student_data) !== null && (
+                    <div>
+                      <Label className="font-medium">
+                        {locale === "zh" ? "就讀學期數" : "Terms Enrolled"}
+                      </Label>
+                      <p className="text-sm">{getTermCount(application.student_data)}</p>
+                    </div>
+                  )}
                   <div>
                     <Label className="font-medium">
                       {locale === "zh" ? "獎學金類型" : "Scholarship Type"}
                     </Label>
-                    <p className="text-sm">{application.scholarship_type}</p>
+                    <p className="text-sm">{application.scholarship_type_zh}</p>
                   </div>
                   <div>
                     <Label className="font-medium">
                       {locale === "zh" ? "申請狀態" : "Status"}
                     </Label>
-                    <Badge
-                      variant={getStatusColor(
-                        application.status as ApplicationStatus
-                      )}
-                    >
-                      {getStatusName(
-                        application.status as ApplicationStatus,
-                        locale
-                      )}
-                    </Badge>
+                    <p>
+                      <Badge
+                        variant={getStatusColor(
+                          application.status as ApplicationStatus
+                        )}
+                      >
+                        {getStatusName(
+                          application.status as ApplicationStatus,
+                          locale
+                        )}
+                      </Badge>
+                    </p>
                   </div>
                   <div>
                     <Label className="font-medium">
@@ -611,51 +661,6 @@ export function ApplicationDetailDialog({
                 </div>
               </CardContent>
             </Card>
-
-            {/* 學術資訊 */}
-            {(application.gpa ||
-              application.class_ranking_percent ||
-              application.dept_ranking_percent) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">
-                    {locale === "zh" ? "學術資訊" : "Academic Information"}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-3 gap-4">
-                    {application.gpa && (
-                      <div>
-                        <Label className="font-medium">
-                          {locale === "zh" ? "GPA" : "GPA"}
-                        </Label>
-                        <p className="text-sm">{application.gpa}</p>
-                      </div>
-                    )}
-                    {application.class_ranking_percent && (
-                      <div>
-                        <Label className="font-medium">
-                          {locale === "zh" ? "班級排名" : "Class Ranking"}
-                        </Label>
-                        <p className="text-sm">
-                          {application.class_ranking_percent}%
-                        </p>
-                      </div>
-                    )}
-                    {application.dept_ranking_percent && (
-                      <div>
-                        <Label className="font-medium">
-                          {locale === "zh" ? "系所排名" : "Department Ranking"}
-                        </Label>
-                        <p className="text-sm">
-                          {application.dept_ranking_percent}%
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {/* 審核進度 */}
             <Card>
