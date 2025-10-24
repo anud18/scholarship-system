@@ -72,7 +72,6 @@ import { getTranslation } from "@/lib/i18n";
 import { useToast } from "@/components/ui/use-toast";
 import { apiClient } from "@/lib/api";
 import * as XLSX from "xlsx";
-import { StudentPreviewCard } from "@/components/student-preview-card";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
 import { Application as ApplicationType, User } from "@/lib/api";
 
@@ -237,13 +236,7 @@ function SortableItem({
 
       <TableCell>
         <div className="space-y-1">
-          {/* TODO: 釐清這個 StudentPreviewCard 是幹嘛的 */}
-          <StudentPreviewCard
-            studentId={application.student_id}
-            studentName={application.student_name}
-            academicYear={academicYear}
-            locale={locale}
-          />
+          <p className="font-medium text-sm">{application.student_name}</p>
           <p className="text-xs text-gray-400">{application.app_id}</p>
         </div>
       </TableCell>
@@ -421,7 +414,8 @@ export function CollegeRankingTable({
     try {
       // Read Excel file
       const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
+      const uint8Array = new Uint8Array(data);
+      const workbook = XLSX.read(uint8Array, { type: 'array' });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 

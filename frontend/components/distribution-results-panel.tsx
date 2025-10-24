@@ -38,6 +38,7 @@ import { usePillMetrics } from "@/hooks/usePillMetrics";
 import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
+import { StudentPreviewCard } from "@/components/student-preview-card";
 
 const { Z_INDEX } = ALLOCATION_MATRIX_LAYOUT;
 
@@ -50,6 +51,7 @@ interface DistributionResultsPanelProps {
     string,
     { quota?: number; label?: string; label_en?: string }
   >;
+  academicYear?: number;
 }
 
 interface SubTypeResult {
@@ -282,6 +284,7 @@ export function DistributionResultsPanel({
   locale = "zh",
   onClose,
   subTypeQuotaBreakdown,
+  academicYear,
 }: DistributionResultsPanelProps) {
   const [distributionData, setDistributionData] =
     useState<DistributionDetails | null>(null);
@@ -1283,19 +1286,26 @@ export function DistributionResultsPanel({
                                   style={{ zIndex: Z_INDEX.CARD }}
                                   data-student-card
                                 >
-                                  <StudentInfoCard
-                                    student={student}
-                                    footer={
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-slate-600">
-                                          {locale === "zh"
-                                            ? "已分配至本子項目"
-                                            : "Allocated to this sub-type"}
-                                        </span>
-                                        <div className="ml-2 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                      </div>
-                                    }
-                                  />
+                                  <StudentPreviewCard
+                                    studentId={student.studentId || ''}
+                                    studentName={student.studentName}
+                                    academicYear={academicYear}
+                                    locale={locale}
+                                  >
+                                    <StudentInfoCard
+                                      student={student}
+                                      footer={
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-slate-600">
+                                            {locale === "zh"
+                                              ? "已分配至本子項目"
+                                              : "Allocated to this sub-type"}
+                                          </span>
+                                          <div className="ml-2 w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                        </div>
+                                      }
+                                    />
+                                  </StudentPreviewCard>
                                 </div>
                               ) : backupInfo ? (
                                 <div
@@ -1303,20 +1313,27 @@ export function DistributionResultsPanel({
                                   style={{ zIndex: Z_INDEX.CARD }}
                                   data-student-card
                                 >
-                                  <StudentInfoCard
-                                    student={student}
-                                    tone="warm"
-                                    footer={
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-orange-700">
-                                          {locale === "zh"
-                                            ? `備取順位 ${backupInfo.backupPosition ?? "-"}`
-                                            : `Backup position ${backupInfo.backupPosition ?? "-"}`}
-                                        </span>
-                                        <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-                                      </div>
-                                    }
-                                  />
+                                  <StudentPreviewCard
+                                    studentId={student.studentId || ''}
+                                    studentName={student.studentName}
+                                    academicYear={academicYear}
+                                    locale={locale}
+                                  >
+                                    <StudentInfoCard
+                                      student={student}
+                                      tone="warm"
+                                      footer={
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-orange-700">
+                                            {locale === "zh"
+                                              ? `備取順位 ${backupInfo.backupPosition ?? "-"}`
+                                              : `Backup position ${backupInfo.backupPosition ?? "-"}`}
+                                          </span>
+                                          <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                                        </div>
+                                      }
+                                    />
+                                  </StudentPreviewCard>
                                 </div>
                               ) : eligible ? (
                                 <div
@@ -1336,10 +1353,16 @@ export function DistributionResultsPanel({
                         <div className="relative px-4 py-4 transition-colors group-hover:bg-slate-50">
                           {isUnassigned ? (
                             <div className="relative" style={{ zIndex: Z_INDEX.CARD }}>
-                              <StudentInfoCard
-                                student={student}
-                                tone="muted"
-                                footer={
+                              <StudentPreviewCard
+                                studentId={student.studentId || ''}
+                                studentName={student.studentName}
+                                academicYear={academicYear}
+                                locale={locale}
+                              >
+                                <StudentInfoCard
+                                  student={student}
+                                  tone="muted"
+                                  footer={
                                   <div className="flex items-start gap-2">
                                     {student.rejection ? (
                                       <>
@@ -1386,6 +1409,7 @@ export function DistributionResultsPanel({
                                   </div>
                                 }
                               />
+                            </StudentPreviewCard>
                             </div>
                           ) : (
                             <div className="flex h-full items-center justify-center text-2xl text-slate-200">

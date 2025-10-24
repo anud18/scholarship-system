@@ -21,12 +21,14 @@ import {
   getStudyingStatusName,
 } from "@/hooks/use-reference-data";
 import { User, GraduationCap, Calendar, Award, Mail, Phone, MapPin } from "lucide-react";
+import { getCurrentSemesterROC } from "@/src/utils/dateUtils";
 
 interface StudentPreviewCardProps {
   studentId: string;
   studentName: string;
   academicYear?: number;
   locale?: "zh" | "en";
+  children?: React.ReactNode;
 }
 
 export function StudentPreviewCard({
@@ -34,6 +36,7 @@ export function StudentPreviewCard({
   studentName,
   academicYear,
   locale = "zh",
+  children,
 }: StudentPreviewCardProps) {
   const { previewData, isLoading, error, fetchPreview } = useStudentPreview();
   const { academies, departments, degrees, genders, identities, schoolIdentities, studyingStatuses } = useReferenceData();
@@ -44,7 +47,15 @@ export function StudentPreviewCard({
   useEffect(() => {
     if (isOpen && !hasTriggered) {
       const timer = setTimeout(() => {
-        fetchPreview(studentId, academicYear);
+        // If academicYear is not provided, use current academic year
+        let yearToUse = academicYear;
+        if (!yearToUse) {
+          // Get current semester (e.g., "114-1") and extract year
+          const currentSemester = getCurrentSemesterROC();
+          const [yearStr] = currentSemester.split("-");
+          yearToUse = parseInt(yearStr, 10);
+        }
+        fetchPreview(studentId, yearToUse);
         setHasTriggered(true);
       }, 300); // 300ms debounce
 
@@ -99,12 +110,16 @@ export function StudentPreviewCard({
   return (
     <HoverCard openDelay={200} closeDelay={100} onOpenChange={setIsOpen}>
       <HoverCardTrigger asChild>
-        <span className="cursor-pointer hover:underline hover:text-blue-600 transition-colors">
-          {studentName}
-        </span>
+        {children ? (
+          <div className="cursor-pointer">{children}</div>
+        ) : (
+          <span className="cursor-pointer hover:underline hover:text-blue-600 transition-colors">
+            {studentName}
+          </span>
+        )}
       </HoverCardTrigger>
       <HoverCardContent
-        className="w-96 max-h-96 overflow-y-auto bg-background/90 backdrop-blur-sm border border-border/50 shadow-lg"
+        className="w-96 max-h-96 overflow-y-auto bg-background/90 backdrop-blur-sm border border-border/50 shadow-lg z-[100]"
         side="right"
         align="start"
       >

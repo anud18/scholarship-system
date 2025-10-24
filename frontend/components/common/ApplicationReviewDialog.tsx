@@ -1086,11 +1086,11 @@ export function ApplicationReviewDialog({
     gpa: detailedApplication?.gpa ?? (application as Application).gpa,
     class_ranking_percent: detailedApplication?.class_ranking_percent ?? (application as Application).class_ranking_percent,
     dept_ranking_percent: detailedApplication?.dept_ranking_percent ?? (application as Application).dept_ranking_percent,
-    student_termcount: detailedApplication?.student_data?.term_count ?? (application as Application).student_data?.term_count,
+    student_termcount: detailedApplication?.student_data?.std_termcount ?? (application as Application).student_data?.std_termcount,
     academy_name: (detailedApplication as any)?.academy_name ?? (application as Application).academy_code,
     academy_code: detailedApplication?.academy_code ?? (application as Application).academy_code,
-    department: getDepartmentName(detailedApplication?.student_data?.dept_code, departments) ?? detailedApplication?.student_data?.dept_code,
-    department_name: (detailedApplication as any)?.department_name ?? getDepartmentName(detailedApplication?.student_data?.dept_code, departments) ?? (application as Application).department,
+    department: getDepartmentName(detailedApplication?.student_data?.std_depno, departments) ?? detailedApplication?.student_data?.std_depno,
+    department_name: (detailedApplication as any)?.department_name ?? getDepartmentName(detailedApplication?.student_data?.std_depno, departments) ?? (application as Application).department,
     department_code: detailedApplication?.department_code ?? (application as Application).department_code,
     degree: (detailedApplication as any)?.degree,
     degree_name: (detailedApplication as any)?.degree ? getDegreeName((detailedApplication as any).degree, degrees) : undefined,
@@ -1343,43 +1343,6 @@ export function ApplicationReviewDialog({
                       </div>
                     </CardContent>
                   </Card>
-
-                  {/* Academic Information */}
-                  {(displayData.gpa || displayData.class_ranking_percent || displayData.dept_ranking_percent) && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">
-                          {locale === "zh" ? "學術資訊" : "Academic Information"}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-3 gap-4">
-                          {displayData.gpa && (
-                            <div>
-                              <Label className="font-medium">GPA</Label>
-                              <p className="text-sm">{displayData.gpa}</p>
-                            </div>
-                          )}
-                          {displayData.class_ranking_percent && (
-                            <div>
-                              <Label className="font-medium">
-                                {locale === "zh" ? "班級排名" : "Class Ranking"}
-                              </Label>
-                              <p className="text-sm">{displayData.class_ranking_percent}%</p>
-                            </div>
-                          )}
-                          {displayData.dept_ranking_percent && (
-                            <div>
-                              <Label className="font-medium">
-                                {locale === "zh" ? "系所排名" : "Department Ranking"}
-                              </Label>
-                              <p className="text-sm">{displayData.dept_ranking_percent}%</p>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
 
                   {/* Progress Timeline */}
                   <Card>

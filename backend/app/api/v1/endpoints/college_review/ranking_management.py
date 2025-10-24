@@ -890,7 +890,7 @@ async def import_ranking_from_excel(
         # Get ranking
         stmt = (
             select(CollegeRanking)
-            .options(selectinload(CollegeRanking.items).selectinload("application"))
+            .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
             .where(CollegeRanking.id == ranking_id)
         )
         result = await db.execute(stmt)

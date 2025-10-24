@@ -94,14 +94,32 @@ export function ApplicationReviewPanel({
 
   // Local state for status filter
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Filter applications based on status
+  // Filter applications based on status and search query
   const filteredApplications = applications.filter(app => {
-    if (statusFilter === "all") return true;
-    if (statusFilter === "pending") {
-      return app.status === "recommended" || app.status === "submitted";
+    // Status filter
+    if (statusFilter !== "all") {
+      if (statusFilter === "pending") {
+        if (app.status !== "recommended" && app.status !== "submitted") {
+          return false;
+        }
+      } else if (app.status !== statusFilter) {
+        return false;
+      }
     }
-    return app.status === statusFilter;
+
+    // Search filter - match student name or ID
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const studentName = (app.student_name || "").toLowerCase();
+      const studentId = (app.student_id || "").toLowerCase();
+      if (!studentName.includes(query) && !studentId.includes(query)) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
   const handleApprove = async (appId: number, comments?: string) => {
@@ -487,6 +505,8 @@ export function ApplicationReviewPanel({
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={
                   locale === "zh"
                     ? "搜尋學生或學號..."

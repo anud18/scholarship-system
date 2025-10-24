@@ -39,6 +39,12 @@ import { useScholarshipSpecificApplications } from "@/hooks/use-admin";
 import { toast } from "@/hooks/use-toast";
 import { apiClient } from "@/lib/api";
 import { Locale } from "@/lib/validators";
+import { getStatusName } from "@/lib/utils/application-helpers";
+import {
+  getStudentName,
+  getStudentId,
+  getStudentEmail,
+} from "@/lib/utils/student-data-helpers";
 import {
   AlertCircle,
   Calendar,
@@ -141,37 +147,9 @@ interface DashboardApplication {
     requires_college_review: boolean;
     config_name?: string;
   };
-  // API response structure
-  student_data?: {
-    id: number;
-    stdNo: string;
-    stdCode: string;
-    pid: string;
-    cname: string;
-    ename: string;
-    sex: string;
-    birthDate: string;
-    contacts: {
-      cellphone: string;
-      email: string;
-      zipCode: string;
-      address: string;
-    };
-    academic: {
-      degree: number;
-      identity: number;
-      studyingStatus: number;
-      schoolIdentity: number;
-      termCount: number;
-      depId: number;
-      academyId: number;
-      enrollTypeCode: number;
-      enrollYear: number;
-      enrollTerm: number;
-      highestSchoolName: string;
-      nationality: number;
-    };
-  };
+  // Student data snapshot from SIS API (see backend/app/schemas/student_snapshot.py)
+  // Fields follow pattern: std_* (basic), trm_* (term), com_* (contact)
+  student_data?: Record<string, any>;
 }
 
 // Data transformation function to map API response to expected format
@@ -221,11 +199,12 @@ const transformApplicationData = (app: any): DashboardApplication => {
     form_data: app.submitted_form_data || app.form_data,
     submitted_form_data: submittedFormData, // Use the enhanced version
     student_data: app.student_data,
-    // Map student information from nested structure
-    student_name: app.student_name || app.student_data?.cname || "未知",
-    student_no: app.student_no || app.student_data?.stdNo || "N/A",
+    // Map student information using helper functions with fallbacks
+    student_name: app.student_name || getStudentName(app.student_data) || "未知",
+    student_no: app.student_no || getStudentId(app.student_data) || "N/A",
+    student_email: app.student_email || getStudentEmail(app.student_data) || app.user?.email || "N/A",
     user: app.user || {
-      email: app.student_data?.contacts?.email || "N/A",
+      email: getStudentEmail(app.student_data) || "N/A",
     },
     // Additional fields that might be needed by ApplicationDetailDialog
     gpa: app.gpa,
@@ -406,9 +385,9 @@ export function AdminScholarshipDashboard({
           app.student_name?.toLowerCase().includes(term) ||
           app.student_no?.toLowerCase().includes(term) ||
           app.user?.email.toLowerCase().includes(term) ||
-          app.student_data?.cname?.toLowerCase().includes(term) ||
-          app.student_data?.stdNo?.toLowerCase().includes(term) ||
-          app.student_data?.contacts?.email?.toLowerCase().includes(term)
+          getStudentName(app.student_data)?.toLowerCase().includes(term) ||
+          getStudentId(app.student_data)?.toLowerCase().includes(term) ||
+          getStudentEmail(app.student_data)?.toLowerCase().includes(term)
       );
     }
 
@@ -1078,7 +1057,7 @@ export function AdminScholarshipDashboard({
                         // 不需要教授推薦的獎學金
                         <div className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-200 rounded-md">
                           <Minus className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm text-gray-600">不需要</span>
+                          <span className="text-sm text-gray-600 whitespace-nowrap">不需要</span>
                         </div>
                       )}
                     </TableCell>
@@ -1094,7 +1073,7 @@ export function AdminScholarshipDashboard({
                                 : "outline"
                         }
                       >
-                        {app.status_name || app.status}
+                        {getStatusName(app.status as any, "zh")}
                       </Badge>
                     </TableCell>
                     <TableCell>
