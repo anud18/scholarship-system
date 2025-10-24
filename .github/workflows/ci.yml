@@ -378,6 +378,9 @@ jobs:
           type=semver,pattern={{major}}.{{minor}}
           type=sha
 
+    - name: Copy email templates for backend build
+      run: cp -r frontend/emails backend/emails
+
     - name: Build and push backend image
       uses: docker/build-push-action@v5
       with:

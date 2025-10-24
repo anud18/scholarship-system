@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // 如果沒有提供 token，嘗試從 cookies 獲取
     if (!token) {
-      const cookieStore = cookies();
+      const cookieStore = await cookies();
       token = cookieStore.get("token")?.value || null;
     }
 

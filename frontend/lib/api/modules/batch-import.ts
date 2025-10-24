@@ -53,6 +53,11 @@ type BatchRevalidateResult = {
   total_records: number;
   valid_count: number;
   invalid_count: number;
+  warnings: Array<{
+    row: number;
+    field?: string;
+    message: string;
+  }>;
   errors: Array<{
     row: number;
     field: string;
