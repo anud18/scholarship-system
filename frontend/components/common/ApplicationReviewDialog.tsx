@@ -48,7 +48,16 @@ import { Locale } from "@/lib/validators";
 import { Application, HistoricalApplication, User } from "@/lib/api";
 import api from "@/lib/api";
 import { useStudentPreview } from "@/hooks/use-student-preview";
-import { useReferenceData, getStudyingStatusName, getDegreeName, getDepartmentName, getGenderName } from "@/hooks/use-reference-data";
+import {
+  useReferenceData,
+  getStudyingStatusName,
+  getDegreeName,
+  getDepartmentName,
+  getGenderName,
+  getIdentityName,
+  getSchoolIdentityName,
+  getAcademyName,
+} from "@/hooks/use-reference-data";
 import {
   getApplicationTimeline,
   getStatusColor,
@@ -115,6 +124,10 @@ function StudentPreviewDisplay({
   degrees,
   departments,
   genders,
+  academies,
+  identities,
+  schoolIdentities,
+  enrollTypes,
 }: {
   studentId: string;
   academicYear?: number;
@@ -123,6 +136,10 @@ function StudentPreviewDisplay({
   degrees: Array<{ id: number; name: string }>;
   departments: Array<{ id: number; code: string; name: string; academy_code?: string | null }>;
   genders: Array<{ id: number; name: string }>;
+  academies: Array<{ id: number; code: string; name: string }>;
+  identities: Array<{ id: number; name: string }>;
+  schoolIdentities: Array<{ id: number; name: string }>;
+  enrollTypes: Array<{ degree_id: number; code: string; name: string; name_en?: string; degree_name?: string }>;
 }) {
   const { previewData, isLoading, error, fetchPreview } = useStudentPreview();
 
@@ -171,48 +188,53 @@ function StudentPreviewDisplay({
           <div className="grid grid-cols-2 gap-3">
             <FieldDisplay
               label={locale === "zh" ? "學號" : "Student ID"}
-              value={previewData?.basic?.student_id}
+              value={previewData?.basic?.std_stdcode}
               locale={locale}
             />
             <FieldDisplay
               label={locale === "zh" ? "姓名" : "Name"}
-              value={previewData?.basic?.student_name}
+              value={previewData?.basic?.std_cname}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "英文姓名" : "English Name"}
+              value={previewData?.basic?.std_ename}
               locale={locale}
             />
             <FieldDisplay
               label={locale === "zh" ? "就讀學期數" : "Terms Enrolled"}
-              value={previewData?.basic?.term_count}
+              value={previewData?.basic?.std_termcount}
               locale={locale}
             />
             <FieldDisplay
               label={locale === "zh" ? "系所" : "Department"}
-              value={previewData?.basic?.department_name}
+              value={previewData?.basic?.std_depno ? getDepartmentName(previewData.basic.std_depno, departments) : undefined}
               locale={locale}
             />
             <FieldDisplay
               label={locale === "zh" ? "學院" : "Academy"}
-              value={previewData?.basic?.academy_name}
+              value={previewData?.basic?.std_academyno ? getAcademyName(previewData.basic.std_academyno, academies) : undefined}
               locale={locale}
             />
             <FieldDisplay
               label={locale === "zh" ? "學位" : "Degree"}
               value={
-                previewData?.basic?.degree
-                  ? getDegreeName(Number(previewData.basic.degree), degrees)
+                previewData?.basic?.std_degree
+                  ? getDegreeName(Number(previewData.basic.std_degree), degrees)
                   : undefined
               }
               locale={locale}
             />
             <FieldDisplay
-              label={locale === "zh" ? "註冊年份" : "Enrollment Year"}
-              value={previewData?.basic?.enrollyear}
+              label={locale === "zh" ? "入學年份" : "Enrollment Year"}
+              value={previewData?.basic?.std_enrollyear}
               locale={locale}
             />
             <FieldDisplay
               label={locale === "zh" ? "性別" : "Gender"}
               value={
-                previewData?.basic?.sex
-                  ? getGenderName(Number(previewData.basic.sex), genders)
+                previewData?.basic?.std_sex
+                  ? getGenderName(Number(previewData.basic.std_sex), genders)
                   : undefined
               }
               locale={locale}
@@ -400,7 +422,16 @@ export function ApplicationReviewDialog({
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { studyingStatuses, degrees, departments, genders } = useReferenceData();
+  const {
+    studyingStatuses,
+    degrees,
+    departments,
+    genders,
+    academies,
+    identities,
+    schoolIdentities,
+    enrollTypes,
+  } = useReferenceData();
 
   // Admin management states
   const [professorInfo, setProfessorInfo] = useState<any>(null);
@@ -1226,6 +1257,10 @@ export function ApplicationReviewDialog({
                         degrees={degrees}
                         departments={departments}
                         genders={genders}
+                        academies={academies}
+                        identities={identities}
+                        schoolIdentities={schoolIdentities}
+                        enrollTypes={enrollTypes}
                       />
                     </CardContent>
                   </Card>

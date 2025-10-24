@@ -240,11 +240,6 @@ function SortableItem({
           <StudentPreviewCard
             studentId={application.student_id}
             studentName={application.student_name}
-            basicInfo={{
-              department_name: application.department_name,
-              academy_name: application.academy_name,
-              term_count: undefined, // Will be fetched from API
-            }}
             academicYear={academicYear}
             locale={locale}
           />

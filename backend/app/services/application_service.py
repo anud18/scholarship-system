@@ -1012,7 +1012,9 @@ class ApplicationService:
 
         # 如果需要，重新從外部API獲取基本學生資料
         if refresh_from_api and current_user.nycu_id:
-            fresh_api_data = await self.student_service.get_student_snapshot(current_user.nycu_id)
+            fresh_api_data = await self.student_service.get_student_snapshot(
+                current_user.nycu_id
+            )  # TODO need to check the parameter
             if fresh_api_data:
                 # 合併API資料，但保留用戶輸入的資料
                 current_student_data.update(fresh_api_data)

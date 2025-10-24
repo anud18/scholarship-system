@@ -10,20 +10,21 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useStudentPreview } from "@/hooks/use-student-preview";
-import { User, GraduationCap, Calendar, Award } from "lucide-react";
-
-interface StudentBasicInfo {
-  department_name?: string;
-  academy_name?: string;
-  term_count?: number;
-  degree?: string;
-  enrollyear?: string;
-}
+import {
+  useReferenceData,
+  getIdentityName,
+  getSchoolIdentityName,
+  getDegreeName,
+  getGenderName,
+  getAcademyName,
+  getDepartmentName,
+  getStudyingStatusName,
+} from "@/hooks/use-reference-data";
+import { User, GraduationCap, Calendar, Award, Mail, Phone, MapPin } from "lucide-react";
 
 interface StudentPreviewCardProps {
   studentId: string;
   studentName: string;
-  basicInfo?: StudentBasicInfo;
   academicYear?: number;
   locale?: "zh" | "en";
 }
@@ -31,11 +32,11 @@ interface StudentPreviewCardProps {
 export function StudentPreviewCard({
   studentId,
   studentName,
-  basicInfo,
   academicYear,
   locale = "zh",
 }: StudentPreviewCardProps) {
   const { previewData, isLoading, error, fetchPreview } = useStudentPreview();
+  const { academies, departments, degrees, genders, identities, schoolIdentities, studyingStatuses } = useReferenceData();
   const [isOpen, setIsOpen] = useState(false);
   const [hasTriggered, setHasTriggered] = useState(false);
 
@@ -63,12 +64,37 @@ export function StudentPreviewCard({
     return gpa.toFixed(2);
   };
 
-  const getDegreeColor = (degree?: string) => {
-    if (!degree) return "bg-gray-100 text-gray-800";
-    if (degree.includes("博士")) return "bg-purple-100 text-purple-800";
-    if (degree.includes("碩士")) return "bg-blue-100 text-blue-800";
+  const getDegreeColor = (degreeId?: number) => {
+    if (!degreeId) return "bg-gray-100 text-gray-800";
+    const degreeName = getDegreeName(degreeId, degrees);
+    if (degreeName.includes("博士")) return "bg-purple-100 text-purple-800";
+    if (degreeName.includes("碩士")) return "bg-blue-100 text-blue-800";
     return "bg-green-100 text-green-800";
   };
+
+  // Helper to render info row
+  const InfoRow = ({
+    icon: Icon,
+    label,
+    value,
+  }: {
+    icon?: any;
+    label: string;
+    value?: string;
+  }) => {
+    if (!value) return null;
+    return (
+      <div className="flex items-start gap-2 text-xs">
+        {Icon && <Icon className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />}
+        <div className="flex-1">
+          <p className="text-muted-foreground font-medium">{label}:</p>
+          <p className="text-foreground">{value}</p>
+        </div>
+      </div>
+    );
+  };
+
+  const basic = previewData?.basic;
 
   return (
     <HoverCard openDelay={200} closeDelay={100} onOpenChange={setIsOpen}>
@@ -78,82 +104,172 @@ export function StudentPreviewCard({
         </span>
       </HoverCardTrigger>
       <HoverCardContent
-        className="w-80 bg-background/90 backdrop-blur-sm border border-border/50 shadow-lg"
+        className="w-96 max-h-96 overflow-y-auto bg-background/90 backdrop-blur-sm border border-border/50 shadow-lg"
         side="right"
         align="start"
       >
-        <div className="space-y-3">
-          {/* Header - Student Name */}
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="font-semibold text-base">
-                  {previewData?.basic.student_name || studentName}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {locale === "zh" ? "學號" : "ID"}: {studentId}
-                </p>
-              </div>
+        <div className="space-y-3 text-xs">
+          {/* Header - Name & ID */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1">
+              <p className="font-semibold text-sm">
+                {basic?.std_cname || studentName}
+              </p>
+              {basic?.std_ename && (
+                <p className="text-muted-foreground text-xs">{basic.std_ename}</p>
+              )}
+              <p className="text-muted-foreground text-xs">
+                {locale === "zh" ? "學號" : "ID"}: {basic?.std_stdcode || studentId}
+              </p>
             </div>
-            {(previewData?.basic.degree || basicInfo?.degree) && (
-              <Badge variant="outline" className={getDegreeColor(previewData?.basic.degree || basicInfo?.degree)}>
-                {previewData?.basic.degree || basicInfo?.degree}
+            {basic?.std_degree && (
+              <Badge variant="outline" className={getDegreeColor(basic.std_degree)}>
+                {getDegreeName(basic.std_degree, degrees)}
               </Badge>
             )}
           </div>
 
           <Separator />
 
-          {/* Basic Information */}
-          <div className="space-y-2 text-sm">
-            {(previewData?.basic.academy_name || basicInfo?.academy_name) && (
-              <div className="flex items-start gap-2">
-                <GraduationCap className="h-4 w-4 text-muted-foreground mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-medium">
-                    {previewData?.basic.academy_name || basicInfo?.academy_name}
-                  </p>
-                  {(previewData?.basic.department_name || basicInfo?.department_name) && (
-                    <p className="text-xs text-muted-foreground">
-                      {previewData?.basic.department_name || basicInfo?.department_name}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+          {/* === 學籍資訊 === */}
+          <div className="space-y-1.5">
+            <p className="font-semibold text-xs">{locale === "zh" ? "學籍資訊" : "Academic Info"}</p>
+            <div className="space-y-1 ml-2">
+              {basic?.std_academyno && (
+                <InfoRow
+                  label={locale === "zh" ? "學院" : "Academy"}
+                  value={getAcademyName(basic.std_academyno, academies)}
+                />
+              )}
+              {basic?.std_depno && (
+                <InfoRow
+                  label={locale === "zh" ? "系所" : "Department"}
+                  value={getDepartmentName(basic.std_depno, departments)}
+                />
+              )}
+              {basic?.std_studingstatus && (
+                <InfoRow
+                  label={locale === "zh" ? "在學狀態" : "Studying Status"}
+                  value={getStudyingStatusName(basic.std_studingstatus, studyingStatuses)}
+                />
+              )}
+              {basic?.mgd_title && (
+                <InfoRow
+                  label={locale === "zh" ? "學籍狀態" : "Status"}
+                  value={basic.mgd_title}
+                />
+              )}
+            </div>
+          </div>
 
-            {(previewData?.basic.enrollyear || basicInfo?.enrollyear) && (
-              <div className="flex items-center gap-2 text-xs">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  {locale === "zh" ? "入學年度" : "Enrolled"}:
-                </span>
-                <span>{previewData?.basic.enrollyear || basicInfo?.enrollyear}</span>
-              </div>
-            )}
+          <Separator />
 
-            {(previewData?.basic.term_count || basicInfo?.term_count) && (
-              <div className="flex items-center gap-2 text-xs">
-                <Award className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  {locale === "zh" ? "在學學期數" : "Terms"}:
-                </span>
-                <span>{previewData?.basic.term_count || basicInfo?.term_count}</span>
-              </div>
-            )}
+          {/* === 入學資訊 === */}
+          <div className="space-y-1.5">
+            <p className="font-semibold text-xs">{locale === "zh" ? "入學資訊" : "Enrollment"}</p>
+            <div className="space-y-1 ml-2">
+              {basic?.std_enrollyear && (
+                <InfoRow
+                  icon={Calendar}
+                  label={locale === "zh" ? "入學年度" : "Enrolled Year"}
+                  value={`${basic.std_enrollyear}/${basic.std_enrollterm || ""}`}
+                />
+              )}
+              {basic?.std_termcount && (
+                <InfoRow
+                  icon={Award}
+                  label={locale === "zh" ? "學期數" : "Terms"}
+                  value={`${basic.std_termcount}`}
+                />
+              )}
+              {basic?.std_highestschname && (
+                <InfoRow
+                  label={locale === "zh" ? "最高學歷" : "Education"}
+                  value={basic.std_highestschname}
+                />
+              )}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* === 個人資訊 === */}
+          <div className="space-y-1.5">
+            <p className="font-semibold text-xs">{locale === "zh" ? "個人資訊" : "Personal Info"}</p>
+            <div className="space-y-1 ml-2">
+              {basic?.std_sex && (
+                <InfoRow
+                  label={locale === "zh" ? "性別" : "Gender"}
+                  value={getGenderName(basic.std_sex, genders)}
+                />
+              )}
+              {basic?.std_identity && (
+                <InfoRow
+                  label={locale === "zh" ? "學生身分" : "Identity"}
+                  value={getIdentityName(basic.std_identity, identities)}
+                />
+              )}
+              {basic?.std_schoolid && (
+                <InfoRow
+                  label={locale === "zh" ? "在學身分" : "School Identity"}
+                  value={getSchoolIdentityName(basic.std_schoolid, schoolIdentities)}
+                />
+              )}
+              {basic?.std_nation && (
+                <InfoRow
+                  label={locale === "zh" ? "國籍" : "Nationality"}
+                  value={basic.std_nation}
+                />
+              )}
+              {basic?.std_overseaplace && (
+                <InfoRow
+                  label={locale === "zh" ? "僑居地" : "Overseas Place"}
+                  value={basic.std_overseaplace}
+                />
+              )}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* === 聯絡資訊 === */}
+          <div className="space-y-1.5">
+            <p className="font-semibold text-xs">{locale === "zh" ? "聯絡資訊" : "Contact"}</p>
+            <div className="space-y-1 ml-2">
+              {basic?.com_email && (
+                <InfoRow
+                  icon={Mail}
+                  label="Email"
+                  value={basic.com_email}
+                />
+              )}
+              {basic?.com_cellphone && (
+                <InfoRow
+                  icon={Phone}
+                  label={locale === "zh" ? "手機" : "Phone"}
+                  value={basic.com_cellphone}
+                />
+              )}
+              {basic?.com_commadd && (
+                <InfoRow
+                  icon={MapPin}
+                  label={locale === "zh" ? "地址" : "Address"}
+                  value={basic.com_commadd}
+                />
+              )}
+            </div>
           </div>
 
           <Separator />
 
           {/* Term Data - Async Loading */}
           <div className="space-y-2">
-            <p className="text-sm font-medium">
+            <p className="font-semibold text-xs">
               {locale === "zh" ? "近期學期成績" : "Recent Terms"}
             </p>
 
             {isLoading && (
-              <div className="space-y-2">
+              <div className="space-y-2 ml-2">
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-3/4" />
               </div>
@@ -166,23 +282,21 @@ export function StudentPreviewCard({
             )}
 
             {!isLoading && !error && previewData?.recent_terms && previewData.recent_terms.length > 0 && (
-              <div className="space-y-1.5">
-                {previewData.recent_terms.map((term, idx) => (
+              <div className="space-y-1 ml-2">
+                {previewData.recent_terms.map((term) => (
                   <div
                     key={`${term.academic_year}-${term.term}`}
-                    className="text-xs bg-muted/50 rounded-md p-2"
+                    className="bg-muted/50 rounded-md p-1.5 text-xs"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-medium">
                         {term.academic_year}-{term.term === "1" ? (locale === "zh" ? "上" : "1st") : (locale === "zh" ? "下" : "2nd")}
                       </span>
-                      <div className="flex items-center gap-2">
-                        {term.gpa !== undefined && (
-                          <Badge variant="outline" className="text-xs">
-                            GPA: {formatGPA(term.gpa)}
-                          </Badge>
-                        )}
-                      </div>
+                      {term.gpa !== undefined && (
+                        <Badge variant="outline" className="text-xs">
+                          GPA: {formatGPA(term.gpa)}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 ))}
