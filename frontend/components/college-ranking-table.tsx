@@ -237,6 +237,7 @@ function SortableItem({
 
       <TableCell>
         <div className="space-y-1">
+          {/* TODO: 釐清這個 StudentPreviewCard 是幹嘛的 */}
           <StudentPreviewCard
             studentId={application.student_id}
             studentName={application.student_name}

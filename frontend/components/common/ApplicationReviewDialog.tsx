@@ -57,6 +57,7 @@ import {
   getIdentityName,
   getSchoolIdentityName,
   getAcademyName,
+  getEnrollTypeName,
 } from "@/hooks/use-reference-data";
 import {
   getApplicationTimeline,
@@ -180,11 +181,13 @@ function StudentPreviewDisplay({
         </Alert>
       )}
 
-      {/* Basic Information Section */}
-      <div>
-          <h4 className="text-sm font-semibold mb-3">
+      {/* Basic Information Section - All API Fields Grouped */}
+      <div className="space-y-4">
+        {/* 基本資訊 */}
+        <div>
+          <h5 className="text-xs font-semibold mb-3">
             {locale === "zh" ? "基本資訊" : "Basic Information"}
-          </h4>
+          </h5>
           <div className="grid grid-cols-2 gap-3">
             <FieldDisplay
               label={locale === "zh" ? "學號" : "Student ID"}
@@ -202,18 +205,43 @@ function StudentPreviewDisplay({
               locale={locale}
             />
             <FieldDisplay
-              label={locale === "zh" ? "就讀學期數" : "Terms Enrolled"}
-              value={previewData?.basic?.std_termcount}
+              label={locale === "zh" ? "身分證字號" : "ID Number"}
+              value={previewData?.basic?.std_pid}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "性別" : "Gender"}
+              value={
+                previewData?.basic?.std_sex
+                  ? getGenderName(Number(previewData.basic.std_sex), genders)
+                  : undefined
+              }
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "生日" : "Date of Birth"}
+              value={previewData?.basic?.std_bdate}
+              locale={locale}
+            />
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* 學籍資訊 */}
+        <div>
+          <h5 className="text-xs font-semibold mb-3">
+            {locale === "zh" ? "學籍資訊" : "Academic Registration"}
+          </h5>
+          <div className="grid grid-cols-2 gap-3">
+            <FieldDisplay
+              label={locale === "zh" ? "學院" : "Academy"}
+              value={previewData?.basic?.std_academyno ? getAcademyName(previewData.basic.std_academyno, academies) : undefined}
               locale={locale}
             />
             <FieldDisplay
               label={locale === "zh" ? "系所" : "Department"}
               value={previewData?.basic?.std_depno ? getDepartmentName(previewData.basic.std_depno, departments) : undefined}
-              locale={locale}
-            />
-            <FieldDisplay
-              label={locale === "zh" ? "學院" : "Academy"}
-              value={previewData?.basic?.std_academyno ? getAcademyName(previewData.basic.std_academyno, academies) : undefined}
               locale={locale}
             />
             <FieldDisplay
@@ -226,21 +254,137 @@ function StudentPreviewDisplay({
               locale={locale}
             />
             <FieldDisplay
-              label={locale === "zh" ? "入學年份" : "Enrollment Year"}
-              value={previewData?.basic?.std_enrollyear}
-              locale={locale}
-            />
-            <FieldDisplay
-              label={locale === "zh" ? "性別" : "Gender"}
+              label={locale === "zh" ? "在學狀態" : "Studying Status"}
               value={
-                previewData?.basic?.std_sex
-                  ? getGenderName(Number(previewData.basic.std_sex), genders)
+                previewData?.basic?.std_studingstatus
+                  ? getStudyingStatusName(Number(previewData.basic.std_studingstatus), studyingStatuses)
                   : undefined
               }
               locale={locale}
             />
+            <FieldDisplay
+              label={locale === "zh" ? "學籍狀態" : "Registration Status"}
+              value={previewData?.basic?.mgd_title}
+              locale={locale}
+            />
           </div>
         </div>
+
+        <Separator />
+
+        {/* 入學資訊 */}
+        <div>
+          <h5 className="text-xs font-semibold mb-3">
+            {locale === "zh" ? "入學資訊" : "Enrollment Information"}
+          </h5>
+          <div className="grid grid-cols-2 gap-3">
+            <FieldDisplay
+              label={locale === "zh" ? "入學年度/學期" : "Enrollment Year/Term"}
+              value={previewData?.basic?.std_enrollyear ? `${previewData.basic.std_enrollyear}/${previewData.basic.std_enrollterm || "-"}` : undefined}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "入學方式" : "Enrollment Type"}
+              value={
+                previewData?.basic?.std_enrolltype
+                  ? getEnrollTypeName(Number(previewData.basic.std_enrolltype), enrollTypes)
+                  : undefined
+              }
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "就讀學期數" : "Terms Enrolled"}
+              value={previewData?.basic?.std_termcount}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "最高學歷學校" : "Highest Education"}
+              value={previewData?.basic?.std_highestschname}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "入學日期" : "Enrollment Date"}
+              value={previewData?.basic?.std_enrolldate}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "備註" : "Remarks"}
+              value={previewData?.basic?.std_directmemo}
+              locale={locale}
+            />
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* 個人資訊 */}
+        <div>
+          <h5 className="text-xs font-semibold mb-3">
+            {locale === "zh" ? "個人資訊" : "Personal Information"}
+          </h5>
+          <div className="grid grid-cols-2 gap-3">
+            <FieldDisplay
+              label={locale === "zh" ? "學生身分" : "Student Identity"}
+              value={
+                previewData?.basic?.std_identity
+                  ? getIdentityName(Number(previewData.basic.std_identity), identities)
+                  : undefined
+              }
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "在學身分" : "School Identity"}
+              value={
+                previewData?.basic?.std_schoolid
+                  ? getSchoolIdentityName(Number(previewData.basic.std_schoolid), schoolIdentities)
+                  : undefined
+              }
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "國籍" : "Nationality"}
+              value={previewData?.basic?.std_nation}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "僑居地" : "Overseas Residence"}
+              value={previewData?.basic?.std_overseaplace}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "是否直升博士" : "Direct PhD"}
+              value={previewData?.basic?.ToDoctor ? (locale === "zh" ? "是" : "Yes") : (locale === "zh" ? "否" : "No")}
+              locale={locale}
+            />
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* 聯絡資訊 */}
+        <div>
+          <h5 className="text-xs font-semibold mb-3">
+            {locale === "zh" ? "聯絡資訊" : "Contact Information"}
+          </h5>
+          <div className="grid grid-cols-2 gap-3">
+            <FieldDisplay
+              label="Email"
+              value={previewData?.basic?.com_email}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "手機" : "Phone"}
+              value={previewData?.basic?.com_cellphone}
+              locale={locale}
+            />
+            <FieldDisplay
+              label={locale === "zh" ? "通訊地址" : "Address"}
+              value={previewData?.basic?.com_commadd}
+              locale={locale}
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Term Data Section with Tabs */}
       {previewData?.recent_terms && previewData.recent_terms.length > 0 ? (
