@@ -268,7 +268,7 @@ def get_department_code_from_data(student_data: Dict[str, Any]) -> Optional[str]
     if not student_data or not isinstance(student_data, dict):
         return None
 
-    return student_data.get("std_depno") or student_data.get("dept_code")
+    return student_data.get("dept_code")
 
 
 def get_academy_code_from_data(student_data: Dict[str, Any]) -> Optional[str]:

@@ -327,7 +327,7 @@ async def get_student_preview(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student {student_id} not found")
 
         # Get department and academy info
-        dept_code = student_data.get("std_depno") or student_data.get("dept_code")
+        dept_code = student_data.get("dept_code")
         department_name = None
         academy_name = None
 

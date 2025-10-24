@@ -48,7 +48,7 @@ import { Locale } from "@/lib/validators";
 import { Application, HistoricalApplication, User } from "@/lib/api";
 import api from "@/lib/api";
 import { useStudentPreview } from "@/hooks/use-student-preview";
-import { useReferenceData, getStudyingStatusName, getDegreeName, getDepartmentName } from "@/hooks/use-reference-data";
+import { useReferenceData, getStudyingStatusName, getDegreeName, getDepartmentName, getGenderName } from "@/hooks/use-reference-data";
 import {
   getApplicationTimeline,
   getStatusColor,
@@ -114,6 +114,7 @@ function StudentPreviewDisplay({
   studyingStatuses,
   degrees,
   departments,
+  genders,
 }: {
   studentId: string;
   academicYear?: number;
@@ -121,6 +122,7 @@ function StudentPreviewDisplay({
   studyingStatuses: Array<{ id: number; name: string }>;
   degrees: Array<{ id: number; name: string }>;
   departments: Array<{ id: number; code: string; name: string; academy_code?: string | null }>;
+  genders: Array<{ id: number; name: string }>;
 }) {
   const { previewData, isLoading, error, fetchPreview } = useStudentPreview();
 
@@ -194,7 +196,11 @@ function StudentPreviewDisplay({
             />
             <FieldDisplay
               label={locale === "zh" ? "學位" : "Degree"}
-              value={previewData?.basic?.degree}
+              value={
+                previewData?.basic?.degree
+                  ? getDegreeName(Number(previewData.basic.degree), degrees)
+                  : undefined
+              }
               locale={locale}
             />
             <FieldDisplay
@@ -204,7 +210,11 @@ function StudentPreviewDisplay({
             />
             <FieldDisplay
               label={locale === "zh" ? "性別" : "Gender"}
-              value={previewData?.basic?.sex}
+              value={
+                previewData?.basic?.sex
+                  ? getGenderName(Number(previewData.basic.sex), genders)
+                  : undefined
+              }
               locale={locale}
             />
           </div>
@@ -390,7 +400,7 @@ export function ApplicationReviewDialog({
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { studyingStatuses, degrees, departments } = useReferenceData();
+  const { studyingStatuses, degrees, departments, genders } = useReferenceData();
 
   // Admin management states
   const [professorInfo, setProfessorInfo] = useState<any>(null);
@@ -1215,6 +1225,7 @@ export function ApplicationReviewDialog({
                         studyingStatuses={studyingStatuses}
                         degrees={degrees}
                         departments={departments}
+                        genders={genders}
                       />
                     </CardContent>
                   </Card>
