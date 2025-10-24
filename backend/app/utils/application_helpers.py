@@ -270,7 +270,7 @@ def get_department_code_from_data(student_data: Dict[str, Any]) -> Optional[str]
     if not student_data or not isinstance(student_data, dict):
         return None
 
-    return student_data.get("dept_code")
+    return student_data.get("trm_depno") or student_data.get("std_depno")
 
 
 def get_academy_code_from_data(student_data: Dict[str, Any]) -> Optional[str]:
@@ -287,7 +287,7 @@ def get_academy_code_from_data(student_data: Dict[str, Any]) -> Optional[str]:
         return None
 
     # std_academyno is the correct field from API, prioritize it
-    return student_data.get("std_academyno") or student_data.get("academy_code") or student_data.get("college_code")
+    return student_data.get("trm_academyno") or student_data.get("std_academyno")
 
 
 def get_term_count_from_data(student_data: Dict[str, Any]) -> Optional[str]:

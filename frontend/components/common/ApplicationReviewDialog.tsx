@@ -306,16 +306,6 @@ function StudentPreviewDisplay({
               value={previewData?.basic?.std_highestschname}
               locale={locale}
             />
-            <FieldDisplay
-              label={locale === "zh" ? "入學日期" : "Enrollment Date"}
-              value={previewData?.basic?.std_enrolldate}
-              locale={locale}
-            />
-            <FieldDisplay
-              label={locale === "zh" ? "備註" : "Remarks"}
-              value={previewData?.basic?.std_directmemo}
-              locale={locale}
-            />
           </div>
         </div>
 
@@ -1053,6 +1043,26 @@ export function ApplicationReviewDialog({
 
   if (!application) return null;
 
+  // Helper function to format date with time
+  const formatDateTime = (dateString: string | undefined | null) => {
+    if (!dateString) return null;
+    try {
+      return new Date(dateString).toLocaleString(
+        locale === "zh" ? "zh-TW" : "en-US",
+        {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }
+      );
+    } catch {
+      return null;
+    }
+  };
+
   // Normalize application data for display
   const displayData = {
     id: detailedApplication?.id ?? application.id,
@@ -1061,15 +1071,29 @@ export function ApplicationReviewDialog({
     student_name: detailedApplication?.student_name ?? (application as Application).student_name ?? (application as HistoricalApplication).student_name ?? "",
     scholarship_type: detailedApplication?.scholarship_type ?? (application as Application).scholarship_type ?? (application as HistoricalApplication).scholarship_type_code ?? "",
     scholarship_name: detailedApplication?.scholarship_name ?? (application as Application).scholarship_name ?? (application as HistoricalApplication).scholarship_name ?? "",
+    scholarship_type_zh: detailedApplication?.scholarship_type_zh ?? (application as Application).scholarship_type_zh,
     status: detailedApplication?.status ?? application.status,
     status_name: (detailedApplication as HistoricalApplication)?.status_name ?? (application as HistoricalApplication).status_name,
+    academic_year: detailedApplication?.academic_year ?? (application as Application).academic_year,
+    semester: detailedApplication?.semester ?? (application as Application).semester,
+    amount: detailedApplication?.amount ?? (application as Application).amount,
+    currency: (detailedApplication as any)?.currency ?? "TWD",
+    is_renewal: detailedApplication?.is_renewal ?? (application as Application).is_renewal ?? false,
     created_at: detailedApplication?.created_at ?? application.created_at,
     submitted_at: detailedApplication?.submitted_at ?? (application as Application).submitted_at ?? (application as HistoricalApplication).submitted_at,
+    reviewed_at: detailedApplication?.reviewed_at ?? (application as Application).reviewed_at,
+    approved_at: detailedApplication?.approved_at ?? (application as Application).approved_at,
     gpa: detailedApplication?.gpa ?? (application as Application).gpa,
     class_ranking_percent: detailedApplication?.class_ranking_percent ?? (application as Application).class_ranking_percent,
     dept_ranking_percent: detailedApplication?.dept_ranking_percent ?? (application as Application).dept_ranking_percent,
     student_termcount: detailedApplication?.student_data?.term_count ?? (application as Application).student_data?.term_count,
+    academy_name: (detailedApplication as any)?.academy_name ?? (application as Application).academy_code,
+    academy_code: detailedApplication?.academy_code ?? (application as Application).academy_code,
     department: getDepartmentName(detailedApplication?.student_data?.dept_code, departments) ?? detailedApplication?.student_data?.dept_code,
+    department_name: (detailedApplication as any)?.department_name ?? getDepartmentName(detailedApplication?.student_data?.dept_code, departments) ?? (application as Application).department,
+    department_code: detailedApplication?.department_code ?? (application as Application).department_code,
+    degree: (detailedApplication as any)?.degree,
+    degree_name: (detailedApplication as any)?.degree ? getDegreeName((detailedApplication as any).degree, degrees) : undefined,
   };
 
   return (
@@ -1144,17 +1168,90 @@ export function ApplicationReviewDialog({
               <div className="flex-1 overflow-y-auto">
                 {/* Basic Information Tab */}
                 <TabsContent value="basic" className="space-y-4 mt-4">
+                  {/* Application Information Section */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">
-                        {locale === "zh" ? "基本資訊" : "Basic Information"}
+                        {locale === "zh" ? "申請資訊" : "Application Information"}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label className="font-medium">
-                            {locale === "zh" ? "申請者" : "Applicant"}
+                            {locale === "zh" ? "申請編號" : "Application ID"}
+                          </Label>
+                          <p className="text-sm font-mono">{displayData.app_id || `APP-${displayData.id}`}</p>
+                        </div>
+                        <div>
+                          <Label className="font-medium">
+                            {locale === "zh" ? "申請狀態" : "Status"}
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={getStatusColor(displayData.status as ApplicationStatus)}>
+                              {displayData.status_name || getStatusName(displayData.status as ApplicationStatus, locale)}
+                            </Badge>
+                            {displayData.is_renewal && (
+                              <Badge variant="outline" className="text-blue-600 border-blue-300">
+                                {locale === "zh" ? "續領" : "Renewal"}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="font-medium">
+                            {locale === "zh" ? "學年度" : "Academic Year"}
+                          </Label>
+                          <p className="text-sm">{displayData.academic_year || "-"}</p>
+                        </div>
+                        <div>
+                          <Label className="font-medium">
+                            {locale === "zh" ? "學期" : "Semester"}
+                          </Label>
+                          <p className="text-sm">
+                            {displayData.semester === "first"
+                              ? (locale === "zh" ? "上學期" : "First")
+                              : displayData.semester === "second"
+                              ? (locale === "zh" ? "下學期" : "Second")
+                              : displayData.semester === "annual"
+                              ? (locale === "zh" ? "全年" : "Annual")
+                              : displayData.semester || "-"}
+                          </p>
+                        </div>
+                        <div className="col-span-2">
+                          <Label className="font-medium">
+                            {locale === "zh" ? "獎學金名稱" : "Scholarship Name"}
+                          </Label>
+                          <p className="text-sm">
+                            {displayData.scholarship_name || displayData.scholarship_type_zh || displayData.scholarship_type}
+                          </p>
+                        </div>
+                        {displayData.amount && (
+                          <div>
+                            <Label className="font-medium">
+                              {locale === "zh" ? "獎學金金額" : "Amount"}
+                            </Label>
+                            <p className="text-sm font-medium text-green-600">
+                              {displayData.currency} {displayData.amount?.toLocaleString()}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Student Information Section */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">
+                        {locale === "zh" ? "學生資訊" : "Student Information"}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="font-medium">
+                            {locale === "zh" ? "姓名" : "Name"}
                           </Label>
                           <p className="text-sm">{displayData.student_name || "N/A"}</p>
                         </div>
@@ -1162,46 +1259,55 @@ export function ApplicationReviewDialog({
                           <Label className="font-medium">
                             {locale === "zh" ? "學號" : "Student ID"}
                           </Label>
-                          <p className="text-sm">{displayData.student_id || "N/A"}</p>
+                          <p className="text-sm font-mono">{displayData.student_id || "N/A"}</p>
                         </div>
-                        <div>
-                          <Label className="font-medium">
-                            {locale === "zh" ? "就讀學期數" : "Terms"}
-                          </Label>
-                          <p className="text-sm">{displayData.student_termcount || "-"}</p>
-                        </div>
+                        {displayData.academy_name && (
+                          <div>
+                            <Label className="font-medium">
+                              {locale === "zh" ? "學院" : "Academy"}
+                            </Label>
+                            <p className="text-sm">{displayData.academy_name}</p>
+                          </div>
+                        )}
                         <div>
                           <Label className="font-medium">
                             {locale === "zh" ? "系所" : "Department"}
                           </Label>
-                          <p className="text-sm">{displayData.department || "-"}</p>
+                          <p className="text-sm">{displayData.department_name || displayData.department || "-"}</p>
                         </div>
-                        <div>
-                          <Label className="font-medium">
-                            {locale === "zh" ? "獎學金類型" : "Scholarship Type"}
-                          </Label>
-                          <p className="text-sm">
-                            {displayData.scholarship_name || displayData.scholarship_type}
-                          </p>
-                        </div>
-                        <div>
-                          <Label className="font-medium">
-                            {locale === "zh" ? "申請狀態" : "Status"}
-                          </Label>
+                        {displayData.degree_name && (
                           <div>
-                            <Badge variant={getStatusColor(displayData.status as ApplicationStatus)}>
-                              {displayData.status_name || getStatusName(displayData.status as ApplicationStatus, locale)}
-                            </Badge>
+                            <Label className="font-medium">
+                              {locale === "zh" ? "學位" : "Degree"}
+                            </Label>
+                            <p className="text-sm">{displayData.degree_name}</p>
                           </div>
+                        )}
+                        <div>
+                          <Label className="font-medium">
+                            {locale === "zh" ? "就讀學期數" : "Terms Enrolled"}
+                          </Label>
+                          <p className="text-sm">{displayData.student_termcount || "-"}</p>
                         </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Status & Timeline Section */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">
+                        {locale === "zh" ? "狀態與時間" : "Status & Timeline"}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label className="font-medium">
                             {locale === "zh" ? "建立時間" : "Created At"}
                           </Label>
                           <p className="text-sm">
-                            {new Date(displayData.created_at).toLocaleDateString(
-                              locale === "zh" ? "zh-TW" : "en-US"
-                            )}
+                            {formatDateTime(displayData.created_at) || "-"}
                           </p>
                         </div>
                         {displayData.submitted_at && (
@@ -1210,9 +1316,27 @@ export function ApplicationReviewDialog({
                               {locale === "zh" ? "提交時間" : "Submitted At"}
                             </Label>
                             <p className="text-sm">
-                              {new Date(displayData.submitted_at).toLocaleDateString(
-                                locale === "zh" ? "zh-TW" : "en-US"
-                              )}
+                              {formatDateTime(displayData.submitted_at) || "-"}
+                            </p>
+                          </div>
+                        )}
+                        {displayData.reviewed_at && (
+                          <div>
+                            <Label className="font-medium">
+                              {locale === "zh" ? "審核時間" : "Reviewed At"}
+                            </Label>
+                            <p className="text-sm">
+                              {formatDateTime(displayData.reviewed_at) || "-"}
+                            </p>
+                          </div>
+                        )}
+                        {displayData.approved_at && (
+                          <div>
+                            <Label className="font-medium">
+                              {locale === "zh" ? "核准時間" : "Approved At"}
+                            </Label>
+                            <p className="text-sm">
+                              {formatDateTime(displayData.approved_at) || "-"}
                             </p>
                           </div>
                         )}

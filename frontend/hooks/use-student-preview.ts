@@ -24,8 +24,6 @@ interface StudentPreviewBasic {
   std_enrolltype: number;        // 入學方式
   std_termcount: number;         // 學期數
   std_highestschname?: string;   // 最高學歷學校
-  std_enrolldate?: string;       // 入學日期
-  std_directmemo?: string;       // 備註
 
   // === 個人資訊 ===
   std_sex: number;               // 性別 (1:男, 2:女)
