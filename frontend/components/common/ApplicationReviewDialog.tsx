@@ -287,7 +287,11 @@ function StudentPreviewDisplay({
               label={locale === "zh" ? "入學方式" : "Enrollment Type"}
               value={
                 previewData?.basic?.std_enrolltype
-                  ? getEnrollTypeName(Number(previewData.basic.std_enrolltype), enrollTypes)
+                  ? getEnrollTypeName(
+                      Number(previewData.basic.std_enrolltype),
+                      previewData.basic.std_degree ? Number(previewData.basic.std_degree) : undefined,
+                      enrollTypes
+                    )
                   : undefined
               }
               locale={locale}

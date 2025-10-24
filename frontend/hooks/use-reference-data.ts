@@ -281,17 +281,19 @@ export function getGenderName(
 }
 
 /**
- * Helper to get enrollment type name by code
+ * Helper to get enrollment type name by code and degree
  *
  * @param enrollTypeCode - The enrollment type code to look up
+ * @param degreeId - The degree ID (1: PhD, 2: Master, 3: Undergraduate, etc.) to filter enrollment types
  * @param enrollTypes - Array of enrollment types (from useReferenceData)
  * @returns Display name or fallback message
  * @example
- * const name = getEnrollTypeName(1, enrollTypes);
- * // Returns: "一般入學"
+ * const name = getEnrollTypeName(1, 3, enrollTypes);
+ * // Returns: "一般入學" (for undergraduate)
  */
 export function getEnrollTypeName(
   enrollTypeCode: number | undefined,
+  degreeId: number | undefined,
   enrollTypes: Array<{ degree_id: number; code: string; name: string; name_en?: string; degree_name?: string }>
 ): string {
   if (enrollTypeCode === undefined || enrollTypeCode === null) {
@@ -299,14 +301,25 @@ export function getEnrollTypeName(
   }
 
   // enrollTypes uses code (string) as lookup, but std_enrolltype is a number
-  // Try to find by matching the numeric code
-  const enrollType = enrollTypes.find((et) => {
+  // Try to find by matching both the numeric code and degree_id
+  let enrollType = enrollTypes.find((et) => {
     try {
-      return parseInt(et.code, 10) === enrollTypeCode;
+      return parseInt(et.code, 10) === enrollTypeCode && et.degree_id === degreeId;
     } catch {
       return false;
     }
   });
+
+  // Fallback: if degree_id is provided but no match found, try code-only lookup
+  if (!enrollType && degreeId !== undefined && degreeId !== null) {
+    enrollType = enrollTypes.find((et) => {
+      try {
+        return parseInt(et.code, 10) === enrollTypeCode;
+      } catch {
+        return false;
+      }
+    });
+  }
 
   if (enrollType) {
     return enrollType.name;
