@@ -274,64 +274,19 @@ class StudentService:
                 term_data_status = "error"
                 term_error_message = str(e)
 
-        # Create snapshot with consistent field mapping
+        # Create snapshot with API data
         snapshot = {
-            # API 1: Basic student info (std_* fields)
-            "std_stdno": student_data.get("std_stdno"),
-            "std_stdcode": student_data.get("std_stdcode"),
-            "std_pid": student_data.get("std_pid"),
-            "std_cname": student_data.get("std_cname"),
-            "std_ename": student_data.get("std_ename"),
-            "std_bdate": student_data.get("std_bdate"),
-            "std_degree": student_data.get("std_degree"),
-            "std_studingstatus": student_data.get("std_studingstatus"),
-            "std_sex": student_data.get("std_sex"),
-            "std_enrollyear": student_data.get("std_enrollyear"),
-            "std_enrollterm": student_data.get("std_enrollterm"),
-            "std_termcount": student_data.get("std_termcount"),
-            "std_nation": student_data.get("std_nation"),
-            "std_schoolid": student_data.get("std_schoolid"),
-            "std_identity": student_data.get("std_identity"),
-            "std_depno": student_data.get("std_depno"),
-            "std_academyno": student_data.get("std_academyno"),
-            "std_enrolltype": student_data.get("std_enrolltype"),
-            "std_directmemo": student_data.get("std_directmemo"),
-            "std_highestschname": student_data.get("std_highestschname"),
-            "std_enrolldate": student_data.get("std_enrolldate"),
-            "std_overseaplace": student_data.get("std_overseaplace"),
-            "com_cellphone": student_data.get("com_cellphone"),
-            "com_email": student_data.get("com_email"),
-            "com_commzip": student_data.get("com_commzip"),
-            "com_commadd": student_data.get("com_commadd"),
-            "mgd_title": student_data.get("mgd_title"),
-            "ToDoctor": student_data.get("ToDoctor"),
-            # Metadata
+            **student_data,  # Include all API 1 fields directly
+            # Add internal metadata
             "_api_fetched_at": datetime.now(timezone.utc).isoformat(),
             "_api_source": self.api_base_url,
             "_term_data_status": term_data_status,
             "_term_error_message": term_error_message,
         }
 
-        # API 2: Term-specific data (trm_* fields) - add if available
+        # Add API 2: Term-specific data (trm_* fields) if available
         if term_data:
-            snapshot.update(
-                {
-                    "trm_year": term_data.get("trm_year"),
-                    "trm_term": term_data.get("trm_term"),
-                    "trm_termcount": term_data.get("trm_termcount"),
-                    "trm_studystatus": term_data.get("trm_studystatus"),
-                    "trm_degree": term_data.get("trm_degree"),
-                    "trm_academyno": term_data.get("trm_academyno"),
-                    "trm_academyname": term_data.get("trm_academyname"),
-                    "trm_depno": term_data.get("trm_depno"),
-                    "trm_depname": term_data.get("trm_depname"),
-                    "trm_placings": term_data.get("trm_placings"),
-                    "trm_placingsrate": term_data.get("trm_placingsrate"),
-                    "trm_depplacing": term_data.get("trm_depplacing"),
-                    "trm_depplacingrate": term_data.get("trm_depplacingrate"),
-                    "trm_ascore_gpa": term_data.get("trm_ascore_gpa"),
-                }
-            )
+            snapshot.update(term_data)
 
         return snapshot
 
