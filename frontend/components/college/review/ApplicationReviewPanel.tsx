@@ -202,15 +202,15 @@ export function ApplicationReviewPanel({
           : "-";
 
         // Format scholarship period status (獎學金期間在學狀態)
-        const studyingStatus = (app as any).scholarship_period_status !== undefined && (app as any).scholarship_period_status !== null
-          ? getStudyingStatusName((app as any).scholarship_period_status, studyingStatuses)
+        const studyingStatus = app.scholarship_period_status !== undefined && app.scholarship_period_status !== null
+          ? getStudyingStatusName(app.scholarship_period_status, studyingStatuses)
           : "-";
 
         return {
           '學生姓名': app.student_name || "-",
           '學號': app.student_id || "-",
-          '學院': getAcademyName((app as any).academy_code, academies),
-          '系所': getDepartmentName((app as any).department_code, departments),
+          '學院': getAcademyName(app.academy_code, academies),
+          '系所': getDepartmentName(app.department_code, departments),
           '在學學期數': app.student_termcount || "-",
           '在學狀態': studyingStatus,
           '獎學金類型': app.scholarship_type_zh || app.scholarship_type || "-",
@@ -578,10 +578,10 @@ export function ApplicationReviewPanel({
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium text-sm">
-                            {getAcademyName((app as any).academy_code, academies)}
+                            {getAcademyName(app.academy_code, academies)}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            {getDepartmentName((app as any).department_code, departments)}
+                            {getDepartmentName(app.department_code, departments)}
                           </span>
                         </div>
                       </TableCell>
@@ -593,8 +593,8 @@ export function ApplicationReviewPanel({
 
                       {/* 4. 在學狀態（獎學金期間） */}
                       <TableCell>
-                        {(app as any).scholarship_period_status !== undefined && (app as any).scholarship_period_status !== null
-                          ? getStudyingStatusName((app as any).scholarship_period_status, studyingStatuses)
+                        {app.scholarship_period_status !== undefined && app.scholarship_period_status !== null
+                          ? getStudyingStatusName(app.scholarship_period_status, studyingStatuses)
                           : "-"}
                       </TableCell>
 

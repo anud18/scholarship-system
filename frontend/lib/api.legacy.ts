@@ -133,6 +133,12 @@ export interface Application {
   sub_type_labels?: Record<string, { zh: string; en: string }>; // 子類型中英文名稱對照
   agree_terms?: boolean; // 同意條款
 
+  // College review enriched fields (from ApplicationEnricherService)
+  academy_code?: string; // 學院代碼
+  department_code?: string; // 系所代碼
+  scholarship_period_status?: number; // 獎學金期間在學狀態
+  scholarship_period_gpa?: number; // 獎學金期間 GPA
+
   // Extended properties for dashboard display (保留向後兼容)
   user?: User; // 關聯的使用者資訊
   student?: Student; // 關聯的學生資訊

@@ -27,9 +27,41 @@ export function createCollegeApi() {
      * Type-safe: Query parameters validated against OpenAPI
      */
     getApplicationsForReview: async (
-      params?: string
+      queryString?: string
     ): Promise<ApiResponse<any[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/applications');
+      // Parse query string into params object
+      const queryParams: {
+        academic_year?: number;
+        semester?: string;
+        scholarship_type?: string;
+      } = {};
+
+      if (queryString) {
+        const params = new URLSearchParams(queryString);
+
+        if (params.has('academic_year')) {
+          const yearStr = params.get('academic_year');
+          if (yearStr) {
+            queryParams.academic_year = parseInt(yearStr);
+          }
+        }
+        if (params.has('semester')) {
+          const semesterVal = params.get('semester');
+          if (semesterVal) {
+            queryParams.semester = semesterVal;
+          }
+        }
+        if (params.has('scholarship_type')) {
+          const typeVal = params.get('scholarship_type');
+          if (typeVal) {
+            queryParams.scholarship_type = typeVal;
+          }
+        }
+      }
+
+      const response = await typedClient.raw.GET('/api/v1/college-review/applications', {
+        params: { query: queryParams }
+      });
       return toApiResponse<any[]>(response);
     },
 

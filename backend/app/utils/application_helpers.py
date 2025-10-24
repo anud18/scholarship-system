@@ -74,11 +74,12 @@ def get_snapshot_college_code(application: Application) -> Optional[str]:
     if not application.student_data or not isinstance(application.student_data, dict):
         return None
 
+    # std_academyno is the correct field from API, prioritize it
     return (
-        application.student_data.get("college_code")
-        or application.student_data.get("std_college")
+        application.student_data.get("std_academyno")
         or application.student_data.get("academy_code")
-        or application.student_data.get("std_academyno")
+        or application.student_data.get("college_code")
+        or application.student_data.get("std_college")
     )
 
 
@@ -215,11 +216,12 @@ def get_college_code_from_data(student_data: Dict[str, Any]) -> Optional[str]:
     if not student_data or not isinstance(student_data, dict):
         return None
 
+    # std_academyno is the correct field from API, prioritize it
     return (
-        student_data.get("college_code")
-        or student_data.get("std_college")
+        student_data.get("std_academyno")
         or student_data.get("academy_code")
-        or student_data.get("std_academyno")
+        or student_data.get("college_code")
+        or student_data.get("std_college")
     )
 
 
@@ -284,7 +286,8 @@ def get_academy_code_from_data(student_data: Dict[str, Any]) -> Optional[str]:
     if not student_data or not isinstance(student_data, dict):
         return None
 
-    return student_data.get("std_academyno") or student_data.get("college_code") or student_data.get("academy_code")
+    # std_academyno is the correct field from API, prioritize it
+    return student_data.get("std_academyno") or student_data.get("academy_code") or student_data.get("college_code")
 
 
 def get_term_count_from_data(student_data: Dict[str, Any]) -> Optional[str]:

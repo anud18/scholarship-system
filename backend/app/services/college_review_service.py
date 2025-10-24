@@ -348,7 +348,8 @@ class CollegeReviewService:
         # Apply college filter if provided (for college role users)
         if college_code:
             logger.info(f"Filtering applications by college_code={college_code}")
-            stmt = stmt.where(sa_func.json_extract_path_text(Application.student_data, "college_code") == college_code)
+            # Use std_academyno which is the actual field name in student_data JSON from API
+            stmt = stmt.where(sa_func.json_extract_path_text(Application.student_data, "std_academyno") == college_code)
 
         # Order by submission date (FIFO)
         stmt = stmt.order_by(asc(Application.submitted_at))
@@ -513,8 +514,9 @@ class CollegeReviewService:
             # Filter by creator's college if available
             if creator_college:
                 logger.debug(f"Adding college filter for college_code={creator_college}")
+                # Use std_academyno which is the actual field name in student_data JSON from API
                 college_condition = (
-                    sa_func.json_extract_path_text(Application.student_data, "college_code") == creator_college
+                    sa_func.json_extract_path_text(Application.student_data, "std_academyno") == creator_college
                 )
                 conditions.append(college_condition)
                 logger.debug("College condition added successfully")
@@ -553,8 +555,9 @@ class CollegeReviewService:
             # Filter by creator's college if available
             if creator_college:
                 logger.debug(f"Adding college filter for college_code={creator_college}")
+                # Use std_academyno which is the actual field name in student_data JSON from API
                 college_condition = (
-                    sa_func.json_extract_path_text(Application.student_data, "college_code") == creator_college
+                    sa_func.json_extract_path_text(Application.student_data, "std_academyno") == creator_college
                 )
                 conditions.append(college_condition)
                 logger.debug("College condition added successfully")
@@ -586,8 +589,9 @@ class CollegeReviewService:
                 review_conditions.append(semester_filter)
             # Filter by creator's college if available
             if creator_college:
+                # Use std_academyno which is the actual field name in student_data JSON from API
                 review_conditions.append(
-                    sa_func.json_extract_path_text(Application.student_data, "college_code") == creator_college
+                    sa_func.json_extract_path_text(Application.student_data, "std_academyno") == creator_college
                 )
 
             college_reviews_stmt = select(CollegeReview).join(Application).where(and_(*review_conditions))
@@ -614,8 +618,9 @@ class CollegeReviewService:
                 review_conditions.append(semester_filter)
             # Filter by creator's college if available
             if creator_college:
+                # Use std_academyno which is the actual field name in student_data JSON from API
                 review_conditions.append(
-                    sa_func.json_extract_path_text(Application.student_data, "college_code") == creator_college
+                    sa_func.json_extract_path_text(Application.student_data, "std_academyno") == creator_college
                 )
 
             college_reviews_stmt = select(CollegeReview).join(Application).where(and_(*review_conditions))

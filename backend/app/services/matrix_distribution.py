@@ -325,10 +325,12 @@ class MatrixDistributionService:
         if not app.student_data or not isinstance(app.student_data, dict):
             return False
 
+        # std_academyno is the correct field from API, prioritize it
         student_college = (
-            app.student_data.get("college_code")
-            or app.student_data.get("std_college")
+            app.student_data.get("std_academyno")
             or app.student_data.get("academy_code")
+            or app.student_data.get("college_code")
+            or app.student_data.get("std_college")
             or ""
         )
 

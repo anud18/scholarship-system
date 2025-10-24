@@ -383,10 +383,12 @@ async def get_distribution_details(
 
             student_id = app.student_data.get("std_stdcode") or app.student_data.get("nycu_id") or "N/A"
             student_name = app.student_data.get("std_cname") or app.student_data.get("name") or "N/A"
+            # std_academyno is the correct field from API, prioritize it
             college_code = (
-                app.student_data.get("college_code")
-                or app.student_data.get("std_college")
+                app.student_data.get("std_academyno")
                 or app.student_data.get("academy_code")
+                or app.student_data.get("college_code")
+                or app.student_data.get("std_college")
                 or "N/A"
             )
 

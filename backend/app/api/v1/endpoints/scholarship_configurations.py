@@ -320,10 +320,12 @@ async def get_matrix_quota_status(
                 continue
 
             # Get college code from student data
+            # std_academyno is the correct field from API, prioritize it
             college_code = (
-                app.student_data.get("college_code")
-                or app.student_data.get("std_college")
+                app.student_data.get("std_academyno")
                 or app.student_data.get("academy_code")
+                or app.student_data.get("college_code")
+                or app.student_data.get("std_college")
             )
 
             if not college_code:
