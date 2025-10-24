@@ -14,7 +14,7 @@ import pandas as pd
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ServiceUnavailableError
+from app.core.exceptions import NotFoundError, ServiceUnavailableError
 from app.models.application import Application, ApplicationStatus
 from app.models.application_sequence import ApplicationSequence
 from app.models.batch_import import BatchImport
@@ -189,7 +189,7 @@ class BatchImportService:
                         student_id=student_id,
                         field="student_id",
                         error_type="duplicate_in_file",
-                        message=f"學號 {student_id} 在檔案中重複出現，每位學生在同一批次中只能有一筆申請",
+                        message=f"學號 {student_id} 在檔案中重複出現，每位學生在同一批次中只能有一筆申請 請檢查後重新上傳",
                     )
                 )
                 continue
@@ -276,70 +276,6 @@ class BatchImportService:
                 )
 
         return parsed_data, errors
-
-    async def validate_college_permission(
-        self, student_id: str, college_code: str, dept_code: Optional[str] = None
-    ) -> Tuple[bool, Optional[str]]:
-        """
-        Validate if student belongs to the specified college
-
-        Args:
-            student_id: Student ID
-            college_code: College code (e.g., 'E', 'C', 'I', etc.)
-            dept_code: Department code from import data (optional)
-
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
-        from app.models.student import Department
-
-        # Get student from database
-        stmt = select(User).where(User.nycu_id == student_id)
-        result = await self.db.execute(stmt)
-        student = result.scalar_one_or_none()
-
-        if not student:
-            return False, f"查無學號 {student_id} 的使用者資料（可能尚未透過 Portal 登入本系統），將於後續確認"
-
-        # Get student's department from raw_data JSON or dept_code column
-        student_dept = None
-        if student.raw_data and isinstance(student.raw_data, dict):
-            student_dept = student.raw_data.get("deptCode")
-
-        if not student_dept:
-            student_dept = student.dept_code
-
-        # Allow override from import data when existing record lacks dept information
-        normalized_dept_code = _normalize_optional(dept_code)
-        if not student_dept and normalized_dept_code:
-            student_dept = normalized_dept_code
-
-        if not student_dept:
-            # If no dept in database, use dept_code from import data
-            if not normalized_dept_code:
-                return False, f"學生 {student_id} 無系所資料，且匯入資料未提供 dept_code"
-            student_dept = normalized_dept_code
-
-        # Query department from database to get academy_code
-        dept_stmt = select(Department).where(Department.code == student_dept)
-        dept_result = await self.db.execute(dept_stmt)
-        department = dept_result.scalar_one_or_none()
-
-        if not department:
-            return False, f"查無系所代碼 {student_dept} 的資料"
-
-        if not department.academy_code:
-            return False, f"系所 {student_dept} 未設定學院代碼"
-
-        student_college = department.academy_code
-
-        if student_college != college_code:
-            return (
-                False,
-                f"學生 {student_id} 所屬學院 ({student_college}) 與匯入學院 ({college_code}) 不符",
-            )
-
-        return True, None
 
     async def check_duplicate_application(
         self, student_id: str, scholarship_type_id: int, academic_year: int, semester: Optional[str]
@@ -758,28 +694,22 @@ class BatchImportService:
                 app_id = f"{base_app_id}U"
 
                 # Create application
-                # Fetch student data from SIS API, prioritizing it over batch import data
-                sis_data = None
+                # Fetch student snapshot from SIS API (includes both basic info and term data)
+                student_data = None
                 try:
-                    sis_data = await self.student_service.get_student_basic_info(student_id)
-                except ServiceUnavailableError:
+                    student_data = await self.student_service.get_student_snapshot(
+                        student_id, academic_year=str(academic_year), semester=semester
+                    )
+                except (NotFoundError, ServiceUnavailableError) as e:
                     logger.warning(
-                        f"SIS API unavailable for student {student_id}. Using batch import data as fallback."
+                        f"SIS API unavailable or student not found for {student_id}: {e}. "
+                        "Creating application without student snapshot."
                     )
                 except Exception as e:
                     logger.error(
-                        f"Error fetching SIS data for student {student_id}: {e}. Using batch import data as fallback."
+                        f"Error fetching student snapshot for {student_id}: {e}. "
+                        "Creating application without student snapshot."
                     )
-
-                # Construct student_payload, prioritizing SIS data
-                student_payload = {
-                    "nycu_id": student_id,
-                    "name": sis_data.get("std_cname") if sis_data else row_data["student_name"],
-                    "dept_code": sis_data.get("std_depno") if sis_data else None,
-                    "college_code": sis_data.get("std_academyno") if sis_data else batch_import.college_code,
-                    "term_count": sis_data.get("term_count") if sis_data else None,
-                    "raw_sis_data": sis_data if sis_data else None,  # Store raw SIS data for reference
-                }
 
                 # Construct submitted_form_data, primarily from batch import, but override dept_code if SIS has it
                 submitted_form_data = {
@@ -789,9 +719,6 @@ class BatchImportService:
                     "advisor_nycu_id": row_data.get("advisor_nycu_id"),
                     "custom_fields": row_data.get("custom_fields", {}),
                 }
-                # Override dept_code in submitted_form_data if SIS data is available and different
-                if sis_data and sis_data.get("std_depno"):
-                    submitted_form_data["dept_code"] = sis_data.get("std_depno")
 
                 application = Application(
                     app_id=app_id,
@@ -813,7 +740,7 @@ class BatchImportService:
                     import_source="batch_import",
                     document_status="pending_documents",
                     submitted_at=datetime.now(timezone.utc),
-                    student_data=student_payload,
+                    student_data=student_data,
                     submitted_form_data=submitted_form_data,
                 )
                 applications.append(application)

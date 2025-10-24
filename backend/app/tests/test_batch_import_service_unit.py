@@ -178,9 +178,33 @@ class TestBatchImportService:
 
         user_map = {"111111111": user_1, "222222222": user_2}
 
+        # Mock student snapshot data
+        mock_student_snapshot = {
+            "std_stdcode": "111111111",
+            "std_cname": "王小明",
+            "std_depno": "5201",
+            "std_academyno": "A",
+            "trm_year": 113,
+            "trm_term": 1,
+            "com_email": "test@nctu.edu.tw",
+            "_api_fetched_at": "2025-10-24T00:00:00Z",
+            "_term_data_status": "success",
+        }
+
         with patch.object(service.db, "get", return_value=mock_scholarship), patch.object(
             service, "_get_or_create_users_bulk", return_value=user_map
-        ), patch.object(service.db, "add") as mock_add, patch.object(service.db, "flush", new_callable=AsyncMock):
+        ), patch.object(service.db, "add") as mock_add, patch.object(
+            service.db, "flush", new_callable=AsyncMock
+        ), patch.object(
+            service.student_service, "get_student_snapshot", new_callable=AsyncMock, return_value=mock_student_snapshot
+        ), patch.object(
+            service.db, "execute"
+        ) as mock_execute:
+            # Mock ApplicationSequence lookup
+            mock_seq_result = Mock()
+            mock_seq_result.scalar_one_or_none.return_value = None
+            mock_execute.return_value = mock_seq_result
+
             created_ids, errors = await service.create_applications_from_batch(
                 batch_import=batch_import,
                 parsed_data=sample_excel_data,
@@ -304,8 +328,6 @@ class TestBatchImportService:
     @pytest.mark.asyncio
     async def test_bulk_validate_missing_student_with_dept(self):
         """Missing students should be marked as valid and will be created later with SIS data."""
-        from app.models.student import Department
-
         db_mock = AsyncMock()
         service = BatchImportService(db_mock)
 
