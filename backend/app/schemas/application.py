@@ -329,6 +329,37 @@ class ApplicationResponse(BaseModel):
     # Additional display fields
     student_name: Optional[str] = None
     student_no: Optional[str] = None
+    student_name_en: Optional[str] = None  # std_ename
+    student_pid: Optional[str] = None  # std_pid
+    student_email: Optional[str] = None  # com_email
+    student_phone: Optional[str] = None  # com_cellphone
+
+    # === Academic Organization ===
+    academy_code: Optional[str] = None  # std_academyno / trm_academyno
+    academy_name: Optional[str] = None  # trm_academyname
+    department_code: Optional[str] = None  # std_depno / trm_depno
+    department_name: Optional[str] = None  # trm_depname
+    degree: Optional[int] = None  # std_degree / trm_degree
+    studying_status: Optional[int] = None  # std_studingstatus
+    studying_status_name: Optional[str] = None  # mgd_title
+
+    # === Enrollment Information ===
+    enroll_year: Optional[int] = None  # std_enrollyear
+    enroll_term: Optional[int] = None  # std_enrollterm
+    enroll_type: Optional[int] = None  # std_enrolltype
+    term_count: Optional[int] = None  # std_termcount / trm_termcount
+
+    # === Identity & Status ===
+    student_identity: Optional[int] = None  # std_identity
+    school_identity: Optional[int] = None  # std_schoolid
+    gender: Optional[int] = None  # std_sex
+
+    # === Academic Performance ===
+    gpa: Optional[float] = None  # trm_ascore_gpa
+    class_ranking: Optional[int] = None  # trm_placings
+    class_ranking_percent: Optional[float] = None  # trm_placingsrate
+    dept_ranking: Optional[int] = None  # trm_depplacing
+    dept_ranking_percent: Optional[float] = None  # trm_depplacingrate
 
     @property
     def is_editable(self) -> bool:
@@ -402,6 +433,38 @@ class ApplicationListResponse(BaseModel):
     # Additional display fields
     student_name: Optional[str] = None
     student_no: Optional[str] = None
+    student_name_en: Optional[str] = None  # std_ename
+    student_pid: Optional[str] = None  # std_pid
+    student_email: Optional[str] = None  # com_email
+    student_phone: Optional[str] = None  # com_cellphone
+
+    # === Academic Organization ===
+    academy_code: Optional[str] = None  # std_academyno / trm_academyno
+    academy_name: Optional[str] = None  # trm_academyname
+    department_code: Optional[str] = None  # std_depno / trm_depno
+    department_name: Optional[str] = None  # trm_depname
+    degree: Optional[int] = None  # std_degree / trm_degree
+    studying_status: Optional[int] = None  # std_studingstatus
+    studying_status_name: Optional[str] = None  # mgd_title
+
+    # === Enrollment Information ===
+    enroll_year: Optional[int] = None  # std_enrollyear
+    enroll_term: Optional[int] = None  # std_enrollterm
+    enroll_type: Optional[int] = None  # std_enrolltype
+    term_count: Optional[int] = None  # std_termcount / trm_termcount
+
+    # === Identity & Status ===
+    student_identity: Optional[int] = None  # std_identity
+    school_identity: Optional[int] = None  # std_schoolid
+    gender: Optional[int] = None  # std_sex
+
+    # === Academic Performance ===
+    gpa: Optional[float] = None  # trm_ascore_gpa
+    class_ranking: Optional[int] = None  # trm_placings
+    class_ranking_percent: Optional[float] = None  # trm_placingsrate
+    dept_ranking: Optional[int] = None  # trm_depplacing
+    dept_ranking_percent: Optional[float] = None  # trm_depplacingrate
+
     days_waiting: Optional[int] = None
 
     # Professor information

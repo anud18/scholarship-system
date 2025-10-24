@@ -78,6 +78,49 @@ class ApplicationService:
             return None
         return user.nycu_id
 
+    def _extract_student_fields(self, student_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract commonly used student fields from student_data snapshot.
+
+        Converts raw API data into structured fields for ApplicationResponse.
+        Prefers term data (trm_*) over basic data (std_*) when both available.
+        """
+        if not student_data:
+            return {}
+
+        return {
+            # Basic info
+            "student_name": student_data.get("std_cname"),
+            "student_no": student_data.get("std_stdcode"),
+            "student_name_en": student_data.get("std_ename"),
+            "student_pid": student_data.get("std_pid"),
+            "student_email": student_data.get("com_email"),
+            "student_phone": student_data.get("com_cellphone"),
+            # Academic org (prefer term data)
+            "academy_code": student_data.get("trm_academyno") or student_data.get("std_academyno"),
+            "academy_name": student_data.get("trm_academyname"),
+            "department_code": student_data.get("trm_depno") or student_data.get("std_depno"),
+            "department_name": student_data.get("trm_depname"),
+            "degree": student_data.get("trm_degree") or student_data.get("std_degree"),
+            "studying_status": student_data.get("std_studingstatus"),
+            # Enrollment
+            "enroll_year": student_data.get("std_enrollyear"),
+            "enroll_term": student_data.get("std_enrollterm"),
+            "enroll_type": student_data.get("std_enrolltype"),
+            "term_count": student_data.get("trm_termcount") or student_data.get("std_termcount"),
+            # Identity
+            "student_identity": student_data.get("std_identity"),
+            "school_identity": student_data.get("std_schoolid"),
+            "gender": student_data.get("std_sex"),
+            "studying_status_name": student_data.get("mgd_title"),
+            # Performance
+            "gpa": student_data.get("trm_ascore_gpa"),
+            "class_ranking": student_data.get("trm_placings"),
+            "class_ranking_percent": student_data.get("trm_placingsrate"),
+            "dept_ranking": student_data.get("trm_depplacing"),
+            "dept_ranking_percent": student_data.get("trm_depplacingrate"),
+        }
+
     def _normalize_submitted_form_data(self, form_data: dict) -> dict:
         """
         Normalize submitted_form_data to new format (with 'fields' and 'documents' keys)
@@ -156,6 +199,9 @@ class ApplicationService:
             application.submitted_form_data.copy() if application.submitted_form_data else {}
         )
 
+        # Extract student fields from student_data snapshot
+        student_fields = self._extract_student_fields(application.student_data)
+
         return ApplicationResponse(
             id=application.id,
             app_id=application.app_id,
@@ -180,6 +226,7 @@ class ApplicationService:
             created_at=application.created_at,
             updated_at=application.updated_at,
             meta_data=application.meta_data,
+            **student_fields,  # Spread extracted student fields
         )
 
     def _convert_semester_to_string(self, semester) -> Optional[str]:
@@ -841,20 +888,14 @@ class ApplicationService:
             scholarship_type_zh = application.scholarship.name
             scholarship_name = application.scholarship.name
 
-        # Extract student name and student number from student_data
-        student_name = None
-        student_no = None
-        if application.student_data:
-            student_name = application.student_data.get("std_cname")
-            student_no = application.student_data.get("std_stdcode")
+        # Extract student fields from student_data snapshot
+        student_fields = self._extract_student_fields(application.student_data)
 
-        # Get user information as fallback
-        if not student_name or not student_no:
-            if application.student:  # User loaded via relationship
-                if not student_name:
-                    student_name = application.student.name
-                if not student_no:
-                    student_no = application.student.nycu_id
+        # Get user information as fallback for student_name and student_no
+        if not student_fields.get("student_name") and application.student:
+            student_fields["student_name"] = application.student.name
+        if not student_fields.get("student_no") and application.student:
+            student_fields["student_no"] = application.student.nycu_id
 
         # Build sub_type labels from scholarship.sub_type_configs
         sub_type_labels = {}
@@ -901,8 +942,7 @@ class ApplicationService:
             "scholarship_name": scholarship_name,
             "amount": amount,
             "currency": currency,
-            "student_name": student_name,
-            "student_no": student_no,
+            **student_fields,  # Spread extracted student fields
         }
 
         return ApplicationResponse(**response_data)

@@ -3452,6 +3452,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reference-data/genders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Genders
+         * @description Get all gender types
+         */
+        get: operations["get_genders_api_v1_reference_data_genders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reference-data/academies": {
         parameters: {
             query?: never;
@@ -5664,14 +5684,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
          * Preview Roster Export
          * @description 預覽造冊Excel匯出內容
          *     Preview roster Excel export content
          */
-        post: operations["preview_roster_export_api_v1_payment_rosters__roster_id__preview_post"];
+        get: operations["preview_roster_export_api_v1_payment_rosters__roster_id__preview_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5874,6 +5894,9 @@ export interface paths {
          * Execute Schedule Now
          * @description 立即執行排程
          *     Execute schedule immediately (manual trigger)
+         *
+         *     Parameters:
+         *     - force_regenerate: 是否強制重新產生造冊。預設為 True，表示手動執行時會覆蓋已存在的造冊。
          */
         post: operations["execute_schedule_now_api_v1_roster_schedules__schedule_id__execute_post"];
         delete?: never;
@@ -7363,29 +7386,11 @@ export interface components {
         };
         /**
          * CollegeReviewCreate
-         * @description Schema for creating a college review
+         * @description Schema for creating a college review.
+         *
+         *     Note: Scoring fields removed. Review is based on ranking position and comments only.
          */
         CollegeReviewCreate: {
-            /**
-             * Academic Score
-             * @description Academic performance score (0-100)
-             */
-            academic_score?: number | null;
-            /**
-             * Professor Review Score
-             * @description Professor review score (0-100)
-             */
-            professor_review_score?: number | null;
-            /**
-             * College Criteria Score
-             * @description College-specific criteria score (0-100)
-             */
-            college_criteria_score?: number | null;
-            /**
-             * Special Circumstances Score
-             * @description Special circumstances score (0-100)
-             */
-            special_circumstances_score?: number | null;
             /**
              * Review Comments
              * @description Detailed review comments
@@ -7414,26 +7419,23 @@ export interface components {
              */
             needs_special_attention: boolean | null;
             /**
-             * Scoring Weights
-             * @description Custom scoring weights
+             * Preliminary Rank
+             * @description Initial ranking position within sub-type
              */
-            scoring_weights?: {
-                [key: string]: number;
-            } | null;
+            preliminary_rank?: number | null;
+            /**
+             * Final Rank
+             * @description Final ranking position after adjustments
+             */
+            final_rank?: number | null;
         };
         /**
          * CollegeReviewUpdate
-         * @description Schema for updating a college review
+         * @description Schema for updating a college review.
+         *
+         *     Note: Scoring fields removed. Update ranking position and comments only.
          */
         CollegeReviewUpdate: {
-            /** Academic Score */
-            academic_score?: number | null;
-            /** Professor Review Score */
-            professor_review_score?: number | null;
-            /** College Criteria Score */
-            college_criteria_score?: number | null;
-            /** Special Circumstances Score */
-            special_circumstances_score?: number | null;
             /** Review Comments */
             review_comments?: string | null;
             /** Recommendation */
@@ -7444,6 +7446,10 @@ export interface components {
             is_priority?: boolean | null;
             /** Needs Special Attention */
             needs_special_attention?: boolean | null;
+            /** Preliminary Rank */
+            preliminary_rank?: number | null;
+            /** Final Rank */
+            final_rank?: number | null;
         };
         /**
          * ConfigCategory
@@ -15982,6 +15988,26 @@ export interface operations {
             };
         };
     };
+    get_genders_api_v1_reference_data_genders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>[];
+                };
+            };
+        };
+    };
     get_academies_api_v1_reference_data_academies_get: {
         parameters: {
             query?: never;
@@ -19447,20 +19473,25 @@ export interface operations {
             };
         };
     };
-    preview_roster_export_api_v1_payment_rosters__roster_id__preview_post: {
+    preview_roster_export_api_v1_payment_rosters__roster_id__preview_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Excel範本名稱 */
+                template_name?: string;
+                /** @description 是否包含標題行 */
+                include_header?: boolean;
+                /** @description 預覽模式最大行數 */
+                max_preview_rows?: number;
+                /** @description 是否包含排除項目 */
+                include_excluded?: boolean;
+            };
             header?: never;
             path: {
                 roster_id: number;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RosterExportRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -19858,7 +19889,10 @@ export interface operations {
     };
     execute_schedule_now_api_v1_roster_schedules__schedule_id__execute_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 是否強制重新產生造冊（覆蓋已存在的造冊） */
+                force_regenerate?: boolean;
+            };
             header?: never;
             path: {
                 schedule_id: number;
