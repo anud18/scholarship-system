@@ -3,6 +3,92 @@ import { cookies } from "next/headers";
 
 const INTERNAL_API_URL = process.env.INTERNAL_API_URL || "http://backend:8000";
 
+// ============================================================================
+// Security: Input Validation Utilities
+// ============================================================================
+// These validators prevent SSRF attacks by ensuring user-controlled inputs
+// cannot be used for path traversal or injection attacks.
+
+/**
+ * Validate ID parameters (rosterId, applicationId, userId, fileId)
+ * Only allows alphanumeric characters, hyphens, and underscores
+ * Prevents path traversal (..), injection (/), and other attacks
+ */
+function validateId(id: string | null, paramName: string): void {
+  if (!id) {
+    throw new Error(`${paramName} is required`);
+  }
+
+  // Check for path traversal attempts
+  if (id.includes("..") || id.includes("/") || id.includes("\\")) {
+    throw new Error(`Invalid ${paramName}: path traversal detected`);
+  }
+
+  // Only allow safe characters: letters, numbers, hyphens, underscores
+  const idPattern = /^[a-zA-Z0-9_-]+$/;
+  if (!idPattern.test(id)) {
+    throw new Error(`Invalid ${paramName}: contains illegal characters`);
+  }
+
+  // Reasonable length limit (prevent DoS)
+  if (id.length > 100) {
+    throw new Error(`Invalid ${paramName}: too long`);
+  }
+}
+
+/**
+ * Validate template name against allowlist
+ * Prevents template injection and unauthorized template access
+ */
+function validateTemplateName(templateName: string): void {
+  const ALLOWED_TEMPLATES = ["STD_UP_MIXLISTA"];
+
+  if (!ALLOWED_TEMPLATES.includes(templateName)) {
+    throw new Error(
+      `Invalid template_name: must be one of ${ALLOWED_TEMPLATES.join(", ")}`
+    );
+  }
+}
+
+/**
+ * Validate numeric parameter with range check
+ * Prevents injection and ensures reasonable values
+ */
+function validateNumericParam(
+  value: string,
+  min: number,
+  max: number,
+  paramName: string
+): number {
+  const numValue = parseInt(value, 10);
+
+  if (isNaN(numValue)) {
+    throw new Error(`Invalid ${paramName}: must be a number`);
+  }
+
+  if (numValue < min || numValue > max) {
+    throw new Error(`Invalid ${paramName}: must be between ${min} and ${max}`);
+  }
+
+  return numValue;
+}
+
+/**
+ * Validate boolean parameter
+ * Only accepts "true" or "false" strings
+ */
+function validateBooleanParam(value: string | null, defaultValue: boolean): boolean {
+  if (value === null) {
+    return defaultValue;
+  }
+
+  if (value !== "true" && value !== "false") {
+    throw new Error(`Invalid boolean parameter: must be "true" or "false"`);
+  }
+
+  return value === "true";
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -25,17 +111,25 @@ export async function GET(request: NextRequest) {
       return handleRosterPreview(rosterId, token, searchParams);
     }
 
-    if (!fileId) {
-      return NextResponse.json(
-        { error: "File ID is required" },
-        { status: 400 }
-      );
-    }
+    // Security: Validate all ID parameters to prevent SSRF
+    try {
+      validateId(fileId, "fileId");
 
-    // For user profile documents, userId can be used instead of applicationId
-    if (!applicationId && !userId) {
+      // For user profile documents, userId can be used instead of applicationId
+      if (applicationId) {
+        validateId(applicationId, "applicationId");
+      } else if (userId) {
+        validateId(userId, "userId");
+      } else {
+        return NextResponse.json(
+          { error: "Application ID or User ID is required" },
+          { status: 400 }
+        );
+      }
+    } catch (validationError: any) {
+      console.error("Input validation error:", validationError.message);
       return NextResponse.json(
-        { error: "Application ID or User ID is required" },
+        { error: validationError.message },
         { status: 400 }
       );
     }
@@ -138,13 +232,6 @@ async function handleRosterPreview(
   token: string | null,
   searchParams: URLSearchParams
 ) {
-  if (!rosterId) {
-    return NextResponse.json(
-      { error: "Roster ID is required" },
-      { status: 400 }
-    );
-  }
-
   if (!token) {
     return NextResponse.json(
       { error: "Authentication required" },
@@ -153,20 +240,39 @@ async function handleRosterPreview(
   }
 
   try {
-    // 獲取查詢參數
-    const template_name = searchParams.get("template_name") || "STD_UP_MIXLISTA";
-    const include_header = searchParams.get("include_header") !== "false";
-    const max_preview_rows = searchParams.get("max_preview_rows") || "10";
-    const include_excluded = searchParams.get("include_excluded") === "true";
+    // Security: Validate all user inputs to prevent SSRF
+    validateId(rosterId, "rosterId");
 
-    // 構建後端 URL
+    // Validate and sanitize query parameters
+    const template_name = searchParams.get("template_name") || "STD_UP_MIXLISTA";
+    validateTemplateName(template_name);
+
+    const include_header = validateBooleanParam(
+      searchParams.get("include_header"),
+      true
+    );
+
+    const max_preview_rows_str = searchParams.get("max_preview_rows") || "10";
+    const max_preview_rows = validateNumericParam(
+      max_preview_rows_str,
+      1,
+      1000,
+      "max_preview_rows"
+    );
+
+    const include_excluded = validateBooleanParam(
+      searchParams.get("include_excluded"),
+      false
+    );
+
+    // 構建後端 URL (使用已驗證的參數)
     const backendUrl = new URL(
       `/api/v1/payment-rosters/${rosterId}/preview`,
       INTERNAL_API_URL
     );
     backendUrl.searchParams.set("template_name", template_name);
     backendUrl.searchParams.set("include_header", String(include_header));
-    backendUrl.searchParams.set("max_preview_rows", max_preview_rows);
+    backendUrl.searchParams.set("max_preview_rows", String(max_preview_rows));
     backendUrl.searchParams.set("include_excluded", String(include_excluded));
 
     console.log(`[Roster Preview] Fetching: ${backendUrl.toString()}`);
@@ -209,6 +315,19 @@ async function handleRosterPreview(
     return NextResponse.json(data);
   } catch (error) {
     console.error("[Roster Preview] Error:", error);
+
+    // Handle validation errors with 400 Bad Request
+    if (error instanceof Error && error.message.startsWith("Invalid")) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: error.message,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Handle other errors with 500 Internal Server Error
     return NextResponse.json(
       {
         success: false,
