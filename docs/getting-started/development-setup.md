@@ -18,49 +18,42 @@ cd scholarship-system
 
 # Copy environment file
 cp .env.example .env
-
-# Make scripts executable
-chmod +x test-docker.sh
-chmod +x test-developer-profiles.sh
 ```
 
 ### 2. Start Development Environment
 
 ```bash
 # Start all services
-./test-docker.sh start
+docker compose -f docker-compose.dev.yml up -d
 
 # Verify services are running
-./test-docker.sh status
+docker compose -f docker-compose.dev.yml ps
 ```
 
 ### 3. Development Commands
 
 #### Database Operations
 ```bash
-# Run migrations
-./test-docker.sh migrate
+# Reset database (includes migrations and seed data)
+./scripts/reset_database.sh
 
-# Seed test data
-./test-docker.sh seed
+# Run migrations only
+docker exec scholarship_backend_dev alembic upgrade head
 
-# Reset database
-./test-docker.sh reset-db
+# Run seed scripts
+docker exec scholarship_backend_dev python -m app.db.init_db
 ```
 
 #### Testing
 ```bash
-# Run all tests
-./test-docker.sh test
+# Backend tests
+docker exec scholarship_backend_dev python -m pytest --disable-warnings -v
 
-# Backend tests only
-./test-docker.sh test-backend
-
-# Frontend tests only
-./test-docker.sh test-frontend
+# Frontend tests
+cd frontend && npm test
 
 # E2E tests
-./test-docker.sh test-e2e
+cd frontend && npm run test:e2e
 ```
 
 ## Local Development (Without Docker)
@@ -112,17 +105,14 @@ npm run dev
 ### Development Features
 
 #### Developer Profiles
-Create isolated test user profiles:
+Create isolated test user profiles using the frontend Developer Profile Manager:
 
-```bash
-# Create basic profiles for your dev ID
-./test-developer-profiles.sh your-dev-id
-
-# Available profile types:
-# - Student profiles (freshman, graduate, phd)
-# - Staff profiles (professor, admin, super_admin)
-# - Custom profiles for specific testing
-```
+- Access at http://localhost:3000 (development mode only)
+- Use the Developer Profile Manager component below the login form
+- Available profile types:
+  - Student profiles (freshman, graduate, phd)
+  - Staff profiles (professor, admin, super_admin)
+  - Custom profiles for specific testing
 
 #### Hot Reloading
 - **Frontend**: Automatic reload on file changes
@@ -171,19 +161,19 @@ SENTRY_DSN=your-sentry-dsn
 ### Backend Debugging
 ```bash
 # View API logs
-./test-docker.sh logs backend
+docker compose -f docker-compose.dev.yml logs -f backend
 
-# Debug mode
+# Debug mode (local development)
 DEBUG=true uvicorn app.main:app --reload
 
 # Database debugging
-./test-docker.sh logs postgres
+docker compose -f docker-compose.dev.yml logs -f postgres
 ```
 
 ### Frontend Debugging
 ```bash
 # View frontend logs
-./test-docker.sh logs frontend
+docker compose -f docker-compose.dev.yml logs -f frontend
 
 # Debug mode
 npm run dev
@@ -205,17 +195,16 @@ Ensure these ports are available:
 ### Database Connection Issues
 ```bash
 # Reset database
-./test-docker.sh reset-db
+./scripts/reset_database.sh
 
 # Check database status
-./test-docker.sh logs postgres
+docker compose -f docker-compose.dev.yml logs -f postgres
 ```
 
 ### File Permission Issues
 ```bash
 # Fix script permissions
-chmod +x test-docker.sh
-chmod +x test-developer-profiles.sh
+chmod +x scripts/reset_database.sh
 ```
 
 ## Next Steps

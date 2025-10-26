@@ -13,17 +13,14 @@ Ensure these ports are available:
 ## Start the System
 
 ```bash
-# Make test script executable
-chmod +x test-docker.sh
-
 # Start all services
-./test-docker.sh start
+docker compose -f docker-compose.dev.yml up -d
 
 # Check service status
-./test-docker.sh status
+docker compose -f docker-compose.dev.yml ps
 
 # View logs
-./test-docker.sh logs [service_name]
+docker compose -f docker-compose.dev.yml logs -f [service_name]
 ```
 
 ## Access Points
@@ -37,10 +34,10 @@ chmod +x test-docker.sh
 
 ```bash
 # Stop all services
-./test-docker.sh stop
+docker compose -f docker-compose.dev.yml down
 
 # Complete cleanup (removes volumes)
-./test-docker.sh cleanup
+docker compose -f docker-compose.dev.yml down -v
 ```
 
 ## Next Steps

@@ -19,14 +19,14 @@ nano .env
 ## Database Management
 
 ```bash
-# Run migrations
-./test-docker.sh migrate
+# Reset database (recommended for clean setup)
+./scripts/reset_database.sh
 
-# Seed test data
-./test-docker.sh seed
+# Or manually run migrations
+docker exec scholarship_backend_dev alembic upgrade head
 
-# Reset database
-./test-docker.sh reset-db
+# Run seed scripts
+docker exec scholarship_backend_dev python -m app.db.init_db
 ```
 
 ## Local Development Setup
@@ -51,8 +51,8 @@ npm run dev
 
 ```bash
 # Build production images
-docker-compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml build
 
 # Deploy with secrets
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 ```

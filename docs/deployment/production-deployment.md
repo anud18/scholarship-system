@@ -194,10 +194,10 @@ sudo -u postgres createuser scholarship_prod
 sudo -u postgres createdb scholarship_prod -O scholarship_prod
 
 # Run migrations
-docker-compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
 
 # Create initial admin user
-docker-compose -f docker-compose.prod.yml run --rm backend python -c "
+docker compose -f docker-compose.prod.yml run --rm backend python -c "
 from app.core.init_db import create_initial_admin
 create_initial_admin()
 "
@@ -207,10 +207,10 @@ create_initial_admin()
 
 ```bash
 # Start production services
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 # Verify deployment
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml ps
 ```
 
 ### 5. Configure NGINX
@@ -267,7 +267,7 @@ logging:
 
 ```bash
 # Deploy monitoring stack
-docker-compose -f docker-compose.monitoring.yml up -d
+docker compose -f docker-compose.monitoring.yml up -d
 
 # Access monitoring dashboards
 # Grafana: https://monitoring.university.edu:3000
@@ -429,7 +429,7 @@ pg_restore -h new-db -U scholarship_prod -d scholarship_prod latest_backup.sql
 mc mirror s3/backups/files/latest/ minio/scholarship-documents/
 
 # 3. Deploy application
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 # 4. Verify system health
 curl -f https://scholarship.university.edu/health
@@ -451,18 +451,18 @@ curl -f https://scholarship.university.edu/health
 # rolling-update.sh
 
 # Update backend
-docker-compose -f docker-compose.prod.yml pull backend
-docker-compose -f docker-compose.prod.yml up -d --no-deps backend
+docker compose -f docker-compose.prod.yml pull backend
+docker compose -f docker-compose.prod.yml up -d --no-deps backend
 
 # Wait for health check
 sleep 30
 
 # Update frontend
-docker-compose -f docker-compose.prod.yml pull frontend
-docker-compose -f docker-compose.prod.yml up -d --no-deps frontend
+docker compose -f docker-compose.prod.yml pull frontend
+docker compose -f docker-compose.prod.yml up -d --no-deps frontend
 
 # Verify deployment
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml ps
 ```
 
 ### Database Maintenance
@@ -486,13 +486,13 @@ VACUUM FULL pg_stat_user_tables;
 docker stats
 
 # Scale down services if needed
-docker-compose -f docker-compose.prod.yml scale backend=2
+docker compose -f docker-compose.prod.yml scale backend=2
 ```
 
 #### Database Connection Issues
 ```bash
 # Check database connections
-docker-compose -f docker-compose.prod.yml logs postgres
+docker compose -f docker-compose.prod.yml logs postgres
 
 # Monitor connection pool
 SELECT state, count(*) FROM pg_stat_activity GROUP BY state;

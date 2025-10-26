@@ -199,7 +199,7 @@ pip install pytest pytest-cov flake8
 
 # Docker for integration testing
 docker --version
-docker-compose --version
+docker compose version
 ```
 
 ### Running Tests Locally
@@ -307,7 +307,7 @@ docker build -t test-image ./backend
 docker build -t test-image ./frontend
 
 # Validate docker-compose
-docker-compose config
+docker compose config
 ```
 
 #### Deployment Issues
@@ -380,5 +380,5 @@ curl -w "@curl-format.txt" -o /dev/null -s http://api.example.com/health
 
 ---
 
-*Last Updated: 2025-01-01*
+*Last Updated: 2025-10-26*
 *Version: 1.0*
