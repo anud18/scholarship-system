@@ -1,0 +1,7 @@
+exclude_dirs:
+  - app/tests
+
+skips:
+  - B104  # Binding to 0.0.0.0 is intentional for Docker
+  - B110  # try/except: pass is intentional in metrics code
+  - B311  # random.randint() is fine for non-security purposes

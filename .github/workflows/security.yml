@@ -77,14 +77,14 @@ jobs:
       - name: Run security audit with Safety
         run: |
           pip install safety
-          safety check --json
+          safety scan --json
         continue-on-error: true
 
       - name: Run Bandit security scan
         run: |
           pip install bandit
-          bandit -r app/ -f json -o bandit-report.json
-        continue-on-error: true
+          bandit -r app/ -c .bandit -f json -o bandit-report.json
+        continue-on-error: false
 
       - name: Upload security reports
         uses: actions/upload-artifact@v4
