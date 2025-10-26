@@ -1,173 +1,690 @@
 # Scholarship Management System
 
-A full-stack platform for managing scholarship applications, reviews, and system configuration. The repository contains a FastAPI backend, a Next.js 15 frontend, shared infrastructure for file storage and messaging, and tooling for local development, testing, and deployment.
+A comprehensive, configuration-driven platform for managing scholarship applications, reviews, and administrative workflows. Built with FastAPI backend and Next.js 15 frontend, featuring multi-role access control, bilingual support, and complete observability.
 
 ## Table of Contents
+
 - [Project Overview](#project-overview)
-- [Architecture Highlights](#architecture-highlights)
+- [Core Features](#core-features)
+- [Technology Stack](#technology-stack)
 - [Directory Structure](#directory-structure)
-- [Getting Started](#getting-started)
+- [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
-  - [Option A: Run Everything with Docker](#option-a-run-everything-with-docker)
-  - [Option B: Run Services Manually](#option-b-run-services-manually)
+  - [Option A: Complete Setup with Makefile (Recommended)](#option-a-complete-setup-with-makefile-recommended)
+  - [Option B: Docker Compose Only](#option-b-docker-compose-only)
+  - [Option C: Manual Setup](#option-c-manual-setup)
 - [Environment Configuration](#environment-configuration)
-- [Database & Seed Data](#database--seed-data)
-- [Testing & Quality](#testing--quality)
-- [Frontend Overview](#frontend-overview)
-- [Backend Overview](#backend-overview)
-- [Supporting Services](#supporting-services)
-- [Useful Tooling](#useful-tooling)
+- [Development Workflow](#development-workflow)
+- [Makefile Commands Reference](#makefile-commands-reference)
+- [Database Management](#database-management)
+- [Testing](#testing)
+- [Monitoring & Observability](#monitoring--observability)
 - [Deployment](#deployment)
+- [Development Guidelines](#development-guidelines)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Project Overview
-- Multi-role access for students, professors, college staff, admins, and super admins.
-- End-to-end scholarship lifecycle: application authoring, configurable review pipelines, quota and rule management, automated notifications, and historical reporting.
-- Bilingual student experience (Traditional Chinese and English) with dynamic content switching.
-- Secure file handling via MinIO, optional OCR, and mock SSO / mock student-information services for development.
 
-## Architecture Highlights
-- **Frontend**: Next.js 15 (App Router) with TypeScript, shadcn/ui component system, Tailwind CSS, React Query for data fetching, and SWR for realtime counters.
-- **Backend**: FastAPI with async SQLAlchemy, Alembic migrations, Pydantic v2 schemas, granular service layer, and MinIO integration for file storage.
-- **Infrastructure**: PostgreSQL, Redis, MinIO, optional Nginx reverse proxy, and a mock student API for local development scenarios.
-- **Tooling**: Makefile targets, Docker Compose stacks for dev/staging/prod, scripts for lookup-table bootstrapping, k6 smoke tests, and rich documentation under `docs/`.
+This scholarship management system provides a complete lifecycle solution for academic scholarship programs:
+
+- **Multi-Role Access**: Supports students, professors, college staff, administrators, and super administrators
+- **End-to-End Workflow**: Application creation, configurable review pipelines, quota management, automated notifications, and historical reporting
+- **Bilingual Support**: Traditional Chinese and English with dynamic content switching
+- **Configuration-Driven**: Add new scholarship types through database configuration without code changes
+- **Secure File Handling**: Three-layer file architecture with MinIO object storage
+- **Development-Friendly**: Mock SSO and student information services for local development
+
+## Core Features
+
+### 1. Configuration-Driven Scholarship System
+- Define scholarship types, rules, and workflows in the database
+- No code changes required when adding new scholarship programs
+- Flexible quota management (none, simple, college-based, matrix-based)
+- Dynamic application fields per scholarship type
+
+### 2. Sequential Application ID System
+- Structured format: `APP-{academic_year}-{semester_code}-{sequence:05d}`
+- Example: `APP-113-1-00001` (Academic Year 113, First Semester, Sequence 1)
+- Concurrency-safe sequence generation with database locking
+- Independent sequences per academic year and semester
+
+### 3. Three-Layer File Upload Architecture
+```
+Frontend → Next.js Proxy → FastAPI → MinIO
+```
+- Token authentication via Next.js proxy
+- Internal Docker network communication
+- Secure path validation and virus scanning
+- Support for PDF preview with proper headers
+
+### 4. Strict Type Safety
+- Enum consistency across Python, TypeScript, and PostgreSQL
+- Automatic OpenAPI type generation for frontend
+- Pydantic v2 validation on backend
+- Zod validation on frontend
+
+### 5. Standardized API Responses
+All endpoints return consistent format:
+```json
+{
+  "success": true,
+  "message": "Operation successful",
+  "data": { }
+}
+```
+
+### 6. Built-in Observability
+- Prometheus metrics for performance monitoring
+- Grafana dashboards for visualization
+- Database connection pool metrics
+- Request latency tracking
+
+## Technology Stack
+
+### Backend
+- **Python 3.11** - Modern async/await support
+- **FastAPI** - High-performance async web framework
+- **PostgreSQL 15** - Primary relational database with async support
+- **Redis** - Caching and session management
+- **MinIO** - S3-compatible object storage
+- **SQLAlchemy 2.0** - Async ORM
+- **Alembic** - Database migrations
+- **Pydantic v2** - Data validation and serialization
+
+### Frontend
+- **Next.js 15** - React framework with App Router
+- **React 18** - UI library with TypeScript
+- **shadcn/ui** - Component library built on Radix UI
+- **Tailwind CSS** - Utility-first CSS framework
+- **React Hook Form** - Form state management
+- **Zod** - Schema validation
+- **React Query (TanStack Query)** - Data fetching and caching
+- **SWR** - Real-time data synchronization
+
+### DevOps & Infrastructure
+- **Docker** & **Docker Compose** - Containerization
+- **NGINX** - Reverse proxy
+- **Prometheus** - Metrics collection
+- **Grafana** - Metrics visualization
+- **pytest** - Backend testing
+- **Jest** - Frontend testing
+- **k6** - Performance testing
+
+### Development Tools
+- **Makefile** - Unified developer workflows
+- **Mock Student API** - Standalone FastAPI service for development
+- **pre-commit** - Git hooks for code quality
+- **Black** - Python code formatting
+- **ESLint** & **Prettier** - JavaScript/TypeScript linting
 
 ## Directory Structure
+
 ```
-.
-├─ backend/                # FastAPI service (APIs, models, services, Alembic)
-├─ frontend/               # Next.js application and shared UI primitives
-├─ docs/                   # Architecture, feature, and setup documentation
-├─ mock-student-api/       # Mock NYCU student-information service used in dev
-├─ nginx/                  # Nginx configuration for container deployments
-├─ perf/                   # k6 smoke/performance scripts
-├─ scripts/                # Helper scripts (migrations, maintenance, etc.)
-├─ test-docker.sh          # Convenience launcher for Docker-based dev stack
-├─ docker-compose*.yml     # Compose definitions for dev/staging/production
-├─ Makefile                # Unified developer workflows (setup, lint, test)
-└─ SECRETS_SETUP.md        # Guidance for managing secrets across environments
+scholarship-system/
+├── backend/                    # FastAPI application
+│   ├── app/
+│   │   ├── api/v1/endpoints/  # API route handlers
+│   │   ├── core/              # Configuration, auth, scheduler
+│   │   ├── db/                # Database session management
+│   │   ├── models/            # SQLAlchemy ORM models
+│   │   ├── schemas/           # Pydantic schemas
+│   │   ├── services/          # Business logic layer
+│   │   ├── integrations/      # External service clients
+│   │   ├── middleware/        # Custom middleware
+│   │   └── tests/             # Backend test suite
+│   ├── alembic/               # Database migrations
+│   └── requirements.txt       # Python dependencies
+│
+├── frontend/                   # Next.js 15 application
+│   ├── app/                   # App Router pages
+│   ├── components/            # React components
+│   │   ├── ui/               # shadcn/ui primitives
+│   │   └── admin/            # Admin-specific components
+│   ├── hooks/                 # Custom React hooks
+│   ├── lib/                   # Utilities and API clients
+│   │   └── api/              # Typed API client
+│   └── styles/                # Global styles
+│
+├── docs/                       # Documentation
+│   ├── architecture/          # System design docs
+│   ├── development/           # Development guides
+│   └── specifications/        # Requirements
+│
+├── mock-student-api/          # Mock NYCU student API
+├── monitoring/                 # Grafana & Prometheus configs
+├── nginx/                      # NGINX configuration
+├── perf/                       # k6 performance tests
+├── scripts/                    # Utility scripts
+│   ├── reset_database.sh      # Database rebuild automation
+│   └── validate_enum_consistency.py  # Enum validation
+│
+├── .claude/                    # Development guidelines
+│   └── CLAUDE.md              # Core development principles
+│
+├── docker-compose.dev.yml      # Development environment
+├── docker-compose.staging.yml  # Staging environment
+├── docker-compose.prod.yml     # Production environment
+├── Makefile                    # Unified developer commands
+└── README.md                   # This file
 ```
 
-## Getting Started
+## Quick Start
 
 ### Prerequisites
-- Docker Engine & Docker Compose v2 (recommended for the quickest setup)
-- Python 3.10+ (if running the backend locally without Docker)
-- Node.js 22+ and npm 10+ (if running the frontend locally)
-- pnpm/yarn are optional; npm scripts are the source of truth
 
-### Option A: Run Everything with Docker
+- **Docker Engine** & **Docker Compose v2** (recommended for fastest setup)
+- **Python 3.11+** (if running backend locally)
+- **Node.js 22+** and **npm 10+** (if running frontend locally)
+- **Make** (optional, for Makefile commands)
+
+### Option A: Complete Setup with Makefile (Recommended)
+
+The fastest way to get everything running:
+
 ```bash
-# Start the full stack (PostgreSQL, Redis, MinIO, mock student API, backend, frontend)
-./test-docker.sh start
-
-# Check service status and health endpoints
-./test-docker.sh status
-
-# Stop and remove containers/volumes
-./test-docker.sh stop
+# Initialize entire development environment (Docker + Database + Test Data)
+make init-all
 ```
-By default the development stack exposes:
-- Frontend: http://localhost:3000
-- Backend API & OpenAPI docs: http://localhost:8000 and http://localhost:8000/docs
-- Mock student API: http://localhost:8080
-- MinIO console: http://localhost:9001 (access keys in backend `.env`)
-- PostgreSQL: localhost:5432, Redis: localhost:6379
 
-Use the helper commands `./test-docker.sh init-lookup` and `./test-docker.sh init-testdata` after the stack is up to populate reference data and demo users.
+This single command will:
+1. Start all Docker services (PostgreSQL, Redis, MinIO, backend, frontend)
+2. Initialize lookup tables (degrees, departments, enrollment types)
+3. Create test users and sample scholarships
+4. Wait 10-15 minutes for complete initialization
 
-### Option B: Run Services Manually
-1. **Install dependencies and scaffold env files**
-   ```bash
-   make setup       # installs backend + frontend dependencies and copies env templates
-   ```
-2. **Start both servers with one command**
-   ```bash
-   make dev         # spawns uvicorn + next dev with live reload
-   ```
-   or run them individually:
-   ```bash
-   # Backend
-   cd backend
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+After initialization completes:
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+- **MinIO Console**: http://localhost:9001
 
-   # Frontend
-   cd frontend
-   npm run dev
-   ```
-3. Ensure PostgreSQL, Redis, and MinIO are available locally (Docker compose or native installs). Update the backend `.env` if you use non-default ports.
+Test user accounts (see [Database Management](#database-management) for credentials).
+
+### Option B: Docker Compose Only
+
+For manual control over initialization:
+
+```bash
+# Start all services
+docker compose -f docker-compose.dev.yml up -d
+
+# Initialize lookup tables (reference data)
+make init-lookup
+
+# Initialize test data (users, scholarships)
+make init-testdata
+```
+
+Check service health:
+```bash
+docker compose -f docker-compose.dev.yml ps
+make health-check
+```
+
+Stop services:
+```bash
+docker compose -f docker-compose.dev.yml down
+```
+
+### Option C: Manual Setup
+
+For development without Docker:
+
+```bash
+# 1. Install dependencies
+make install
+
+# 2. Setup environment files
+make setup
+
+# 3. Start PostgreSQL, Redis, and MinIO
+# (Use Docker Compose for infrastructure only)
+docker compose -f docker-compose.dev.yml up -d postgres redis minio
+
+# 4. Run database migrations
+cd backend && alembic upgrade head
+
+# 5. Start development servers
+make dev
+```
+
+The `make dev` command starts both backend (port 8000) and frontend (port 3000) with hot reload.
 
 ## Environment Configuration
-- `backend/.env.example` – copy to `backend/.env` and adjust database credentials, MinIO keys, JWT secret, and feature toggles. Many optional integrations (OCR, employee API, SSO) are disabled by default.
-- `frontend/.env.local` – create manually if it does not exist. Minimum configuration:
-  ```
-  NEXT_PUBLIC_API_URL=http://localhost:8000
-  ```
-- `mock-student-api/README.md` describes environment variables for the mock service.
-- See `SECRETS_SETUP.md` for recommended secret-management workflows in staging/production.
 
-## Database & Seed Data
-- Alembic migrations live under `backend/alembic`. Apply them with `alembic upgrade head` (or `make`/Docker helpers).
-- `test-docker.sh init-lookup` populates lookup tables (departments, degrees, etc.).
-- `test-docker.sh init-testdata` loads sample users, scholarships, application fields, and announcements (requires the dev stack to be running).
-- `python -m app.seed` provides additional seeding utilities if you prefer running them manually.
+### Backend Configuration
 
-## Testing & Quality
-- `make test` runs backend pytest suites followed by frontend Jest tests (`npm run test:ci`).
-- `make test-backend` / `make test-frontend` run each side independently.
-- `make lint` formats code (Black + isort + ESLint + Prettier). `make check-types` runs mypy and TypeScript checks.
-- `make security-scan` executes Bandit, Safety, and npm audit.
-- `perf/smoke.js` is a k6 script that hits the health endpoint; execute with `k6 run perf/smoke.js` (`BASE_URL` env overrides the host).
+Create `backend/.env` from template:
 
-## Frontend Overview
-- Next.js App Router app under `frontend/app`, with global providers defined in `frontend/app/layout.tsx` (AuthProvider, React Query provider, SWR defaults, notification context, debug panel).
-- Feature modules and composite components live in `frontend/components/`, with admin-specific panels grouped under `frontend/components/admin/`.
-- Shared UI primitives (shadcn/ui) are in `frontend/components/ui/`; domain-specific hooks (`frontend/hooks/`) cover auth, admin dashboards, notification polling, etc.
-- The REST client resides in `frontend/lib/api.ts` (hand-written wrapper) and `frontend/lib/api/typed-client.ts` (OpenAPI-generated helper).
-- State/data fetching leverages React Query for standard queries/mutations and SWR for lightweight counters (e.g., notifications).
-- Unit tests live beside code (`__tests__` folders) and use Testing Library; Jest configuration files are in the project root (`frontend/jest.config.js`, etc.).
+```bash
+# Database
+DATABASE_URL=postgresql+asyncpg://scholarship_user:scholarship_pass@localhost:5432/scholarship_db
 
-## Backend Overview
-- FastAPI routers organized under `backend/app/api/v1/`; each endpoint delegates to service modules under `backend/app/services/`.
-- Domain models (`backend/app/models/`) expose SQLAlchemy ORM entities with async session support (`backend/app/db/session.py`).
-- Schemas in `backend/app/schemas/` use Pydantic v2 for validation/serialization.
-- Core infrastructure (`backend/app/core/`) handles configuration, security, background scheduler initialisation, MinIO client management, and exception handling.
-- Integrations (SSO, student API, bank verification) are abstracted in `backend/app/integrations/`.
-- Tests are located in `backend/app/tests/`, covering API endpoints, services, and critical workflows.
+# Security
+SECRET_KEY=your-secret-key-here-change-in-production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
-## Supporting Services
-- **PostgreSQL** – primary relational database; credentials configurable via `.env`.
-- **Redis** – caching and background job assistance.
-- **MinIO** – S3-compatible storage for uploaded documents and roster exports.
-- **Mock Student API** – standalone FastAPI service emulating NYCU student data responses for local testing (`mock-student-api/`).
-- **Nginx** – optional reverse proxy for production/staging (`nginx/nginx.conf`).
+# MinIO Object Storage
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=scholarship-system
+MINIO_SECURE=false
 
-## Useful Tooling
-- `Makefile` – central entry point for setup, dev, testing, linting, building, and scanning.
-- `test-docker.sh` – spins up/shuts down the entire dev stack and initializes reference data.
-- `docker-manager.sh` – helper for production/staging Docker hosts.
-- `perf/smoke.js` – k6 smoke test.
+# Redis
+REDIS_URL=redis://redis:6379/0
+
+# CORS
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8000
+
+# Feature Flags
+ENABLE_OCR=false
+ENABLE_EMPLOYEE_API=false
+ENABLE_SSO=false
+DEBUG_MODE=true
+```
+
+### Frontend Configuration
+
+Create `frontend/.env.local`:
+
+```bash
+# API URLs
+NEXT_PUBLIC_API_URL=http://localhost:8000
+INTERNAL_API_URL=http://backend:8000  # Docker internal network
+
+# Feature Flags
+NEXT_PUBLIC_ENABLE_DEBUG_PANEL=true
+```
+
+### Mock Student API
+
+The mock student API runs on port 8080 and provides test data for local development. Configuration is in `mock-student-api/.env`.
+
+## Development Workflow
+
+### Starting Development
+
+```bash
+# Start all services and watch for changes
+make dev
+```
+
+This starts:
+- Backend on http://localhost:8000 (with auto-reload)
+- Frontend on http://localhost:3000 (with hot module replacement)
+
+### Code Quality
+
+```bash
+# Format and lint all code
+make lint
+
+# Type checking
+make check-types
+
+# Security scan
+make security-scan
+```
+
+### Database Operations
+
+```bash
+# Create new migration
+cd backend && alembic revision -m "description"
+
+# Apply migrations
+make db-migrate
+
+# Reset database (WARNING: deletes all data)
+./scripts/reset_database.sh
+```
+
+### OpenAPI Type Generation
+
+After modifying backend schemas or endpoints:
+
+```bash
+# Ensure backend is running
+cd frontend && npm run api:generate
+git add lib/api/generated/schema.d.ts
+```
+
+## Makefile Commands Reference
+
+### Setup Commands
+- `make install` - Install all dependencies (backend + frontend)
+- `make setup` - Complete project setup with env files
+- `make init-all` - Full initialization (Docker + DB + test data)
+- `make init-lookup` - Initialize lookup tables only
+- `make init-testdata` - Initialize test users and data
+
+### Development Commands
+- `make dev` - Start both backend and frontend with hot reload
+- `make dev-backend` - Start backend only
+- `make dev-frontend` - Start frontend only
+- `make dev-safe` - Test API connection before starting frontend
+
+### Testing Commands
+- `make test` - Run all tests (backend + frontend)
+- `make test-backend` - Run backend tests only
+- `make test-frontend` - Run frontend tests only
+- `make test-coverage` - Run tests with coverage reports
+- `make test-e2e` - Run end-to-end tests
+
+### Code Quality Commands
+- `make lint` - Lint and format all code
+- `make check-types` - Check TypeScript and Python types
+- `make security-scan` - Run security scans
+
+### Docker Commands
+- `make docker-up` - Start all services with Docker Compose
+- `make docker-down` - Stop all services
+- `make docker-restart` - Restart all services
+- `make docker-logs` - Show logs from all services
+- `make docker-clean` - Clean up Docker resources
+
+### Database Commands
+- `make db-migrate` - Run database migrations
+- `make db-reset` - Reset database (with confirmation)
+- `make db-seed` - Seed database with sample data
+
+### Utility Commands
+- `make clean` - Clean up generated files and caches
+- `make health-check` - Check if all services are running
+- `make version` - Show version information
+- `make env-check` - Check environment configuration
+- `make help` - Show all available commands
+
+## Database Management
+
+### Alembic Migrations
+
+Always include existence checks in migrations:
+
+```python
+# ✅ CORRECT - Safe migration
+def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_tables = inspector.get_table_names()
+
+    if 'new_table' not in existing_tables:
+        op.create_table('new_table', ...)
+```
+
+### Database Reset
+
+Use the automated script for clean rebuilds:
+
+```bash
+# Preview steps
+./scripts/reset_database.sh --dry-run
+
+# Execute reset
+./scripts/reset_database.sh
+```
+
+### Lookup Tables Initialization
+
+The system requires reference data before test data:
+
+```bash
+make init-lookup
+```
+
+This initializes:
+- 3 degree types (博士, 碩士, 學士)
+- 16 student identity types
+- 11 studying status types
+- 8 school identity types
+- 29 NYCU academies/colleges
+- 16 departments
+- 27 enrollment types
+
+### Test Data
+
+After lookup tables are initialized:
+
+```bash
+make init-testdata
+```
+
+**Test User Accounts:**
+| Role | Username | Password |
+|------|----------|----------|
+| Admin | admin | admin123 |
+| Super Admin | super_admin | super123 |
+| Professor | professor | professor123 |
+| College | college | college123 |
+| Student (學士) | stu_under | stuunder123 |
+| Student (博士) | stu_phd | stuphd123 |
+| Student (逕讀博士) | stu_direct | studirect123 |
+| Student (碩士) | stu_master | stumaster123 |
+| Student (陸生) | stu_china | stuchina123 |
+
+## Testing
+
+### Backend Tests
+
+```bash
+# Run all backend tests
+cd backend && python -m pytest app/tests -v
+
+# Run with coverage
+python -m pytest app/tests --cov=app --cov-report=html
+
+# Run specific test file
+python -m pytest app/tests/test_auth.py -v
+```
+
+### Frontend Tests
+
+```bash
+# Run all frontend tests
+cd frontend && npm run test:ci
+
+# Watch mode for development
+npm run test:watch
+
+# Debug mode
+npm run test:debug
+```
+
+### Performance Testing
+
+```bash
+# Run k6 smoke test
+k6 run perf/smoke.js
+
+# Custom base URL
+BASE_URL=http://localhost:8000 k6 run perf/smoke.js
+```
+
+## Monitoring & Observability
+
+### Prometheus Metrics
+
+The backend exposes metrics at:
+- **Endpoint**: http://localhost:8000/metrics
+- **Metrics**: Request latency, database pool stats, custom business metrics
+
+### Grafana Dashboards
+
+Access Grafana at http://localhost:3001 (when monitoring stack is running):
+
+```bash
+docker compose -f docker-compose.prod-db-monitoring.yml up -d
+```
+
+Default credentials: admin/admin
+
+### Health Checks
+
+```bash
+# Check all services
+make health-check
+
+# Backend health endpoint
+curl http://localhost:8000/health
+
+# Database connection check
+curl http://localhost:8000/health/db
+```
 
 ## Deployment
-- Docker Compose blueprints: `docker-compose.prod.yml`, `docker-compose.staging.yml`, and `docker-compose.prod-db.yml` cover multi-service deployments.
-- `DEPLOYMENT.md` outlines production considerations, including Nginx routing, SSL termination, and scaling tips.
-- Container images can be built via `make build-docker` or the individual Dockerfiles located in `backend/` and `frontend/`.
+
+### Development Environment
+```bash
+docker compose -f docker-compose.dev.yml up -d
+```
+
+### Staging Environment
+```bash
+docker compose -f docker-compose.staging.yml up -d
+```
+
+### Production Environment
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Production Considerations
+
+1. **SSL/TLS**: Configure NGINX with valid certificates
+2. **Environment Variables**: Use secrets management for sensitive data (never commit `.env` files)
+3. **Database Backups**: Set up automated PostgreSQL backups
+4. **Monitoring**: Deploy full monitoring stack with Prometheus and Grafana
+5. **Logging**: Configure centralized logging
+6. **Resource Limits**: Set appropriate container resource limits
+
+See `monitoring/PRODUCTION_RUNBOOK.md` and `monitoring/GITHUB_DEPLOYMENT.md` for detailed deployment guides.
+
+## Development Guidelines
+
+**IMPORTANT**: Read `.claude/CLAUDE.md` before contributing. Key principles:
+
+### 1. Error Handling
+Never return fallback data. Always throw errors:
+
+```python
+# ✅ CORRECT
+def get_scholarship_data():
+    scholarship = db.get_scholarship()
+    if not scholarship:
+        raise ScholarshipNotFoundError("No scholarship data available")
+    return scholarship
+```
+
+### 2. Configuration-Driven Logic
+Use database configuration instead of hardcoded logic:
+
+```python
+# ✅ CORRECT
+if scholarship.config.requires_interview:
+    # interview logic
+```
+
+### 3. Enum Consistency
+Maintain consistency across all layers:
+- **Python**: Lowercase enum values
+- **TypeScript**: UPPERCASE member names, lowercase values
+- **PostgreSQL**: Lowercase enum values
+
+Run validation script:
+```bash
+python scripts/validate_enum_consistency.py
+```
+
+### 4. API Response Format
+All endpoints must return:
+```python
+{
+    "success": bool,
+    "message": str,
+    "data": any
+}
+```
+
+### 5. Path Security
+Always validate file paths:
+```python
+if ".." in filename or "/" in filename or "\\" in filename:
+    raise HTTPException(status_code=400, detail="無效的檔案名稱")
+```
+
+### 6. OpenAPI Type Generation
+After schema changes:
+```bash
+cd frontend && npm run api:generate
+```
 
 ## Documentation
-Key entry points under `docs/`:
-- `docs/architecture/system-overview.md` – high-level architecture and data flow.
-- `docs/getting-started/quick-start.md` and `docs/getting-started/development-setup.md` – detailed setup guides.
-- `docs/features/` – feature-specific walkthroughs (user management, authentication, etc.).
-- `docs/deployment/` – staging/production deployment guidance.
-- `Table_Description.md` – database table reference.
+
+### Architecture Documentation
+- `docs/architecture/system-overview.md` - High-level architecture
+- `docs/architecture/database-schema.md` - Database design
+- `docs/architecture/api-design.md` - API design principles
+
+### Development Guides
+- `docs/development/migration-guides.md` - Database migration guides
+- `.claude/CLAUDE.md` - Core development principles (MUST READ)
+
+### Database Reference
+- `docs/Table_Description.md` - Complete database table reference
+
+### API Documentation
+- **OpenAPI Docs**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
 ## Contributing
-1. Fork the repository and create a feature branch (`git checkout -b feature/my-change`).
-2. Ensure your environment passes `make lint`, `make check-types`, and `make test`.
-3. Submit a pull request with context and testing notes.
-4. For significant changes, update relevant documentation under `docs/`.
+
+1. **Fork & Branch**: Create feature branch from `main`
+   ```bash
+   git checkout -b feature/my-feature
+   ```
+
+2. **Read Guidelines**: Review `.claude/CLAUDE.md` thoroughly
+
+3. **Code Quality**: Ensure all checks pass
+   ```bash
+   make lint
+   make check-types
+   make test
+   ```
+
+4. **Enum Consistency**: If modifying enums, validate:
+   ```bash
+   python scripts/validate_enum_consistency.py
+   ```
+
+5. **Type Generation**: If modifying schemas:
+   ```bash
+   cd frontend && npm run api:generate
+   ```
+
+6. **Commit**: Use English commit messages
+   ```bash
+   git commit -m "feat: add new feature"
+   ```
+
+7. **Pull Request**: Submit PR with:
+   - Clear description
+   - Testing notes
+   - Documentation updates (if applicable)
 
 ## License
-A dedicated license file is not bundled with this repository. Contact the project maintainers for guidance before redistributing or using the code outside the intended environments.
+
+This project does not include a public license. Contact the maintainers for usage permissions before redistributing or deploying outside the intended environments.
+
+---
+
+**Quick Links:**
+- [Makefile Commands](#makefile-commands-reference)
+- [Development Guidelines](/.claude/CLAUDE.md)
+- [API Documentation](http://localhost:8000/docs)
+- [Architecture Overview](/docs/architecture/system-overview.md)
+- [Database Schema](/docs/Table_Description.md)
