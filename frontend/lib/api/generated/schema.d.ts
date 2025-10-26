@@ -6135,7 +6135,9 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never> | null;
+            data?: {
+                [key: string]: unknown;
+            } | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -6162,7 +6164,7 @@ export interface components {
             success: boolean;
             /** Message */
             message: string;
-            data?: components["schemas"]["EmailHistoryListResponse"] | null;
+            data?: components["schemas"]["EmailHistoryListResponse-Output"] | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -6201,7 +6203,9 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never>[] | null;
+            data?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -6280,7 +6284,7 @@ export interface components {
             success: boolean;
             /** Message */
             message: string;
-            data?: components["schemas"]["ScheduledEmailListResponse"] | null;
+            data?: components["schemas"]["ScheduledEmailListResponse-Output"] | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -6533,7 +6537,9 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ApplicationDocumentResponse
@@ -6622,7 +6628,9 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
             /** Id */
             id: number;
             /**
@@ -6682,7 +6690,9 @@ export interface components {
             /** Example File Url */
             example_file_url?: string | null;
             /** Validation Rules */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ApplicationFieldCreate
@@ -6755,7 +6765,9 @@ export interface components {
              * Field Options
              * @description Field options
              */
-            field_options?: Record<string, never>[] | null;
+            field_options?: {
+                [key: string]: unknown;
+            }[] | null;
             /**
              * Display Order
              * @description Display order
@@ -6782,12 +6794,16 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Conditional Rules
              * @description Conditional rules
              */
-            conditional_rules?: Record<string, never> | null;
+            conditional_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ApplicationFieldResponse
@@ -6860,7 +6876,9 @@ export interface components {
              * Field Options
              * @description Field options
              */
-            field_options?: Record<string, never>[] | null;
+            field_options?: {
+                [key: string]: unknown;
+            }[] | null;
             /**
              * Display Order
              * @description Display order
@@ -6887,12 +6905,16 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Conditional Rules
              * @description Conditional rules
              */
-            conditional_rules?: Record<string, never> | null;
+            conditional_rules?: {
+                [key: string]: unknown;
+            } | null;
             /** Id */
             id: number;
             /**
@@ -6946,7 +6968,9 @@ export interface components {
             /** Step Value */
             step_value?: number | null;
             /** Field Options */
-            field_options?: Record<string, never>[] | null;
+            field_options?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Display Order */
             display_order?: number | null;
             /** Is Active */
@@ -6956,9 +6980,13 @@ export interface components {
             /** Help Text En */
             help_text_en?: string | null;
             /** Validation Rules */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
             /** Conditional Rules */
-            conditional_rules?: Record<string, never> | null;
+            conditional_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ApplicationFormData
@@ -7154,7 +7182,9 @@ export interface components {
              * Updates
              * @description 要更新的欄位
              */
-            updates: Record<string, never>;
+            updates: {
+                [key: string]: unknown;
+            };
         };
         /** Body_create_ranking_api_v1_college_review_rankings_post */
         Body_create_ranking_api_v1_college_review_rankings_post: {
@@ -7365,7 +7395,9 @@ export interface components {
              * Parameters
              * @description Operation-specific parameters
              */
-            parameters?: Record<string, never> | null;
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * BulkScholarshipAssignRequest
@@ -7614,7 +7646,9 @@ export interface components {
              */
             email_domain: string | null;
             /** Custom Attributes */
-            custom_attributes?: Record<string, never> | null;
+            custom_attributes?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * DocumentData
@@ -7738,7 +7772,9 @@ export interface components {
              * Validation Rules
              * @description 驗證規則
              */
-            validation_rules?: Record<string, never> | null;
+            validation_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** EmailAutomationRuleCreate */
         EmailAutomationRuleCreate: {
@@ -7821,7 +7857,21 @@ export interface components {
          * EmailHistoryListResponse
          * @description Response schema for paginated email history
          */
-        EmailHistoryListResponse: {
+        "EmailHistoryListResponse-Input": {
+            /** Items */
+            items: components["schemas"]["EmailHistoryRead"][];
+            /** Total */
+            total: number;
+            /** Skip */
+            skip: number;
+            /** Limit */
+            limit: number;
+        };
+        /**
+         * EmailHistoryListResponse
+         * @description Response schema for paginated email history
+         */
+        "EmailHistoryListResponse-Output": {
             /** Items */
             items: components["schemas"]["EmailHistoryRead"][];
             /** Total */
@@ -8019,9 +8069,13 @@ export interface components {
          */
         FormConfigSaveRequest: {
             /** Fields */
-            fields: Record<string, never>[];
+            fields: {
+                [key: string]: unknown;
+            }[];
             /** Documents */
-            documents: Record<string, never>[];
+            documents: {
+                [key: string]: unknown;
+            }[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -8190,7 +8244,9 @@ export interface components {
              * Metadata
              * @description 額外資料
              */
-            metadata?: Record<string, never> | null;
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * NotificationResponse
@@ -8233,7 +8289,9 @@ export interface components {
              */
             created_at: string;
             /** Meta Data */
-            meta_data?: Record<string, never> | null;
+            meta_data?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * NotificationUpdate
@@ -8257,7 +8315,9 @@ export interface components {
             /** Expires At */
             expires_at?: string | null;
             /** Metadata */
-            metadata?: Record<string, never> | null;
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Is Dismissed
              * @description 是否已關閉
@@ -8328,7 +8388,9 @@ export interface components {
              * Distribution Rules
              * @description Custom distribution rules
              */
-            distribution_rules?: Record<string, never> | null;
+            distribution_rules?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * RankingImportItem
@@ -8503,7 +8565,9 @@ export interface components {
              * Notification Settings
              * @description 通知設定
              */
-            notification_settings?: Record<string, never> | null;
+            notification_settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * RosterScheduleStatus
@@ -8564,7 +8628,9 @@ export interface components {
              * Notification Settings
              * @description 通知設定
              */
-            notification_settings?: Record<string, never> | null;
+            notification_settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * RosterStatus
@@ -8644,7 +8710,21 @@ export interface components {
          * ScheduledEmailListResponse
          * @description Response schema for paginated scheduled emails
          */
-        ScheduledEmailListResponse: {
+        "ScheduledEmailListResponse-Input": {
+            /** Items */
+            items: components["schemas"]["ScheduledEmailRead"][];
+            /** Total */
+            total: number;
+            /** Skip */
+            skip: number;
+            /** Limit */
+            limit: number;
+        };
+        /**
+         * ScheduledEmailListResponse
+         * @description Response schema for paginated scheduled emails
+         */
+        "ScheduledEmailListResponse-Output": {
             /** Items */
             items: components["schemas"]["ScheduledEmailRead"][];
             /** Total */
@@ -9209,7 +9289,9 @@ export interface components {
              * Test Data
              * @description 測試數據（用於模板變數替換）
              */
-            test_data?: Record<string, never>;
+            test_data?: {
+                [key: string]: unknown;
+            };
             /**
              * Subject Override
              * @description 覆蓋主旨（可選）
@@ -9557,9 +9639,13 @@ export interface components {
              */
             preferred_language: string;
             /** Privacy Settings */
-            privacy_settings?: Record<string, never> | null;
+            privacy_settings?: {
+                [key: string]: unknown;
+            } | null;
             /** Custom Fields */
-            custom_fields?: Record<string, never> | null;
+            custom_fields?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * UserProfileUpdate
@@ -9577,9 +9663,13 @@ export interface components {
             /** Preferred Language */
             preferred_language?: string | null;
             /** Privacy Settings */
-            privacy_settings?: Record<string, never> | null;
+            privacy_settings?: {
+                [key: string]: unknown;
+            } | null;
             /** Custom Fields */
-            custom_fields?: Record<string, never> | null;
+            custom_fields?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * UserRole
@@ -9632,7 +9722,9 @@ export interface components {
              * Students
              * @description 學生列表 [{'nycu_id': '0856001', 'sub_type': 'nstc'}, ...]
              */
-            students: Record<string, never>[];
+            students: {
+                [key: string]: unknown;
+            }[];
         };
         /**
          * WhitelistBatchRemoveRequest
@@ -9772,7 +9864,7 @@ export interface components {
             enabled: boolean;
         };
         /** ApiResponse[List[dict]] */
-        app__schemas__common__ApiResponse_List_dict__: {
+        "app__schemas__common__ApiResponse[List[dict]]": {
             /**
              * Success
              * @default true
@@ -9781,14 +9873,16 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never>[] | null;
+            data?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
             trace_id?: string | null;
         };
         /** ApiResponse[dict] */
-        app__schemas__common__ApiResponse_dict_: {
+        "app__schemas__common__ApiResponse[dict]": {
             /**
              * Success
              * @default true
@@ -9797,33 +9891,39 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never> | null;
+            data?: {
+                [key: string]: unknown;
+            } | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
             trace_id?: string | null;
         };
         /** ApiResponse[List[dict]] */
-        app__schemas__response__ApiResponse_List_dict__: {
+        "app__schemas__response__ApiResponse[List[dict]]": {
             /** Success */
             success: boolean;
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never>[] | null;
+            data?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
             trace_id?: string | null;
         };
         /** ApiResponse[dict] */
-        app__schemas__response__ApiResponse_dict_: {
+        "app__schemas__response__ApiResponse[dict]": {
             /** Success */
             success: boolean;
             /** Message */
             message: string;
             /** Data */
-            data?: Record<string, never> | null;
+            data?: {
+                [key: string]: unknown;
+            } | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -10485,7 +10585,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -12488,7 +12590,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -12543,7 +12647,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -13974,7 +14080,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -14358,7 +14466,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -14596,7 +14706,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
                 };
             };
             /** @description Validation Error */
@@ -14625,7 +14735,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
                 };
             };
         };
@@ -14647,7 +14757,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
                 };
             };
             /** @description Validation Error */
@@ -14740,7 +14850,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
                 };
             };
         };
@@ -14769,7 +14879,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
                 };
             };
             /** @description Validation Error */
@@ -14899,7 +15009,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
                 };
             };
             /** @description Validation Error */
@@ -15262,7 +15372,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
                 };
             };
             /** @description Validation Error */
@@ -15554,7 +15664,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -15620,7 +15732,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -15686,7 +15800,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {
@@ -15762,7 +15878,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
                 };
             };
             /** @description Validation Error */
@@ -15797,7 +15913,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
                 };
             };
             /** @description Validation Error */
@@ -15923,7 +16039,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };
@@ -15943,7 +16061,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };
@@ -15963,7 +16083,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };
@@ -15983,7 +16105,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };
@@ -16003,7 +16127,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };
@@ -16023,7 +16149,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__common__ApiResponse_List_dict__"];
+                    "application/json": components["schemas"]["app__schemas__common__ApiResponse[List[dict]]"];
                 };
             };
         };
@@ -16043,7 +16169,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
         };
@@ -16066,7 +16194,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>[];
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
             /** @description Validation Error */
@@ -16095,7 +16225,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -16115,7 +16247,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -16138,7 +16272,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -16167,7 +16303,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -16194,7 +16332,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__common__ApiResponse_dict_"];
+                    "application/json": components["schemas"]["app__schemas__common__ApiResponse[dict]"];
                 };
             };
             /** @description Validation Error */
@@ -16223,7 +16361,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -18615,7 +18755,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
@@ -19101,7 +19243,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse_List_dict__"];
+                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[List[dict]]"];
                 };
             };
         };
