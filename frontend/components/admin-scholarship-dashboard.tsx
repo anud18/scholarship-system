@@ -933,7 +933,7 @@ export function AdminScholarshipDashboard({
                               <div className="flex items-center justify-between gap-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
                                 <div className="flex items-center gap-1">
                                   <AlertCircle className="h-4 w-4 text-orange-600" />
-                                  <span className="text-sm font-medium text-orange-800">
+                                  <span className="text-sm font-medium text-orange-800 whitespace-nowrap">
                                     待指派教授
                                   </span>
                                 </div>
@@ -1004,7 +1004,7 @@ export function AdminScholarshipDashboard({
                           // 待指派狀態（無法修改）
                           <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded-md">
                             <AlertCircle className="h-4 w-4 text-orange-600" />
-                            <span className="text-sm font-medium text-orange-800">
+                            <span className="text-sm font-medium text-orange-800 whitespace-nowrap">
                               待指派教授
                             </span>
                           </div>

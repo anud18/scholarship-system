@@ -177,6 +177,23 @@ docker-restart: ## Docker - Restart all Docker Compose services
 	docker compose -f docker-compose.dev.yml restart
 	@echo "$(GREEN)✅ Services restarted!$(NC)"
 
+docker-rebuild: ## Docker - Rebuild and restart all services (檢查 email 資料夾後重建)
+	@echo "$(GREEN)Rebuilding Docker services...$(NC)"
+	@echo "$(CYAN)Checking email templates directory...$(NC)"
+	@if [ ! -d "./frontend/emails" ]; then \
+		echo "$(RED)❌ Error: frontend/emails directory not found!$(NC)"; \
+		echo "$(YELLOW)Please ensure the emails directory exists at ./frontend/emails$(NC)"; \
+		exit 1; \
+	else \
+		echo "$(GREEN)✅ Email templates directory found$(NC)"; \
+	fi
+	@echo "$(CYAN)Rebuilding and restarting services...$(NC)"
+	docker compose -f docker-compose.dev.yml up -d --build
+	@echo "$(GREEN)✅ Services rebuilt and restarted!$(NC)"
+	@echo "$(CYAN)Backend: http://localhost:8000$(NC)"
+	@echo "$(CYAN)Frontend: http://localhost:3000$(NC)"
+	@echo "$(CYAN)API Docs: http://localhost:8000/docs$(NC)"
+
 docker-logs: ## Docker - Show logs from all services
 	@echo "$(GREEN)Showing Docker logs...$(NC)"
 	docker compose -f docker-compose.dev.yml logs -f

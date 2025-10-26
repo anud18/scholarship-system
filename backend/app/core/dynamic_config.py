@@ -132,6 +132,11 @@ class DynamicConfig:
         value = await self.get(key, db, default)
         return int(value)
 
+    async def get_float(self, key: str, db: AsyncSession, default: Optional[float] = None) -> float:
+        """Get float configuration value."""
+        value = await self.get(key, db, default)
+        return float(value)
+
     async def get_str(self, key: str, db: AsyncSession, default: Optional[str] = None) -> str:
         """Get string configuration value."""
         value = await self.get(key, db, default)
