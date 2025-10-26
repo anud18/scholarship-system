@@ -211,6 +211,93 @@ db-seed: ## Seed database with sample data
 	cd backend && python -c "from app.core.init_db import init_db; init_db()"
 	@echo "$(GREEN)✅ Database seeded!$(NC)"
 
+init-lookup: ## Initialize lookup tables (reference data)
+	@echo "$(GREEN)Initializing lookup tables (reference data)...$(NC)"
+	@if ! docker compose -f docker-compose.dev.yml ps backend | grep -q "Up" 2>/dev/null; then \
+		echo "$(YELLOW)⚠️  Backend service is not running. Starting development services first...$(NC)"; \
+		docker compose -f docker-compose.dev.yml up -d --build; \
+		echo "$(CYAN)⏳ Waiting for services to start...$(NC)"; \
+		sleep 10; \
+		echo "$(CYAN)🔍 Checking database connection...$(NC)"; \
+		for i in {1..30}; do \
+			if docker exec scholarship_postgres_dev pg_isready -U scholarship_user -d scholarship_db > /dev/null 2>&1; then \
+				echo "$(GREEN)✅ Database is ready$(NC)"; \
+				break; \
+			fi; \
+			if [ $$i -eq 30 ]; then \
+				echo "$(RED)❌ Database failed to start after 30 attempts$(NC)"; \
+				exit 1; \
+			fi; \
+			echo "   Waiting for database... ($$i/30)"; \
+			sleep 2; \
+		done; \
+	else \
+		echo "$(GREEN)✅ Backend service is already running$(NC)"; \
+	fi
+	@echo "$(CYAN)🚀 Running lookup tables initialization...$(NC)"
+	@docker exec scholarship_backend_dev python -m app.core.init_lookup_tables
+	@echo "$(GREEN)✅ Lookup tables initialization completed successfully!$(NC)"
+	@echo ""
+	@echo "$(CYAN)📊 Reference Data Initialized:$(NC)"
+	@echo "  - 3 degree types (博士, 碩士, 學士)"
+	@echo "  - 16 student identity types"
+	@echo "  - 11 studying status types"
+	@echo "  - 8 school identity types"
+	@echo "  - 29 NYCU academies/colleges"
+	@echo "  - 16 departments"
+	@echo "  - 27 enrollment types"
+
+init-testdata: ## Initialize test data (users, scholarships, etc.)
+	@echo "$(GREEN)Initializing test data (users, scholarships, etc.)...$(NC)"
+	@if ! docker compose -f docker-compose.dev.yml ps backend | grep -q "Up" 2>/dev/null; then \
+		echo "$(RED)❌ Backend service is not running. Please start services first with 'make docker-up'$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)🔍 Checking if lookup tables are initialized...$(NC)"
+	@DEGREE_COUNT=$$(docker exec scholarship_postgres_dev psql -U scholarship_user -d scholarship_db -t -c "SELECT COUNT(*) FROM degrees;" 2>/dev/null | tr -d ' '); \
+	if [ "$$DEGREE_COUNT" -eq 0 ] 2>/dev/null; then \
+		echo "$(YELLOW)⚠️  Lookup tables not found. Initializing lookup tables first...$(NC)"; \
+		$(MAKE) init-lookup; \
+	else \
+		echo "$(GREEN)✅ Lookup tables found ($$DEGREE_COUNT degrees)$(NC)"; \
+	fi
+	@echo "$(CYAN)🚀 Running test data initialization...$(NC)"
+	@docker exec scholarship_backend_dev python -c "\
+import asyncio; \
+from app.core.init_db import createTestUsers, createTestStudents, createTestScholarships, createApplicationFields, createSystemAnnouncements; \
+from app.db.session import AsyncSessionLocal; \
+async def init_test_data(): \
+    async with AsyncSessionLocal() as session: \
+        users = await createTestUsers(session); \
+        await createTestStudents(session, users); \
+        await createTestScholarships(session); \
+        await createApplicationFields(session); \
+        await createSystemAnnouncements(session); \
+    print('✅ Test data initialization completed!'); \
+asyncio.run(init_test_data())"
+	@echo "$(GREEN)✅ Test data initialization completed successfully!$(NC)"
+	@echo ""
+	@echo "$(CYAN)📋 Test User Accounts:$(NC)"
+	@echo "  - Admin: admin / admin123"
+	@echo "  - Super Admin: super_admin / super123"
+	@echo "  - Professor: professor / professor123"
+	@echo "  - College: college / college123"
+	@echo "  - Student (學士): stu_under / stuunder123"
+	@echo "  - Student (博士): stu_phd / stuphd123"
+	@echo "  - Student (逕讀博士): stu_direct / studirect123"
+	@echo "  - Student (碩士): stu_master / stumaster123"
+	@echo "  - Student (陸生): stu_china / stuchina123"
+
+init-all: docker-up init-lookup init-testdata ## Initialize complete development environment (Docker + DB + Test Data)
+	@echo ""
+	@echo "$(GREEN)🎉 Development environment fully initialized!$(NC)"
+	@echo "$(CYAN)Ready to start developing!$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Next steps:$(NC)"
+	@echo "  - Run 'make dev' to start development servers"
+	@echo "  - Visit http://localhost:3000 for frontend"
+	@echo "  - Visit http://localhost:8000/docs for API docs"
+
 # Utility Commands
 clean: ## Clean up generated files and caches
 	@echo "$(GREEN)Cleaning up...$(NC)"
