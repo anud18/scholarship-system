@@ -25,7 +25,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for complete mirror
+          fetch-depth: 1  # Shallow clone (will squash to single commit)
           token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Configure Git
@@ -109,10 +109,12 @@ jobs:
           if [ -d "mock-student-api" ]; then
             echo "::notice::Removing mock-student-api/ directory"
             git rm -rf mock-student-api/
+          fi
 
-            echo "::notice::Removed mock-student-api from production mirror"
-          else
-            echo "::notice::No mock-student-api/ directory found"
+          # Remove .claude directory (Claude Code project configuration)
+          if [ -d ".claude" ]; then
+            echo "::notice::Removing .claude/ directory"
+            git rm -rf .claude/
           fi
 
           # Commit the removal
@@ -123,6 +125,7 @@ jobs:
 
             Development directories are not needed in production:
             - mock-student-api/: Mock Student API for local development
+            - .claude/: Claude Code project configuration
 
             Source: ${{ github.repository }}
             Commit: ${{ github.sha }}
@@ -131,6 +134,45 @@ jobs:
             echo "::notice::✅ Committed development directories removal"
           fi
 
+          echo "::endgroup::"
+
+      - name: Squash commits into single production commit
+        run: |
+          echo "::group::Creating squashed production commit"
+
+          # Get current state
+          CURRENT_COMMIT=$(git rev-parse HEAD)
+          echo "::notice::Current commit: $CURRENT_COMMIT"
+
+          # Create a new orphan branch (no history)
+          git checkout --orphan production-squashed
+
+          # Add all current files
+          git add -A
+
+          # Create single commit with production code
+          git commit -m "chore: production release from ${{ github.repository }}
+
+          This is a production-ready snapshot of the scholarship system.
+
+          Source Repository: ${{ github.repository }}
+          Source Commit: ${{ github.sha }}
+          Source Branch: ${{ github.ref_name }}
+          Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          Triggered By: ${{ github.event_name }}
+
+          Production Changes:
+          - Removed development workflows (.github/workflows/)
+          - Removed mock-student-api (development testing tool)
+          - Removed .claude directory (development configuration)
+
+          This commit contains only production-ready code with no development history."
+
+          # Replace production-mirror branch with squashed version
+          git branch -D production-mirror
+          git branch -m production-squashed production-mirror
+
+          echo "::notice::✅ Created single squashed commit for production"
           echo "::endgroup::"
 
       - name: Show mirror contents
@@ -189,14 +231,12 @@ jobs:
             echo "::notice::Production branch does not exist yet (first sync)"
           fi
 
-          # Push to production
+          # Push to production (always force since we're squashing to single commit)
+          # Note: Using --force because this is a squashed commit with no shared history
           PUSH_FLAGS="--force"
-          if [ "$FORCE_PUSH" != "true" ]; then
-            # Use force-with-lease for safety (won't overwrite unexpected changes)
-            PUSH_FLAGS="--force-with-lease"
-          fi
 
-          echo "::notice::Pushing with: $PUSH_FLAGS"
+          echo "::notice::Pushing squashed commit with: $PUSH_FLAGS"
+          echo "::notice::Production will have single commit with no development history"
 
           if git push production "production-mirror:${PRODUCTION_BRANCH}" $PUSH_FLAGS; then
             echo "::notice::✅ Successfully synced to ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}"
@@ -233,6 +273,8 @@ jobs:
 
           - ✅ Created production mirror branch
           - ✅ Removed development workflows (.github/workflows/)
+          - ✅ Removed development directories (mock-student-api/, .claude/)
+          - ✅ Squashed all commits into single production commit
           - ✅ Pushed to source repo (production-mirror branch)
           - ✅ Synced to production repository
 
@@ -240,8 +282,9 @@ jobs:
 
           The production repository now contains:
           - 📦 All application code (latest from main)
-          - 📜 Complete git history
+          - 📜 Single squashed commit (no development history)
           - 🚫 No development workflows (removed)
+          - 🚫 No development tools (mock-student-api, .claude removed)
           - ✅ Independent production workflows (maintained separately)
 
           View production repo: https://github.com/${{ secrets.PRODUCTION_REPO }}/tree/${{ secrets.PRODUCTION_BRANCH || 'main' }}
