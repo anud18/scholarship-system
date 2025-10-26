@@ -1,5 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// ============================================================================
+// Security: Input Validation Utility
+// ============================================================================
+// Prevents SSRF attacks by validating user-controlled inputs
+
+/**
+ * Validate ID parameters (fileId, applicationId, userId)
+ * Only allows alphanumeric characters, hyphens, and underscores
+ * Prevents path traversal (..), injection (/), and other attacks
+ */
+function validateId(id: string | null, paramName: string): void {
+  if (!id) {
+    throw new Error(`${paramName} is required`);
+  }
+
+  // Check for path traversal attempts
+  if (id.includes("..") || id.includes("/") || id.includes("\\")) {
+    throw new Error(`Invalid ${paramName}: path traversal detected`);
+  }
+
+  // Only allow safe characters: letters, numbers, hyphens, underscores
+  const idPattern = /^[a-zA-Z0-9_-]+$/;
+  if (!idPattern.test(id)) {
+    throw new Error(`Invalid ${paramName}: contains illegal characters`);
+  }
+
+  // Reasonable length limit (prevent DoS)
+  if (id.length > 100) {
+    throw new Error(`Invalid ${paramName}: too long`);
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -10,17 +42,25 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get("userId");
     const token = searchParams.get("token");
 
-    if (!fileId) {
-      return NextResponse.json(
-        { error: "File ID is required" },
-        { status: 400 }
-      );
-    }
+    // Security: Validate all ID parameters to prevent SSRF
+    try {
+      validateId(fileId, "fileId");
 
-    // For user profile documents, userId can be used instead of applicationId
-    if (!applicationId && !userId) {
+      // For user profile documents, userId can be used instead of applicationId
+      if (applicationId) {
+        validateId(applicationId, "applicationId");
+      } else if (userId) {
+        validateId(userId, "userId");
+      } else {
+        return NextResponse.json(
+          { error: "Application ID or User ID is required" },
+          { status: 400 }
+        );
+      }
+    } catch (validationError: any) {
+      console.error("Input validation error:", validationError.message);
       return NextResponse.json(
-        { error: "Application ID or User ID is required" },
+        { error: validationError.message },
         { status: 400 }
       );
     }
