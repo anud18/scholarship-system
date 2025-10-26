@@ -68,7 +68,7 @@ async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> L
 # Core API endpoints
 
 
-@router.get("/available-semesters", response_model=ApiResponse)
+@router.get("/available-semesters")
 async def get_available_semesters(
     scholarship_code: Optional[str] = Query(None, description="Filter periods by specific scholarship code"),
     quota_management_mode: Optional[str] = Query(
@@ -84,11 +84,7 @@ async def get_available_semesters(
         accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
 
         if not accessible_scholarship_ids:
-            return ApiResponse(
-                success=True,
-                message="No accessible scholarship configurations found",
-                data=[],
-            )
+            return ApiResponse(success=True, message="No accessible scholarship configurations found", data=[])
 
         # Build query conditions
         conditions = [
@@ -99,19 +95,14 @@ async def get_available_semesters(
         # If scholarship_code filter is provided, add it to conditions
         if scholarship_code:
             scholarship_stmt = select(ScholarshipType.id).where(
-                and_(
-                    ScholarshipType.code == scholarship_code,
-                    ScholarshipType.id.in_(accessible_scholarship_ids),
-                )
+                and_(ScholarshipType.code == scholarship_code, ScholarshipType.id.in_(accessible_scholarship_ids))
             )
             scholarship_result = await db.execute(scholarship_stmt)
             scholarship_id = scholarship_result.scalar_one_or_none()
 
             if not scholarship_id:
                 return ApiResponse(
-                    success=True,
-                    message=f"No accessible scholarship found with code: {scholarship_code}",
-                    data=[],
+                    success=True, message=f"No accessible scholarship found with code: {scholarship_code}", data=[]
                 )
 
             conditions.append(ScholarshipConfiguration.scholarship_type_id == scholarship_id)
@@ -130,25 +121,18 @@ async def get_available_semesters(
 
                 if mode_enum is None:
                     return ApiResponse(
-                        success=False,
-                        message=f"Invalid quota management mode: {quota_management_mode}",
-                        data=[],
+                        success=False, message=f"Invalid quota management mode: {quota_management_mode}", data=[]
                     )
 
                 conditions.append(ScholarshipConfiguration.quota_management_mode == mode_enum)
             except Exception:
                 return ApiResponse(
-                    success=False,
-                    message=f"Invalid quota management mode: {quota_management_mode}",
-                    data=[],
+                    success=False, message=f"Invalid quota management mode: {quota_management_mode}", data=[]
                 )
 
         # Query for unique academic years and semesters from configurations
         stmt = (
-            select(
-                ScholarshipConfiguration.academic_year,
-                ScholarshipConfiguration.semester,
-            )
+            select(ScholarshipConfiguration.academic_year, ScholarshipConfiguration.semester)
             .where(and_(*conditions))
             .distinct()
         )
@@ -187,9 +171,7 @@ async def get_available_semesters(
                 seen.add(period)
 
         return ApiResponse(
-            success=True,
-            message=f"Retrieved {len(unique_periods)} available periods",
-            data=unique_periods,
+            success=True, message=f"Retrieved {len(unique_periods)} available periods", data=unique_periods
         )
 
     except Exception as e:
@@ -197,10 +179,7 @@ async def get_available_semesters(
         import traceback
 
         logger = logging.getLogger(__name__)
-        logger.error(
-            f"Error in get_available_semesters: {type(e).__name__}: {str(e)}",
-            exc_info=True,
-        )
+        logger.error(f"Error in get_available_semesters: {type(e).__name__}: {str(e)}", exc_info=True)
         logger.error(f"Full traceback: {traceback.format_exc()}")
 
         raise HTTPException(
@@ -209,7 +188,7 @@ async def get_available_semesters(
         )
 
 
-@router.get("/matrix-quota-status/{period}", response_model=ApiResponse)
+@router.get("/matrix-quota-status/{period}")
 async def get_matrix_quota_status(
     period: str,  # Academic year (e.g., "114") or semester (e.g., "114-1")
     current_user: User = Depends(require_admin),
@@ -235,18 +214,14 @@ async def get_matrix_quota_status(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="未找到可存取的獎學金")
 
         phd_stmt = select(ScholarshipType).where(
-            and_(
-                ScholarshipType.code == "phd",
-                ScholarshipType.id.in_(accessible_scholarship_ids),
-            )
+            and_(ScholarshipType.code == "phd", ScholarshipType.id.in_(accessible_scholarship_ids))
         )
         phd_result = await db.execute(phd_stmt)
         phd_scholarship = phd_result.scalar_one_or_none()
 
         if not phd_scholarship:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="PhD scholarship not found or not accessible",
+                status_code=status.HTTP_404_NOT_FOUND, detail="PhD scholarship not found or not accessible"
             )
 
         # Get configuration for this period
@@ -278,10 +253,7 @@ async def get_matrix_quota_status(
         matrix_quotas = config.quotas or {}
 
         if not matrix_quotas:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No matrix quota configuration found",
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No matrix quota configuration found")
 
         # Get application usage data with single aggregated query (fixes N+1 problem)
         phd_quotas = {}
@@ -380,32 +352,22 @@ async def get_matrix_quota_status(
             },
         }
 
-        return ApiResponse(
-            success=True,
-            message="Matrix quota status retrieved successfully",
-            data=response_data,
-        )
+        return ApiResponse(success=True, message="Matrix quota status retrieved successfully", data=response_data)
 
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid period format: {period}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
     except Exception as e:
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.error(
-            f"Error in get_matrix_quota_status: {type(e).__name__}: {str(e)}",
-            exc_info=True,
-        )
+        logger.error(f"Error in get_matrix_quota_status: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve matrix quota status: {str(e)}",
         )
 
 
-@router.put("/matrix-quota", response_model=ApiResponse)
+@router.put("/matrix-quota")
 async def update_matrix_quota(
     sub_type: str = Body(...),
     college: str = Body(...),
@@ -431,10 +393,7 @@ async def update_matrix_quota(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="未找到可存取的獎學金")
 
         phd_stmt = select(ScholarshipType).where(
-            and_(
-                ScholarshipType.code == "phd",
-                ScholarshipType.id.in_(accessible_scholarship_ids),
-            )
+            and_(ScholarshipType.code == "phd", ScholarshipType.id.in_(accessible_scholarship_ids))
         )
         phd_result = await db.execute(phd_stmt)
         phd_scholarship = phd_result.scalar_one_or_none()
@@ -463,8 +422,7 @@ async def update_matrix_quota(
 
         if not config:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No active configuration found for PhD scholarship",
+                status_code=status.HTTP_404_NOT_FOUND, detail="No active configuration found for PhD scholarship"
             )
 
         # Validate sub_type and college
@@ -524,12 +482,11 @@ async def update_matrix_quota(
         logger = logging.getLogger(__name__)
         logger.error(f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update matrix quota: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update matrix quota: {str(e)}"
         )
 
 
-@router.get("/colleges", response_model=ApiResponse)
+@router.get("/colleges")
 async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     """Get college configurations from database"""
 
@@ -543,12 +500,11 @@ async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSes
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve colleges: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve colleges: {str(e)}"
         )
 
 
-@router.get("/scholarship-types", response_model=ApiResponse)
+@router.get("/scholarship-types")
 async def get_scholarship_types(current_user: User = Depends(require_staff), db: AsyncSession = Depends(get_db)):
     """Get scholarship types that the user has access to"""
 
@@ -562,12 +518,7 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
         # Get scholarship types with their configurations
         stmt = (
             select(ScholarshipType)
-            .where(
-                and_(
-                    ScholarshipType.id.in_(accessible_scholarship_ids),
-                    ScholarshipType.status == "active",
-                )
-            )
+            .where(and_(ScholarshipType.id.in_(accessible_scholarship_ids), ScholarshipType.status == "active"))
             .options(selectinload(ScholarshipType.sub_type_configs))
         )
 
@@ -607,20 +558,15 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
             }
             type_configs.append(type_config)
 
-        return ApiResponse(
-            success=True,
-            message=f"Retrieved {len(type_configs)} scholarship types",
-            data=type_configs,
-        )
+        return ApiResponse(success=True, message=f"Retrieved {len(type_configs)} scholarship types", data=type_configs)
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve scholarship types: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve scholarship types: {str(e)}"
         )
 
 
-@router.get("/overview/{period}", response_model=ApiResponse)
+@router.get("/overview/{period}")
 async def get_quota_overview(
     period: str,  # Academic year or semester (e.g., "114" or "114-1")
     current_user: User = Depends(require_admin),
@@ -740,28 +686,20 @@ async def get_quota_overview(
                 }
             )
 
-        return ApiResponse(
-            success=True,
-            message="Quota overview retrieved successfully",
-            data=overview_data,
-        )
+        return ApiResponse(success=True, message="Quota overview retrieved successfully", data=overview_data)
 
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid period format: {period}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve quota overview: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve quota overview: {str(e)}"
         )
 
 
 # CRUD Endpoints for ScholarshipConfiguration Management
 
 
-@router.post("/configurations", response_model=ApiResponse)
+@router.post("/configurations")
 async def create_scholarship_configuration(
     config_data: Dict[str, Any] = Body(...),
     current_user: User = Depends(require_admin),
@@ -831,9 +769,7 @@ async def create_scholarship_configuration(
         await db.refresh(new_config)
 
         return ApiResponse(
-            success=True,
-            message="獎學金配置建立成功",
-            data={"id": new_config.id, "config_code": new_config.config_code},
+            success=True, message="獎學金配置建立成功", data={"id": new_config.id, "config_code": new_config.config_code}
         )
 
     except HTTPException:
@@ -841,16 +777,13 @@ async def create_scholarship_configuration(
     except Exception as e:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create configuration: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
         )
 
 
-@router.get("/configurations/{id}", response_model=ApiResponse)
+@router.get("/configurations/{id}")
 async def get_scholarship_configuration(
-    id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Get a specific scholarship configuration by ID"""
 
@@ -940,12 +873,11 @@ async def get_scholarship_configuration(
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve configuration: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
         )
 
 
-@router.put("/configurations/{id}", response_model=ApiResponse)
+@router.put("/configurations/{id}")
 async def update_scholarship_configuration(
     id: int,
     config_data: Dict[str, Any] = Body(...),
@@ -1065,11 +997,7 @@ async def update_scholarship_configuration(
         await db.commit()
         await db.refresh(config)
 
-        return ApiResponse(
-            success=True,
-            message="配置更新成功",
-            data={"id": config.id, "config_code": config.config_code},
-        )
+        return ApiResponse(success=True, message="配置更新成功", data={"id": config.id, "config_code": config.config_code})
 
     except HTTPException:
         raise
@@ -1078,21 +1006,15 @@ async def update_scholarship_configuration(
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.error(
-            f"Error in update_scholarship_configuration: {type(e).__name__}: {str(e)}",
-            exc_info=True,
-        )
+        logger.error(f"Error in update_scholarship_configuration: {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update configuration: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
         )
 
 
-@router.delete("/configurations/{id}", response_model=ApiResponse)
+@router.delete("/configurations/{id}")
 async def deactivate_scholarship_configuration(
-    id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """Deactivate (soft delete) a scholarship configuration"""
 
@@ -1123,23 +1045,18 @@ async def deactivate_scholarship_configuration(
 
         await db.commit()
 
-        return ApiResponse(
-            success=True,
-            message="配置已停用",
-            data={"id": config.id, "config_code": config.config_code},
-        )
+        return ApiResponse(success=True, message="配置已停用", data={"id": config.id, "config_code": config.config_code})
 
     except HTTPException:
         raise
     except Exception as e:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to deactivate configuration: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to deactivate configuration: {str(e)}"
         )
 
 
-@router.post("/configurations/{id}/duplicate", response_model=ApiResponse)
+@router.post("/configurations/{id}/duplicate")
 async def duplicate_scholarship_configuration(
     id: int,
     target_data: Dict[str, Any] = Body(...),
@@ -1210,9 +1127,7 @@ async def duplicate_scholarship_configuration(
         await db.refresh(new_config)
 
         return ApiResponse(
-            success=True,
-            message="配置複製成功",
-            data={"id": new_config.id, "config_code": new_config.config_code},
+            success=True, message="配置複製成功", data={"id": new_config.id, "config_code": new_config.config_code}
         )
 
     except HTTPException:
@@ -1220,12 +1135,11 @@ async def duplicate_scholarship_configuration(
     except Exception as e:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to duplicate configuration: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to duplicate configuration: {str(e)}"
         )
 
 
-@router.get("/configurations", response_model=ApiResponse)
+@router.get("/configurations")
 async def list_scholarship_configurations(
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
@@ -1266,10 +1180,7 @@ async def list_scholarship_configurations(
             select(ScholarshipConfiguration)
             .where(and_(*conditions))
             .options(selectinload(ScholarshipConfiguration.scholarship_type))
-            .order_by(
-                ScholarshipConfiguration.academic_year.desc(),
-                ScholarshipConfiguration.semester.desc(),
-            )
+            .order_by(ScholarshipConfiguration.academic_year.desc(), ScholarshipConfiguration.semester.desc())
         )
 
         result = await db.execute(stmt)
@@ -1346,27 +1257,20 @@ async def list_scholarship_configurations(
             }
             config_list.append(config_data)
 
-        return ApiResponse(
-            success=True,
-            message=f"Retrieved {len(config_list)} configurations",
-            data=config_list,
-        )
+        return ApiResponse(success=True, message=f"Retrieved {len(config_list)} configurations", data=config_list)
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list configurations: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list configurations: {str(e)}"
         )
 
 
 # Whitelist Management Endpoints
 
 
-@router.get("/{id}/whitelist", response_model=ApiResponse[List[WhitelistResponse]])
+@router.get("/{id}/whitelist")
 async def get_configuration_whitelist(
-    id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """
     Get whitelist for a specific scholarship configuration
@@ -1418,7 +1322,7 @@ async def get_configuration_whitelist(
     return ApiResponse(success=True, message="成功取得白名單", data=response_list)
 
 
-@router.post("/{id}/whitelist/batch", response_model=ApiResponse[dict])
+@router.post("/{id}/whitelist/batch")
 async def batch_add_whitelist(
     id: int,
     request: WhitelistBatchAddRequest,
@@ -1471,13 +1375,11 @@ async def batch_add_whitelist(
     await db.commit()
 
     return ApiResponse(
-        success=True,
-        message=f"成功新增 {added_count} 位學生到白名單",
-        data={"added_count": added_count, "errors": errors},
+        success=True, message=f"成功新增 {added_count} 位學生到白名單", data={"added_count": added_count, "errors": errors}
     )
 
 
-@router.delete("/{id}/whitelist/batch", response_model=ApiResponse[dict])
+@router.delete("/{id}/whitelist/batch")
 async def batch_remove_whitelist(
     id: int,
     request: WhitelistBatchRemoveRequest,
@@ -1514,14 +1416,10 @@ async def batch_remove_whitelist(
 
     await db.commit()
 
-    return ApiResponse(
-        success=True,
-        message=f"成功移除 {removed_count} 位學生",
-        data={"removed_count": removed_count},
-    )
+    return ApiResponse(success=True, message=f"成功移除 {removed_count} 位學生", data={"removed_count": removed_count})
 
 
-@router.post("/{id}/whitelist/import", response_model=ApiResponse[WhitelistImportResult])
+@router.post("/{id}/whitelist/import")
 async def import_whitelist_excel(
     id: int,
     file: UploadFile = File(...),
@@ -1594,9 +1492,7 @@ async def import_whitelist_excel(
 
 @router.get("/{id}/whitelist/export")
 async def export_whitelist_excel(
-    id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """
     Export whitelist to Excel file
@@ -1657,9 +1553,7 @@ async def export_whitelist_excel(
 
 @router.get("/{id}/whitelist/template")
 async def download_whitelist_template(
-    id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """
     Download whitelist import template Excel file

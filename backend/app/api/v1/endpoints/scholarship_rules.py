@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("", response_model=ApiResponse[List[ScholarshipRuleResponse]])
+@router.get("")
 async def list_scholarship_rules(
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
@@ -138,18 +138,12 @@ async def list_scholarship_rules(
         rule_dict.academic_period_label = rule.academic_period_label
         response_rules.append(rule_dict)
 
-    return ApiResponse(
-        success=True,
-        message=f"Retrieved {len(response_rules)} scholarship rules",
-        data=response_rules,
-    )
+    return ApiResponse(success=True, message=f"Retrieved {len(response_rules)} scholarship rules", data=response_rules)
 
 
-@router.post("", response_model=ApiResponse[ScholarshipRuleResponse])
+@router.post("")
 async def create_scholarship_rule(
-    rule_data: ScholarshipRuleCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    rule_data: ScholarshipRuleCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """Create a new scholarship rule"""
 
@@ -159,10 +153,7 @@ async def create_scholarship_rule(
     scholarship_type = scholarship_type_result.scalar_one_or_none()
 
     if not scholarship_type:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Scholarship type {rule_data.scholarship_type_id} not found",
-        )
+        raise HTTPException(status_code=404, detail=f"Scholarship type {rule_data.scholarship_type_id} not found")
 
     # Validate sub_type if provided
     if rule_data.sub_type:
@@ -189,11 +180,9 @@ async def create_scholarship_rule(
     )
 
 
-@router.get("/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse])
+@router.get("/{rule_id}")
 async def get_scholarship_rule(
-    rule_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    rule_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """Get a specific scholarship rule by ID"""
 
@@ -214,13 +203,11 @@ async def get_scholarship_rule(
         raise HTTPException(status_code=404, detail="Rule not found")
 
     return ApiResponse(
-        success=True,
-        message="Rule retrieved successfully",
-        data=ScholarshipRuleResponse.model_validate(rule),
+        success=True, message="Rule retrieved successfully", data=ScholarshipRuleResponse.model_validate(rule)
     )
 
 
-@router.put("/{rule_id}", response_model=ApiResponse[ScholarshipRuleResponse])
+@router.put("/{rule_id}")
 async def update_scholarship_rule(
     rule_id: int,
     rule_update: ScholarshipRuleUpdate,
@@ -275,11 +262,9 @@ async def update_scholarship_rule(
     )
 
 
-@router.delete("/{rule_id}", response_model=ApiResponse[Dict[str, Any]])
+@router.delete("/{rule_id}")
 async def delete_scholarship_rule(
-    rule_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    rule_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """Delete a scholarship rule"""
 
@@ -295,17 +280,13 @@ async def delete_scholarship_rule(
     await db.commit()
 
     return ApiResponse(
-        success=True,
-        message=f"Deleted scholarship rule: {rule_name}",
-        data={"deleted_rule_id": rule_id},
+        success=True, message=f"Deleted scholarship rule: {rule_name}", data={"deleted_rule_id": rule_id}
     )
 
 
-@router.post("/bulk", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/bulk")
 async def bulk_rule_operation(
-    operation: BulkRuleOperation,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    operation: BulkRuleOperation, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """Perform bulk operations on scholarship rules"""
 
@@ -352,11 +333,9 @@ async def bulk_rule_operation(
     )
 
 
-@router.post("/copy", response_model=ApiResponse[Dict[str, Any]])
+@router.post("/copy")
 async def copy_rules(
-    copy_request: RuleCopyRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    copy_request: RuleCopyRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """Copy rules from one academic period to another"""
 
@@ -472,14 +451,9 @@ async def copy_rules(
     )
 
 
-@router.get(
-    "/scholarship-types/{scholarship_type_id}/sub-types",
-    response_model=ApiResponse[List[Dict[str, Any]]],
-)
+@router.get("/scholarship-types/{scholarship_type_id}/sub-types")
 async def get_scholarship_type_sub_types(
-    scholarship_type_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    scholarship_type_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """Get available sub-types for a specific scholarship type"""
 

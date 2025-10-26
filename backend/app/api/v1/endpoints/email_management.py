@@ -36,7 +36,7 @@ router = APIRouter()
 email_service = EmailManagementService()
 
 
-@router.get("/history", response_model=ApiResponse[EmailHistoryListResponse])
+@router.get("/history")
 async def get_email_history(
     *,
     db: AsyncSession = Depends(get_db),
@@ -76,7 +76,7 @@ async def get_email_history(
     return ApiResponse(success=True, message="Email history retrieved successfully", data=response_data)
 
 
-@router.get("/scheduled", response_model=ApiResponse[ScheduledEmailListResponse])
+@router.get("/scheduled")
 async def get_scheduled_emails(
     *,
     db: AsyncSession = Depends(get_db),
@@ -113,14 +113,10 @@ async def get_scheduled_emails(
 
     response_data = ScheduledEmailListResponse(items=email_items, total=total, skip=skip, limit=limit)
 
-    return ApiResponse(
-        success=True,
-        message="Scheduled emails retrieved successfully",
-        data=response_data,
-    )
+    return ApiResponse(success=True, message="Scheduled emails retrieved successfully", data=response_data)
 
 
-@router.get("/scheduled/due", response_model=List[ScheduledEmailRead])
+@router.get("/scheduled/due")
 async def get_due_scheduled_emails(
     *,
     db: AsyncSession = Depends(get_db),
@@ -135,10 +131,10 @@ async def get_due_scheduled_emails(
         raise HTTPException(status_code=403, detail="Only superadmins can access due emails")
 
     emails = await email_service.get_due_scheduled_emails(db=db, limit=limit)
-    return emails
+    return {"success": True, "message": "Due scheduled emails retrieved successfully", "data": emails}
 
 
-@router.patch("/scheduled/{email_id}/approve", response_model=ScheduledEmailRead)
+@router.patch("/scheduled/{email_id}/approve")
 async def approve_scheduled_email(
     *,
     db: AsyncSession = Depends(get_db),
@@ -154,24 +150,18 @@ async def approve_scheduled_email(
         # Check if user has permission to approve this email
         # This is handled within the service method for permission checking
         scheduled_email = await email_service.approve_scheduled_email(
-            db=db,
-            email_id=email_id,
-            approved_by_user_id=current_user.id,
-            notes=approval_data.approval_notes,
+            db=db, email_id=email_id, approved_by_user_id=current_user.id, notes=approval_data.approval_notes
         )
-        return scheduled_email
+        return {"success": True, "message": "Scheduled email approved successfully", "data": scheduled_email}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to approve email")
 
 
-@router.patch("/scheduled/{email_id}/cancel", response_model=ScheduledEmailRead)
+@router.patch("/scheduled/{email_id}/cancel")
 async def cancel_scheduled_email(
-    *,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
-    email_id: int,
+    *, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin), email_id: int
 ):
     """
     Cancel a scheduled email.
@@ -181,14 +171,14 @@ async def cancel_scheduled_email(
         # Check if user has permission to cancel this email
         # This is handled within the service method for permission checking
         scheduled_email = await email_service.cancel_scheduled_email(db=db, email_id=email_id)
-        return scheduled_email
+        return {"success": True, "message": "Scheduled email approved successfully", "data": scheduled_email}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to cancel email")
 
 
-@router.patch("/scheduled/{email_id}", response_model=ScheduledEmailRead)
+@router.patch("/scheduled/{email_id}")
 async def update_scheduled_email(
     *,
     db: AsyncSession = Depends(get_db),
@@ -207,14 +197,14 @@ async def update_scheduled_email(
         scheduled_email = await email_service.update_scheduled_email(
             db=db, email_id=email_id, subject=update_data.subject, body=update_data.body
         )
-        return scheduled_email
+        return {"success": True, "message": "Scheduled email approved successfully", "data": scheduled_email}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to update scheduled email")
 
 
-@router.post("/scheduled/process", response_model=EmailProcessingStats)
+@router.post("/scheduled/process")
 async def process_due_emails(
     *,
     db: AsyncSession = Depends(get_db),
@@ -230,31 +220,35 @@ async def process_due_emails(
 
     try:
         stats = await email_service.process_due_emails(db=db, batch_size=batch_size)
-        return EmailProcessingStats(**stats)
+        return {"success": True, "message": "Emails processed successfully", "data": EmailProcessingStats(**stats)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process emails: {str(e)}")
 
 
-@router.get("/categories", response_model=List[str])
-async def get_email_categories(
-    current_user: User = Depends(require_admin),
-):
+@router.get("/categories")
+async def get_email_categories(current_user: User = Depends(require_admin)):
     """
     Get list of available email categories.
     """
-    return [category.value for category in EmailCategory]
+    return {
+        "success": True,
+        "message": "Email categories retrieved successfully",
+        "data": [category.value for category in EmailCategory],
+    }
 
 
-@router.get("/statuses", response_model=dict)
-async def get_email_statuses(
-    current_user: User = Depends(require_admin),
-):
+@router.get("/statuses")
+async def get_email_statuses(current_user: User = Depends(require_admin)):
     """
     Get list of available email and schedule statuses.
     """
     return {
-        "email_statuses": [status.value for status in EmailStatus],
-        "schedule_statuses": [status.value for status in ScheduleStatus],
+        "success": True,
+        "message": "Email statuses retrieved successfully",
+        "data": {
+            "email_statuses": [status.value for status in EmailStatus],
+            "schedule_statuses": [status.value for status in ScheduleStatus],
+        },
     }
 
 
@@ -262,11 +256,7 @@ async def get_email_statuses(
 
 
 @router.get("/test-mode/status")
-async def get_test_mode_status(
-    *,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
-):
+async def get_test_mode_status(*, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
     """
     獲取郵件測試模式狀態（向後相容舊格式）
     """
@@ -295,11 +285,7 @@ async def get_test_mode_status(
         if "redirect_emails" not in test_config:
             test_config["redirect_emails"] = []
 
-        return ApiResponse(
-            success=True,
-            message="Test mode status retrieved successfully",
-            data=test_config,
-        )
+        return ApiResponse(success=True, message="Test mode status retrieved successfully", data=test_config)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get test mode status: {str(e)}")
@@ -351,9 +337,7 @@ async def enable_test_mode(
 
         # Update configuration
         await config_service.set_configuration(
-            key="email_test_mode",
-            value=json.dumps(test_config),
-            user_id=current_user.id,
+            key="email_test_mode", value=json.dumps(test_config), user_id=current_user.id
         )
 
         # Log audit event
@@ -366,11 +350,7 @@ async def enable_test_mode(
         db.add(audit_log)
         await db.commit()
 
-        return ApiResponse(
-            success=True,
-            message=f"測試模式已啟用，將於 {duration_hours} 小時後自動關閉",
-            data=test_config,
-        )
+        return ApiResponse(success=True, message=f"測試模式已啟用，將於 {duration_hours} 小時後自動關閉", data=test_config)
 
     except Exception as e:
         await db.rollback()
@@ -379,9 +359,7 @@ async def enable_test_mode(
 
 @router.post("/test-mode/disable")
 async def disable_test_mode(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    request: Request, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """
     停用郵件測試模式
@@ -394,11 +372,7 @@ async def disable_test_mode(
         old_config = await config_service.get_configuration("email_test_mode")
 
         if not old_config:
-            return ApiResponse(
-                success=True,
-                message="Test mode not configured",
-                data={"enabled": False},
-            )
+            return ApiResponse(success=True, message="Test mode not configured", data={"enabled": False})
 
         # Parse old config
         old_test_config = json.loads(old_config.value) if isinstance(old_config.value, str) else old_config.value
@@ -414,9 +388,7 @@ async def disable_test_mode(
 
         # Update configuration
         await config_service.set_configuration(
-            key="email_test_mode",
-            value=json.dumps(new_test_config),
-            user_id=current_user.id,
+            key="email_test_mode", value=json.dumps(new_test_config), user_id=current_user.id
         )
 
         # Log audit event
@@ -429,11 +401,7 @@ async def disable_test_mode(
         db.add(audit_log)
         await db.commit()
 
-        return ApiResponse(
-            success=True,
-            message="測試模式已停用",
-            data=new_test_config,
-        )
+        return ApiResponse(success=True, message="測試模式已停用", data=new_test_config)
 
     except Exception as e:
         await db.rollback()
@@ -543,12 +511,9 @@ async def cleanup_old_audit_logs(
 # ========== Manual Test Email Endpoints ==========
 
 
-@router.post("/send-test", response_model=ApiResponse[SendTestEmailResponse])
+@router.post("/send-test")
 async def send_test_email(
-    *,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
-    request: SendTestEmailRequest,
+    *, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin), request: SendTestEmailRequest
 ):
     """
     手動發送測試郵件
@@ -579,10 +544,7 @@ async def send_test_email(
                 request.body_override if request.body_override else template.body_template.format(**request.test_data)
             )
         except KeyError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"模板變數缺失：{str(e)}。請確保 test_data 包含所有必需的變數",
-            )
+            raise HTTPException(status_code=400, detail=f"模板變數缺失：{str(e)}。請確保 test_data 包含所有必需的變數")
 
         # Initialize email service with database session
         email_service = EmailService(db)
@@ -599,11 +561,7 @@ async def send_test_email(
         test_subject = f"[測試郵件] {rendered_subject}"
 
         await email_service.send_email(
-            to=request.recipient_email,
-            subject=test_subject,
-            body=rendered_body,
-            db=db,
-            **metadata,
+            to=request.recipient_email, subject=test_subject, body=rendered_body, db=db, **metadata
         )
 
         # Get the last email history entry to return ID
@@ -625,11 +583,7 @@ async def send_test_email(
             rendered_body=rendered_body,
         )
 
-        return ApiResponse(
-            success=True,
-            message="測試郵件發送成功",
-            data=response_data,
-        )
+        return ApiResponse(success=True, message="測試郵件發送成功", data=response_data)
 
     except HTTPException:
         raise
@@ -638,25 +592,14 @@ async def send_test_email(
 
         logging.error(f"Failed to send test email: {str(e)}", exc_info=True)
 
-        response_data = SendTestEmailResponse(
-            success=False,
-            message="測試郵件發送失敗",
-            error=str(e),
-        )
+        response_data = SendTestEmailResponse(success=False, message="測試郵件發送失敗", error=str(e))
 
-        return ApiResponse(
-            success=False,
-            message=f"測試郵件發送失敗: {str(e)}",
-            data=response_data,
-        )
+        return ApiResponse(success=False, message=f"測試郵件發送失敗: {str(e)}", data=response_data)
 
 
-@router.post("/send-simple-test", response_model=ApiResponse[SimpleTestEmailResponse])
+@router.post("/send-simple-test")
 async def send_simple_test_email(
-    *,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
-    request: SimpleTestEmailRequest,
+    *, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin), request: SimpleTestEmailRequest
 ):
     """
     Send simple test email without template
@@ -684,11 +627,7 @@ async def send_simple_test_email(
         test_subject = f"[TEST] {request.subject}"
 
         await email_service.send_email(
-            to=request.recipient_email,
-            subject=test_subject,
-            body=request.body,
-            db=db,
-            **metadata,
+            to=request.recipient_email, subject=test_subject, body=request.body, db=db, **metadata
         )
 
         # Get the last email history entry to return ID
@@ -708,11 +647,7 @@ async def send_simple_test_email(
             email_id=last_email.id if last_email else None,
         )
 
-        return ApiResponse(
-            success=True,
-            message="Test email sent successfully",
-            data=response_data,
-        )
+        return ApiResponse(success=True, message="Test email sent successfully", data=response_data)
 
     except HTTPException:
         raise
@@ -721,17 +656,9 @@ async def send_simple_test_email(
 
         logging.error(f"Failed to send simple test email: {str(e)}", exc_info=True)
 
-        response_data = SimpleTestEmailResponse(
-            success=False,
-            message="Failed to send test email",
-            error=str(e),
-        )
+        response_data = SimpleTestEmailResponse(success=False, message="Failed to send test email", error=str(e))
 
-        return ApiResponse(
-            success=False,
-            message=f"Failed to send test email: {str(e)}",
-            data=response_data,
-        )
+        return ApiResponse(success=False, message=f"Failed to send test email: {str(e)}", data=response_data)
 
 
 def extract_template_variables(subject: str, body: str) -> list[str]:
@@ -755,11 +682,7 @@ def extract_template_variables(subject: str, body: str) -> list[str]:
 
 
 @router.get("/templates")
-async def get_email_templates(
-    *,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
-):
+async def get_email_templates(*, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
     """
     獲取所有郵件模板列表
 
@@ -796,11 +719,7 @@ async def get_email_templates(
                 }
             )
 
-        return ApiResponse(
-            success=True,
-            message=f"成功獲取 {len(template_list)} 個郵件模板",
-            data=template_list,
-        )
+        return ApiResponse(success=True, message=f"成功獲取 {len(template_list)} 個郵件模板", data=template_list)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"獲取郵件模板失敗: {str(e)}")
@@ -810,10 +729,7 @@ async def get_email_templates(
 
 
 @router.get("/react-email-templates")
-async def get_react_email_templates(
-    *,
-    current_user: User = Depends(require_admin),
-):
+async def get_react_email_templates(*, current_user: User = Depends(require_admin)):
     """
     獲取所有 React Email 模板列表
 
@@ -825,11 +741,7 @@ async def get_react_email_templates(
 
         templates = ReactEmailTemplateService.scan_templates()
 
-        return ApiResponse(
-            success=True,
-            message=f"成功獲取 {len(templates)} 個 React Email 模板",
-            data=templates,
-        )
+        return ApiResponse(success=True, message=f"成功獲取 {len(templates)} 個 React Email 模板", data=templates)
 
     except Exception as e:
         logger.error(f"Failed to scan React Email templates: {e}")
@@ -837,11 +749,7 @@ async def get_react_email_templates(
 
 
 @router.get("/react-email-templates/{template_name}")
-async def get_react_email_template(
-    *,
-    template_name: str,
-    current_user: User = Depends(require_admin),
-):
+async def get_react_email_template(*, template_name: str, current_user: User = Depends(require_admin)):
     """
     獲取特定 React Email 模板的詳細資訊
 
@@ -859,11 +767,7 @@ async def get_react_email_template(
         if not template:
             raise HTTPException(status_code=404, detail=f"模板 '{template_name}' 不存在")
 
-        return ApiResponse(
-            success=True,
-            message="成功獲取模板資訊",
-            data=template,
-        )
+        return ApiResponse(success=True, message="成功獲取模板資訊", data=template)
 
     except HTTPException:
         raise
@@ -873,11 +777,7 @@ async def get_react_email_template(
 
 
 @router.get("/react-email-templates/{template_name}/source")
-async def get_react_email_template_source(
-    *,
-    template_name: str,
-    current_user: User = Depends(require_admin),
-):
+async def get_react_email_template_source(*, template_name: str, current_user: User = Depends(require_admin)):
     """
     獲取 React Email 模板的源碼（僅供查看，不可編輯）
 
@@ -896,9 +796,7 @@ async def get_react_email_template_source(
             raise HTTPException(status_code=404, detail=f"模板 '{template_name}' 不存在")
 
         return ApiResponse(
-            success=True,
-            message="成功獲取模板源碼",
-            data={"source": source, "language": "typescript", "read_only": True},
+            success=True, message="成功獲取模板源碼", data={"source": source, "language": "typescript", "read_only": True}
         )
 
     except HTTPException:

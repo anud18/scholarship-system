@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.path_security import validate_filename_strict, validate_path_in_directory
 from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.user import User
@@ -317,14 +318,8 @@ async def delete_my_profile(current_user: User = Depends(get_current_user), db: 
 @router.get("/files/bank_documents/{filename}")
 async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
     """Serve bank documents from MinIO"""
-    # Validate filename to prevent path traversal
-    if ".." in filename or "/" in filename or "\\" in filename:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="無效的檔案名稱")
-
-    # Additional validation: block dangerous characters while allowing Unicode (including Chinese)
-    dangerous_chars = ["|", "<", ">", ":", '"', "?", "*"]
-    if any(char in filename for char in dangerous_chars):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="檔案名稱包含無效字元")
+    # SECURITY: Comprehensive filename validation (CLAUDE.md triple validation)
+    validate_filename_strict(filename, allow_unicode=True)
 
     try:
         # Try to serve from MinIO first (new approach)
@@ -378,11 +373,12 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
         bank_docs_dir = os.environ.get("BANK_DOCUMENTS_DIR", "bank_documents")
         file_path = os.path.join(upload_base, bank_docs_dir, filename)
 
-        # Ensure the resolved path is still within the expected directory
+        # SECURITY: Validate path is within expected directory (CLAUDE.md requirement)
+        expected_dir = os.path.join(upload_base, bank_docs_dir)
+        validate_path_in_directory(file_path, expected_dir)
+
+        # After validation, use absolute path
         resolved_path = os.path.abspath(file_path)
-        expected_dir = os.path.abspath(os.path.join(upload_base, bank_docs_dir))
-        if not resolved_path.startswith(expected_dir):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="存取被拒絕")
 
         if not os.path.exists(resolved_path):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="證明文件不存在")

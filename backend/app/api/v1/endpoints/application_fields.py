@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
+from app.core.path_security import validate_upload_file
 from app.core.security import get_current_user, require_admin
 from app.models.application_field import ApplicationDocument
 from app.models.user import User
@@ -34,14 +35,9 @@ logger = logging.getLogger(__name__)
 
 
 # Application Field endpoints
-@router.get(
-    "/fields/{scholarship_type}",
-    response_model=ApiResponse[List[ApplicationFieldResponse]],
-)
+@router.get("/fields/{scholarship_type}")
 async def get_fields_by_scholarship_type(
-    scholarship_type: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    scholarship_type: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Get all fields for a scholarship type"""
     service = ApplicationFieldService(db)
@@ -50,11 +46,9 @@ async def get_fields_by_scholarship_type(
     return ApiResponse(success=True, message=f"Fields retrieved for {scholarship_type}", data=fields)
 
 
-@router.post("/fields", response_model=ApiResponse[ApplicationFieldResponse])
+@router.post("/fields")
 async def create_field(
-    field_data: ApplicationFieldCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    field_data: ApplicationFieldCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """Create a new application field"""
     service = ApplicationFieldService(db)
@@ -63,7 +57,7 @@ async def create_field(
     return ApiResponse(success=True, message="Application field created successfully", data=field)
 
 
-@router.put("/fields/{field_id}", response_model=ApiResponse[ApplicationFieldResponse])
+@router.put("/fields/{field_id}")
 async def update_field(
     field_id: int,
     field_data: ApplicationFieldUpdate,
@@ -80,12 +74,8 @@ async def update_field(
     return ApiResponse(success=True, message="Application field updated successfully", data=field)
 
 
-@router.delete("/fields/{field_id}", response_model=ApiResponse[bool])
-async def delete_field(
-    field_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
-):
+@router.delete("/fields/{field_id}")
+async def delete_field(field_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)):
     """Delete an application field"""
     service = ApplicationFieldService(db)
     success = await service.delete_field(field_id)
@@ -97,27 +87,18 @@ async def delete_field(
 
 
 # Application Document endpoints
-@router.get(
-    "/documents/{scholarship_type}",
-    response_model=ApiResponse[List[ApplicationDocumentResponse]],
-)
+@router.get("/documents/{scholarship_type}")
 async def get_documents_by_scholarship_type(
-    scholarship_type: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    scholarship_type: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Get all documents for a scholarship type"""
     service = ApplicationFieldService(db)
     documents = await service.get_documents_by_scholarship_type(scholarship_type)
 
-    return ApiResponse(
-        success=True,
-        message=f"Documents retrieved for {scholarship_type}",
-        data=documents,
-    )
+    return ApiResponse(success=True, message=f"Documents retrieved for {scholarship_type}", data=documents)
 
 
-@router.post("/documents", response_model=ApiResponse[ApplicationDocumentResponse])
+@router.post("/documents")
 async def create_document(
     document_data: ApplicationDocumentCreate,
     db: AsyncSession = Depends(get_db),
@@ -130,7 +111,7 @@ async def create_document(
     return ApiResponse(success=True, message="Application document created successfully", data=document)
 
 
-@router.put("/documents/{document_id}", response_model=ApiResponse[ApplicationDocumentResponse])
+@router.put("/documents/{document_id}")
 async def update_document(
     document_id: int,
     document_data: ApplicationDocumentUpdate,
@@ -142,38 +123,27 @@ async def update_document(
     document = await service.update_document(document_id, document_data, current_user.id)
 
     if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Application document not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application document not found")
 
     return ApiResponse(success=True, message="Application document updated successfully", data=document)
 
 
-@router.delete("/documents/{document_id}", response_model=ApiResponse[bool])
+@router.delete("/documents/{document_id}")
 async def delete_document(
-    document_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    document_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """Delete an application document"""
     service = ApplicationFieldService(db)
     success = await service.delete_document(document_id)
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Application document not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application document not found")
 
     return ApiResponse(success=True, message="Application document deleted successfully", data=True)
 
 
 # Combined form configuration endpoints
-@router.get(
-    "/form-config/{scholarship_type}",
-    response_model=ApiResponse[ScholarshipFormConfigResponse],
-)
+@router.get("/form-config/{scholarship_type}")
 async def get_scholarship_form_config(
     scholarship_type: str,
     include_inactive: bool = False,
@@ -194,19 +164,13 @@ async def get_scholarship_form_config(
         )
 
         logger.info(f"API: Form config retrieved successfully for {scholarship_type}")
-        return ApiResponse(
-            success=True,
-            message=f"Form configuration retrieved for {scholarship_type}",
-            data=config,
-        )
+        return ApiResponse(success=True, message=f"Form configuration retrieved for {scholarship_type}", data=config)
     except Exception as e:
         logger.error(f"API: Error getting form config for {scholarship_type}: {str(e)}")
         # 返回空的配置而不是拋出異常
         empty_config = ScholarshipFormConfigResponse(scholarship_type=scholarship_type, fields=[], documents=[])
         return ApiResponse(
-            success=True,
-            message=f"Form configuration retrieved for {scholarship_type} (empty)",
-            data=empty_config,
+            success=True, message=f"Form configuration retrieved for {scholarship_type} (empty)", data=empty_config
         )
 
 
@@ -217,10 +181,7 @@ class FormConfigSaveRequest(BaseModel):
     documents: List[Dict[str, Any]]
 
 
-@router.post(
-    "/form-config/{scholarship_type}",
-    response_model=ApiResponse[ScholarshipFormConfigResponse],
-)
+@router.post("/form-config/{scholarship_type}")
 async def save_scholarship_form_config(
     scholarship_type: str,
     config_data: FormConfigSaveRequest,
@@ -237,15 +198,11 @@ async def save_scholarship_form_config(
         user_id=current_user.id,
     )
 
-    return ApiResponse(
-        success=True,
-        message=f"Form configuration saved for {scholarship_type}",
-        data=config,
-    )
+    return ApiResponse(success=True, message=f"Form configuration saved for {scholarship_type}", data=config)
 
 
 # Example file management endpoints
-@router.post("/documents/{document_id}/upload-example", response_model=ApiResponse[dict])
+@router.post("/documents/{document_id}/upload-example")
 async def upload_document_example(
     document_id: int,
     file: UploadFile = File(...),
@@ -264,18 +221,18 @@ async def upload_document_example(
     Returns:
         ApiResponse with uploaded file object name
     """
-    # Validate filename security
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="檔案名稱不得為空")
+    # SECURITY: Comprehensive file validation (CLAUDE.md triple validation)
+    # Read file first for size validation
+    file_content = await file.read()
+    file_size = len(file_content)
 
-    # Check for path traversal attempts
-    if ".." in file.filename or "/" in file.filename or "\\" in file.filename:
-        raise HTTPException(status_code=400, detail="無效的檔案名稱：包含路徑字元")
-
-    # Validate filename characters - block dangerous characters while allowing Unicode (including Chinese)
-    dangerous_chars = ["|", "<", ">", ":", '"', "?", "*"]
-    if any(char in file.filename for char in dangerous_chars):
-        raise HTTPException(status_code=400, detail="檔案名稱包含無效字元")
+    validate_upload_file(
+        filename=file.filename,
+        allowed_extensions=[".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"],
+        max_size_mb=10,
+        file_size=file_size,
+        allow_unicode=True,
+    )
 
     # Get document from database
     stmt = select(ApplicationDocument).where(ApplicationDocument.id == document_id)
@@ -293,8 +250,7 @@ async def upload_document_example(
         file_extension = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "pdf"
         object_name = f"examples/document_{document_id}_{timestamp}.{file_extension}"
 
-        # Read file content
-        file_content = await file.read()
+        # Note: file_content already read above for validation
 
         # Upload to MinIO
         minio_service.client.put_object(
@@ -309,8 +265,7 @@ async def upload_document_example(
         if document.example_file_url:
             try:
                 minio_service.client.remove_object(
-                    bucket_name=minio_service.default_bucket,
-                    object_name=document.example_file_url,
+                    bucket_name=minio_service.default_bucket, object_name=document.example_file_url
                 )
             except Exception as e:
                 logger.warning(f"Failed to delete old example file: {str(e)}")
@@ -320,11 +275,7 @@ async def upload_document_example(
         document.updated_by = current_user.id
         await db.commit()
 
-        return ApiResponse(
-            success=True,
-            message="範例文件上傳成功",
-            data={"example_file_url": object_name},
-        )
+        return ApiResponse(success=True, message="範例文件上傳成功", data={"example_file_url": object_name})
 
     except Exception as e:
         logger.error(f"Failed to upload example file: {str(e)}")
@@ -334,9 +285,7 @@ async def upload_document_example(
 
 @router.get("/documents/{document_id}/example")
 async def get_document_example(
-    document_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    document_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     Get example file for an application document and proxy download from MinIO
@@ -362,8 +311,7 @@ async def get_document_example(
 
         # Download from MinIO
         response = minio_service.client.get_object(
-            bucket_name=minio_service.default_bucket,
-            object_name=document.example_file_url,
+            bucket_name=minio_service.default_bucket, object_name=document.example_file_url
         )
 
         file_content = response.read()
@@ -394,11 +342,9 @@ async def get_document_example(
         raise HTTPException(status_code=500, detail=f"範例文件讀取失敗: {str(e)}")
 
 
-@router.delete("/documents/{document_id}/example", response_model=ApiResponse[bool])
+@router.delete("/documents/{document_id}/example")
 async def delete_document_example(
-    document_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    document_id: int, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
 ):
     """
     Delete example file for an application document
@@ -427,8 +373,7 @@ async def delete_document_example(
 
         # Delete from MinIO
         minio_service.client.remove_object(
-            bucket_name=minio_service.default_bucket,
-            object_name=document.example_file_url,
+            bucket_name=minio_service.default_bucket, object_name=document.example_file_url
         )
 
         # Clear database field
@@ -436,11 +381,7 @@ async def delete_document_example(
         document.updated_by = current_user.id
         await db.commit()
 
-        return ApiResponse(
-            success=True,
-            message="範例文件刪除成功",
-            data=True,
-        )
+        return ApiResponse(success=True, message="範例文件刪除成功", data=True)
 
     except Exception as e:
         logger.error(f"Failed to delete example file: {str(e)}")

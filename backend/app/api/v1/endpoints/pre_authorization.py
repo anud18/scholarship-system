@@ -21,19 +21,16 @@ from app.services.pre_authorization_service import PreAuthorizationService
 router = APIRouter()
 
 
-@router.post("/pre-authorize/user", response_model=PreAuthorizeUserResponse)
+@router.post("/pre-authorize/user")
 async def pre_authorize_user(
-    request: PreAuthorizeUserRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    request: PreAuthorizeUserRequest, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Pre-authorize a user with nycu_id and role"""
 
     # Check permissions
     if not current_user.can_assign_roles():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to pre-authorize users",
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to pre-authorize users"
         )
 
     try:
@@ -58,7 +55,7 @@ async def pre_authorize_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/assign-scholarship", response_model=AssignScholarshipResponse)
+@router.post("/assign-scholarship")
 async def assign_scholarship_to_admin(
     request: AssignScholarshipRequest,
     current_user: User = Depends(get_current_user),
@@ -69,8 +66,7 @@ async def assign_scholarship_to_admin(
     # Check permissions
     if not current_user.can_assign_roles():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to assign scholarships",
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to assign scholarships"
         )
 
     try:
@@ -95,15 +91,14 @@ async def assign_scholarship_to_admin(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/pre-authorized-users", response_model=PreAuthorizedUserList)
+@router.get("/pre-authorized-users")
 async def get_pre_authorized_users(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get all pre-authorized users"""
 
     # Check permissions
     if not current_user.can_assign_roles():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to view pre-authorized users",
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to view pre-authorized users"
         )
 
     pre_auth_service = PreAuthorizationService(db)
@@ -122,26 +117,19 @@ async def get_pre_authorized_users(current_user: User = Depends(get_current_user
             }
         )
 
-    return PreAuthorizedUserList(
-        success=True,
-        message=f"Found {len(user_list)} pre-authorized users",
-        data=user_list,
-    )
+    return PreAuthorizedUserList(success=True, message=f"Found {len(user_list)} pre-authorized users", data=user_list)
 
 
-@router.get("/admin-scholarships/{admin_nycu_id}", response_model=AdminScholarshipList)
+@router.get("/admin-scholarships/{admin_nycu_id}")
 async def get_admin_scholarships(
-    admin_nycu_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    admin_nycu_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Get all scholarship assignments for an admin"""
 
     # Check permissions - admin can only view their own assignments
     if not current_user.can_assign_roles() and current_user.nycu_id != admin_nycu_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to view admin scholarships",
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to view admin scholarships"
         )
 
     pre_auth_service = PreAuthorizationService(db)
@@ -176,16 +164,13 @@ async def remove_admin_from_scholarship(
     # Check permissions
     if not current_user.can_assign_roles():
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to remove scholarship assignments",
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to remove scholarship assignments"
         )
 
     try:
         pre_auth_service = PreAuthorizationService(db)
         await pre_auth_service.remove_admin_from_scholarship(
-            admin_nycu_id=admin_nycu_id,
-            scholarship_id=scholarship_id,
-            removed_by=current_user.nycu_id,
+            admin_nycu_id=admin_nycu_id, scholarship_id=scholarship_id, removed_by=current_user.nycu_id
         )
 
         return {
@@ -198,27 +183,21 @@ async def remove_admin_from_scholarship(
 
 @router.get("/user/{nycu_id}")
 async def get_user_by_nycu_id(
-    nycu_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    nycu_id: str, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Get user by nycu_id"""
 
     # Check permissions - users can only view their own info unless they have admin rights
     if not current_user.can_assign_roles() and current_user.nycu_id != nycu_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions to view user information",
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions to view user information"
         )
 
     pre_auth_service = PreAuthorizationService(db)
     user = await pre_auth_service.get_user_by_nycu_id(nycu_id)
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User with nycu_id {nycu_id} not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User with nycu_id {nycu_id} not found")
 
     return {
         "success": True,

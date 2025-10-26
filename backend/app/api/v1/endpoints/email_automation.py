@@ -56,7 +56,7 @@ class EmailAutomationRuleResponse(EmailAutomationRuleBase):
         from_attributes = True
 
 
-@router.get("", response_model=ApiResponse[List[EmailAutomationRuleResponse]])
+@router.get("")
 async def get_automation_rules(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
@@ -99,18 +99,14 @@ async def get_automation_rules(
             for rule in rules
         ]
 
-        return ApiResponse(
-            success=True,
-            message=f"成功獲取 {len(rules_data)} 條自動化規則",
-            data=rules_data,
-        )
+        return ApiResponse(success=True, message=f"成功獲取 {len(rules_data)} 條自動化規則", data=rules_data)
 
     except Exception as e:
         logger.error(f"獲取自動化規則失敗: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"獲取自動化規則失敗: {str(e)}")
 
 
-@router.post("", response_model=ApiResponse[EmailAutomationRuleResponse])
+@router.post("")
 async def create_automation_rule(
     rule_data: EmailAutomationRuleCreate,
     db: AsyncSession = Depends(get_db),
@@ -126,10 +122,7 @@ async def create_automation_rule(
         try:
             trigger_enum = TriggerEvent(rule_data.trigger_event)
         except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"無效的觸發事件: {rule_data.trigger_event}",
-            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}")
 
         # Create new rule
         new_rule = EmailAutomationRule(
@@ -161,11 +154,7 @@ async def create_automation_rule(
             "updated_at": new_rule.updated_at.isoformat() if new_rule.updated_at else None,
         }
 
-        return ApiResponse(
-            success=True,
-            message="成功創建自動化規則",
-            data=response_data,
-        )
+        return ApiResponse(success=True, message="成功創建自動化規則", data=response_data)
 
     except HTTPException:
         raise
@@ -175,7 +164,7 @@ async def create_automation_rule(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"創建自動化規則失敗: {str(e)}")
 
 
-@router.put("/{rule_id}", response_model=ApiResponse[EmailAutomationRuleResponse])
+@router.put("/{rule_id}")
 async def update_automation_rule(
     rule_id: int,
     rule_data: EmailAutomationRuleUpdate,
@@ -194,10 +183,7 @@ async def update_automation_rule(
         rule = result.scalar_one_or_none()
 
         if not rule:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"找不到 ID 為 {rule_id} 的自動化規則",
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"找不到 ID 為 {rule_id} 的自動化規則")
 
         # Update fields
         if rule_data.name is not None:
@@ -209,8 +195,7 @@ async def update_automation_rule(
                 rule.trigger_event = TriggerEvent(rule_data.trigger_event)
             except ValueError:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"無效的觸發事件: {rule_data.trigger_event}",
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}"
                 )
         if rule_data.template_key is not None:
             rule.template_key = rule_data.template_key
@@ -238,11 +223,7 @@ async def update_automation_rule(
             "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
         }
 
-        return ApiResponse(
-            success=True,
-            message="成功更新自動化規則",
-            data=response_data,
-        )
+        return ApiResponse(success=True, message="成功更新自動化規則", data=response_data)
 
     except HTTPException:
         raise
@@ -252,11 +233,9 @@ async def update_automation_rule(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"更新自動化規則失敗: {str(e)}")
 
 
-@router.delete("/{rule_id}", response_model=ApiResponse)
+@router.delete("/{rule_id}")
 async def delete_automation_rule(
-    rule_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    rule_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """
     刪除郵件自動化規則
@@ -270,19 +249,12 @@ async def delete_automation_rule(
         rule = result.scalar_one_or_none()
 
         if not rule:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"找不到 ID 為 {rule_id} 的自動化規則",
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"找不到 ID 為 {rule_id} 的自動化規則")
 
         await db.delete(rule)
         await db.commit()
 
-        return ApiResponse(
-            success=True,
-            message="成功刪除自動化規則",
-            data=None,
-        )
+        return ApiResponse(success=True, message="成功刪除自動化規則", data=None)
 
     except HTTPException:
         raise
@@ -292,11 +264,9 @@ async def delete_automation_rule(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"刪除自動化規則失敗: {str(e)}")
 
 
-@router.patch("/{rule_id}/toggle", response_model=ApiResponse[EmailAutomationRuleResponse])
+@router.patch("/{rule_id}/toggle")
 async def toggle_automation_rule(
-    rule_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    rule_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """
     切換郵件自動化規則的啟用狀態
@@ -310,10 +280,7 @@ async def toggle_automation_rule(
         rule = result.scalar_one_or_none()
 
         if not rule:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"找不到 ID 為 {rule_id} 的自動化規則",
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"找不到 ID 為 {rule_id} 的自動化規則")
 
         # Toggle is_active
         rule.is_active = not rule.is_active
@@ -335,11 +302,7 @@ async def toggle_automation_rule(
             "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
         }
 
-        return ApiResponse(
-            success=True,
-            message=f"成功{'啟用' if rule.is_active else '停用'}自動化規則",
-            data=response_data,
-        )
+        return ApiResponse(success=True, message=f"成功{'啟用' if rule.is_active else '停用'}自動化規則", data=response_data)
 
     except HTTPException:
         raise
@@ -349,10 +312,8 @@ async def toggle_automation_rule(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"切換自動化規則狀態失敗: {str(e)}")
 
 
-@router.get("/trigger-events", response_model=ApiResponse[List[dict]])
-async def get_trigger_events(
-    current_user: User = Depends(require_admin),
-):
+@router.get("/trigger-events")
+async def get_trigger_events(current_user: User = Depends(require_admin)):
     """
     獲取所有可用的觸發事件
 
@@ -391,8 +352,4 @@ async def get_trigger_events(
         },
     ]
 
-    return ApiResponse(
-        success=True,
-        message=f"成功獲取 {len(trigger_events)} 種觸發事件",
-        data=trigger_events,
-    )
+    return ApiResponse(success=True, message=f"成功獲取 {len(trigger_events)} 種觸發事件", data=trigger_events)

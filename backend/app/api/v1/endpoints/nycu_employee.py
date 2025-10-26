@@ -39,7 +39,7 @@ class EmployeeSearchResponse(BaseModel):
     filtered_count: int
 
 
-@router.get("/employees", response_model=EmployeeListResponse)
+@router.get("/employees")
 async def get_employees(
     page: int = Query(1, ge=1, description="Page number (starting from 1)"),
     status: str = Query("01", description="Employee status filter (01=active, 02=inactive)"),
@@ -91,10 +91,8 @@ async def get_employees(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
-@router.get("/employees/all", response_model=List[EmployeeListResponse])
-async def get_all_employees(
-    status: str = Query("01", description="Employee status filter (01=active, 02=inactive)"),
-):
+@router.get("/employees/all")
+async def get_all_employees(status: str = Query("01", description="Employee status filter (01=active, 02=inactive)")):
     """
     Get all NYCU employees by automatically paginating through all pages.
 
@@ -148,7 +146,7 @@ async def get_all_employees(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
-@router.get("/employees/search", response_model=EmployeeSearchResponse)
+@router.get("/employees/search")
 async def search_employees(
     query: Optional[str] = Query(None, description="Search query for employee name or ID"),
     dept_name: Optional[str] = Query(None, description="Department name filter"),
@@ -212,9 +210,7 @@ async def search_employees(
             filtered_employees = [emp for emp in filtered_employees if position_lower in emp.position_name.lower()]
 
         return EmployeeSearchResponse(
-            employees=filtered_employees,
-            total_count=total_count,
-            filtered_count=len(filtered_employees),
+            employees=filtered_employees, total_count=total_count, filtered_count=len(filtered_employees)
         )
 
     except NYCUEmpAuthenticationError as e:
@@ -231,10 +227,9 @@ async def search_employees(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
-@router.get("/employees/{employee_no}", response_model=Optional[NYCUEmpItem])
+@router.get("/employees/{employee_no}")
 async def get_employee_by_no(
-    employee_no: str,
-    status: str = Query("01", description="Employee status filter (01=active, 02=inactive)"),
+    employee_no: str, status: str = Query("01", description="Employee status filter (01=active, 02=inactive)")
 ):
     """
     Get specific employee by employee number.

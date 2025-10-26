@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.path_security import validate_object_name_minio
 from app.core.security import get_current_user
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
@@ -1309,6 +1310,16 @@ async def download_batch_import_file(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="原始檔案不存在（可能是舊版本匯入或檔案已被刪除）",
+        )
+
+    # SECURITY: Validate MinIO object name (CLAUDE.md requirement)
+    try:
+        validate_object_name_minio(batch_import.file_path)
+    except HTTPException:
+        logger.error(f"Invalid file_path from database: {batch_import.file_path}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="檔案路徑驗證失敗",
         )
 
     # Get file from MinIO

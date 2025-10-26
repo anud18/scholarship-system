@@ -23,7 +23,7 @@ func: Any = sa_func
 router = APIRouter()
 
 
-@router.get("", response_model=ApiResponse[List[NotificationResponse]])
+@router.get("")
 async def getUserNotifications(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -52,7 +52,7 @@ async def getUserNotifications(
         raise HTTPException(status_code=500, detail=f"獲取通知失敗: {str(e)}")
 
 
-@router.get("/unread-count", response_model=ApiResponse[int])
+@router.get("/unread-count")
 async def getUnreadNotificationCount(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
@@ -70,11 +70,9 @@ async def getUnreadNotificationCount(
         raise HTTPException(status_code=500, detail=f"獲取未讀通知數量失敗: {str(e)}")
 
 
-@router.patch("/{notification_id}/read", response_model=ApiResponse[dict])
+@router.patch("/{notification_id}/read")
 async def markNotificationAsRead(
-    notification_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    notification_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     標記通知為已讀
@@ -96,7 +94,7 @@ async def markNotificationAsRead(
         raise HTTPException(status_code=500, detail=f"標記通知為已讀失敗: {str(e)}")
 
 
-@router.patch("/mark-all-read", response_model=ApiResponse[dict])
+@router.patch("/mark-all-read")
 async def markAllNotificationsAsRead(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
@@ -108,22 +106,16 @@ async def markAllNotificationsAsRead(
         service = NotificationService(db)
         updated_count = await service.markAllNotificationsAsRead(current_user.id)
 
-        return ApiResponse(
-            success=True,
-            message=f"已標記 {updated_count} 條通知為已讀",
-            data={"updated_count": updated_count},
-        )
+        return ApiResponse(success=True, message=f"已標記 {updated_count} 條通知為已讀", data={"updated_count": updated_count})
 
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"標記所有通知為已讀失敗: {str(e)}")
 
 
-@router.patch("/{notification_id}/dismiss", response_model=ApiResponse[dict])
+@router.patch("/{notification_id}/dismiss")
 async def dismissNotification(
-    notification_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    notification_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     關閉/隱藏通知
@@ -133,10 +125,7 @@ async def dismissNotification(
         stmt = select(Notification).where(
             and_(
                 Notification.id == notification_id,
-                or_(
-                    Notification.user_id == current_user.id,
-                    Notification.user_id.is_(None),
-                ),
+                or_(Notification.user_id == current_user.id, Notification.user_id.is_(None)),
             )
         )
 
@@ -159,11 +148,9 @@ async def dismissNotification(
         raise HTTPException(status_code=500, detail=f"關閉通知失敗: {str(e)}")
 
 
-@router.get("/{notification_id}", response_model=ApiResponse[NotificationResponse])
+@router.get("/{notification_id}")
 async def getNotificationDetail(
-    notification_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    notification_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     獲取通知詳情
@@ -172,10 +159,7 @@ async def getNotificationDetail(
         stmt = select(Notification).where(
             and_(
                 Notification.id == notification_id,
-                or_(
-                    Notification.user_id == current_user.id,
-                    Notification.user_id.is_(None),
-                ),
+                or_(Notification.user_id == current_user.id, Notification.user_id.is_(None)),
             )
         )
 
@@ -217,10 +201,7 @@ async def getNotificationDetail(
         raise HTTPException(status_code=500, detail=f"獲取通知詳情失敗: {str(e)}")
 
 
-@router.post(
-    "/admin/create-system-announcement",
-    response_model=ApiResponse[NotificationResponse],
-)
+@router.post("/admin/create-system-announcement")
 async def createSystemAnnouncement(
     notification_data: NotificationCreate,
     current_user: User = Depends(get_current_user),
@@ -279,7 +260,7 @@ async def createSystemAnnouncement(
         raise HTTPException(status_code=500, detail=f"創建系統公告失敗: {str(e)}")
 
 
-@router.post("/admin/create-test-notifications", response_model=ApiResponse[dict])
+@router.post("/admin/create-test-notifications")
 async def createTestNotifications(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """
     創建測試通知（僅管理員可用，用於演示）
@@ -345,7 +326,7 @@ async def createTestNotifications(current_user: User = Depends(get_current_user)
 # === Admin Announcement Management Endpoints === #
 
 
-@router.get("/admin/announcements", response_model=ApiResponse[dict])
+@router.get("/admin/announcements")
 async def getAllAnnouncements(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -417,23 +398,16 @@ async def getAllAnnouncements(
             items.append(notification_data)
 
         return ApiResponse(
-            success=True,
-            message="系統公告列表獲取成功",
-            data={"items": items, "total": total, "page": page, "size": size},
+            success=True, message="系統公告列表獲取成功", data={"items": items, "total": total, "page": page, "size": size}
         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"獲取系統公告列表失敗: {str(e)}")
 
 
-@router.get(
-    "/admin/announcements/{announcement_id}",
-    response_model=ApiResponse[NotificationResponse],
-)
+@router.get("/admin/announcements/{announcement_id}")
 async def getAnnouncement(
-    announcement_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    announcement_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     獲取特定系統公告詳情
@@ -488,7 +462,7 @@ async def getAnnouncement(
         raise HTTPException(status_code=500, detail=f"獲取系統公告詳情失敗: {str(e)}")
 
 
-@router.post("/admin/announcements", response_model=ApiResponse[NotificationResponse])
+@router.post("/admin/announcements")
 async def createAnnouncement(
     notification_data: NotificationCreate,
     current_user: User = Depends(get_current_user),
@@ -547,10 +521,7 @@ async def createAnnouncement(
         raise HTTPException(status_code=500, detail=f"創建系統公告失敗: {str(e)}")
 
 
-@router.put(
-    "/admin/announcements/{announcement_id}",
-    response_model=ApiResponse[NotificationResponse],
-)
+@router.put("/admin/announcements/{announcement_id}")
 async def updateAnnouncement(
     announcement_id: int,
     notification_data: NotificationCreate,
@@ -636,11 +607,9 @@ async def updateAnnouncement(
         raise HTTPException(status_code=500, detail=f"更新系統公告失敗: {str(e)}")
 
 
-@router.delete("/admin/announcements/{announcement_id}", response_model=ApiResponse[dict])
+@router.delete("/admin/announcements/{announcement_id}")
 async def deleteAnnouncement(
-    announcement_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    announcement_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     刪除系統公告

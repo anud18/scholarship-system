@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.functions import count
 
 from app.core.deps import get_current_user
+from app.core.path_security import validate_object_name_minio
 from app.core.security import check_user_roles
 from app.db.deps import get_db, get_sync_db
 from app.models.payment_roster import (
@@ -585,6 +586,13 @@ async def download_roster_excel(
         from app.services.minio_service import minio_service
 
         if use_minio and hasattr(roster, "minio_object_name") and roster.minio_object_name:
+            # SECURITY: Validate MinIO object name (CLAUDE.md requirement)
+            try:
+                validate_object_name_minio(roster.minio_object_name)
+            except HTTPException:
+                logger.error(f"Invalid minio_object_name from database: {roster.minio_object_name}")
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="MinIO object name驗證失敗")
+
             # 使用MinIO下載
             try:
                 file_content, metadata = minio_service.download_roster_file(roster.minio_object_name)

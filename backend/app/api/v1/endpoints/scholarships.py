@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
 from app.core.deps import get_db
+from app.core.path_security import validate_upload_file
 from app.core.security import get_current_user, require_admin
 from app.models.enums import Semester
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
@@ -434,35 +435,29 @@ async def upload_terms_document(
     Returns:
         ApiResponse with uploaded file URL
     """
-    # Validate filename security
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="檔案名稱不得為空")
-
-    # Check for path traversal attempts
-    if ".." in file.filename or "/" in file.filename or "\\" in file.filename:
-        raise HTTPException(status_code=400, detail="無效的檔案名稱：包含路徑字元")
-
-    # Validate filename characters - block dangerous characters while allowing Unicode (including Chinese)
-    dangerous_chars = ["|", "<", ">", ":", '"', "?", "*"]
-    if any(char in file.filename for char in dangerous_chars):
-        raise HTTPException(status_code=400, detail="檔案名稱包含無效字元")
-
-    # Limit filename length
-    if len(file.filename) > 255:
-        raise HTTPException(status_code=400, detail="檔案名稱過長")
-
-    # Validate file type
+    # SECURITY: Comprehensive file validation (CLAUDE.md triple validation)
     allowed_extensions = [".pdf", ".doc", ".docx"]
-    file_extension = None
-    for ext in allowed_extensions:
-        if file.filename and file.filename.lower().endswith(ext):
-            file_extension = ext
-            break
 
-    if not file_extension:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}"
-        )
+    # Read file content first for size validation
+    file_content = await file.read()
+    file_size = len(file_content)
+
+    # Validate file (includes path traversal checks, character validation, size limit)
+    validate_upload_file(
+        filename=file.filename,
+        allowed_extensions=allowed_extensions,
+        max_size_mb=10,  # 10MB limit for document files
+        file_size=file_size,
+        allow_unicode=True,  # Allow Chinese filenames for terms documents
+    )
+
+    # Get file extension after validation
+    file_extension = None
+    if file.filename:
+        for ext in allowed_extensions:
+            if file.filename.lower().endswith(ext):
+                file_extension = ext
+                break
 
     # Find scholarship type
     stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
@@ -482,18 +477,7 @@ async def upload_terms_document(
     object_name = f"terms/{scholarship_type}_terms_{timestamp}{file_extension}"
 
     try:
-        # Read file content
-        file_content = await file.read()
-        file_size = len(file_content)
-
-        # Validate file size
-        from app.core.config import settings
-
-        if file_size > settings.max_file_size:
-            raise HTTPException(
-                status_code=400,
-                detail=f"檔案大小超過限制 ({settings.max_file_size / 1024 / 1024:.1f}MB)",
-            )
+        # Note: file_content already read above for validation
 
         # Check for empty files
         if file_size == 0:

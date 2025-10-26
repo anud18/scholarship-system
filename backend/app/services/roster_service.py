@@ -497,7 +497,18 @@ class RosterService:
             else:
                 exclusion_reason = "不符合獎學金資格條件"
         # 3. 檢查銀行帳戶資訊
-        elif not student_data.get("bank_account"):
+        # FIXED: bank_account should be in submitted_form_data, not student_data (CLAUDE.md principle)
+        form_data = application.submitted_form_data or {}
+        form_fields = form_data.get("fields", {})
+
+        # Extract bank_account from various possible field names
+        bank_account = ""
+        for field_name in ["postal_account", "bank_account", "account_number", "帳戶號碼", "帳號", "郵局帳號"]:
+            if field_name in form_fields and form_fields[field_name].get("value"):
+                bank_account = str(form_fields[field_name]["value"])
+                break
+
+        if not bank_account:
             is_included = False
             exclusion_reason = "缺少銀行帳戶資訊"
 
@@ -507,7 +518,7 @@ class RosterService:
             student_id_number=student_data.get("std_stdcode", ""),
             student_name=student_data.get("std_cname", ""),
             student_email=student_data.get("com_email", ""),
-            bank_account=student_data.get("bank_account", ""),
+            bank_account=bank_account,  # From submitted_form_data, not student_data
             scholarship_name=application.scholarship_configuration.scholarship_type.name,
             scholarship_amount=application.amount or application.scholarship_configuration.amount,
             scholarship_subtype=application.sub_scholarship_type,
