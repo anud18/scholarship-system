@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import api from "@/lib/api";
+import { useStudentProfile } from "@/hooks/use-student-profile";
 import {
   validateAdvisorInfo,
   validateBankInfo,
@@ -35,7 +36,7 @@ import {
   sanitizeAdvisorInfo,
   sanitizeBankInfo,
 } from "@/lib/validations/user-profile";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 
 interface PersonalInfoStepProps {
@@ -51,8 +52,10 @@ export function PersonalInfoStep({
   onComplete,
   locale,
 }: PersonalInfoStepProps) {
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Use SWR hook for student profile data
+  const { profile, isLoading, error, refresh } = useStudentProfile();
 
   // Form data
   const [advisorName, setAdvisorName] = useState("");
@@ -73,11 +76,7 @@ export function PersonalInfoStep({
     filename: string;
     type: string;
   } | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-
-  const { toast } = useToast();
-
-  const t = {
+  const [showPreview, setShowPreview] = useState(false);  const t = {
     zh: {
       title: "填寫個人資料",
       subtitle: "請填寫指導教授資訊與郵局帳號資料",
@@ -96,7 +95,7 @@ export function PersonalInfoStep({
       documentUploaded: "已上傳文件",
       preview: "預覽",
       delete: "刪除",
-      fileFormats: "支援格式：JPG, PNG, PDF",
+      fileFormats: "支援格式：JPG, JPEG, PNG, PDF",
       fileSizeLimit: "檔案大小限制：10MB",
       uploadSuggestion: "建議上傳存摺封面照片或帳戶資料截圖",
       saveButton: "儲存並繼續",
@@ -135,7 +134,7 @@ export function PersonalInfoStep({
       documentUploaded: "Document Uploaded",
       preview: "Preview",
       delete: "Delete",
-      fileFormats: "Supported formats: JPG, PNG, PDF",
+      fileFormats: "Supported formats: JPG, JPEG, PNG, PDF",
       fileSizeLimit: "File size limit: 10MB",
       uploadSuggestion: "Recommend uploading passbook cover photo or account details screenshot",
       saveButton: "Save and Continue",
@@ -160,28 +159,16 @@ export function PersonalInfoStep({
 
   const text = t[locale];
 
+  // Populate form fields when profile data loads
   useEffect(() => {
-    loadProfile();
-  }, []);
-
-  const loadProfile = async () => {
-    setLoading(true);
-    try {
-      const response = await api.userProfiles.getMyProfile();
-      if (response.success && response.data && response.data.profile) {
-        const profile = response.data.profile;
-        setAdvisorName(profile.advisor_name || "");
-        setAdvisorEmail(profile.advisor_email || "");
-        setAdvisorNycuId(profile.advisor_nycu_id || "");
-        setAccountNumber(profile.account_number || "");
-        setExistingBankDocument(profile.bank_document_photo_url || null);
-      }
-    } catch (error) {
-      console.error("Failed to load profile:", error);
-    } finally {
-      setLoading(false);
+    if (profile) {
+      setAdvisorName(profile.advisor_name || "");
+      setAdvisorEmail(profile.advisor_email || "");
+      setAdvisorNycuId(profile.advisor_nycu_id || "");
+      setAccountNumber(profile.account_number || "");
+      setExistingBankDocument(profile.bank_document_photo_url || null);
     }
-  };
+  }, [profile]);
 
   const validateAdvisorData = () => {
     const advisorData = {
@@ -229,11 +216,7 @@ export function PersonalInfoStep({
       const bankValid = validateBankData();
 
       if (!advisorValid || !bankValid) {
-        toast({
-          title: text.validationFailed,
-          description: text.validationFailedDesc,
-          variant: "destructive",
-        });
+        toast.error(text.validationFailedDesc);
         setSaving(false);
         return;
       }
@@ -277,25 +260,18 @@ export function PersonalInfoStep({
           throw new Error(uploadResponse.message || "Failed to upload document");
         }
 
-        toast({
-          title: text.updateSuccess,
-          description: text.documentUploadSuccess,
-        });
+        toast.success(text.documentUploadSuccess);
       }
 
-      toast({
-        title: text.updateSuccess,
-        description: text.profileUpdated,
-      });
+      toast.success(text.profileUpdated);
+
+      // Refresh SWR cache to sync changes across components
+      await refresh();
 
       onComplete(true);
       onNext();
     } catch (error: any) {
-      toast({
-        title: text.updateFailed,
-        description: error.message || text.updateFailed,
-        variant: "destructive",
-      });
+      toast.error(error.message || text.updateFailed);
     } finally {
       setSaving(false);
     }
@@ -332,27 +308,21 @@ export function PersonalInfoStep({
       const response = await api.userProfiles.deleteBankDocument();
 
       if (response.success) {
-        toast({
-          title: text.updateSuccess,
-          description: "文件已刪除",
-        });
+        toast.success("文件已刪除");
         setExistingBankDocument(null);
-        await loadProfile();
+        // Refresh SWR cache to sync changes
+        await refresh();
       } else {
         throw new Error(response.message || "Delete failed");
       }
     } catch (error: any) {
-      toast({
-        title: text.updateFailed,
-        description: error.message || "刪除失敗",
-        variant: "destructive",
-      });
+      toast.error(error.message || "刪除失敗");
     }
   };
 
   // Calculate completion percentage
   const calculateCompletion = () => {
-    let total = 5; // advisor_name, advisor_email, advisor_nycu_id, account_number, bank_document
+    const total = 5; // advisor_name, advisor_email, advisor_nycu_id, account_number, bank_document
     let completed = 0;
 
     if (advisorName) completed++;
@@ -364,12 +334,27 @@ export function PersonalInfoStep({
     return Math.round((completed / total) * 100);
   };
 
-  if (loading) {
+  // Loading state from SWR
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="p-12 text-center">
           <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-nycu-blue-600" />
           <p className="text-lg text-gray-600">{text.loading}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Error state from SWR
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="p-12 text-center">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
+          <p className="text-lg text-red-600 mb-4">載入資料時發生錯誤</p>
+          <p className="text-sm text-gray-600 mb-6">{error.message}</p>
+          <Button onClick={() => refresh()}>重新載入</Button>
         </CardContent>
       </Card>
     );

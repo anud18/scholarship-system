@@ -37,7 +37,7 @@ import { useGridMetrics } from "@/hooks/useGridMetrics";
 import { usePillMetrics } from "@/hooks/usePillMetrics";
 import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import * as XLSX from "xlsx";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { StudentPreviewCard } from "@/components/student-preview-card";
 
 const { Z_INDEX } = ALLOCATION_MATRIX_LAYOUT;
@@ -293,17 +293,10 @@ export function DistributionResultsPanel({
 
   // ✨ Use SWR hook to fetch sub-type translations (auto-detects user role)
   const { subTypeTranslations } = useScholarshipData();
-
-  const { toast } = useToast();
-
   const handleExportDistribution = () => {
     try {
       if (!distributionData) {
-        toast({
-          title: locale === "zh" ? "無資料可匯出" : "No data to export",
-          description: locale === "zh" ? "目前沒有分配資料" : "No distribution data available",
-          variant: "destructive",
-        });
+        toast.error(locale === "zh" ? "目前沒有分配資料" : "No distribution data available");
         return;
       }
 
@@ -452,19 +445,14 @@ export function DistributionResultsPanel({
       // Download file
       XLSX.writeFile(workbook, filename);
 
-      toast({
-        title: locale === "zh" ? "匯出成功" : "Export successful",
-        description: locale === "zh"
+      toast.success(
+        locale === "zh"
           ? `已匯出分配矩陣資料，共 ${studentRows.length} 位學生`
-          : `Exported distribution matrix with ${studentRows.length} students`,
-      });
+          : `Exported distribution matrix with ${studentRows.length} students`
+      );
     } catch (error) {
       console.error('Export error:', error);
-      toast({
-        title: locale === "zh" ? "匯出失敗" : "Export failed",
-        description: error instanceof Error ? error.message : (locale === "zh" ? "無法匯出資料" : "Failed to export data"),
-        variant: "destructive",
-      });
+      toast.error(error instanceof Error ? error.message : (locale === "zh" ? "無法匯出資料" : "Failed to export data"));
     }
   };
 

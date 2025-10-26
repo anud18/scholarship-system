@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Edit2, Check, X, Loader2, AlertCircle } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import {
   MatrixQuotaData,
   QuotaCell,
@@ -51,7 +51,6 @@ export function MatrixQuotaTable({
   readOnly = false,
   currentPeriod,
 }: MatrixQuotaTableProps) {
-  const { toast } = useToast();
   const { academies, subTypeTranslations } = useReferenceData();
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
   const [savingCell, setSavingCell] = useState<string | null>(null);
@@ -101,11 +100,7 @@ export function MatrixQuotaTable({
 
     const newValue = parseInt(editingCell.value);
     if (isNaN(newValue) || newValue < 0) {
-      toast({
-        title: "錯誤",
-        description: "請輸入有效的非負整數",
-        variant: "destructive",
-      });
+      toast.error("請輸入有效的非負整數");
       return;
     }
 
@@ -168,19 +163,12 @@ export function MatrixQuotaTable({
           onDataUpdate?.(updatedData);
         }, 0);
 
-        toast({
-          title: "更新成功",
-          description: `${getSubTypeName(editingCell.subType, subTypeTranslations, "zh")} - ${getAcademyName(editingCell.college, academies)}: ${response.data.old_quota} → ${response.data.new_quota}`,
-        });
+        toast.success(`${getSubTypeName(editingCell.subType, subTypeTranslations, "zh")} - ${getAcademyName(editingCell.college, academies)}: ${response.data.old_quota} → ${response.data.new_quota}`);
       } else {
         throw new Error(response.message || "更新失敗");
       }
     } catch (error) {
-      toast({
-        title: "更新失敗",
-        description: error instanceof Error ? error.message : "發生未知錯誤",
-        variant: "destructive",
-      });
+      toast.error(error instanceof Error ? error.message : "發生未知錯誤");
     } finally {
       setSavingCell(null);
       setEditingCell(null);

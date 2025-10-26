@@ -102,7 +102,7 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
         {
             "key": "gemini_api_key",
             "value": settings.gemini_api_key or "",
-            "category": ConfigCategory.ocr,
+            "category": ConfigCategory.api_keys,
             "data_type": ConfigDataType.string,
             "description": "Google Gemini API 金鑰",
             "is_sensitive": True,

@@ -84,7 +84,7 @@ import { useCollegeApplications } from "@/hooks/use-admin";
 import { User } from "@/types/user";
 import { apiClient } from "@/lib/api";
 import * as XLSX from "xlsx";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface CollegeDashboardProps {
   user: User;
@@ -455,9 +455,7 @@ export function CollegeDashboard({
   user,
   locale = "zh",
 }: CollegeDashboardProps) {
-  const t = (key: string) => getTranslation(locale, key);
-  const { toast } = useToast();
-  const {
+  const t = (key: string) => getTranslation(locale, key);  const {
     applications,
     isLoading,
     error,
@@ -1113,20 +1111,12 @@ export function CollegeDashboard({
         } else {
           console.error('Failed to save ranking order:', response.message);
           setSaveStatus('error');
-          toast({
-            title: locale === 'zh' ? '儲存失敗' : 'Save Failed',
-            description: response.message || (locale === 'zh' ? '無法儲存排名順序' : 'Failed to save ranking order'),
-            variant: 'destructive',
-          });
+          toast.error(response.message || (locale === 'zh' ? '無法儲存排名順序' : 'Failed to save ranking order'));
         }
       } catch (error) {
         console.error('Error saving ranking order:', error);
         setSaveStatus('error');
-        toast({
-          title: locale === 'zh' ? '儲存錯誤' : 'Save Error',
-          description: error instanceof Error ? error.message : (locale === 'zh' ? '儲存時發生錯誤' : 'An error occurred while saving'),
-          variant: 'destructive',
-        });
+        toast.error(error instanceof Error ? error.message : (locale === 'zh' ? '儲存時發生錯誤' : 'An error occurred while saving'));
       }
     }, 500);
   };
@@ -1201,25 +1191,14 @@ export function CollegeDashboard({
             isFinalized: true,
           });
         }
-        toast({
-          title: locale === 'zh' ? '鎖定成功' : 'Locked Successfully',
-          description: locale === 'zh' ? '排名已成功鎖定' : 'Ranking has been locked successfully',
-        });
+        toast.success(locale === 'zh' ? '排名已成功鎖定' : 'Ranking has been locked successfully');
       } else {
         console.error("Failed to finalize ranking:", response.message);
-        toast({
-          title: locale === 'zh' ? '鎖定失敗' : 'Lock Failed',
-          description: response.message || (locale === 'zh' ? '無法鎖定排名' : 'Failed to lock ranking'),
-          variant: 'destructive',
-        });
+        toast.error(response.message || (locale === 'zh' ? '無法鎖定排名' : 'Failed to lock ranking'));
       }
     } catch (error) {
       console.error("Failed to finalize ranking:", error);
-      toast({
-        title: locale === 'zh' ? '鎖定錯誤' : 'Lock Error',
-        description: error instanceof Error ? error.message : (locale === 'zh' ? '鎖定時發生錯誤' : 'An error occurred while locking'),
-        variant: 'destructive',
-      });
+      toast.error(error instanceof Error ? error.message : (locale === 'zh' ? '鎖定時發生錯誤' : 'An error occurred while locking'));
     }
   };
 
@@ -1241,25 +1220,14 @@ export function CollegeDashboard({
             isFinalized: false,
           });
         }
-        toast({
-          title: locale === 'zh' ? '解除鎖定成功' : 'Unlocked Successfully',
-          description: locale === 'zh' ? '排名已成功解除鎖定，現在可以編輯' : 'Ranking has been unlocked successfully and can now be edited',
-        });
+        toast.success(locale === 'zh' ? '排名已成功解除鎖定，現在可以編輯' : 'Ranking has been unlocked successfully and can now be edited');
       } else {
         console.error("Failed to unfinalize ranking:", response.message);
-        toast({
-          title: locale === 'zh' ? '解除鎖定失敗' : 'Unlock Failed',
-          description: response.message || (locale === 'zh' ? '無法解除鎖定排名' : 'Failed to unlock ranking'),
-          variant: 'destructive',
-        });
+        toast.error(response.message || (locale === 'zh' ? '無法解除鎖定排名' : 'Failed to unlock ranking'));
       }
     } catch (error) {
       console.error("Failed to unfinalize ranking:", error);
-      toast({
-        title: locale === 'zh' ? '解除鎖定錯誤' : 'Unlock Error',
-        description: error instanceof Error ? error.message : (locale === 'zh' ? '解除鎖定時發生錯誤' : 'An error occurred while unlocking'),
-        variant: 'destructive',
-      });
+      toast.error(error instanceof Error ? error.message : (locale === 'zh' ? '解除鎖定時發生錯誤' : 'An error occurred while unlocking'));
     }
   };
 
@@ -1344,11 +1312,7 @@ export function CollegeDashboard({
   const handleExportApplications = () => {
     try {
       if (applications.length === 0) {
-        toast({
-          title: locale === "zh" ? "無資料可匯出" : "No data to export",
-          description: locale === "zh" ? "目前沒有申請資料" : "No applications available",
-          variant: "destructive",
-        });
+        toast.error(locale === "zh" ? "目前沒有申請資料" : "No applications available");
         return;
       }
 
@@ -1426,19 +1390,14 @@ export function CollegeDashboard({
       // Download file
       XLSX.writeFile(workbook, filename);
 
-      toast({
-        title: locale === "zh" ? "匯出成功" : "Export successful",
-        description: locale === "zh"
+      toast.success(
+        locale === "zh"
           ? `已匯出 ${exportData.length} 筆申請資料`
-          : `Exported ${exportData.length} applications`,
-      });
+          : `Exported ${exportData.length} applications`
+      );
     } catch (error) {
       console.error('Export error:', error);
-      toast({
-        title: locale === "zh" ? "匯出失敗" : "Export failed",
-        description: error instanceof Error ? error.message : (locale === "zh" ? "無法匯出資料" : "Failed to export data"),
-        variant: "destructive",
-      });
+      toast.error(error instanceof Error ? error.message : (locale === "zh" ? "無法匯出資料" : "Failed to export data"));
     }
   };
 

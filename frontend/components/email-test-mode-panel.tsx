@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface TestModeStatus {
   enabled: boolean;
@@ -63,9 +63,7 @@ interface EmailHistoryItem {
   error_message?: string;
 }
 
-export function EmailTestModePanel() {
-  const { toast } = useToast();
-  const [status, setStatus] = useState<TestModeStatus>({
+export function EmailTestModePanel() {  const [status, setStatus] = useState<TestModeStatus>({
     enabled: false,
     redirect_emails: [],
     expires_at: null,
@@ -103,11 +101,8 @@ export function EmailTestModePanel() {
       }
     } catch (error) {
       console.error("Failed to load test mode status:", error);
-      toast({
-        variant: "destructive",
-        title: "載入失敗",
-        description: "無法載入測試模式狀態",
-      });
+      toast.error("無法載入測試模式狀態",
+      );
     } finally {
       setRefreshing(false);
     }
@@ -133,11 +128,8 @@ export function EmailTestModePanel() {
       }
     } catch (error) {
       console.error("Failed to load email history:", error);
-      toast({
-        variant: "destructive",
-        title: "載入失敗",
-        description: "無法載入郵件歷史紀錄",
-      });
+      toast.error("無法載入郵件歷史紀錄",
+      );
     } finally {
       setLoadingHistory(false);
     }
@@ -145,11 +137,8 @@ export function EmailTestModePanel() {
 
   const handleSendTestEmail = async () => {
     if (!testEmailRecipient || !testEmailSubject || !testEmailBody) {
-      toast({
-        variant: "destructive",
-        title: "驗證錯誤",
-        description: "請填寫所有欄位",
-      });
+      toast.error("請填寫所有欄位",
+      );
       return;
     }
 
@@ -162,10 +151,7 @@ export function EmailTestModePanel() {
       });
 
       if (response.success) {
-        toast({
-          title: "發送成功",
-          description: `測試郵件已發送至 ${testEmailRecipient}`,
-        });
+        toast.success(`測試郵件已發送至 ${testEmailRecipient}`);
         // Clear form
         setTestEmailRecipient("");
         setTestEmailSubject("");
@@ -178,11 +164,8 @@ export function EmailTestModePanel() {
         throw new Error(response.data?.error || "無法發送測試郵件");
       }
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "發送失敗",
-        description: error.message || "無法發送測試郵件",
-      });
+      toast.error(error.message || "無法發送測試郵件",
+      );
     } finally {
       setSendingTestEmail(false);
     }
@@ -191,11 +174,8 @@ export function EmailTestModePanel() {
   const handleEnable = async () => {
     // Validate at least one email
     if (redirectEmails.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "驗證失敗",
-        description: "請輸入至少一個測試信箱地址",
-      });
+      toast.error("請輸入至少一個測試信箱地址",
+      );
       return;
     }
 
@@ -210,17 +190,11 @@ export function EmailTestModePanel() {
         setStatus(response.data!);
         setShowEnableDialog(false);
         setRedirectEmails([]);
-        toast({
-          title: "測試模式已啟用",
-          description: `所有郵件將重定向到 ${redirectEmails.length} 個測試信箱，將於 ${durationHours} 小時後自動關閉`,
-        });
+        toast.success(`所有郵件將重定向到 ${redirectEmails.length} 個測試信箱，將於 ${durationHours} 小時後自動關閉`);
       }
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "啟用失敗",
-        description: error.message || "無法啟用測試模式",
-      });
+      toast.error(error.message || "無法啟用測試模式",
+      );
     } finally {
       setLoading(false);
     }
@@ -234,17 +208,11 @@ export function EmailTestModePanel() {
       if (response.success) {
         setStatus(response.data!);
         setShowDisableDialog(false);
-        toast({
-          title: "測試模式已停用",
-          description: "郵件將正常發送至實際收件人",
-        });
+        toast.success("郵件將正常發送至實際收件人");
       }
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "停用失敗",
-        description: error.message || "無法停用測試模式",
-      });
+      toast.error(error.message || "無法停用測試模式",
+      );
     } finally {
       setLoading(false);
     }

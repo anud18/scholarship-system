@@ -138,7 +138,7 @@ security-scan: ## Run security scans
 	@echo "$(GREEN)Running security scans...$(NC)"
 	@echo "$(CYAN)Backend security scan...$(NC)"
 	cd backend && python -m bandit -r app || true
-	cd backend && python -m safety check || true
+	cd backend && pip install pip-audit && pip-audit --desc || true
 	@echo "$(CYAN)Frontend security scan...$(NC)"
 	cd frontend && npm audit || true
 	@echo "$(GREEN)✅ Security scans completed!$(NC)"

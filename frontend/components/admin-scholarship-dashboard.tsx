@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Locale } from "@/lib/validators";
 import { getStatusName } from "@/lib/utils/application-helpers";
@@ -434,10 +434,7 @@ export function AdminScholarshipDashboard({
       console.log("Status update result:", result);
 
       // 檢查是否成功（即使拋出錯誤，實際上也可能成功了）
-      toast({
-        title: "狀態更新成功",
-        description: `申請狀態已更新為${newStatus === "approved" ? "已核准" : newStatus === "rejected" ? "已駁回" : newStatus}`,
-      });
+      toast.success(`申請狀態已更新為${newStatus === "approved" ? "已核准" : newStatus === "rejected" ? "已駁回" : newStatus}`);
 
       // 重新載入數據
       refetch();
@@ -447,11 +444,7 @@ export function AdminScholarshipDashboard({
       await new Promise(resolve => setTimeout(resolve, 500));
       refetch();
 
-      toast({
-        title: "狀態更新失敗",
-        description: error instanceof Error ? error.message : "無法更新申請狀態",
-        variant: "destructive",
-      });
+      toast.error(error instanceof Error ? error.message : "無法更新申請狀態");
     }
   };
 
@@ -462,25 +455,14 @@ export function AdminScholarshipDashboard({
       const response =
         await apiClient.bankVerification.verifyBankAccount(applicationId);
       if (response.success) {
-        toast({
-          title: "銀行驗證成功",
-          description: "銀行帳戶驗證已完成",
-        });
+        toast.success("銀行帳戶驗證已完成");
         refetch(); // 重新載入數據以顯示更新的驗證狀態
       } else {
-        toast({
-          title: "銀行驗證失敗",
-          description: response.message || "無法完成銀行帳戶驗證",
-          variant: "destructive",
-        });
+        toast.error(response.message || "無法完成銀行帳戶驗證");
       }
     } catch (error) {
       console.error("Bank verification error:", error);
-      toast({
-        title: "銀行驗證錯誤",
-        description: "銀行帳戶驗證過程中發生錯誤",
-        variant: "destructive",
-      });
+      toast.error("銀行帳戶驗證過程中發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
     }
@@ -489,11 +471,7 @@ export function AdminScholarshipDashboard({
   // 處理批量銀行帳戶驗證
   const handleBatchBankVerification = async () => {
     if (selectedApplicationsForBatch.length === 0) {
-      toast({
-        title: "請選擇申請案件",
-        description: "請至少選擇一個申請案件進行批量驗證",
-        variant: "destructive",
-      });
+      toast.error("請至少選擇一個申請案件進行批量驗證");
       return;
     }
 
@@ -503,26 +481,15 @@ export function AdminScholarshipDashboard({
         selectedApplicationsForBatch
       );
       if (response.success) {
-        toast({
-          title: "批量銀行驗證成功",
-          description: `已完成 ${selectedApplicationsForBatch.length} 個申請案件的銀行帳戶驗證`,
-        });
+        toast.success(`已完成 ${selectedApplicationsForBatch.length} 個申請案件的銀行帳戶驗證`);
         setSelectedApplicationsForBatch([]);
         refetch(); // 重新載入數據
       } else {
-        toast({
-          title: "批量銀行驗證失敗",
-          description: response.message || "無法完成批量銀行帳戶驗證",
-          variant: "destructive",
-        });
+        toast.error(response.message || "無法完成批量銀行帳戶驗證");
       }
     } catch (error) {
       console.error("Batch bank verification error:", error);
-      toast({
-        title: "批量銀行驗證錯誤",
-        description: "批量銀行帳戶驗證過程中發生錯誤",
-        variant: "destructive",
-      });
+      toast.error("批量銀行帳戶驗證過程中發生錯誤");
     } finally {
       setBatchVerificationLoading(false);
     }
@@ -632,19 +599,11 @@ export function AdminScholarshipDashboard({
         setAuditLogs(response.data);
         setShowAuditModal(true);
       } else {
-        toast({
-          title: "載入操作紀錄失敗",
-          description: response.message || "無法載入操作紀錄",
-          variant: "destructive",
-        });
+        toast.error(response.message || "無法載入操作紀錄");
       }
     } catch (error) {
       console.error("Failed to fetch audit logs:", error);
-      toast({
-        title: "載入操作紀錄失敗",
-        description: "無法載入操作紀錄，請稍後再試",
-        variant: "destructive",
-      });
+      toast.error("無法載入操作紀錄，請稍後再試");
     } finally {
       setAuditLoading(false);
     }
@@ -661,10 +620,7 @@ export function AdminScholarshipDashboard({
       fetchAuditLogsForCurrentType();
     }
 
-    toast({
-      title: "刪除成功",
-      description: "申請已成功刪除",
-    });
+    toast.success("申請已成功刪除");
   };
 
   // 渲染統計卡片

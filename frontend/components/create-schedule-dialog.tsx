@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner";
 import { Calendar, Plus } from "lucide-react"
 
 interface ScholarshipConfiguration {
@@ -47,11 +47,7 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
       setScholarshipConfigs(configs)
     } catch (error) {
       console.error("獲取獎學金設定失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法載入獎學金設定",
-        variant: "destructive",
-      })
+      toast.error("無法載入獎學金設定")
     }
   }
 
@@ -59,29 +55,17 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
     e.preventDefault()
 
     if (!formData.schedule_name.trim()) {
-      toast({
-        title: "錯誤",
-        description: "請輸入排程名稱",
-        variant: "destructive",
-      })
+      toast.error("請輸入排程名稱")
       return
     }
 
     if (!formData.scholarship_configuration_id) {
-      toast({
-        title: "錯誤",
-        description: "請選擇獎學金設定",
-        variant: "destructive",
-      })
+      toast.error("請選擇獎學金設定")
       return
     }
 
     if (!formData.roster_cycle) {
-      toast({
-        title: "錯誤",
-        description: "請選擇造冊週期",
-        variant: "destructive",
-      })
+      toast.error("請選擇造冊週期")
       return
     }
 
@@ -101,10 +85,7 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
         body: JSON.stringify(submitData),
       })
 
-      toast({
-        title: "成功",
-        description: "排程已建立",
-      })
+      toast.success("排程已建立")
 
       // Reset form
       setFormData({
@@ -119,11 +100,7 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
       onScheduleCreated()
     } catch (error) {
       console.error("建立排程失敗:", error)
-      toast({
-        title: "錯誤",
-        description: error instanceof Error ? error.message : "無法建立排程",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : "無法建立排程")
     } finally {
       setLoading(false)
     }

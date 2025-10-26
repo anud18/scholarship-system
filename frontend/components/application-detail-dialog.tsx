@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { ProgressTimeline } from "@/components/progress-timeline";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import {
@@ -133,25 +133,14 @@ export function ApplicationDetailDialog({
         application.id
       );
       if (response.success) {
-        toast({
-          title: "銀行驗證成功",
-          description: "銀行帳戶驗證已完成",
-        });
+        toast.success("銀行帳戶驗證已完成");
         // You might want to refresh the application data here to show updated status
       } else {
-        toast({
-          title: "銀行驗證失敗",
-          description: response.message || "無法完成銀行帳戶驗證",
-          variant: "destructive",
-        });
+        toast.error(response.message || "無法完成銀行帳戶驗證");
       }
     } catch (error) {
       console.error("Bank verification error:", error);
-      toast({
-        title: "銀行驗證錯誤",
-        description: "銀行帳戶驗證過程中發生錯誤",
-        variant: "destructive",
-      });
+      toast.error("銀行帳戶驗證過程中發生錯誤");
     } finally {
       setBankVerificationLoading(false);
     }

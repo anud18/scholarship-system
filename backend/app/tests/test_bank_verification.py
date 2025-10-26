@@ -60,7 +60,7 @@ class TestBankVerificationService:
         """Test extraction of bank fields from application"""
         # Create mock application with bank account data
         application = Application()
-        application.form_data = {
+        application.submitted_form_data = {
             "fields": {
                 "bank_account": {
                     "field_id": "bank_account",
@@ -86,13 +86,13 @@ class TestBankVerificationService:
     def test_extract_bank_fields_empty_form_data(self, verification_service):
         """Test extraction when application has no form data"""
         application = Application()
-        application.form_data = None
+        application.submitted_form_data = None
 
         result = verification_service.extract_bank_fields_from_application(application)
         assert result == {}
 
         # Test with empty fields
-        application.form_data = {"fields": {}}
+        application.submitted_form_data = {"fields": {}}
         result = verification_service.extract_bank_fields_from_application(application)
         assert result == {}
 
@@ -112,7 +112,7 @@ class TestBankVerificationService:
         # Mock application without bank data
         application = Application()
         application.id = 1
-        application.form_data = {"fields": {}}
+        application.submitted_form_data = {"fields": {}}
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = application
@@ -130,7 +130,7 @@ class TestBankVerificationService:
         # Mock application with bank data but no document
         application = Application()
         application.id = 1
-        application.form_data = {"fields": {"bank_account": {"value": "123456789"}}, "documents": []}
+        application.submitted_form_data = {"fields": {"bank_account": {"value": "123456789"}}, "documents": []}
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.side_effect = [application, None]  # App found, document not found
@@ -160,7 +160,7 @@ class TestBankVerificationService:
         # Mock application with complete data
         application = Application()
         application.id = 1
-        application.form_data = {
+        application.submitted_form_data = {
             "fields": {
                 "bank_account": {"value": "123456789012"},
                 "account_holder": {"value": "王小明"},
@@ -250,7 +250,7 @@ class TestBankVerificationService:
         # Mock application with passbook document
         application = Application()
         application.id = 1
-        application.form_data = {
+        application.submitted_form_data = {
             "documents": [
                 {"document_id": "bank_account_cover", "file_path": "passbook.pdf"},
                 {"document_id": "other_document", "file_path": "other.pdf"},
@@ -275,12 +275,12 @@ class TestBankVerificationService:
         """Test when passbook document is not found"""
         # Mock application without passbook document
         application = Application()
-        application.form_data = {"documents": [{"document_id": "other_document", "file_path": "other.pdf"}]}
+        application.submitted_form_data = {"documents": [{"document_id": "other_document", "file_path": "other.pdf"}]}
 
         result = await verification_service.get_bank_passbook_document(application)
         assert result is None
 
         # Test with no documents
-        application.form_data = None
+        application.submitted_form_data = None
         result = await verification_service.get_bank_passbook_document(application)
         assert result is None

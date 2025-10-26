@@ -26,7 +26,7 @@ import {
   Check,
   X,
 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import {
   Dialog,
@@ -78,9 +78,6 @@ export function RankingManagementPanel({
     setActiveTab,
     fetchCollegeApplications,
   } = useCollegeManagement();
-
-  const { toast } = useToast();
-
   // Fetch rankings on mount
   const fetchRankings = useCallback(async () => {
     try {
@@ -201,39 +198,26 @@ export function RankingManagementPanel({
           await fetchRankingDetails(response.data.id);
 
           // Show success notification
-          toast({
-            title: locale === 'zh' ? '建立成功' : 'Created Successfully',
-            description: locale === 'zh'
+          toast.success(
+            locale === 'zh'
               ? `排名「${response.data.ranking_name || '新排名'}」已成功建立`
-              : `Ranking "${response.data.ranking_name || 'New Ranking'}" has been created successfully`,
-          });
+              : `Ranking "${response.data.ranking_name || 'New Ranking'}" has been created successfully`
+          );
         } catch (fetchError) {
           console.error("Failed to load ranking after creation:", fetchError);
-          toast({
-            title: locale === 'zh' ? '建立成功，但載入失敗' : 'Created but Failed to Load',
-            description: locale === 'zh'
+          toast.error(locale === 'zh'
               ? '排名已建立，但無法自動載入。請手動重新整理頁面。'
-              : 'Ranking created but failed to load automatically. Please refresh the page manually.',
-            variant: "destructive",
-          });
+              : 'Ranking created but failed to load automatically. Please refresh the page manually.');
         }
       } else {
         // API returned success: false
-        toast({
-          title: locale === 'zh' ? '建立失敗' : 'Creation Failed',
-          description: response.message || (locale === 'zh' ? '無法建立排名' : 'Failed to create ranking'),
-          variant: "destructive",
-        });
+        toast.error(response.message || (locale === 'zh' ? '無法建立排名' : 'Failed to create ranking'));
       }
     } catch (error) {
       console.error("Failed to create ranking:", error);
-      toast({
-        title: locale === 'zh' ? '建立失敗' : 'Creation Failed',
-        description: error instanceof Error
+      toast.error(error instanceof Error
           ? error.message
-          : (locale === 'zh' ? '建立排名時發生錯誤' : 'An error occurred while creating the ranking'),
-        variant: "destructive",
-      });
+          : (locale === 'zh' ? '建立排名時發生錯誤' : 'An error occurred while creating the ranking'));
     }
   }, [
     getAcademicConfig,
@@ -342,10 +326,7 @@ export function RankingManagementPanel({
         if (rankingData && rankingId === selectedRanking) {
           setRankingData({ ...rankingData, isFinalized: true });
         }
-        toast({
-          title: locale === 'zh' ? '鎖定成功' : 'Locked Successfully',
-          description: locale === 'zh' ? '排名已成功鎖定' : 'Ranking has been locked successfully',
-        });
+        toast.success(locale === 'zh' ? '排名已成功鎖定' : 'Ranking has been locked successfully');
       }
     } catch (error) {
       console.error("Failed to finalize ranking:", error);
@@ -363,10 +344,7 @@ export function RankingManagementPanel({
         if (rankingData && rankingId === selectedRanking) {
           setRankingData({ ...rankingData, isFinalized: false });
         }
-        toast({
-          title: locale === 'zh' ? '解除鎖定成功' : 'Unlocked Successfully',
-          description: locale === 'zh' ? '排名已成功解除鎖定' : 'Ranking unlocked',
-        });
+        toast.success(locale === 'zh' ? '排名已成功解除鎖定' : 'Ranking unlocked');
       }
     } catch (error) {
       console.error("Failed to unfinalize ranking:", error);
@@ -422,24 +400,13 @@ export function RankingManagementPanel({
         await fetchRankings();
         setEditingRankingId(null);
         setEditingRankingName("");
-        toast({
-          title: locale === 'zh' ? '更新成功' : 'Updated Successfully',
-          description: locale === 'zh' ? '排名名稱已更新' : 'Ranking name has been updated',
-        });
+        toast.success(locale === 'zh' ? '排名名稱已更新' : 'Ranking name has been updated');
       } else {
-        toast({
-          title: locale === 'zh' ? '更新失敗' : 'Update Failed',
-          description: response.message || (locale === 'zh' ? '無法更新排名名稱' : 'Failed to update ranking name'),
-          variant: "destructive",
-        });
+        toast.error(response.message || (locale === 'zh' ? '無法更新排名名稱' : 'Failed to update ranking name'));
       }
     } catch (error) {
       console.error("Failed to update ranking name:", error);
-      toast({
-        title: locale === 'zh' ? '更新失敗' : 'Update Failed',
-        description: locale === 'zh' ? '無法更新排名名稱' : 'Failed to update ranking name',
-        variant: "destructive",
-      });
+      toast.error(locale === 'zh' ? '無法更新排名名稱' : 'Failed to update ranking name');
     }
   }, [editingRankingName, fetchRankings, setEditingRankingId, setEditingRankingName, toast, locale]);
 

@@ -74,10 +74,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run security audit with Safety
+      - name: Run security audit with pip-audit
         run: |
-          pip install safety
-          safety scan --json
+          pip install pip-audit
+          pip-audit --desc --format json
         continue-on-error: true
 
       - name: Run Bandit security scan

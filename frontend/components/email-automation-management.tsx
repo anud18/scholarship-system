@@ -58,7 +58,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface EmailAutomationRule {
   id: number;
@@ -86,9 +86,7 @@ interface EmailTemplate {
   subject_template?: string;
 }
 
-export function EmailAutomationManagement() {
-  const { toast } = useToast();
-  const [rules, setRules] = useState<EmailAutomationRule[]>([]);
+export function EmailAutomationManagement() {  const [rules, setRules] = useState<EmailAutomationRule[]>([]);
   const [triggerEvents, setTriggerEvents] = useState<TriggerEvent[]>([]);
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -126,11 +124,7 @@ export function EmailAutomationManagement() {
         setRules(response.data);
       }
     } catch (error: any) {
-      toast({
-        title: "錯誤",
-        description: error.message || "無法載入自動化規則",
-        variant: "destructive",
-      });
+      toast.error(error.message || "無法載入自動化規則");
     } finally {
       setIsLoading(false);
     }
@@ -198,11 +192,7 @@ export function EmailAutomationManagement() {
 
   const handleSubmitCreate = async () => {
     if (!formData.name || !formData.trigger_event || !formData.template_key) {
-      toast({
-        title: "驗證錯誤",
-        description: "請填寫所有必填欄位",
-        variant: "destructive",
-      });
+      toast.error("請填寫所有必填欄位");
       return;
     }
 
@@ -210,19 +200,12 @@ export function EmailAutomationManagement() {
       setIsSubmitting(true);
       const response = await apiClient.emailAutomation.createRule(formData);
       if (response.success) {
-        toast({
-          title: "成功",
-          description: "自動化規則已創建",
-        });
+        toast.success("自動化規則已創建");
         setIsCreateDialogOpen(false);
         fetchRules();
       }
     } catch (error: any) {
-      toast({
-        title: "錯誤",
-        description: error.message || "創建規則失敗",
-        variant: "destructive",
-      });
+      toast.error(error.message || "創建規則失敗");
     } finally {
       setIsSubmitting(false);
     }
@@ -232,11 +215,7 @@ export function EmailAutomationManagement() {
     if (!selectedRule) return;
 
     if (!formData.name || !formData.trigger_event || !formData.template_key) {
-      toast({
-        title: "驗證錯誤",
-        description: "請填寫所有必填欄位",
-        variant: "destructive",
-      });
+      toast.error("請填寫所有必填欄位");
       return;
     }
 
@@ -247,19 +226,12 @@ export function EmailAutomationManagement() {
         formData
       );
       if (response.success) {
-        toast({
-          title: "成功",
-          description: "自動化規則已更新",
-        });
+        toast.success("自動化規則已更新");
         setIsEditDialogOpen(false);
         fetchRules();
       }
     } catch (error: any) {
-      toast({
-        title: "錯誤",
-        description: error.message || "更新規則失敗",
-        variant: "destructive",
-      });
+      toast.error(error.message || "更新規則失敗");
     } finally {
       setIsSubmitting(false);
     }
@@ -272,19 +244,12 @@ export function EmailAutomationManagement() {
       setIsSubmitting(true);
       const response = await apiClient.emailAutomation.deleteRule(selectedRule.id);
       if (response.success) {
-        toast({
-          title: "成功",
-          description: "自動化規則已刪除",
-        });
+        toast.success("自動化規則已刪除");
         setIsDeleteDialogOpen(false);
         fetchRules();
       }
     } catch (error: any) {
-      toast({
-        title: "錯誤",
-        description: error.message || "刪除規則失敗",
-        variant: "destructive",
-      });
+      toast.error(error.message || "刪除規則失敗");
     } finally {
       setIsSubmitting(false);
     }
@@ -294,18 +259,11 @@ export function EmailAutomationManagement() {
     try {
       const response = await apiClient.emailAutomation.toggleRule(rule.id);
       if (response.success) {
-        toast({
-          title: "成功",
-          description: rule.is_active ? "規則已停用" : "規則已啟用",
-        });
+        toast.success(rule.is_active ? "規則已停用" : "規則已啟用");
         fetchRules();
       }
     } catch (error: any) {
-      toast({
-        title: "錯誤",
-        description: error.message || "切換規則狀態失敗",
-        variant: "destructive",
-      });
+      toast.error(error.message || "切換規則狀態失敗");
     }
   };
 

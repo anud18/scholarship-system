@@ -48,10 +48,10 @@ class BankVerificationService:
         """Extract bank account fields from application form data"""
         bank_fields = {}
 
-        if not application.form_data or not application.form_data.get("fields"):
+        if not application.submitted_form_data or not application.submitted_form_data.get("fields"):
             return bank_fields
 
-        fields = application.form_data["fields"]
+        fields = application.submitted_form_data["fields"]
 
         # Common field mappings (adjust based on your form structure)
         field_mappings = {
@@ -69,10 +69,10 @@ class BankVerificationService:
 
     async def get_bank_passbook_document(self, application: Application) -> Optional[ApplicationFile]:
         """Get the bank passbook document from application"""
-        if not application.form_data or not application.form_data.get("documents"):
+        if not application.submitted_form_data or not application.submitted_form_data.get("documents"):
             return None
 
-        documents = application.form_data["documents"]
+        documents = application.submitted_form_data["documents"]
 
         # Look for bank account cover document
         for doc in documents:

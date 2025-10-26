@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import api, { type UserResponse } from "@/lib/api";
 import {
   validateAdvisorInfo,
@@ -99,11 +99,7 @@ export default function UserProfileManagement() {
   // Validation states
   const [advisorErrors, setAdvisorErrors] = useState<string[]>([]);
   const [bankErrors, setBankErrors] = useState<string[]>([]);
-  const [emailValidationError, setEmailValidationError] = useState<string>("");
-
-  const { toast } = useToast();
-
-  // Language preference and translation
+  const [emailValidationError, setEmailValidationError] = useState<string>("");  // Language preference and translation
   const { locale } = useLanguagePreference("student");
   const t = (key: string) => getTranslation(locale, key);
 
@@ -129,12 +125,7 @@ export default function UserProfileManagement() {
       } else {
         // 如果 API 返回失敗，顯示錯誤但不阻止頁面渲染
         console.warn("Profile API returned error:", response.message);
-        toast({
-          title: t("profile_management.update_success"),
-          description:
-            response.message || t("profile_management.profile_may_not_exist"),
-          variant: "default",
-        });
+        toast(response.message || t("profile_management.profile_may_not_exist"));
 
         // 設置基本的用戶資料結構，即使沒有完整的個人資料
         setProfile({
@@ -163,18 +154,9 @@ export default function UserProfileManagement() {
 
       // 網絡錯誤或其他嚴重錯誤
       if (error.name === "TypeError" && error.message.includes("fetch")) {
-        toast({
-          title: t("profile_management.connection_error"),
-          description: t("profile_management.connection_error_desc"),
-          variant: "destructive",
-        });
+        toast.error(t("profile_management.connection_error_desc"));
       } else {
-        toast({
-          title: t("profile_management.load_error"),
-          description:
-            error.message || t("profile_management.load_profile_error"),
-          variant: "destructive",
-        });
+        toast.error(error.message || t("profile_management.load_profile_error"));
       }
 
       // 即使發生錯誤也設置基本結構
@@ -260,11 +242,7 @@ export default function UserProfileManagement() {
     }
 
     if (!isValid) {
-      toast({
-        title: t("profile_management.validation_failed"),
-        description: t("profile_management.validation_failed_desc"),
-        variant: "destructive",
-      });
+      toast.error(t("profile_management.validation_failed_desc"));
       return;
     }
 
@@ -316,20 +294,12 @@ export default function UserProfileManagement() {
         throw new Error(response.message || "Update failed");
       }
 
-      toast({
-        title: t("profile_management.update_success"),
-        description: t("profile_management.profile_updated"),
-      });
+      toast.success(t("profile_management.profile_updated"));
 
       await loadProfile();
     } catch (error: any) {
-      toast({
-        title: t("profile_management.update_failed"),
-        description:
-          error.response?.data?.detail ||
-          t("profile_management.update_profile_error"),
-        variant: "destructive",
-      });
+      toast.error(error.response?.data?.detail ||
+          t("profile_management.update_profile_error"));
     } finally {
       setSaving(false);
     }
@@ -341,22 +311,14 @@ export default function UserProfileManagement() {
 
   const handleBankDocumentUpload = async () => {
     if (bankDocumentFiles.length === 0) {
-      toast({
-        title: t("profile_management.select_file"),
-        description: t("profile_management.select_file_desc"),
-        variant: "destructive",
-      });
+      toast.error(t("profile_management.select_file_desc"));
       return;
     }
 
     const file = bankDocumentFiles[0]; // 只處理第一個文件，因為銀行文件通常只要一個
 
     if (file.size > 10 * 1024 * 1024) {
-      toast({
-        title: t("profile_management.file_too_large"),
-        description: t("profile_management.file_size_error"),
-        variant: "destructive",
-      });
+      toast.error(t("profile_management.file_size_error"));
       return;
     }
 
@@ -368,21 +330,13 @@ export default function UserProfileManagement() {
         throw new Error(response.message || "Upload failed");
       }
 
-      toast({
-        title: t("profile_management.update_success"),
-        description: t("profile_management.document_uploaded_success"),
-      });
+      toast.success(t("profile_management.document_uploaded_success"));
 
       // 清空已選擇的文件
       setBankDocumentFiles([]);
       await loadProfile();
     } catch (error: any) {
-      toast({
-        title: t("profile_management.upload_failed"),
-        description:
-          error.response?.data?.detail || t("profile_management.upload_error"),
-        variant: "destructive",
-      });
+      toast.error(error.response?.data?.detail || t("profile_management.upload_error"));
     } finally {
       setUploadingBankDoc(false);
     }
@@ -393,20 +347,13 @@ export default function UserProfileManagement() {
       const response = await api.userProfiles.deleteBankDocument();
 
       if (response.success) {
-        toast({
-          title: t("profile_management.update_success"),
-          description: t("profile_management.document_deleted"),
-        });
+        toast.success(t("profile_management.document_deleted"));
         await loadProfile();
       } else {
         throw new Error(response.message || "Delete failed");
       }
     } catch (error: any) {
-      toast({
-        title: t("profile_management.delete_failed"),
-        description: error.message || t("profile_management.delete_error"),
-        variant: "destructive",
-      });
+      toast.error(error.message || t("profile_management.delete_error"));
     }
   };
 
@@ -486,12 +433,7 @@ export default function UserProfileManagement() {
         throw new Error(response.message || "Failed to load history");
       }
     } catch (error: any) {
-      toast({
-        title: t("profile_management.load_error"),
-        description:
-          error.message || t("profile_management.load_history_error"),
-        variant: "destructive",
-      });
+      toast.error(error.message || t("profile_management.load_history_error"));
     }
   };
 

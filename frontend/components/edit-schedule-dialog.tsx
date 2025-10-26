@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner";
 import { Calendar } from "lucide-react"
 
 interface RosterSchedule {
@@ -69,11 +69,7 @@ export function EditScheduleDialog({
       setScholarshipConfigs(data.configurations || [])
     } catch (error) {
       console.error("獲取獎學金設定失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法載入獎學金設定",
-        variant: "destructive",
-      })
+      toast.error("無法載入獎學金設定")
     }
   }
 
@@ -81,29 +77,17 @@ export function EditScheduleDialog({
     e.preventDefault()
 
     if (!formData.schedule_name.trim()) {
-      toast({
-        title: "錯誤",
-        description: "請輸入排程名稱",
-        variant: "destructive",
-      })
+      toast.error("請輸入排程名稱")
       return
     }
 
     if (!formData.scholarship_configuration_id) {
-      toast({
-        title: "錯誤",
-        description: "請選擇獎學金設定",
-        variant: "destructive",
-      })
+      toast.error("請選擇獎學金設定")
       return
     }
 
     if (!formData.roster_cycle) {
-      toast({
-        title: "錯誤",
-        description: "請選擇造冊週期",
-        variant: "destructive",
-      })
+      toast.error("請選擇造冊週期")
       return
     }
 
@@ -128,19 +112,12 @@ export function EditScheduleDialog({
         throw new Error(errorData.message || "更新排程失敗")
       }
 
-      toast({
-        title: "成功",
-        description: "排程已更新",
-      })
+      toast.success("排程已更新")
 
       onScheduleUpdated()
     } catch (error) {
       console.error("更新排程失敗:", error)
-      toast({
-        title: "錯誤",
-        description: error instanceof Error ? error.message : "無法更新排程",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : "無法更新排程")
     } finally {
       setLoading(false)
     }

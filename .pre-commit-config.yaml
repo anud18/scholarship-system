@@ -132,9 +132,9 @@ repos:
   - repo: local
     hooks:
       # Python dependency security check
-      - id: python-safety-check
-        name: Python Safety Check
-        entry: bash -c 'cd backend && safety check --json; [ $? -lt 2 ] || exit 1'
+      - id: python-pip-audit
+        name: Python pip-audit Check
+        entry: bash -c 'cd backend && pip-audit --desc; [ $? -lt 2 ] || exit 1'
         language: system
         files: ^backend/requirements.*\.txt$
         pass_filenames: false

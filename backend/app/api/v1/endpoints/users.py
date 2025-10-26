@@ -53,6 +53,7 @@ async def get_student_info(current_user: User = Depends(get_current_user), db: A
     """Get student information including all semester data"""
     from app.services.application_service import get_student_data_from_user
     from app.services.student_service import StudentService
+    from app.utils.academic_period import get_academic_year_range
 
     if current_user.role != UserRole.student:
         raise HTTPException(status_code=403, detail="Only students can access student information")
@@ -63,14 +64,16 @@ async def get_student_info(current_user: User = Depends(get_current_user), db: A
     if not student:
         raise HTTPException(status_code=404, detail="Student profile not found")
 
-    # Get semester data for recent years (last 3 years)
+    # Get semester data for recent years (dynamically determined, last 3 years)
     student_service = StudentService()
     semesters = []
-    current_year = 113  # TODO: Get from system settings
     student_code = student.get("std_stdcode", "")
 
     if student_code:
-        for year in range(current_year, current_year - 3, -1):
+        # Get academic years to query (current + 3 years back)
+        academic_years = get_academic_year_range(years_back=3, include_current=True)
+
+        for year in academic_years:
             for term in ["1", "2"]:
                 try:
                     term_data = await student_service.get_student_term_info(student_code, str(year), term)

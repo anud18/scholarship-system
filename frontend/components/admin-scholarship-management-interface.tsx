@@ -60,7 +60,7 @@ import type {
   ApplicationDocumentUpdate,
   WhitelistResponse,
 } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 type ScholarshipType = "undergraduate_freshman" | "direct_phd" | "phd";
 
@@ -73,8 +73,6 @@ export function AdminScholarshipManagementInterface({
   type,
   className,
 }: AdminScholarshipManagementInterfaceProps) {
-  const { toast } = useToast();
-
   // State for form configuration
   const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(
     null
@@ -209,11 +207,7 @@ export function AdminScholarshipManagementInterface({
       }
     } catch (err) {
       console.error("Failed to load scholarship data:", err);
-      toast({
-        title: "載入失敗",
-        description: "無法載入獎學金資料",
-        variant: "destructive",
-      });
+      toast.error("無法載入獎學金資料");
     } finally {
       setLoadingWhitelist(false);
     }
@@ -228,11 +222,7 @@ export function AdminScholarshipManagementInterface({
       }
     } catch (err: any) {
       console.error("Failed to load whitelist:", err);
-      toast({
-        title: "載入失敗",
-        description: err.message || "無法載入白名單",
-        variant: "destructive",
-      });
+      toast.error(err.message || "無法載入白名單");
     } finally {
       setLoadingWhitelist(false);
     }
@@ -623,11 +613,7 @@ export function AdminScholarshipManagementInterface({
   // Whitelist operation functions
   const handleAddStudent = async () => {
     if (!newStudentNycuId.trim() || !newStudentSubType || !activeConfigId) {
-      toast({
-        title: "輸入錯誤",
-        description: "請填寫學號和選擇子獎學金類型",
-        variant: "destructive",
-      });
+      toast.error("請填寫學號和選擇子獎學金類型");
       return;
     }
 
@@ -638,28 +624,17 @@ export function AdminScholarshipManagementInterface({
       });
 
       if (response.success) {
-        toast({
-          title: "新增成功",
-          description: `已將學號 ${newStudentNycuId} 加入白名單`,
-        });
+        toast.success(`已將學號 ${newStudentNycuId} 加入白名單`);
         setNewStudentNycuId("");
         if (activeConfigId) {
           await loadWhitelist(activeConfigId);
         }
       } else if (response.data?.failed_items && response.data.failed_items.length > 0) {
         const batchResult = response.data as { success_count: number; failed_items: Array<{ nycu_id: string; reason: string; }>; };
-        toast({
-          title: "新增失敗",
-          description: batchResult.failed_items[0].reason,
-          variant: "destructive",
-        });
+        toast.error(batchResult.failed_items[0].reason);
       }
     } catch (error: any) {
-      toast({
-        title: "新增失敗",
-        description: error.message || "無法新增學生到白名單",
-        variant: "destructive",
-      });
+      toast.error(error.message || "無法新增學生到白名單");
     } finally {
       setAddingStudent(false);
     }
@@ -674,19 +649,12 @@ export function AdminScholarshipManagementInterface({
       });
 
       if (response.success) {
-        toast({
-          title: "刪除成功",
-          description: `已移除 ${nycuIds.length} 位學生`,
-        });
+        toast.success(`已移除 ${nycuIds.length} 位學生`);
         setSelectedStudents(new Set());
         await loadWhitelist(activeConfigId);
       }
     } catch (error: any) {
-      toast({
-        title: "刪除失敗",
-        description: error.message || "無法刪除學生",
-        variant: "destructive",
-      });
+      toast.error(error.message || "無法刪除學生");
     }
   };
 
@@ -700,24 +668,18 @@ export function AdminScholarshipManagementInterface({
 
       if (response.success && response.data) {
         const result = response.data as { success_count: number; failed_items: Array<{ nycu_id: string; reason: string; }>; };
-        toast({
-          title: "匯入完成",
-          description: `成功: ${result.success_count} 筆，失敗: ${result.failed_items.length} 筆`,
-          variant: result.failed_items.length > 0 ? "destructive" : "default",
-        });
-
+        const message = `成功: ${result.success_count} 筆，失敗: ${result.failed_items.length} 筆`;
         if (result.failed_items.length > 0) {
+          toast.error(message);
           console.error("Import errors:", result.failed_items);
+        } else {
+          toast.success(message);
         }
 
         await loadWhitelist(activeConfigId);
       }
     } catch (error: any) {
-      toast({
-        title: "匯入失敗",
-        description: error.message || "無法匯入 Excel 檔案",
-        variant: "destructive",
-      });
+      toast.error(error.message || "無法匯入 Excel 檔案");
     } finally {
       setLoadingWhitelist(false);
       if (fileInputRef.current) {
@@ -739,16 +701,9 @@ export function AdminScholarshipManagementInterface({
       a.click();
       window.URL.revokeObjectURL(url);
 
-      toast({
-        title: "匯出成功",
-        description: "白名單已下載為 Excel 檔案",
-      });
+      toast.success("白名單已下載為 Excel 檔案");
     } catch (error: any) {
-      toast({
-        title: "匯出失敗",
-        description: error.message || "無法匯出白名單",
-        variant: "destructive",
-      });
+      toast.error(error.message || "無法匯出白名單");
     }
   };
 
@@ -764,16 +719,9 @@ export function AdminScholarshipManagementInterface({
       a.click();
       window.URL.revokeObjectURL(url);
 
-      toast({
-        title: "下載成功",
-        description: "匯入模板已下載",
-      });
+      toast.success("匯入模板已下載");
     } catch (error: any) {
-      toast({
-        title: "下載失敗",
-        description: error.message || "無法下載模板",
-        variant: "destructive",
-      });
+      toast.error(error.message || "無法下載模板");
     }
   };
 

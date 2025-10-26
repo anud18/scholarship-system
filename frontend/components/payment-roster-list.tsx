@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner";
 import { Search, MoreHorizontal, Download, Eye, RefreshCw, Trash2, FileSpreadsheet } from "lucide-react"
 import { formatDateTime, getStatusBadgeVariant } from "@/lib/utils"
 
@@ -72,11 +72,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
       }
     } catch (error) {
       console.error("獲取造冊列表失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法載入造冊列表",
-        variant: "destructive",
-      })
+      toast.error("無法載入造冊列表")
     } finally {
       setLoading(false)
     }
@@ -96,17 +92,10 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
         throw new Error("無法取得下載連結")
       }
 
-      toast({
-        title: "成功",
-        description: "造冊檔案已下載",
-      })
+      toast.success("造冊檔案已下載")
     } catch (error) {
       console.error("下載造冊失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法下載造冊檔案",
-        variant: "destructive",
-      })
+      toast.error("無法下載造冊檔案")
     } finally {
       setActionLoading(prev => ({ ...prev, [rosterId]: false }))
     }
@@ -120,20 +109,13 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
         method: "POST",
       })
 
-      toast({
-        title: "成功",
-        description: "造冊已重新產生",
-      })
+      toast.success("造冊已重新產生")
 
       fetchRosters()
       onRosterChange()
     } catch (error) {
       console.error("重新產生造冊失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法重新產生造冊",
-        variant: "destructive",
-      })
+      toast.error("無法重新產生造冊")
     } finally {
       setActionLoading(prev => ({ ...prev, [rosterId]: false }))
     }
@@ -147,10 +129,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
         method: "DELETE",
       })
 
-      toast({
-        title: "成功",
-        description: "造冊已刪除",
-      })
+      toast.success("造冊已刪除")
 
       fetchRosters()
       onRosterChange()
@@ -158,11 +137,7 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
       setSelectedRoster(null)
     } catch (error) {
       console.error("刪除造冊失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法刪除造冊",
-        variant: "destructive",
-      })
+      toast.error("無法刪除造冊")
     }
   }
 

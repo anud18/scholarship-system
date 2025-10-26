@@ -498,7 +498,7 @@ class TestAdminEndpoints:
         # Arrange
         settings_data = {
             "max_file_size": 10485760,  # 10MB
-            "allowed_file_types": ["pdf", "jpg", "png"],
+            "allowed_file_types": ["pdf", "jpg", "jpeg", "png"],
             "email_notifications_enabled": True,
         }
 

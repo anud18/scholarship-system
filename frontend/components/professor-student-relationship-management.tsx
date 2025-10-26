@@ -38,7 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import {
   api,
   ProfessorStudentRelationship,
@@ -146,11 +146,7 @@ export default function ProfessorStudentRelationshipManagement() {
         setRelationships(response.data as ProfessorStudentRelationship[]);
       }
     } catch (error) {
-      toast({
-        title: "載入失敗",
-        description: "無法載入教授學生關係資料",
-        variant: "destructive",
-      });
+      toast.error("無法載入教授學生關係資料");
     } finally {
       setLoading(false);
     }
@@ -163,10 +159,7 @@ export default function ProfessorStudentRelationshipManagement() {
           newRelationship
         );
       if (response.success) {
-        toast({
-          title: "建立成功",
-          description: "教授學生關係已成功建立",
-        });
+        toast.success("教授學生關係已成功建立");
         setShowCreateDialog(false);
         setNewRelationship({
           professor_id: 0,
@@ -179,11 +172,7 @@ export default function ProfessorStudentRelationshipManagement() {
         loadRelationships();
       }
     } catch (error) {
-      toast({
-        title: "建立失敗",
-        description: "無法建立教授學生關係",
-        variant: "destructive",
-      });
+      toast.error("無法建立教授學生關係");
     }
   };
 
@@ -208,19 +197,12 @@ export default function ProfessorStudentRelationshipManagement() {
           updateData
         );
       if (response.success) {
-        toast({
-          title: "更新成功",
-          description: "教授學生關係已成功更新",
-        });
+        toast.success("教授學生關係已成功更新");
         setEditingRelationship(null);
         loadRelationships();
       }
     } catch (error) {
-      toast({
-        title: "更新失敗",
-        description: "無法更新教授學生關係",
-        variant: "destructive",
-      });
+      toast.error("無法更新教授學生關係");
     }
   };
 
@@ -233,18 +215,11 @@ export default function ProfessorStudentRelationshipManagement() {
       const response =
         await api.professorStudent.deleteProfessorStudentRelationship(id);
       if (response.success) {
-        toast({
-          title: "刪除成功",
-          description: "教授學生關係已成功刪除",
-        });
+        toast.success("教授學生關係已成功刪除");
         loadRelationships();
       }
     } catch (error) {
-      toast({
-        title: "刪除失敗",
-        description: "無法刪除教授學生關係",
-        variant: "destructive",
-      });
+      toast.error("無法刪除教授學生關係");
     }
   };
 

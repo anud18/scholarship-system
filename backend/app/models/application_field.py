@@ -93,7 +93,7 @@ class ApplicationDocument(Base):
 
     # Requirements
     is_required = Column(Boolean, default=True)
-    accepted_file_types = Column(JSON)  # 接受的檔案類型 ["PDF", "JPG", "PNG"]
+    accepted_file_types = Column(JSON)  # 接受的檔案類型 ["PDF", "JPG", "JPEG", "PNG"]
     max_file_size = Column(String(20), default="5MB")  # 檔案大小限制
     max_file_count = Column(Integer, default=1)  # 檔案數量限制
 

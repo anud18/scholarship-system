@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuotaData } from "@/hooks/use-quota-data";
 import apiClient from "@/lib/api";
@@ -47,9 +47,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-export function QuotaManagement() {
-  const { toast } = useToast();
-  const { user } = useAuth();
+export function QuotaManagement() {  const { user } = useAuth();
   // State management
   const [availablePeriods, setAvailablePeriods] = useState<AvailablePeriod[]>(
     []
@@ -171,11 +169,7 @@ export function QuotaManagement() {
     } catch (error) {
       console.error("Error fetching available periods:", error);
       setError("無法載入可用學期資料");
-      toast({
-        title: "載入失敗",
-        description: "無法載入可用學期資料",
-        variant: "destructive",
-      });
+      toast.error("無法載入可用學期資料");
     }
   };
 
@@ -184,16 +178,9 @@ export function QuotaManagement() {
 
     try {
       await refresh();
-      toast({
-        title: "更新成功",
-        description: "配額資料已更新",
-      });
+      toast.success("配額資料已更新");
     } catch (error) {
-      toast({
-        title: "更新失敗",
-        description: error instanceof Error ? error.message : "無法更新配額資料",
-        variant: "destructive",
-      });
+      toast.error(error instanceof Error ? error.message : "無法更新配額資料");
     }
   }, [selectedPeriod, refreshing, refresh, toast]);
 
@@ -211,17 +198,9 @@ export function QuotaManagement() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      toast({
-        title: "匯出成功",
-        description: "配額資料已匯出",
-      });
+      toast.success("配額資料已匯出");
     } catch (error) {
-      toast({
-        title: "匯出失敗",
-        description:
-          error instanceof Error ? error.message : "無法匯出配額資料",
-        variant: "destructive",
-      });
+      toast.error(error instanceof Error ? error.message : "無法匯出配額資料");
     }
   };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Card,
   CardContent,
@@ -25,7 +25,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
-import api, { type UserResponse } from "@/lib/api";
+import { useStudentProfile } from "@/hooks/use-student-profile";
 
 interface StudentDataReviewStepProps {
   onNext: () => void;
@@ -34,22 +34,16 @@ interface StudentDataReviewStepProps {
   locale: "zh" | "en";
 }
 
-interface StudentInfo {
-  user_info: UserResponse;
-  student_info?: any;
-  profile?: any;
-}
-
 export function StudentDataReviewStep({
   onNext,
   onBack,
   onConfirm,
   locale,
 }: StudentDataReviewStepProps) {
-  const [loading, setLoading] = useState(true);
-  const [studentData, setStudentData] = useState<StudentInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+
+  // Use SWR hook for student profile data
+  const { userInfo, studentInfo, isLoading, error, refresh } = useStudentProfile();
 
   const t = {
     zh: {
@@ -113,34 +107,14 @@ export function StudentDataReviewStep({
 
   const text = t[locale];
 
-  useEffect(() => {
-    loadStudentData();
-  }, []);
-
-  const loadStudentData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.userProfiles.getMyProfile();
-      if (response.success && response.data) {
-        setStudentData(response.data as unknown as StudentInfo);
-      } else {
-        setError(response.message || text.loadError);
-      }
-    } catch (err: any) {
-      setError(err.message || text.loadError);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleConfirm = () => {
     setConfirmed(true);
     onConfirm(true);
     onNext();
   };
 
-  if (loading) {
+  // Loading state
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="p-12 text-center">
@@ -151,24 +125,24 @@ export function StudentDataReviewStep({
     );
   }
 
+  // Error state
   if (error) {
     return (
       <Card>
         <CardContent className="p-12 text-center">
           <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
           <p className="text-lg text-red-600 mb-4">{text.loadError}</p>
-          <p className="text-sm text-gray-600 mb-6">{error}</p>
-          <Button onClick={loadStudentData}>{text.retry}</Button>
+          <p className="text-sm text-gray-600 mb-6">{error.message}</p>
+          <Button onClick={() => refresh()}>{text.retry}</Button>
         </CardContent>
       </Card>
     );
   }
 
-  if (!studentData) {
+  // No data state (shouldn't happen if no error)
+  if (!userInfo) {
     return null;
   }
-
-  const { user_info, student_info } = studentData;
 
   return (
     <div className="space-y-6">
@@ -205,7 +179,7 @@ export function StudentDataReviewStep({
                     </label>
                     <div className="flex items-center gap-2">
                       <div className="text-base font-semibold text-nycu-navy-800">
-                        {user_info.name || "-"}
+                        {userInfo.name || "-"}
                       </div>
                     </div>
                   </div>
@@ -217,7 +191,7 @@ export function StudentDataReviewStep({
                     </label>
                     <div className="flex items-center gap-2">
                       <div className="text-base font-semibold text-nycu-navy-800">
-                        {user_info.nycu_id || "-"}
+                        {userInfo.nycu_id || "-"}
                       </div>
                     </div>
                   </div>
@@ -230,7 +204,7 @@ export function StudentDataReviewStep({
                     <div className="flex items-center gap-2">
                       <Mail className="h-4 w-4 text-gray-500" />
                       <div className="text-base text-gray-700">
-                        {user_info.email || "-"}
+                        {userInfo.email || "-"}
                       </div>
                     </div>
                   </div>
@@ -243,7 +217,7 @@ export function StudentDataReviewStep({
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-gray-500" />
                       <div className="text-base text-gray-700">
-                        {user_info.dept_name || "-"}
+                        {userInfo.dept_name || "-"}
                       </div>
                     </div>
                   </div>
@@ -253,17 +227,19 @@ export function StudentDataReviewStep({
                     <label className="text-sm font-medium text-gray-600">
                       {text.userType}
                     </label>
-                    <Badge
-                      variant={
-                        user_info.user_type === "student"
-                          ? "default"
-                          : "secondary"
-                      }
-                    >
-                      {user_info.user_type === "student"
-                        ? text.student
-                        : text.employee}
-                    </Badge>
+                    <p>
+                      <Badge
+                        variant={
+                          userInfo.user_type === "student"
+                            ? "default"
+                            : "secondary"
+                        }
+                      >
+                        {userInfo.user_type === "student"
+                          ? text.student
+                          : text.employee}
+                      </Badge>
+                    </p>
                   </div>
 
                   {/* Status */}
@@ -271,9 +247,11 @@ export function StudentDataReviewStep({
                     <label className="text-sm font-medium text-gray-600">
                       {text.status}
                     </label>
-                    <Badge variant="outline">
-                      {user_info.status || "-"}
-                    </Badge>
+                    <p>
+                      <Badge variant="outline">
+                        {userInfo.status || "-"}
+                      </Badge>
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -281,7 +259,7 @@ export function StudentDataReviewStep({
           </div>
 
           {/* Academic Information - Only for students */}
-          {student_info && (
+          {studentInfo && (
             <>
               <Separator />
               <div>
@@ -302,7 +280,7 @@ export function StudentDataReviewStep({
                         <div className="flex items-center gap-2">
                           <BookOpen className="h-4 w-4 text-gray-500" />
                           <div className="text-base text-gray-700">
-                            {student_info.std_degree || "-"}
+                            {studentInfo.std_degree || "-"}
                           </div>
                         </div>
                       </div>
@@ -313,7 +291,7 @@ export function StudentDataReviewStep({
                           {text.enrollmentStatus}
                         </label>
                         <div className="text-base font-semibold text-green-700">
-                          {student_info.std_studingstatus || "-"}
+                          {studentInfo.std_studingstatus || "-"}
                         </div>
                       </div>
 
@@ -325,7 +303,7 @@ export function StudentDataReviewStep({
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-gray-500" />
                           <div className="text-base text-gray-700">
-                            {student_info.std_enrollyear || "-"}
+                            {studentInfo.std_enrollyear || "-"}
                           </div>
                         </div>
                       </div>
@@ -336,7 +314,7 @@ export function StudentDataReviewStep({
                           {text.semesterCount}
                         </label>
                         <div className="text-base text-gray-700">
-                          {student_info.std_termcount || "-"}
+                          {studentInfo.std_termcount || "-"}
                         </div>
                       </div>
                     </div>

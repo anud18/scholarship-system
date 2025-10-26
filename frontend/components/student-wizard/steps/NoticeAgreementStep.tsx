@@ -54,7 +54,7 @@ export function NoticeAgreementStep({
         {
           title: "文件準備",
           content:
-            "請備妥所需文件，包括但不限於成績單、在學證明、指導教授推薦函等。所有文件必須為清晰可辨識的電子檔案（PDF、JPG 或 PNG 格式）。",
+            "請備妥所需文件，包括但不限於成績單、在學證明、指導教授推薦函等。所有文件必須為清晰可辨識的電子檔案（PDF、JPG、JPEG 或 PNG 格式）。",
         },
         {
           title: "資料正確性",
@@ -107,7 +107,7 @@ export function NoticeAgreementStep({
         {
           title: "Document Preparation",
           content:
-            "Please prepare all required documents, including but not limited to transcripts, enrollment certificates, and advisor recommendation letters. All documents must be clear electronic files (PDF, JPG, or PNG format).",
+            "Please prepare all required documents, including but not limited to transcripts, enrollment certificates, and advisor recommendation letters. All documents must be clear electronic files (PDF, JPG, JPEG, or PNG format).",
         },
         {
           title: "Data Accuracy",

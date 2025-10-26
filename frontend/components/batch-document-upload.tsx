@@ -216,8 +216,8 @@ export function BatchDocumentUpload({
               </ul>
               <p className="text-sm text-gray-600">
                 {locale === "zh"
-                  ? "支援格式：PDF, JPG, PNG"
-                  : "Supported formats: PDF, JPG, PNG"}
+                  ? "支援格式：PDF, JPG, JPEG, PNG"
+                  : "Supported formats: PDF, JPG, JPEG, PNG"}
               </p>
             </div>
           </AlertDescription>

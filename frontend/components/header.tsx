@@ -71,7 +71,7 @@ export function Header({
                     <span className="font-bold text-xl nycu-text-gradient">
                       NYCU
                     </span>
-                    <span className="text-sm font-medium text-nycu-navy-600">
+                    <span className="text-sm font-medium text-nycu-navy-600 whitespace-nowrap">
                       {locale === "zh"
                         ? "陽明交大"
                         : "National Yang Ming Chiao Tung University"}
@@ -101,7 +101,7 @@ export function Header({
             {/* Role Badge */}
             <Badge
               variant={roleBadge.variant}
-              className="hidden sm:inline-flex"
+              className="hidden sm:inline-flex whitespace-nowrap"
             >
               {roleBadge.label}
             </Badge>

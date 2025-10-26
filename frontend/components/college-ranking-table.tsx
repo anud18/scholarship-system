@@ -69,7 +69,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react";
 import { getTranslation } from "@/lib/i18n";
-import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import * as XLSX from "xlsx";
 import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDialog";
@@ -311,8 +311,6 @@ export function CollegeRankingTable({
   saveStatus = 'idle',
 }: CollegeRankingTableProps) {
   const t = (key: string) => getTranslation(locale, key);
-  const { toast } = useToast();
-
   const formatSemesterLabel = (value?: string | null) => {
     if (!value) {
       return locale === "zh" ? "全年" : "Yearly";
@@ -401,11 +399,7 @@ export function CollegeRankingTable({
 
     // Validate file type
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      toast({
-        title: "檔案格式錯誤",
-        description: "請上傳 Excel 檔案 (.xlsx 或 .xls)",
-        variant: "destructive",
-      });
+      toast.error("請上傳 Excel 檔案 (.xlsx 或 .xls)");
       return;
     }
 
@@ -427,11 +421,7 @@ export function CollegeRankingTable({
       })).filter(item => item.student_id && item.rank_position > 0);
 
       if (importData.length === 0) {
-        toast({
-          title: "無有效資料",
-          description: "Excel 檔案中沒有找到有效的排名資料",
-          variant: "destructive",
-        });
+        toast.error("Excel 檔案中沒有找到有效的排名資料");
         setIsImporting(false);
         return;
       }
@@ -439,19 +429,12 @@ export function CollegeRankingTable({
       // Call import handler if provided
       if (onImportExcel) {
         await onImportExcel(importData);
-        toast({
-          title: "匯入成功",
-          description: `成功匯入 ${importData.length} 筆排名資料`,
-        });
+        toast.success(`成功匯入 ${importData.length} 筆排名資料`);
         setIsImportDialogOpen(false);
       }
     } catch (error) {
       console.error('Excel import error:', error);
-      toast({
-        title: "匯入失敗",
-        description: error instanceof Error ? error.message : "無法讀取 Excel 檔案",
-        variant: "destructive",
-      });
+      toast.error(error instanceof Error ? error.message : "無法讀取 Excel 檔案");
     } finally {
       setIsImporting(false);
       // Reset file input
@@ -488,17 +471,10 @@ export function CollegeRankingTable({
       // Download file
       XLSX.writeFile(workbook, filename);
 
-      toast({
-        title: "下載成功",
-        description: `已下載範本檔案：${filename}`,
-      });
+      toast.success(`已下載範本檔案：${filename}`);
     } catch (error) {
       console.error('Template download error:', error);
-      toast({
-        title: "下載失敗",
-        description: error instanceof Error ? error.message : "無法產生範本檔案",
-        variant: "destructive",
-      });
+      toast.error(error instanceof Error ? error.message : "無法產生範本檔案");
     }
   };
 
@@ -557,17 +533,10 @@ export function CollegeRankingTable({
       // Download file
       XLSX.writeFile(workbook, filename);
 
-      toast({
-        title: "匯出成功",
-        description: `已匯出 ${exportData.length} 筆排名資料`,
-      });
+      toast.success(`已匯出 ${exportData.length} 筆排名資料`);
     } catch (error) {
       console.error('Export error:', error);
-      toast({
-        title: "匯出失敗",
-        description: error instanceof Error ? error.message : "無法匯出排名資料",
-        variant: "destructive",
-      });
+      toast.error(error instanceof Error ? error.message : "無法匯出排名資料");
     }
   };
 

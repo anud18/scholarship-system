@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner";
 import { Search, MoreHorizontal, Play, Pause, Square, Trash2, Edit, Calendar, FileText } from "lucide-react"
 import { EditScheduleDialog } from "./edit-schedule-dialog"
 import { formatDateTime, getStatusBadgeVariant } from "@/lib/utils"
@@ -76,11 +76,7 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
       }
     } catch (error) {
       console.error("獲取排程列表失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法載入排程列表",
-        variant: "destructive",
-      })
+      toast.error("無法載入排程列表")
     } finally {
       setLoading(false)
     }
@@ -95,20 +91,13 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
         body: JSON.stringify({ status: newStatus }),
       })
 
-      toast({
-        title: "成功",
-        description: `排程狀態已更新為 ${getStatusLabel(newStatus)}`,
-      })
+      toast.success(`排程狀態已更新為 ${getStatusLabel(newStatus)}`)
 
       fetchSchedules()
       onScheduleChange()
     } catch (error) {
       console.error("狀態更新失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法更新排程狀態",
-        variant: "destructive",
-      })
+      toast.error("無法更新排程狀態")
     } finally {
       setActionLoading(prev => ({ ...prev, [scheduleId]: false }))
     }
@@ -122,20 +111,13 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
         method: "POST",
       })
 
-      toast({
-        title: "成功",
-        description: "排程已觸發執行",
-      })
+      toast.success("排程已觸發執行")
 
       fetchSchedules()
       onScheduleChange()
     } catch (error) {
       console.error("執行排程失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法執行排程",
-        variant: "destructive",
-      })
+      toast.error("無法執行排程")
     } finally {
       setActionLoading(prev => ({ ...prev, [scheduleId]: false }))
     }
@@ -149,10 +131,7 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
         method: "DELETE",
       })
 
-      toast({
-        title: "成功",
-        description: "排程已刪除",
-      })
+      toast.success("排程已刪除")
 
       fetchSchedules()
       onScheduleChange()
@@ -160,11 +139,7 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
       setSelectedSchedule(null)
     } catch (error) {
       console.error("刪除排程失敗:", error)
-      toast({
-        title: "錯誤",
-        description: "無法刪除排程",
-        variant: "destructive",
-      })
+      toast.error("無法刪除排程")
     }
   }
 

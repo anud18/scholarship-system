@@ -310,7 +310,7 @@ class ApplicationFieldService:
             "description_en": "Please upload bank statement cover",
             "is_required": True,
             "is_fixed": True,  # Mark as fixed document
-            "accepted_file_types": ["PDF", "JPG", "PNG"],
+            "accepted_file_types": ["PDF", "JPG", "JPEG", "PNG"],
             "max_file_size": "10MB",
             "max_file_count": 1,
             "display_order": display_order,
