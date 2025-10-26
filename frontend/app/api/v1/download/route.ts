@@ -32,6 +32,38 @@ function validateId(id: string | null, paramName: string): void {
   }
 }
 
+/**
+ * Validate backend URL to prevent SSRF attacks
+ * Ensures the URL hostname is from a trusted allowlist
+ */
+function validateBackendUrl(envUrl: string | undefined): string {
+  if (!envUrl) {
+    throw new Error("Invalid backend configuration: URL not set");
+  }
+
+  // Parse URL to extract hostname
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(envUrl);
+  } catch (error) {
+    throw new Error("Invalid backend URL format");
+  }
+
+  // Allowlist of trusted hostnames
+  const allowedHostnames = [
+    'backend',                  // Docker internal network
+    'localhost',                // Local development
+    'host.docker.internal',     // Docker host gateway
+    'ss.test.nycu.edu.tw'       // Production server
+  ];
+
+  if (!allowedHostnames.includes(parsedUrl.hostname)) {
+    throw new Error(`Untrusted backend hostname: ${parsedUrl.hostname}`);
+  }
+
+  return envUrl;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -72,14 +104,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 使用後端的下載端點
-    let backendUrl;
+    // Security: Validate backend URL to prevent SSRF attacks
+    let baseUrl: string;
+    try {
+      baseUrl = validateBackendUrl(
+        process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL
+      );
+    } catch (error: any) {
+      console.error("Backend URL validation error:", error.message);
+      return NextResponse.json(
+        { error: "Invalid backend configuration" },
+        { status: 500 }
+      );
+    }
+
+    // Construct backend URL using safe URL constructor
+    let backendUrl: string;
     if (applicationId) {
       // Application file download
-      backendUrl = `${process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL}/api/v1/files/applications/${applicationId}/files/${fileId}/download?token=${token}`;
+      const url = new URL(`/api/v1/files/applications/${applicationId}/files/${fileId}/download`, baseUrl);
+      url.searchParams.set("token", token);
+      backendUrl = url.toString();
     } else if (userId) {
       // User profile file download (e.g., bank document)
-      backendUrl = `${process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL}/api/v1/user-profiles/files/bank_documents/${fileId}?token=${token}`;
+      const url = new URL(`/api/v1/user-profiles/files/bank_documents/${fileId}`, baseUrl);
+      url.searchParams.set("token", token);
+      backendUrl = url.toString();
     } else {
       return NextResponse.json(
         { error: "Invalid file context" },

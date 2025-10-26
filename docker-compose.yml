@@ -133,6 +133,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      INTERNAL_API_URL: http://backend:8000  # Internal Docker network URL (trusted)
       NEXT_PUBLIC_API_URL: http://${HOST_IP:-host.docker.internal}:8000
       NODE_ENV: production
     depends_on:
