@@ -101,6 +101,38 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Remove development-only directories
+        run: |
+          echo "::group::Removing development-only directories"
+
+          # Remove mock-student-api (development only)
+          if [ -d "mock-student-api" ]; then
+            echo "::notice::Removing mock-student-api/ directory"
+            git rm -rf mock-student-api/
+
+            echo "::notice::Removed mock-student-api from production mirror"
+          else
+            echo "::notice::No mock-student-api/ directory found"
+          fi
+
+          # Commit the removal
+          if git diff --cached --quiet; then
+            echo "::notice::No development directories to remove"
+          else
+            git commit -m "chore: remove development-only directories for production
+
+            Development directories are not needed in production:
+            - mock-student-api/: Mock Student API for local development
+
+            Source: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            "
+            echo "::notice::✅ Committed development directories removal"
+          fi
+
+          echo "::endgroup::"
+
       - name: Show mirror contents
         run: |
           echo "::group::Production mirror contents"
