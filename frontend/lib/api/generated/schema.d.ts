@@ -1023,46 +1023,6 @@ export interface paths {
         patch: operations["cancel_document_request_api_v1_document_requests__request_id__cancel_patch"];
         trace?: never;
     };
-    "/api/v1/admin/applications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get All Applications
-         * @description Get all applications with pagination (admin only)
-         */
-        get: operations["get_all_applications_api_v1_admin_applications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/applications/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Historical Applications
-         * @description Get historical applications with advanced filtering (admin only)
-         */
-        get: operations["get_historical_applications_api_v1_admin_applications_history_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/dashboard/stats": {
         parameters: {
             query?: never;
@@ -1073,6 +1033,16 @@ export interface paths {
         /**
          * Get Dashboard Stats
          * @description Get dashboard statistics for admin
+         *
+         *     Returns system overview data including:
+         *     - totalUsers: Total registered users
+         *     - activeApplications: Applications in progress (submitted/under_review)
+         *     - completedReviews: Completed reviews (approved/rejected)
+         *     - pendingReviews: Pending reviews
+         *     - totalScholarships: Total scholarship types
+         *     - systemUptime: System uptime (percentage)
+         *     - avgResponseTime: Average application processing time
+         *     - storageUsed: Storage usage (calculated from uploads)
          */
         get: operations["get_dashboard_stats_api_v1_admin_dashboard_stats_get"];
         put?: never;
@@ -1123,74 +1093,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/system-setting": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get System Setting
-         * @description Get system setting by key (admin only)
-         */
-        get: operations["get_system_setting_api_v1_admin_system_setting_get"];
-        /**
-         * Set System Setting
-         * @description Update system setting (admin only)
-         */
-        put: operations["set_system_setting_api_v1_admin_system_setting_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/email-template": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Email Template
-         * @description Get email template by key (admin only)
-         */
-        get: operations["get_email_template_api_v1_admin_email_template_get"];
-        /**
-         * Update Email Template
-         * @description Update email template (super admin only)
-         */
-        put: operations["update_email_template_api_v1_admin_email_template_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/email-templates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Email Templates
-         * @description Get all email templates with optional sending type filtering
-         */
-        get: operations["get_email_templates_api_v1_admin_email_templates_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/recent-applications": {
         parameters: {
             query?: never;
@@ -1203,6 +1105,28 @@ export interface paths {
          * @description Get recent applications for admin dashboard
          */
         get: operations["get_recent_applications_api_v1_admin_recent_applications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/scholarships/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Scholarship Stats
+         * @description Get scholarship statistics grouped by scholarship type
+         *
+         *     Returns applications count and status breakdown for each scholarship type
+         */
+        get: operations["get_scholarship_stats_api_v1_admin_scholarships_stats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1229,6 +1153,132 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/system-setting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get System Setting
+         * @description Get system setting by key (admin only)
+         */
+        get: operations["get_system_setting_api_v1_admin_system_setting_get"];
+        /**
+         * Set System Setting
+         * @description Update system setting (admin only)
+         */
+        put: operations["set_system_setting_api_v1_admin_system_setting_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get All Applications
+         * @description Get all applications with pagination (admin only)
+         */
+        get: operations["get_all_applications_api_v1_admin_applications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/applications/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Historical Applications
+         * @description Get historical applications with advanced filtering (admin only)
+         */
+        get: operations["get_historical_applications_api_v1_admin_applications_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/applications/{id}/assign-professor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Assign Professor To Application
+         * @description Assign a professor to review an application
+         */
+        put: operations["assign_professor_to_application_api_v1_admin_applications__id__assign_professor_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/applications/bulk-approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Approve Applications Endpoint
+         * @description Bulk approve multiple applications.
+         */
+        post: operations["bulk_approve_applications_endpoint_api_v1_admin_applications_bulk_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/applications/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Admin Update Application Status
+         * @description Update application status (admin version)
+         *
+         *     This is a wrapper around the applications endpoint for admin-specific access.
+         */
+        patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
         trace?: never;
     };
     "/api/v1/admin/announcements": {
@@ -1278,26 +1328,6 @@ export interface paths {
          * @description Delete system announcement (admin only)
          */
         delete: operations["delete_announcement_api_v1_admin_announcements__id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/scholarships/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Scholarship Statistics
-         * @description Get scholarship-specific statistics for admin dashboard
-         */
-        get: operations["get_scholarship_statistics_api_v1_admin_scholarships_stats_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1436,6 +1466,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/scholarships/all-for-permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get All Scholarships For Permissions
+         * @description Get all scholarships for permission management (admin only)
+         */
+        get: operations["get_all_scholarships_for_permissions_api_v1_admin_scholarships_all_for_permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/scholarships/my-scholarships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Scholarships
+         * @description Get scholarships that the current user has permission to manage
+         */
+        get: operations["get_my_scholarships_api_v1_admin_scholarships_my_scholarships_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/scholarship-permissions": {
         parameters: {
             query?: never;
@@ -1499,46 +1569,6 @@ export interface paths {
          * @description Delete scholarship permission (admin can only delete permissions for scholarships they manage, and cannot delete their own permissions)
          */
         delete: operations["delete_scholarship_permission_api_v1_admin_scholarship_permissions__id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/scholarships/all-for-permissions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get All Scholarships For Permissions
-         * @description Get all scholarships for permission management (admin only)
-         */
-        get: operations["get_all_scholarships_for_permissions_api_v1_admin_scholarships_all_for_permissions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/scholarships/my-scholarships": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get My Scholarships
-         * @description Get scholarships that the current user has permission to manage
-         */
-        get: operations["get_my_scholarships_api_v1_admin_scholarships_my_scholarships_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1736,7 +1766,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/professors": {
+    "/api/v1/admin/email-template": {
         parameters: {
             query?: never;
             header?: never;
@@ -1744,11 +1774,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Available Professors
-         * @description Get list of available professors for assignment.
+         * Get Email Template
+         * @description Get email template by key (admin only)
          */
-        get: operations["get_available_professors_api_v1_admin_professors_get"];
-        put?: never;
+        get: operations["get_email_template_api_v1_admin_email_template_get"];
+        /**
+         * Update Email Template
+         * @description Update email template (super admin only)
+         */
+        put: operations["update_email_template_api_v1_admin_email_template_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1756,47 +1790,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/applications/{id}/assign-professor": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Assign Professor To Application
-         * @description Assign a professor to review an application
-         */
-        put: operations["assign_professor_to_application_api_v1_admin_applications__id__assign_professor_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/applications/bulk-approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Bulk Approve Applications Endpoint
-         * @description Bulk approve multiple applications.
-         */
-        post: operations["bulk_approve_applications_endpoint_api_v1_admin_applications_bulk_approve_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/configurations": {
+    "/api/v1/admin/email-templates": {
         parameters: {
             query?: never;
             header?: never;
@@ -1804,142 +1798,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get All Configurations
-         * @description Get all system configurations organized by category (super admin only)
+         * Get Email Templates
+         * @description Get all email templates with optional sending type filtering
          */
-        get: operations["get_all_configurations_api_v1_admin_configurations_get"];
-        put?: never;
-        /**
-         * Create Configuration
-         * @description Create a new configuration (super admin only)
-         */
-        post: operations["create_configuration_api_v1_admin_configurations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/configurations/bulk": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Bulk Update Configurations
-         * @description Bulk update multiple configurations (super admin only)
-         */
-        put: operations["bulk_update_configurations_api_v1_admin_configurations_bulk_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/configurations/validate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Validate Configuration
-         * @description Validate a configuration value (super admin only)
-         */
-        post: operations["validate_configuration_api_v1_admin_configurations_validate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/configurations/{key}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete Configuration
-         * @description Delete a configuration (super admin only)
-         */
-        delete: operations["delete_configuration_api_v1_admin_configurations__key__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/bank-verification": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Verify Bank Account
-         * @description Verify bank account information for an application (admin only)
-         */
-        post: operations["verify_bank_account_api_v1_admin_bank_verification_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/bank-verification/batch": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Batch Verify Bank Accounts
-         * @description Batch verify bank account information for multiple applications (admin only)
-         */
-        post: operations["batch_verify_bank_accounts_api_v1_admin_bank_verification_batch_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/applications/{id}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
+        get: operations["get_email_templates_api_v1_admin_email_templates_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /**
-         * Admin Update Application Status
-         * @description Update application status (admin version)
-         *
-         *     This is a wrapper around the applications endpoint for admin-specific access.
-         */
-        patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/scholarship-email-templates/{scholarship_type_id}": {
@@ -2050,6 +1918,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/configurations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get All Configurations
+         * @description Get all system configurations organized by category (super admin only)
+         */
+        get: operations["get_all_configurations_api_v1_admin_configurations_get"];
+        put?: never;
+        /**
+         * Create Configuration
+         * @description Create a new configuration (super admin only)
+         */
+        post: operations["create_configuration_api_v1_admin_configurations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/configurations/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Bulk Update Configurations
+         * @description Bulk update multiple configurations (super admin only)
+         */
+        put: operations["bulk_update_configurations_api_v1_admin_configurations_bulk_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/configurations/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Configuration
+         * @description Validate a configuration value (super admin only)
+         */
+        post: operations["validate_configuration_api_v1_admin_configurations_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/configurations/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Configuration
+         * @description Delete a configuration (super admin only)
+         */
+        delete: operations["delete_configuration_api_v1_admin_configurations__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/professors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Available Professors
+         * @description Get list of available professors for assignment.
+         */
+        get: operations["get_available_professors_api_v1_admin_professors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/professor-student-relationships": {
         parameters: {
             query?: never;
@@ -2068,6 +2040,46 @@ export interface paths {
          * @description Create a new professor-student relationship
          */
         post: operations["create_professor_student_relationship_api_v1_admin_professor_student_relationships_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bank-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Bank Account
+         * @description Verify bank account information for an application (admin only)
+         */
+        post: operations["verify_bank_account_api_v1_admin_bank_verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bank-verification/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Batch Verify Bank Accounts
+         * @description Batch verify bank account information for multiple applications (admin only)
+         */
+        post: operations["batch_verify_bank_accounts_api_v1_admin_bank_verification_batch_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6088,117 +6100,12 @@ export interface components {
              */
             change_reason?: string | null;
         };
-        /**
-         * ApiResponse
-         * @description Standard API response format
-         */
-        ApiResponse: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: unknown | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[ApplicationDocumentResponse] */
-        ApiResponse_ApplicationDocumentResponse_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["ApplicationDocumentResponse"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[ApplicationFieldResponse] */
-        ApiResponse_ApplicationFieldResponse_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["ApplicationFieldResponse"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[Dict[str, Any]] */
-        ApiResponse_Dict_str__Any__: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: {
-                [key: string]: unknown;
-            } | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[EmailAutomationRuleResponse] */
-        ApiResponse_EmailAutomationRuleResponse_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["EmailAutomationRuleResponse"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[EmailHistoryListResponse] */
-        ApiResponse_EmailHistoryListResponse_: {
+        /** ApiResponse[List[dict]] */
+        ApiResponse_List_dict__: {
             /**
              * Success
              * @default true
              */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["EmailHistoryListResponse-Output"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[List[ApplicationDocumentResponse]] */
-        ApiResponse_List_ApplicationDocumentResponse__: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: components["schemas"]["ApplicationDocumentResponse"][] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[List[ApplicationFieldResponse]] */
-        ApiResponse_List_ApplicationFieldResponse__: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: components["schemas"]["ApplicationFieldResponse"][] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[List[Dict[str, Any]]] */
-        ApiResponse_List_Dict_str__Any___: {
-            /** Success */
             success: boolean;
             /** Message */
             message: string;
@@ -6211,72 +6118,8 @@ export interface components {
             /** Trace Id */
             trace_id?: string | null;
         };
-        /** ApiResponse[List[EmailAutomationRuleResponse]] */
-        ApiResponse_List_EmailAutomationRuleResponse__: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: components["schemas"]["EmailAutomationRuleResponse"][] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[List[NotificationResponse]] */
-        ApiResponse_List_NotificationResponse__: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: components["schemas"]["NotificationResponse"][] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[List[ScholarshipRuleResponse]] */
-        ApiResponse_List_ScholarshipRuleResponse__: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: components["schemas"]["ScholarshipRuleResponse"][] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[List[WhitelistResponse]] */
-        ApiResponse_List_WhitelistResponse__: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: components["schemas"]["WhitelistResponse"][] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[NotificationResponse] */
-        ApiResponse_NotificationResponse_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["NotificationResponse"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[ScheduledEmailListResponse] */
-        ApiResponse_ScheduledEmailListResponse_: {
+        /** ApiResponse[dict] */
+        ApiResponse_dict_: {
             /**
              * Success
              * @default true
@@ -6284,99 +6127,10 @@ export interface components {
             success: boolean;
             /** Message */
             message: string;
-            data?: components["schemas"]["ScheduledEmailListResponse-Output"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[ScholarshipFormConfigResponse] */
-        ApiResponse_ScholarshipFormConfigResponse_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["ScholarshipFormConfigResponse"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[ScholarshipRuleResponse] */
-        ApiResponse_ScholarshipRuleResponse_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["ScholarshipRuleResponse"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[SendTestEmailResponse] */
-        ApiResponse_SendTestEmailResponse_: {
-            /**
-             * Success
-             * @default true
-             */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["SendTestEmailResponse"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[SimpleTestEmailResponse] */
-        ApiResponse_SimpleTestEmailResponse_: {
-            /**
-             * Success
-             * @default true
-             */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["SimpleTestEmailResponse"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[WhitelistImportResult] */
-        ApiResponse_WhitelistImportResult_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["WhitelistImportResult"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[bool] */
-        ApiResponse_bool_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
             /** Data */
-            data?: boolean | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[int] */
-        ApiResponse_int_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: number | null;
+            data?: {
+                [key: string]: unknown;
+            } | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -6542,123 +6296,6 @@ export interface components {
             } | null;
         };
         /**
-         * ApplicationDocumentResponse
-         * @description Schema for application document response
-         */
-        ApplicationDocumentResponse: {
-            /**
-             * Scholarship Type
-             * @description Scholarship type
-             */
-            scholarship_type: string;
-            /**
-             * Document Name
-             * @description Document name
-             */
-            document_name: string;
-            /**
-             * Document Name En
-             * @description Document name (English)
-             */
-            document_name_en?: string | null;
-            /**
-             * Description
-             * @description Document description
-             */
-            description?: string | null;
-            /**
-             * Description En
-             * @description Document description (English)
-             */
-            description_en?: string | null;
-            /**
-             * Is Required
-             * @description Is document required
-             * @default true
-             */
-            is_required: boolean;
-            /**
-             * Accepted File Types
-             * @description Accepted file types
-             * @default [
-             *       "PDF"
-             *     ]
-             */
-            accepted_file_types: string[];
-            /**
-             * Max File Size
-             * @description Maximum file size
-             * @default 5MB
-             */
-            max_file_size: string;
-            /**
-             * Max File Count
-             * @description Maximum file count
-             * @default 1
-             */
-            max_file_count: number;
-            /**
-             * Display Order
-             * @description Display order
-             * @default 0
-             */
-            display_order: number;
-            /**
-             * Is Active
-             * @description Is document active
-             * @default true
-             */
-            is_active: boolean;
-            /**
-             * Upload Instructions
-             * @description Upload instructions
-             */
-            upload_instructions?: string | null;
-            /**
-             * Upload Instructions En
-             * @description Upload instructions (English)
-             */
-            upload_instructions_en?: string | null;
-            /**
-             * Example File Url
-             * @description Example file MinIO object name
-             */
-            example_file_url?: string | null;
-            /**
-             * Validation Rules
-             * @description Validation rules
-             */
-            validation_rules?: {
-                [key: string]: unknown;
-            } | null;
-            /** Id */
-            id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** Created By */
-            created_by?: number | null;
-            /** Updated By */
-            updated_by?: number | null;
-            /**
-             * Is Fixed
-             * @description Is this a fixed document
-             */
-            is_fixed?: boolean | null;
-            /**
-             * Existing File Url
-             * @description URL of existing file from user profile
-             */
-            existing_file_url?: string | null;
-        };
-        /**
          * ApplicationDocumentUpdate
          * @description Schema for updating application document
          */
@@ -6804,143 +6441,6 @@ export interface components {
             conditional_rules?: {
                 [key: string]: unknown;
             } | null;
-        };
-        /**
-         * ApplicationFieldResponse
-         * @description Schema for application field response
-         */
-        ApplicationFieldResponse: {
-            /**
-             * Scholarship Type
-             * @description Scholarship type
-             */
-            scholarship_type: string;
-            /**
-             * Field Name
-             * @description Field name (English)
-             */
-            field_name: string;
-            /**
-             * Field Label
-             * @description Field label (Chinese)
-             */
-            field_label: string;
-            /**
-             * Field Label En
-             * @description Field label (English)
-             */
-            field_label_en?: string | null;
-            /**
-             * Field Type
-             * @description Field type
-             * @default text
-             */
-            field_type: string;
-            /**
-             * Is Required
-             * @description Is field required
-             * @default false
-             */
-            is_required: boolean;
-            /**
-             * Placeholder
-             * @description Placeholder text
-             */
-            placeholder?: string | null;
-            /**
-             * Placeholder En
-             * @description Placeholder text (English)
-             */
-            placeholder_en?: string | null;
-            /**
-             * Max Length
-             * @description Maximum length
-             */
-            max_length?: number | null;
-            /**
-             * Min Value
-             * @description Minimum value
-             */
-            min_value?: number | null;
-            /**
-             * Max Value
-             * @description Maximum value
-             */
-            max_value?: number | null;
-            /**
-             * Step Value
-             * @description Step value
-             */
-            step_value?: number | null;
-            /**
-             * Field Options
-             * @description Field options
-             */
-            field_options?: {
-                [key: string]: unknown;
-            }[] | null;
-            /**
-             * Display Order
-             * @description Display order
-             * @default 0
-             */
-            display_order: number;
-            /**
-             * Is Active
-             * @description Is field active
-             * @default true
-             */
-            is_active: boolean;
-            /**
-             * Help Text
-             * @description Help text
-             */
-            help_text?: string | null;
-            /**
-             * Help Text En
-             * @description Help text (English)
-             */
-            help_text_en?: string | null;
-            /**
-             * Validation Rules
-             * @description Validation rules
-             */
-            validation_rules?: {
-                [key: string]: unknown;
-            } | null;
-            /**
-             * Conditional Rules
-             * @description Conditional rules
-             */
-            conditional_rules?: {
-                [key: string]: unknown;
-            } | null;
-            /** Id */
-            id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** Created By */
-            created_by?: number | null;
-            /** Updated By */
-            updated_by?: number | null;
-            /**
-             * Is Fixed
-             * @description Is this a fixed field
-             */
-            is_fixed?: boolean | null;
-            /**
-             * Prefill Value
-             * @description Prefilled value from user profile
-             */
-            prefill_value?: string | null;
         };
         /**
          * ApplicationFieldUpdate
@@ -7799,37 +7299,6 @@ export interface components {
              */
             is_active: boolean;
         };
-        /** EmailAutomationRuleResponse */
-        EmailAutomationRuleResponse: {
-            /** Name */
-            name: string;
-            /** Description */
-            description?: string | null;
-            /** Trigger Event */
-            trigger_event: string;
-            /** Template Key */
-            template_key: string;
-            /**
-             * Delay Hours
-             * @default 0
-             */
-            delay_hours: number;
-            /** Condition Query */
-            condition_query?: string | null;
-            /**
-             * Is Active
-             * @default true
-             */
-            is_active: boolean;
-            /** Id */
-            id: number;
-            /** Created By User Id */
-            created_by_user_id: number | null;
-            /** Created At */
-            created_at: string;
-            /** Updated At */
-            updated_at: string;
-        };
         /** EmailAutomationRuleUpdate */
         EmailAutomationRuleUpdate: {
             /** Name */
@@ -7853,115 +7322,6 @@ export interface components {
          * @enum {string}
          */
         EmailCategory: "application_whitelist" | "application_student" | "recommendation_professor" | "review_college" | "supplement_student" | "result_professor" | "result_college" | "result_student" | "roster_student" | "system" | "other";
-        /**
-         * EmailHistoryListResponse
-         * @description Response schema for paginated email history
-         */
-        "EmailHistoryListResponse-Input": {
-            /** Items */
-            items: components["schemas"]["EmailHistoryRead"][];
-            /** Total */
-            total: number;
-            /** Skip */
-            skip: number;
-            /** Limit */
-            limit: number;
-        };
-        /**
-         * EmailHistoryListResponse
-         * @description Response schema for paginated email history
-         */
-        "EmailHistoryListResponse-Output": {
-            /** Items */
-            items: components["schemas"]["EmailHistoryRead"][];
-            /** Total */
-            total: number;
-            /** Skip */
-            skip: number;
-            /** Limit */
-            limit: number;
-        };
-        /**
-         * EmailHistoryRead
-         * @description Schema for reading email history
-         */
-        EmailHistoryRead: {
-            /** Recipient Email */
-            recipient_email: string;
-            /** Cc Emails */
-            cc_emails?: string | null;
-            /** Bcc Emails */
-            bcc_emails?: string | null;
-            /** Subject */
-            subject: string;
-            /** Body */
-            body: string;
-            /** Template Key */
-            template_key?: string | null;
-            email_category?: components["schemas"]["EmailCategory"] | null;
-            /** Application Id */
-            application_id?: number | null;
-            /** Scholarship Type Id */
-            scholarship_type_id?: number | null;
-            /** Sent By User Id */
-            sent_by_user_id?: number | null;
-            /**
-             * Sent By System
-             * @default true
-             */
-            sent_by_system: boolean;
-            status: components["schemas"]["EmailStatus"];
-            /** Error Message */
-            error_message?: string | null;
-            /**
-             * Retry Count
-             * @default 0
-             */
-            retry_count: number;
-            /** Email Size Bytes */
-            email_size_bytes?: number | null;
-            /** Id */
-            id: number;
-            /**
-             * Sent At
-             * Format: date-time
-             */
-            sent_at: string;
-            /** Application App Id */
-            application_app_id?: string | null;
-            /** Scholarship Type Name */
-            scholarship_type_name?: string | null;
-            /** Sent By Username */
-            sent_by_username?: string | null;
-            /** Template Description */
-            template_description?: string | null;
-        };
-        /**
-         * EmailProcessingStats
-         * @description Schema for email processing statistics
-         */
-        EmailProcessingStats: {
-            /**
-             * Processed
-             * @default 0
-             */
-            processed: number;
-            /**
-             * Sent
-             * @default 0
-             */
-            sent: number;
-            /**
-             * Failed
-             * @default 0
-             */
-            failed: number;
-            /**
-             * Skipped
-             * @default 0
-             */
-            skipped: number;
-        };
         /**
          * EmailStatus
          * @description Email status enum
@@ -8028,36 +7388,6 @@ export interface components {
             max_recipients?: number | null;
         };
         /**
-         * EmployeeListResponse
-         * @description Response model for employee list.
-         */
-        EmployeeListResponse: {
-            /** Status */
-            status: string;
-            /** Message */
-            message: string;
-            /** Total Page */
-            total_page: number;
-            /** Total Count */
-            total_count: number;
-            /** Employees */
-            employees: components["schemas"]["NYCUEmpItem"][];
-            /** Page */
-            page: number;
-        };
-        /**
-         * EmployeeSearchResponse
-         * @description Response model for employee search.
-         */
-        EmployeeSearchResponse: {
-            /** Employees */
-            employees: components["schemas"]["NYCUEmpItem"][];
-            /** Total Count */
-            total_count: number;
-            /** Filtered Count */
-            filtered_count: number;
-        };
-        /**
          * EmployeeStatus
          * @description Employee status enum
          * @enum {string}
@@ -8081,117 +7411,6 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /**
-         * NYCUEmpItem
-         * @description Individual employee data item.
-         */
-        NYCUEmpItem: {
-            /**
-             * Employee No
-             * @description 員工編號
-             */
-            employee_no: string;
-            /**
-             * Employee Type
-             * @description 員工類別
-             */
-            employee_type: string;
-            /**
-             * Employee Name
-             * @description 員工姓名
-             */
-            employee_name: string;
-            /**
-             * Employee Ename
-             * @description 員工英文姓名
-             */
-            employee_ename: string;
-            /**
-             * Zone No
-             * @description 校區代碼
-             */
-            zone_no: string;
-            /**
-             * Zone Name
-             * @description 校區名稱
-             */
-            zone_name: string;
-            /**
-             * Dept No
-             * @description 系所代碼
-             */
-            dept_no: string;
-            /**
-             * Dept Name
-             * @description 系所名稱
-             */
-            dept_name: string;
-            /**
-             * Service Dept No
-             * @description 服務系所代碼
-             */
-            service_dept_no: string;
-            /**
-             * Service Dept Name
-             * @description 服務系所名稱
-             */
-            service_dept_name: string;
-            /**
-             * Class No
-             * @description 職級代碼
-             */
-            class_no: string;
-            /**
-             * Identity No
-             * @description 身分代碼
-             */
-            identity_no: string;
-            /**
-             * Position No
-             * @description 職稱代碼
-             */
-            position_no: string;
-            /**
-             * Position Name
-             * @description 職稱名稱
-             */
-            position_name: string;
-            /**
-             * Onboard Date
-             * @description 到職日期
-             */
-            onboard_date: string;
-            /**
-             * Leave Date
-             * @description 離職日期
-             */
-            leave_date: string;
-            /**
-             * Email
-             * @description 電子郵件
-             */
-            email: string;
-            /**
-             * School Email
-             * @description 學校電子郵件
-             */
-            school_email: string;
-            /**
-             * Mobile Phone
-             * @description 手機號碼
-             */
-            mobile_phone: string;
-            /**
-             * Employee Status
-             * @description 員工狀態
-             */
-            employee_status: string;
-            /**
-             * Update Time
-             * @description 更新時間
-             */
-            update_time: string;
         };
         /**
          * NotificationCreate
@@ -8245,51 +7464,6 @@ export interface components {
              * @description 額外資料
              */
             metadata?: {
-                [key: string]: unknown;
-            } | null;
-        };
-        /**
-         * NotificationResponse
-         * @description Notification response schema
-         */
-        NotificationResponse: {
-            /** Id */
-            id: number;
-            /** Title */
-            title: string;
-            /** Title En */
-            title_en?: string | null;
-            /** Message */
-            message: string;
-            /** Message En */
-            message_en?: string | null;
-            /** Notification Type */
-            notification_type: string;
-            /** Priority */
-            priority: string;
-            /** Related Resource Type */
-            related_resource_type?: string | null;
-            /** Related Resource Id */
-            related_resource_id?: number | null;
-            /** Action Url */
-            action_url?: string | null;
-            /** Is Read */
-            is_read: boolean;
-            /** Is Dismissed */
-            is_dismissed: boolean;
-            /** Scheduled At */
-            scheduled_at?: string | null;
-            /** Expires At */
-            expires_at?: string | null;
-            /** Read At */
-            read_at?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Meta Data */
-            meta_data?: {
                 [key: string]: unknown;
             } | null;
         };
@@ -8707,117 +7881,6 @@ export interface components {
          */
         ScheduleStatus: "pending" | "sent" | "cancelled" | "failed";
         /**
-         * ScheduledEmailListResponse
-         * @description Response schema for paginated scheduled emails
-         */
-        "ScheduledEmailListResponse-Input": {
-            /** Items */
-            items: components["schemas"]["ScheduledEmailRead"][];
-            /** Total */
-            total: number;
-            /** Skip */
-            skip: number;
-            /** Limit */
-            limit: number;
-        };
-        /**
-         * ScheduledEmailListResponse
-         * @description Response schema for paginated scheduled emails
-         */
-        "ScheduledEmailListResponse-Output": {
-            /** Items */
-            items: components["schemas"]["ScheduledEmailRead"][];
-            /** Total */
-            total: number;
-            /** Skip */
-            skip: number;
-            /** Limit */
-            limit: number;
-        };
-        /**
-         * ScheduledEmailRead
-         * @description Schema for reading scheduled email
-         */
-        ScheduledEmailRead: {
-            /** Recipient Email */
-            recipient_email: string;
-            /** Cc Emails */
-            cc_emails?: string | null;
-            /** Bcc Emails */
-            bcc_emails?: string | null;
-            /** Subject */
-            subject: string;
-            /** Body */
-            body: string;
-            /** Template Key */
-            template_key?: string | null;
-            email_category?: components["schemas"]["EmailCategory"] | null;
-            /**
-             * Scheduled For
-             * Format: date-time
-             */
-            scheduled_for: string;
-            /** Application Id */
-            application_id?: number | null;
-            /** Scholarship Type Id */
-            scholarship_type_id?: number | null;
-            /**
-             * Requires Approval
-             * @default false
-             */
-            requires_approval: boolean;
-            /**
-             * Priority
-             * @default 5
-             */
-            priority: number;
-            /** Id */
-            id: number;
-            status: components["schemas"]["ScheduleStatus"];
-            /** Approved By User Id */
-            approved_by_user_id?: number | null;
-            /** Approved At */
-            approved_at?: string | null;
-            /** Approval Notes */
-            approval_notes?: string | null;
-            /** Created By User Id */
-            created_by_user_id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Updated At */
-            updated_at?: string | null;
-            /**
-             * Retry Count
-             * @default 0
-             */
-            retry_count: number;
-            /** Last Error */
-            last_error?: string | null;
-            /** Application App Id */
-            application_app_id?: string | null;
-            /** Scholarship Type Name */
-            scholarship_type_name?: string | null;
-            /** Created By Username */
-            created_by_username?: string | null;
-            /** Approved By Username */
-            approved_by_username?: string | null;
-            /** Template Description */
-            template_description?: string | null;
-            /**
-             * Is Due
-             * @default false
-             */
-            is_due: boolean;
-            /**
-             * Is Ready To Send
-             * @default false
-             */
-            is_ready_to_send: boolean;
-        };
-        /**
          * ScheduledEmailUpdate
          * @description Schema for updating scheduled email
          */
@@ -8828,28 +7891,6 @@ export interface components {
             subject?: string | null;
             /** Body */
             body?: string | null;
-        };
-        /**
-         * ScholarshipFormConfigResponse
-         * @description Schema for complete scholarship form configuration
-         */
-        ScholarshipFormConfigResponse: {
-            /** Scholarship Type */
-            scholarship_type: string;
-            /** Fields */
-            fields: components["schemas"]["ApplicationFieldResponse"][];
-            /** Documents */
-            documents: components["schemas"]["ApplicationDocumentResponse"][];
-            /** Title */
-            title?: string | null;
-            /** Title En */
-            title_en?: string | null;
-            /** Color */
-            color?: string | null;
-            /** Haswhitelist */
-            hasWhitelist?: boolean | null;
-            /** Terms Document Url */
-            terms_document_url?: string | null;
         };
         /** ScholarshipRuleCreate */
         ScholarshipRuleCreate: {
@@ -8964,138 +8005,6 @@ export interface components {
             template_description?: string | null;
             /** Scholarship Type Id */
             scholarship_type_id: number;
-        };
-        /** ScholarshipRuleResponse */
-        ScholarshipRuleResponse: {
-            /**
-             * Rule Name
-             * @description Rule name
-             */
-            rule_name: string;
-            /**
-             * Rule Type
-             * @description Rule type
-             */
-            rule_type: string;
-            /**
-             * Tag
-             * @description Rule tag
-             */
-            tag?: string | null;
-            /**
-             * Description
-             * @description Rule description
-             */
-            description?: string | null;
-            /**
-             * Condition Field
-             * @description Field to check
-             */
-            condition_field: string;
-            /**
-             * Operator
-             * @description Comparison operator
-             */
-            operator: string;
-            /**
-             * Expected Value
-             * @description Expected value
-             */
-            expected_value: string;
-            /**
-             * Message
-             * @description Validation message
-             */
-            message?: string | null;
-            /**
-             * Message En
-             * @description English validation message
-             */
-            message_en?: string | null;
-            /**
-             * Is Hard Rule
-             * @description Whether this is a hard requirement
-             * @default false
-             */
-            is_hard_rule: boolean;
-            /**
-             * Is Warning
-             * @description Whether this is a warning rule
-             * @default false
-             */
-            is_warning: boolean;
-            /**
-             * Priority
-             * @description Rule priority (0-999)
-             * @default 0
-             */
-            priority: number;
-            /**
-             * Is Active
-             * @description Whether rule is active
-             * @default true
-             */
-            is_active: boolean;
-            /**
-             * Is Initial Enabled
-             * @description Whether rule is enabled for initial applications
-             * @default true
-             */
-            is_initial_enabled: boolean;
-            /**
-             * Is Renewal Enabled
-             * @description Whether rule is enabled for renewal applications
-             * @default true
-             */
-            is_renewal_enabled: boolean;
-            /**
-             * Sub Type
-             * @description Sub-type this rule applies to
-             */
-            sub_type?: string | null;
-            /**
-             * Academic Year
-             * @description Academic year (Taiwan calendar)
-             */
-            academic_year?: number | null;
-            /** @description Semester */
-            semester?: components["schemas"]["Semester"] | null;
-            /**
-             * Is Template
-             * @description Whether this is a template rule
-             * @default false
-             */
-            is_template: boolean;
-            /**
-             * Template Name
-             * @description Template name
-             */
-            template_name?: string | null;
-            /**
-             * Template Description
-             * @description Template description
-             */
-            template_description?: string | null;
-            /** Id */
-            id: number;
-            /** Scholarship Type Id */
-            scholarship_type_id: number;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** Created By */
-            created_by?: number | null;
-            /** Updated By */
-            updated_by?: number | null;
-            /** Academic Period Label */
-            academic_period_label?: string | null;
         };
         /** ScholarshipRuleUpdate */
         ScholarshipRuleUpdate: {
@@ -9304,24 +8213,6 @@ export interface components {
             body_override?: string | null;
         };
         /**
-         * SendTestEmailResponse
-         * @description Schema for test email response
-         */
-        SendTestEmailResponse: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Email Id */
-            email_id?: number | null;
-            /** Rendered Subject */
-            rendered_subject?: string | null;
-            /** Rendered Body */
-            rendered_body?: string | null;
-            /** Error */
-            error?: string | null;
-        };
-        /**
          * SendingType
          * @enum {string}
          */
@@ -9346,20 +8237,6 @@ export interface components {
              * @description Email body (plain text or HTML)
              */
             body: string;
-        };
-        /**
-         * SimpleTestEmailResponse
-         * @description Schema for simple test email response
-         */
-        SimpleTestEmailResponse: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Email Id */
-            email_id?: number | null;
-            /** Error */
-            error?: string | null;
         };
         /**
          * StudentDataSchema
@@ -9743,113 +8620,6 @@ export interface components {
             sub_type?: string | null;
         };
         /**
-         * WhitelistImportResult
-         * @description 白名單匯入結果
-         * @example {
-         *       "error_count": 3,
-         *       "errors": [
-         *         {
-         *           "error": "學號不存在",
-         *           "nycu_id": "0856999",
-         *           "row": "2"
-         *         },
-         *         {
-         *           "error": "子獎學金類型無效: invalid_type",
-         *           "nycu_id": "0856888",
-         *           "row": "5"
-         *         }
-         *       ],
-         *       "success_count": 45,
-         *       "warnings": [
-         *         "第 10 行學號重複，已跳過"
-         *       ]
-         *     }
-         */
-        WhitelistImportResult: {
-            /**
-             * Success Count
-             * @description 成功匯入數量
-             */
-            success_count: number;
-            /**
-             * Error Count
-             * @description 錯誤數量
-             */
-            error_count: number;
-            /**
-             * Errors
-             * @description 錯誤詳情 [{'row': '2', 'nycu_id': '0856001', 'error': '學號不存在'}]
-             * @default []
-             */
-            errors: {
-                [key: string]: string;
-            }[];
-            /**
-             * Warnings
-             * @description 警告訊息
-             * @default []
-             */
-            warnings: string[];
-        };
-        /**
-         * WhitelistResponse
-         * @description 白名單響應
-         */
-        WhitelistResponse: {
-            /**
-             * Sub Type
-             * @description 子獎學金類型
-             */
-            sub_type: string;
-            /**
-             * Students
-             * @description 白名單學生列表
-             */
-            students: components["schemas"]["WhitelistStudentInfo"][];
-            /**
-             * Total
-             * @description 總人數
-             */
-            total: number;
-        };
-        /**
-         * WhitelistStudentInfo
-         * @description 申請白名單學生資訊
-         */
-        WhitelistStudentInfo: {
-            /**
-             * Student Id
-             * @description 學生ID（如已註冊）
-             */
-            student_id?: number | null;
-            /**
-             * Nycu Id
-             * @description 學號
-             */
-            nycu_id: string;
-            /**
-             * Name
-             * @description 姓名（如已註冊）
-             */
-            name?: string | null;
-            /**
-             * Sub Type
-             * @description 子獎學金類型
-             */
-            sub_type: string;
-            /**
-             * Note
-             * @description 備註
-             */
-            note?: string | null;
-            /**
-             * Is Registered
-             * @description 是否已註冊
-             * @default false
-             */
-            is_registered: boolean;
-        };
-        /**
          * WhitelistToggleRequest
          * @description 白名單開關更新請求
          * @example {
@@ -9862,72 +8632,6 @@ export interface components {
              * @description 是否啟用白名單
              */
             enabled: boolean;
-        };
-        /** ApiResponse[List[dict]] */
-        "app__schemas__common__ApiResponse[List[dict]]": {
-            /**
-             * Success
-             * @default true
-             */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: {
-                [key: string]: unknown;
-            }[] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[dict] */
-        "app__schemas__common__ApiResponse[dict]": {
-            /**
-             * Success
-             * @default true
-             */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: {
-                [key: string]: unknown;
-            } | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[List[dict]] */
-        "app__schemas__response__ApiResponse[List[dict]]": {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: {
-                [key: string]: unknown;
-            }[] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
-        /** ApiResponse[dict] */
-        "app__schemas__response__ApiResponse[dict]": {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            /** Data */
-            data?: {
-                [key: string]: unknown;
-            } | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
         };
     };
     responses: never;
@@ -11722,88 +10426,6 @@ export interface operations {
             };
         };
     };
-    get_all_applications_api_v1_admin_applications_get: {
-        parameters: {
-            query?: {
-                /** @description Page number */
-                page?: number;
-                /** @description Page size */
-                size?: number;
-                /** @description Filter by status */
-                status?: string | null;
-                /** @description Search by student name or ID */
-                search?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_historical_applications_api_v1_admin_applications_history_get: {
-        parameters: {
-            query?: {
-                /** @description Page number */
-                page?: number;
-                /** @description Page size */
-                size?: number;
-                /** @description Filter by status */
-                status?: string | null;
-                /** @description Filter by scholarship type */
-                scholarship_type?: string | null;
-                /** @description Filter by academic year */
-                academic_year?: number | null;
-                /** @description Filter by semester */
-                semester?: string | null;
-                /** @description Search by student name or ID */
-                search?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_dashboard_stats_api_v1_admin_dashboard_stats_get: {
         parameters: {
             query?: never;
@@ -11851,6 +10473,90 @@ export interface operations {
                 page?: number;
                 /** @description Employee status filter */
                 status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_recent_applications_api_v1_admin_recent_applications_get: {
+        parameters: {
+            query?: {
+                /** @description Number of recent applications */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scholarship_stats_api_v1_admin_scholarships_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_system_announcements_api_v1_admin_system_announcements_get: {
+        parameters: {
+            query?: {
+                /** @description Number of announcements */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -11943,11 +10649,17 @@ export interface operations {
             };
         };
     };
-    get_email_template_api_v1_admin_email_template_get: {
+    get_all_applications_api_v1_admin_applications_get: {
         parameters: {
-            query: {
-                /** @description Template key */
-                key: string;
+            query?: {
+                /** @description Page number */
+                page?: number;
+                /** @description Page size */
+                size?: number;
+                /** @description Filter by status */
+                status?: string | null;
+                /** @description Search by student name or ID */
+                search?: string | null;
             };
             header?: never;
             path?: never;
@@ -11975,7 +10687,86 @@ export interface operations {
             };
         };
     };
-    update_email_template_api_v1_admin_email_template_put: {
+    get_historical_applications_api_v1_admin_applications_history_get: {
+        parameters: {
+            query?: {
+                /** @description Page number */
+                page?: number;
+                /** @description Page size */
+                size?: number;
+                /** @description Filter by status */
+                status?: string | null;
+                /** @description Filter by scholarship type */
+                scholarship_type?: string | null;
+                /** @description Filter by academic year */
+                academic_year?: number | null;
+                /** @description Filter by semester */
+                semester?: string | null;
+                /** @description Search by student name or ID */
+                search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_professor_to_application_api_v1_admin_applications__id__assign_professor_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfessorAssignmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_approve_applications_endpoint_api_v1_admin_applications_bulk_approve_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -11984,7 +10775,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["EmailTemplateUpdateSchema"];
+                "application/json": components["schemas"]["BulkApproveRequest"];
             };
         };
         responses: {
@@ -12008,81 +10799,20 @@ export interface operations {
             };
         };
     };
-    get_email_templates_api_v1_admin_email_templates_get: {
+    admin_update_application_status_api_v1_admin_applications__id__status_patch: {
         parameters: {
-            query?: {
-                /** @description Filter by sending type (single/bulk) */
-                sending_type?: string | null;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                id: number;
+            };
             cookie?: never;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationStatusUpdate"];
             };
         };
-    };
-    get_recent_applications_api_v1_admin_recent_applications_get: {
-        parameters: {
-            query?: {
-                /** @description Number of recent applications */
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_system_announcements_api_v1_admin_system_announcements_get: {
-        parameters: {
-            query?: {
-                /** @description Number of announcements */
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -12268,26 +10998,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_scholarship_statistics_api_v1_admin_scholarships_stats_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };
@@ -12549,6 +11259,46 @@ export interface operations {
             };
         };
     };
+    get_all_scholarships_for_permissions_api_v1_admin_scholarships_all_for_permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_my_scholarships_api_v1_admin_scholarships_my_scholarships_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     get_scholarship_permissions_api_v1_admin_scholarship_permissions_get: {
         parameters: {
             query?: {
@@ -12700,46 +11450,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_all_scholarships_for_permissions_api_v1_admin_scholarships_all_for_permissions_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_my_scholarships_api_v1_admin_scholarships_my_scholarships_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };
@@ -13138,247 +11848,14 @@ export interface operations {
             };
         };
     };
-    get_available_professors_api_v1_admin_professors_get: {
+    get_email_template_api_v1_admin_email_template_get: {
         parameters: {
-            query?: {
-                /** @description Search by name or NYCU ID */
-                search?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    assign_professor_to_application_api_v1_admin_applications__id__assign_professor_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProfessorAssignmentRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    bulk_approve_applications_endpoint_api_v1_admin_applications_bulk_approve_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BulkApproveRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_all_configurations_api_v1_admin_configurations_get: {
-        parameters: {
-            query?: {
-                /** @description Filter by category */
-                category?: components["schemas"]["ConfigCategory"] | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_configuration_api_v1_admin_configurations_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfigurationCreateSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    bulk_update_configurations_api_v1_admin_configurations_bulk_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfigurationBulkUpdateSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    validate_configuration_api_v1_admin_configurations_validate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConfigurationValidationSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_configuration_api_v1_admin_configurations__key__delete: {
-        parameters: {
-            query?: {
-                /** @description Reason for deletion */
-                change_reason?: string | null;
-            };
-            header?: never;
-            path: {
+            query: {
+                /** @description Template key */
                 key: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -13403,7 +11880,7 @@ export interface operations {
             };
         };
     };
-    verify_bank_account_api_v1_admin_bank_verification_post: {
+    update_email_template_api_v1_admin_email_template_put: {
         parameters: {
             query?: never;
             header?: never;
@@ -13412,7 +11889,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BankVerificationRequestSchema"];
+                "application/json": components["schemas"]["EmailTemplateUpdateSchema"];
             };
         };
         responses: {
@@ -13436,53 +11913,17 @@ export interface operations {
             };
         };
     };
-    batch_verify_bank_accounts_api_v1_admin_bank_verification_batch_post: {
+    get_email_templates_api_v1_admin_email_templates_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Filter by sending type (single/bulk) */
+                sending_type?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BankVerificationBatchRequestSchema"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_update_application_status_api_v1_admin_applications__id__status_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApplicationStatusUpdate"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -13734,6 +12175,203 @@ export interface operations {
             };
         };
     };
+    get_all_configurations_api_v1_admin_configurations_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by category */
+                category?: components["schemas"]["ConfigCategory"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_configuration_api_v1_admin_configurations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationCreateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_update_configurations_api_v1_admin_configurations_bulk_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationBulkUpdateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_configuration_api_v1_admin_configurations_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationValidationSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_configuration_api_v1_admin_configurations__key__delete: {
+        parameters: {
+            query?: {
+                /** @description Reason for deletion */
+                change_reason?: string | null;
+            };
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_available_professors_api_v1_admin_professors_get: {
+        parameters: {
+            query?: {
+                /** @description Search by name or NYCU ID */
+                search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_professor_student_relationships_api_v1_admin_professor_student_relationships_get: {
         parameters: {
             query?: {
@@ -13778,6 +12416,72 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_bank_account_api_v1_admin_bank_verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankVerificationRequestSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_verify_bank_accounts_api_v1_admin_bank_verification_batch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankVerificationBatchRequestSchema"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -14655,7 +13359,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_List_NotificationResponse__"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -14684,7 +13388,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_int_"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -14706,7 +13410,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -14735,7 +13439,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -14757,7 +13461,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -14788,7 +13492,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_NotificationResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -14821,7 +13525,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_NotificationResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -14850,7 +13554,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -14879,7 +13583,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -14912,7 +13616,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_NotificationResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -14943,7 +13647,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_NotificationResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -14978,7 +13682,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_NotificationResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15009,7 +13713,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15040,7 +13744,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_List_ApplicationFieldResponse__"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15073,7 +13777,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ApplicationFieldResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15108,7 +13812,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ApplicationFieldResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15139,7 +13843,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_bool_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15170,7 +13874,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_List_ApplicationDocumentResponse__"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15203,7 +13907,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ApplicationDocumentResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15238,7 +13942,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ApplicationDocumentResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15269,7 +13973,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_bool_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15302,7 +14006,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ScholarshipFormConfigResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15337,7 +14041,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ScholarshipFormConfigResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15372,7 +14076,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15434,7 +14138,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_bool_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15468,7 +14172,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15499,7 +14203,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15532,7 +14236,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15561,7 +14265,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -15581,7 +14285,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -15603,7 +14307,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15641,7 +14345,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15676,7 +14380,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15707,7 +14411,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15744,7 +14448,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15775,7 +14479,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15812,7 +14516,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15843,7 +14547,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_List_WhitelistResponse__"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15878,7 +14582,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15913,7 +14617,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[dict]"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15948,7 +14652,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_WhitelistImportResult_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -16149,7 +14853,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__common__ApiResponse[List[dict]]"];
+                    "application/json": components["schemas"]["ApiResponse_List_dict__"];
                 };
             };
         };
@@ -16332,7 +15036,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__common__ApiResponse[dict]"];
+                    "application/json": components["schemas"]["ApiResponse_dict_"];
                 };
             };
             /** @description Validation Error */
@@ -16865,7 +15569,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_List_ScholarshipRuleResponse__"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -16898,7 +15602,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ScholarshipRuleResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -16929,7 +15633,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ScholarshipRuleResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -16964,7 +15668,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ScholarshipRuleResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -16995,7 +15699,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -17028,7 +15732,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -17061,7 +15765,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -17092,7 +15796,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_List_Dict_str__Any___"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -18505,7 +17209,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_EmailHistoryListResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -18543,7 +17247,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_ScheduledEmailListResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -18574,7 +17278,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScheduledEmailRead"][];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -18609,7 +17313,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScheduledEmailRead"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -18640,7 +17344,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScheduledEmailRead"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -18675,7 +17379,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScheduledEmailRead"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -18706,7 +17410,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EmailProcessingStats"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -18735,7 +17439,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": string[];
+                    "application/json": unknown;
                 };
             };
         };
@@ -18755,9 +17459,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": unknown;
                 };
             };
         };
@@ -18917,7 +17619,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_SendTestEmailResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -18950,7 +17652,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_SimpleTestEmailResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -19084,7 +17786,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_List_EmailAutomationRuleResponse__"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -19117,7 +17819,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_EmailAutomationRuleResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -19152,7 +17854,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_EmailAutomationRuleResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -19183,7 +17885,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -19214,7 +17916,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_EmailAutomationRuleResponse_"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -19243,7 +17945,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__response__ApiResponse[List[dict]]"];
+                    "application/json": unknown;
                 };
             };
         };
@@ -19268,7 +17970,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EmployeeListResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -19300,7 +18002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EmployeeListResponse"][];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -19338,7 +18040,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EmployeeSearchResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -19372,7 +18074,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NYCUEmpItem"] | null;
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
