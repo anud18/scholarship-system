@@ -368,6 +368,93 @@ class ApplicationAuditService:
             meta_data={"app_id": app_id, "update_type": "student_data"},
         )
 
+    async def log_bank_verification(
+        self,
+        application_id: int,
+        app_id: str,
+        user: User,
+        verification_result: Dict[str, Any],
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄銀行帳戶驗證操作"""
+        success = verification_result.get("success", False)
+        verification_status = verification_result.get("verification_status", "unknown")
+
+        if success:
+            overall_match = verification_result.get("overall_match", False)
+            average_confidence = verification_result.get("average_confidence", 0.0)
+            compared_fields = verification_result.get("compared_fields", 0)
+
+            match_text = "相符" if overall_match else "不相符"
+            description = f"驗證銀行帳戶 {app_id}: {match_text} (信心度: {average_confidence:.2f}, 比對欄位: {compared_fields})"
+
+            meta_data = {
+                "app_id": app_id,
+                "verification_status": verification_status,
+                "overall_match": overall_match,
+                "average_confidence": average_confidence,
+                "compared_fields": compared_fields,
+            }
+        else:
+            error = verification_result.get("error", "Unknown error")
+            description = f"驗證銀行帳戶失敗 {app_id}: {error}"
+            meta_data = {
+                "app_id": app_id,
+                "verification_status": verification_status,
+                "error": error,
+            }
+
+        return await self.log_application_operation(
+            application_id=application_id,
+            action=AuditAction.verify_bank_account,
+            user=user,
+            request=request,
+            description=description,
+            new_values=verification_result,
+            status="success" if success else "failed",
+            error_message=verification_result.get("error") if not success else None,
+            meta_data=meta_data,
+        )
+
+    async def log_batch_bank_verification(
+        self,
+        application_ids: List[int],
+        user: User,
+        batch_result: Dict[str, Any],
+        request: Optional[Request] = None,
+    ) -> Optional[AuditLog]:
+        """記錄批次銀行帳戶驗證操作"""
+        total_processed = batch_result.get("total_processed", 0)
+        successful_verifications = batch_result.get("successful_verifications", 0)
+        failed_verifications = batch_result.get("failed_verifications", 0)
+        summary = batch_result.get("summary", {})
+
+        description = (
+            f"批次驗證銀行帳戶: 處理 {total_processed} 筆申請, " f"成功 {successful_verifications} 筆, 失敗 {failed_verifications} 筆"
+        )
+
+        # Use the first application ID as the resource ID for batch operations
+        primary_app_id = application_ids[0] if application_ids else 0
+
+        return await self.log_application_operation(
+            application_id=primary_app_id,
+            action=AuditAction.batch_verify_bank_accounts,
+            user=user,
+            request=request,
+            description=description,
+            new_values={
+                "total_processed": total_processed,
+                "successful_verifications": successful_verifications,
+                "failed_verifications": failed_verifications,
+                "summary": summary,
+            },
+            meta_data={
+                "application_ids": application_ids,
+                "batch_size": len(application_ids),
+                "verification_summary": summary,
+            },
+        )
+
     async def get_application_audit_trail(
         self,
         application_id: int,

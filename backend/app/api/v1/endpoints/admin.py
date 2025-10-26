@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import desc
 from sqlalchemy import func as sa_func
 from sqlalchemy import or_, select
@@ -3577,39 +3577,93 @@ async def delete_configuration(
 @router.post("/bank-verification")
 async def verify_bank_account(
     request: BankVerificationRequestSchema,
+    http_request: Request,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Verify bank account information for an application (admin only)"""
     try:
+        from app.services.application_audit_service import ApplicationAuditService
+
         verification_service = BankVerificationService(db)
 
         result = await verification_service.verify_bank_account(request.application_id)
 
+        # Get application to retrieve app_id for audit logging
+        application_stmt = select(Application).where(Application.id == request.application_id)
+        application_result = await db.execute(application_stmt)
+        application = application_result.scalar_one_or_none()
+
+        # Log bank verification operation
+        if application:
+            audit_service = ApplicationAuditService(db)
+            await audit_service.log_bank_verification(
+                application_id=request.application_id,
+                app_id=application.app_id,
+                user=current_user,
+                verification_result=result,
+                request=http_request,
+            )
+
+        # Determine response based on verification status
+        verification_status = result.get("verification_status")
+
+        # Handle error cases
+        if verification_status == "no_data":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error", "找不到銀行帳戶資料"))
+        elif verification_status == "no_document":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error", "找不到存摺文件"))
+        elif verification_status == "ocr_failed":
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "OCR 處理失敗")
+            )
+
+        # Handle successful verification results
+        if verification_status == "verified":
+            message = "銀行帳戶驗證通過，資料一致"
+            success = True
+        elif verification_status == "likely_verified":
+            message = "銀行帳戶驗證基本通過，建議人工核對"
+            success = True
+        elif verification_status == "verification_failed":
+            message = "銀行帳戶驗證失敗，資料不一致"
+            success = False
+        elif verification_status == "no_comparison":
+            message = "無法進行驗證，缺少可比較的欄位"
+            success = False
+        else:
+            message = "銀行帳戶驗證完成"
+            success = result.get("success", True)
+
         return {
-            "success": True,
-            "message": "Bank account verification completed",
+            "success": success,
+            "message": message,
             "data": BankVerificationResultSchema(**result),
         }
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error in bank verification: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to verify bank account due to an unexpected error.",
+            detail="銀行帳戶驗證發生未預期的錯誤",
         )
 
 
 @router.post("/bank-verification/batch")
 async def batch_verify_bank_accounts(
     request: BankVerificationBatchRequestSchema,
+    http_request: Request,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Batch verify bank account information for multiple applications (admin only)"""
     try:
+        from app.services.application_audit_service import ApplicationAuditService
+
         verification_service = BankVerificationService(db)
 
         results = await verification_service.batch_verify_applications(request.application_ids)
@@ -3639,6 +3693,20 @@ async def batch_verify_bank_accounts(
             successful_verifications=successful_verifications,
             failed_verifications=failed_verifications,
             summary=summary,
+        )
+
+        # Log batch bank verification operation
+        audit_service = ApplicationAuditService(db)
+        await audit_service.log_batch_bank_verification(
+            application_ids=request.application_ids,
+            user=current_user,
+            batch_result={
+                "total_processed": total_processed,
+                "successful_verifications": successful_verifications,
+                "failed_verifications": failed_verifications,
+                "summary": summary,
+            },
+            request=http_request,
         )
 
         return {

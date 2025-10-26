@@ -55,7 +55,7 @@ class BankVerificationService:
 
         # Common field mappings (adjust based on your form structure)
         field_mappings = {
-            "account_number": ["bank_account", "account_number", "帳戶號碼", "帳號", "郵局帳號"],
+            "account_number": ["postal_account", "bank_account", "account_number", "帳戶號碼", "帳號", "郵局帳號"],
             "account_holder": ["account_holder", "account_name", "戶名", "帳戶名稱"],
         }
 
@@ -64,6 +64,11 @@ class BankVerificationService:
                 if key in fields and fields[key].get("value"):
                     bank_fields[standard_field] = str(fields[key]["value"])
                     break
+
+        # If account_holder not found in form, use applicant's name from student_data
+        if "account_holder" not in bank_fields or not bank_fields["account_holder"]:
+            if application.student_data and application.student_data.get("std_cname"):
+                bank_fields["account_holder"] = application.student_data["std_cname"]
 
         return bank_fields
 
@@ -247,9 +252,38 @@ class BankVerificationService:
         return recommendations
 
     async def get_verification_history(self, application_id: int) -> List[Dict[str, Any]]:
-        """Get verification history for an application (placeholder for future audit trail)"""
-        # This would query a verification_history table if implemented
-        return []
+        """Get verification history for an application from audit logs"""
+        from app.services.application_audit_service import ApplicationAuditService
+
+        audit_service = ApplicationAuditService(self.db)
+
+        # Get all bank verification audit logs for this application
+        audit_logs = await audit_service.get_application_audit_trail(
+            application_id=application_id,
+            action_filter="verify_bank_account",  # Only bank verification logs
+            limit=100,  # Get up to 100 verification records
+        )
+
+        # Convert audit logs to verification history format
+        history = []
+        for log in audit_logs:
+            history_entry = {
+                "timestamp": log.created_at.isoformat() if log.created_at else None,
+                "verified_by_user_id": log.user_id,
+                "verified_by_username": log.user.nycu_id if log.user else "Unknown",
+                "verified_by_name": log.user.name if log.user else "Unknown",
+                "verification_status": log.meta_data.get("verification_status") if log.meta_data else None,
+                "overall_match": log.meta_data.get("overall_match") if log.meta_data else None,
+                "average_confidence": log.meta_data.get("average_confidence") if log.meta_data else None,
+                "compared_fields": log.meta_data.get("compared_fields") if log.meta_data else None,
+                "description": log.description,
+                "status": log.status,
+                "error_message": log.error_message,
+                "ip_address": log.ip_address,
+            }
+            history.append(history_entry)
+
+        return history
 
     async def batch_verify_applications(self, application_ids: List[int]) -> Dict[int, Dict[str, Any]]:
         """Verify multiple applications in batch"""

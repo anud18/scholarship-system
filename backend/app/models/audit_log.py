@@ -36,6 +36,10 @@ class AuditAction(enum.Enum):
     delete_ranking = "delete_ranking"  # Delete ranking
     withdraw = "withdraw"  # Withdraw application
 
+    # Bank verification operations
+    verify_bank_account = "verify_bank_account"  # Verify single bank account
+    batch_verify_bank_accounts = "batch_verify_bank_accounts"  # Batch verify bank accounts
+
 
 class AuditLog(Base):
     """Audit log model for tracking user activities"""
