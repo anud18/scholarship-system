@@ -81,13 +81,28 @@ class BankVerificationService:
 
         # Look for bank account cover document
         for doc in documents:
-            if doc.get("document_id") == "bank_account_cover":
-                # Find the actual document record
-                stmt = select(ApplicationFile).where(
-                    ApplicationFile.application_id == application.id, ApplicationFile.filename == doc.get("file_path")
-                )
+            # Support both English and Chinese document IDs
+            if doc.get("document_id") in ["bank_account_cover", "存摺封面"]:
+                # Prefer using file_id for accurate lookup
+                file_id = doc.get("file_id")
+                if file_id:
+                    stmt = select(ApplicationFile).where(
+                        ApplicationFile.application_id == application.id, ApplicationFile.id == file_id
+                    )
+                else:
+                    # Fallback: use filename field
+                    filename = doc.get("filename") or doc.get("original_filename")
+                    if filename:
+                        stmt = select(ApplicationFile).where(
+                            ApplicationFile.application_id == application.id, ApplicationFile.filename == filename
+                        )
+                    else:
+                        continue
+
                 result = await self.db.execute(stmt)
-                return result.scalar_one_or_none()
+                passbook_file = result.scalar_one_or_none()
+                if passbook_file:
+                    return passbook_file
 
         return None
 
@@ -131,32 +146,46 @@ class BankVerificationService:
 
         # Perform OCR on passbook document
         try:
-            # Initialize OCR service to validate configuration before processing
-            get_ocr_service()
+            # Get MinIO service to read file
+            from app.services.minio_service import get_minio_service
 
-            # Read the document file (assuming it's stored and accessible)
-            # In a real implementation, you'd read from MinIO or file system
-            # For now, we'll simulate with the document info
+            minio_service = get_minio_service()
 
-            # This is a placeholder - you'd need to implement actual file reading
-            # based on your file storage system (MinIO, local storage, etc.)
-            # file_content = await self.read_document_file(passbook_doc.file_path)
-            # ocr_result = await ocr_service.extract_bank_info_from_image(file_content)
+            # Initialize OCR service
+            ocr_service = get_ocr_service(self.db)
 
-            # For now, return a simulated OCR result structure
-            # Replace this with actual OCR when file reading is implemented
-            ocr_result = {
-                "success": True,
-                "account_number": "123456789012",
-                "account_holder": "測試用戶",
-                "confidence": 0.95,
-                "note": "OCR extraction from post office passbook - implementation pending file reading",
-            }
+            # Validate that object_name exists
+            if not passbook_doc.object_name:
+                raise OCRError("File object_name is missing in database")
+
+            # Read file from MinIO
+            try:
+                file_stream = minio_service.get_file_stream(passbook_doc.object_name)
+                image_data = file_stream.read()
+                file_stream.close()
+                file_stream.release_conn()
+            except Exception as e:
+                raise OCRError(f"Failed to read file from storage: {str(e)}")
+
+            # Perform OCR extraction
+            ocr_result = await ocr_service.extract_bank_info_from_image(image_data=image_data, db=self.db)
+
+            # Validate OCR result
+            if not ocr_result.get("success"):
+                raise OCRError(ocr_result.get("error", "OCR extraction returned unsuccessful result"))
 
         except OCRError as e:
             return {
                 "success": False,
                 "error": f"OCR processing failed: {str(e)}",
+                "application_id": application_id,
+                "form_data": form_bank_fields,
+                "verification_status": "ocr_failed",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Unexpected error during OCR: {str(e)}",
                 "application_id": application_id,
                 "form_data": form_bank_fields,
                 "verification_status": "ocr_failed",

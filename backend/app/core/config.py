@@ -76,6 +76,7 @@ class Settings(BaseSettings):
     gemini_api_key: Optional[str] = None
     gemini_model: str = "gemini-2.0-flash"  # Best model for OCR tasks
     ocr_timeout: int = 30  # seconds
+    gemini_query_delay: float = 5.0  # Delay between API queries to avoid rate limit
 
     # Redis Cache
     redis_url: str = "redis://localhost:6379/0"

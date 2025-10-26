@@ -39,6 +39,8 @@ class OCRService:
         self.api_key = None
         self.model_name = None
         self.timeout = None
+        self.query_delay = None
+        self._last_query_time = None
         self.model = None
 
     async def _load_config(self):
@@ -52,6 +54,9 @@ class OCRService:
                 self.api_key = await dynamic_config.get_str("gemini_api_key", self.db, settings.gemini_api_key or "")
                 self.model_name = await dynamic_config.get_str("gemini_model", self.db, settings.gemini_model)
                 self.timeout = await dynamic_config.get_int("ocr_timeout", self.db, settings.ocr_timeout)
+                self.query_delay = await dynamic_config.get_float(
+                    "gemini_query_delay", self.db, settings.gemini_query_delay
+                )
                 logger.info("OCR configuration loaded from database")
             else:
                 # Fall back to environment variables
@@ -59,6 +64,7 @@ class OCRService:
                 self.api_key = settings.gemini_api_key
                 self.model_name = settings.gemini_model
                 self.timeout = settings.ocr_timeout
+                self.query_delay = settings.gemini_query_delay
 
             # Validate configuration
             if not self.ocr_enabled:
@@ -95,40 +101,51 @@ class OCRService:
             self.db = db
         await self._load_config()
 
+        # Flow control - ensure minimum delay between queries to avoid rate limit
+        import asyncio
+        import time
+
+        if self._last_query_time is not None:
+            elapsed = time.time() - self._last_query_time
+            if elapsed < self.query_delay:
+                wait_time = self.query_delay - elapsed
+                logger.info(f"Rate limit protection: waiting {wait_time:.2f}s before next query")
+                await asyncio.sleep(wait_time)
+
         try:
             # Validate and process image
             image = self._validate_and_process_image(image_data)
 
-            # Define the extraction prompt
+            # Define the extraction prompt (simplified - only account_number and account_holder)
             prompt = """
-            請從這個銀行存摺或帳戶資料圖片中提取以下資訊：
+            請從這個郵局存摺封面圖片中提取以下資訊：
 
-            1. 銀行名稱 (Bank Name)
-            2. 銀行代碼 (Bank Code) - 通常是3位數字
-            3. 帳戶號碼 (Account Number) - 完整的帳戶號碼
-            4. 帳戶名稱 (Account Holder Name) - 戶名
-            5. 分行名稱 (Branch Name) - 如果有的話
+            1. 帳戶號碼 (Account Number) - 完整的郵局帳號
+               > 含局號(7碼)+帳號(7碼) 共14碼
+            2. 戶名 (Account Holder Name) - 帳戶持有人姓名
 
             請以以下JSON格式回傳，確保數字和文字準確：
             {
                 "success": true,
                 "account_number": "帳戶號碼",
                 "account_holder": "戶名",
-                "branch_name": "分行名稱",
                 "confidence": 0.95
             }
 
             如果無法清楚識別某些資訊，請將該欄位設為 null，並調整 confidence 分數。
-            如果圖片不是銀行相關文件，請回傳：
+            如果圖片不是郵局存摺封面，請回傳：
             {
                 "success": false,
-                "error": "此圖片不是銀行存摺或帳戶資料",
+                "error": "此圖片不是郵局存摺封面",
                 "confidence": 0.0
             }
             """
 
-            # Send request to Gemini
-            response = self.model.generate_content([prompt, image])
+            # Use asyncio.to_thread to avoid blocking the event loop
+            response = await asyncio.to_thread(self.model.generate_content, [prompt, image])
+
+            # Record query time for rate limiting
+            self._last_query_time = time.time()
 
             # Parse response
             result = self._parse_gemini_response(response.text)
