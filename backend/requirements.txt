@@ -1,5 +1,6 @@
 # FastAPI and web framework
-fastapi==0.115.6
+fastapi==0.120.0
+starlette==0.47.2  # Security: Fixed multi-part form blocking issue (GHSA-2c2j-9gv5-cj73)
 uvicorn[standard]==0.24.0
 python-multipart==0.0.20  # Security: Updated to fix DoS vulnerabilities (GHSA-59g5-xgcq-4qw3)
 
@@ -13,7 +14,7 @@ psycopg2-binary==2.9.8
 python-jose[cryptography]==3.4.0  # Security: Fixes algorithm confusion (PYSEC-2024-232) and JWT bomb (PYSEC-2024-233)
 passlib==1.7.4
 bcrypt==4.0.1
-cryptography==43.0.1  # Security: Multiple fixes (PYSEC-2024-225, GHSA-3ww4-gg4f-jr7f, GHSA-9v9h-cgj8-h64p, GHSA-h4gh-qq45-vh27)
+cryptography==44.0.1  # Security: OpenSSL 3.4.1 update (GHSA-79v4-65xg-pq4g)
 # Note: ecdsa (transitive dependency) has Minerva timing attack - accepted risk (out of scope for library maintainers)
 python-decouple==3.8
 
