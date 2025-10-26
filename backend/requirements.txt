@@ -1,7 +1,7 @@
 # FastAPI and web framework
-fastapi==0.104.1
+fastapi==0.115.6
 uvicorn[standard]==0.24.0
-python-multipart==0.0.9  # Security: CVE-2024-24762 (ReDoS fix)
+python-multipart==0.0.20  # Security: Updated to fix DoS vulnerabilities (GHSA-59g5-xgcq-4qw3)
 
 # Database and ORM
 sqlalchemy==2.0.23
@@ -10,10 +10,11 @@ asyncpg==0.29.0
 psycopg2-binary==2.9.8
 
 # Authentication and Security
-python-jose[cryptography]==3.3.0  # Note: CVE-2024-33663 mitigated by specifying algorithms in jwt.decode()
+python-jose[cryptography]==3.4.0  # Security: Fixes algorithm confusion (PYSEC-2024-232) and JWT bomb (PYSEC-2024-233)
 passlib==1.7.4
 bcrypt==4.0.1
-cryptography==41.0.7
+cryptography==43.0.1  # Security: Multiple fixes (PYSEC-2024-225, GHSA-3ww4-gg4f-jr7f, GHSA-9v9h-cgj8-h64p, GHSA-h4gh-qq45-vh27)
+# Note: ecdsa (transitive dependency) has Minerva timing attack - accepted risk (out of scope for library maintainers)
 python-decouple==3.8
 
 # Data validation and serialization
@@ -37,10 +38,10 @@ croniter==1.4.1
 
 # Email services
 fastapi-mail==1.4.1
-jinja2==3.1.5  # Security: CVE-2024-56201 (sandbox escape fix)
+jinja2==3.1.6  # Security: Fixed sandbox escape vulnerability (GHSA-cpwx-vrp4-4pq7)
 
 # File processing and OCR
-pillow==10.2.0  # Security: CVE-2023-50447 (arbitrary code execution fix)
+pillow==11.1.0  # Security: Fixed buffer overflow (GHSA-44wm-f244-xhp3)
 opencv-python==4.8.1.78
 pytesseract==0.3.10
 google-generativeai==0.8.3
