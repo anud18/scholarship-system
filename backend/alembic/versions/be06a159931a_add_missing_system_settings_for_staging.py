@@ -20,15 +20,16 @@ def upgrade() -> None:
     """
     Add missing system settings that were not seeded in some environments.
     Uses ON CONFLICT DO NOTHING to safely skip if settings already exist.
+    Sets last_modified_by to NULL to avoid foreign key constraint issues in fresh databases.
     """
     op.execute(
         """
         INSERT INTO system_settings
         (key, value, category, data_type, is_sensitive, is_readonly, allow_empty, description, last_modified_by)
         VALUES
-        ('gemini_api_key', '', 'api_keys', 'string', true, false, true, 'Google Gemini API 金鑰', 1),
-        ('smtp_user', '', 'email', 'string', true, false, true, 'SMTP 使用者名稱', 1),
-        ('smtp_password', '', 'email', 'string', true, false, true, 'SMTP 密碼', 1)
+        ('gemini_api_key', '', 'api_keys', 'string', true, false, true, 'Google Gemini API 金鑰', NULL),
+        ('smtp_user', '', 'email', 'string', true, false, true, 'SMTP 使用者名稱', NULL),
+        ('smtp_password', '', 'email', 'string', true, false, true, 'SMTP 密碼', NULL)
         ON CONFLICT (key) DO NOTHING;
         """
     )
