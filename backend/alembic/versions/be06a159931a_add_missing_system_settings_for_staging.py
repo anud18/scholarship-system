@@ -24,11 +24,11 @@ def upgrade() -> None:
     op.execute(
         """
         INSERT INTO system_settings
-        (key, value, category, data_type, is_sensitive, allow_empty, description, last_modified_by)
+        (key, value, category, data_type, is_sensitive, is_readonly, allow_empty, description, last_modified_by)
         VALUES
-        ('gemini_api_key', '', 'api_keys', 'string', true, true, 'Google Gemini API 金鑰', 1),
-        ('smtp_user', '', 'email', 'string', true, true, 'SMTP 使用者名稱', 1),
-        ('smtp_password', '', 'email', 'string', true, true, 'SMTP 密碼', 1)
+        ('gemini_api_key', '', 'api_keys', 'string', true, false, true, 'Google Gemini API 金鑰', 1),
+        ('smtp_user', '', 'email', 'string', true, false, true, 'SMTP 使用者名稱', 1),
+        ('smtp_password', '', 'email', 'string', true, false, true, 'SMTP 密碼', 1)
         ON CONFLICT (key) DO NOTHING;
         """
     )
