@@ -151,9 +151,15 @@ class BankVerificationResultSchema(BaseModel):
     success: bool = Field(..., description="Whether verification was successful")
     application_id: int = Field(..., description="Application ID")
     verification_status: str = Field(..., description="Overall verification status")
-    overall_match: bool = Field(..., description="Whether all fields match")
-    average_confidence: float = Field(..., description="Average confidence score")
-    compared_fields: int = Field(..., description="Number of fields compared")
+    overall_match: Optional[bool] = Field(
+        None, description="Whether all fields match (only for successful verifications)"
+    )
+    average_confidence: Optional[float] = Field(
+        None, description="Average confidence score (only for successful verifications)"
+    )
+    compared_fields: Optional[int] = Field(
+        None, description="Number of fields compared (only for successful verifications)"
+    )
     comparisons: Dict[str, BankFieldComparisonSchema] = Field({}, description="Detailed field comparisons")
     form_data: Dict[str, str] = Field({}, description="Bank data from form")
     ocr_data: Dict[str, Any] = Field({}, description="Bank data from OCR")

@@ -841,7 +841,7 @@ export function AdminScholarshipDashboard({
                       <TableCell>
                         {app.scholarship_subtype_list &&
                         app.scholarship_subtype_list.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1 whitespace-nowrap">
                             {app.scholarship_subtype_list.map(
                               (subType: string) => (
                                 <Badge

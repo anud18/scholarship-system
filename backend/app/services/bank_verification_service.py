@@ -260,6 +260,11 @@ class BankVerificationService:
                 result = await self.verify_bank_account(app_id)
                 results[app_id] = result
             except Exception as e:
-                results[app_id] = {"success": False, "error": str(e), "application_id": app_id}
+                results[app_id] = {
+                    "success": False,
+                    "error": str(e),
+                    "application_id": app_id,
+                    "verification_status": "error",
+                }
 
         return results
