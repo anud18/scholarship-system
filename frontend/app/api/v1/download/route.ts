@@ -33,35 +33,41 @@ function validateId(id: string | null, paramName: string): void {
 }
 
 /**
- * Validate backend URL to prevent SSRF attacks
- * Ensures the URL hostname is from a trusted allowlist
+ * Sanitizes backend URL by validating hostname and reconstructing a clean URL
+ * Returns a new URL object with validated components (CodeQL sanitizer pattern)
+ *
+ * This function prevents SSRF attacks by:
+ * 1. Validating the hostname against an allowlist
+ * 2. Reconstructing a new URL from validated components
+ * 3. Breaking the taint chain for static analysis tools
  */
-function validateBackendUrl(envUrl: string | undefined): string {
+function getSafeBackendUrl(): URL {
+  const envUrl = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL;
+
   if (!envUrl) {
-    throw new Error("Invalid backend configuration: URL not set");
+    throw new Error("Backend URL not configured");
   }
 
-  // Parse URL to extract hostname
-  let parsedUrl: URL;
+  // Parse and validate the environment URL
+  let parsed: URL;
   try {
-    parsedUrl = new URL(envUrl);
+    parsed = new URL(envUrl);
   } catch (error) {
     throw new Error("Invalid backend URL format");
   }
 
-  // Allowlist of trusted hostnames
-  const allowedHostnames = [
-    'backend',                  // Docker internal network
-    'localhost',                // Local development
-    'host.docker.internal',     // Docker host gateway
-    'ss.test.nycu.edu.tw'       // Production server
-  ];
-
-  if (!allowedHostnames.includes(parsedUrl.hostname)) {
-    throw new Error(`Untrusted backend hostname: ${parsedUrl.hostname}`);
+  // Explicit allowlist check
+  const allowedHosts = ['backend', 'localhost', 'host.docker.internal', 'ss.test.nycu.edu.tw'];
+  if (!allowedHosts.includes(parsed.hostname)) {
+    throw new Error(`Untrusted hostname: ${parsed.hostname}`);
   }
 
-  return envUrl;
+  // CRITICAL: Reconstruct URL from validated components
+  // This creates a new, untainted value for CodeQL's data flow analysis
+  const protocol = parsed.protocol === 'https:' ? 'https:' : 'http:';
+  const port = parsed.port || (protocol === 'https:' ? '443' : '8000');
+
+  return new URL(`${protocol}//${parsed.hostname}:${port}`);
 }
 
 export async function GET(request: NextRequest) {
@@ -104,12 +110,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Security: Validate backend URL to prevent SSRF attacks
-    let baseUrl: string;
+    // Security: Get safe backend URL to prevent SSRF attacks
+    let backendUrl: URL;
     try {
-      baseUrl = validateBackendUrl(
-        process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL
-      );
+      backendUrl = getSafeBackendUrl();
     } catch (error: any) {
       console.error("Backend URL validation error:", error.message);
       return NextResponse.json(
@@ -118,18 +122,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Construct backend URL using safe URL constructor
-    let backendUrl: string;
+    // Construct URL path and query parameters using URL object methods
     if (applicationId) {
       // Application file download
-      const url = new URL(`/api/v1/files/applications/${applicationId}/files/${fileId}/download`, baseUrl);
-      url.searchParams.set("token", token);
-      backendUrl = url.toString();
+      backendUrl.pathname = `/api/v1/files/applications/${applicationId}/files/${fileId}/download`;
+      backendUrl.searchParams.set("token", token);
     } else if (userId) {
       // User profile file download (e.g., bank document)
-      const url = new URL(`/api/v1/user-profiles/files/bank_documents/${fileId}`, baseUrl);
-      url.searchParams.set("token", token);
-      backendUrl = url.toString();
+      backendUrl.pathname = `/api/v1/user-profiles/files/bank_documents/${fileId}`;
+      backendUrl.searchParams.set("token", token);
     } else {
       return NextResponse.json(
         { error: "Invalid file context" },

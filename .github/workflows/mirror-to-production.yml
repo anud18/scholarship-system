@@ -1,0 +1,268 @@
+name: Mirror to Production Repo
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      force_push:
+        description: 'Force push to production repo'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  mirror-to-production:
+    name: Create Production Mirror & Sync
+    runs-on: ubuntu-latest
+    # Only run if secrets are configured
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.repository == 'jotpalch/scholarship-system')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for complete mirror
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check for required secrets
+        id: check-secrets
+        run: |
+          if [ -z "${{ secrets.GH_PAT }}" ]; then
+            echo "::warning::GH_PAT not configured"
+            echo "configured=false" >> $GITHUB_OUTPUT
+          else
+            echo "configured=true" >> $GITHUB_OUTPUT
+          fi
+
+          if [ -z "${{ secrets.PRODUCTION_REPO }}" ]; then
+            echo "::error::PRODUCTION_REPO secret not configured"
+            echo "::error::Please set PRODUCTION_REPO to format: owner/repo-name"
+            exit 1
+          fi
+
+      - name: Create production mirror branch
+        id: mirror
+        run: |
+          echo "::group::Creating production-mirror branch"
+
+          # Create or reset production-mirror branch from current commit
+          git checkout -B production-mirror
+
+          echo "::notice::Created production-mirror branch from ${{ github.sha }}"
+          echo "::endgroup::"
+
+      - name: Remove development workflows
+        run: |
+          echo "::group::Removing development workflows"
+
+          # Remove .github/workflows directory
+          if [ -d ".github/workflows" ]; then
+            echo "::notice::Removing .github/workflows/ directory"
+            git rm -rf .github/workflows/
+
+            # Count removed files
+            REMOVED_COUNT=$(git diff --cached --name-only --diff-filter=D | grep -c "\.github/workflows/" || echo "0")
+            echo "::notice::Removed $REMOVED_COUNT workflow file(s)"
+          else
+            echo "::notice::No .github/workflows/ directory found"
+          fi
+
+          # If .github directory is now empty, remove it
+          if [ -d ".github" ] && [ -z "$(ls -A .github 2>/dev/null)" ]; then
+            echo "::notice::Removing empty .github/ directory"
+            git rm -rf .github/
+          fi
+
+          # Commit the removal
+          if git diff --cached --quiet; then
+            echo "::notice::No workflows to remove"
+          else
+            git commit -m "chore: remove development workflows for production
+
+            Development workflows are not needed in production repository.
+            Production repo will maintain its own deployment and monitoring workflows.
+
+            Source: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Triggered by: ${{ github.event_name }}
+            Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            "
+            echo "::notice::✅ Committed workflow removal"
+          fi
+
+          echo "::endgroup::"
+
+      - name: Show mirror contents
+        run: |
+          echo "::group::Production mirror contents"
+          echo "Directory structure:"
+          tree -L 2 -a || ls -la
+
+          echo ""
+          echo "Git status:"
+          git status
+
+          echo ""
+          echo "Recent commits:"
+          git log --oneline -5
+          echo "::endgroup::"
+
+      - name: Push mirror to source repository (optional)
+        if: success()
+        continue-on-error: true
+        run: |
+          echo "::group::Pushing production-mirror branch to source repo"
+
+          # Push to source repo's production-mirror branch for review
+          git push origin production-mirror --force
+
+          echo "::notice::✅ Pushed to origin/production-mirror"
+          echo "::notice::Review at: ${{ github.server_url }}/${{ github.repository }}/tree/production-mirror"
+          echo "::endgroup::"
+
+      - name: Push to production repository
+        if: steps.check-secrets.outputs.configured == 'true'
+        env:
+          PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
+          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
+          FORCE_PUSH: ${{ github.event.inputs.force_push || 'false' }}
+        run: |
+          echo "::group::Pushing to production repository"
+
+          echo "Target: ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}"
+
+          # Add production repo as remote
+          git remote add production "https://x-access-token:${{ secrets.GH_PAT }}@github.com/${PRODUCTION_REPO}.git"
+
+          # Fetch production branch to check status
+          echo "::notice::Fetching production repository..."
+          if git fetch production "${PRODUCTION_BRANCH}" 2>/dev/null; then
+            echo "::notice::Production branch exists"
+
+            # Check if we're ahead
+            AHEAD=$(git rev-list --count production/${PRODUCTION_BRANCH}..production-mirror 2>/dev/null || echo "0")
+            BEHIND=$(git rev-list --count production-mirror..production/${PRODUCTION_BRANCH} 2>/dev/null || echo "0")
+
+            echo "::notice::Mirror is $AHEAD commit(s) ahead, $BEHIND commit(s) behind production"
+          else
+            echo "::notice::Production branch does not exist yet (first sync)"
+          fi
+
+          # Push to production
+          PUSH_FLAGS="--force"
+          if [ "$FORCE_PUSH" != "true" ]; then
+            # Use force-with-lease for safety (won't overwrite unexpected changes)
+            PUSH_FLAGS="--force-with-lease"
+          fi
+
+          echo "::notice::Pushing with: $PUSH_FLAGS"
+
+          if git push production "production-mirror:${PRODUCTION_BRANCH}" $PUSH_FLAGS; then
+            echo "::notice::✅ Successfully synced to ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "::error::Failed to push to production repository"
+            echo "::error::Check if:"
+            echo "::error::1. GH_PAT has write permissions"
+            echo "::error::2. PRODUCTION_REPO is correct (format: owner/repo)"
+            echo "::error::3. Branch protection rules allow force push"
+            exit 1
+          fi
+
+          echo "::endgroup::"
+
+      - name: Create sync summary
+        if: success()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # 🚀 Production Mirror Sync Complete
+
+          ## Summary
+
+          | Property | Value |
+          |----------|-------|
+          | **Production Repo** | [\`${{ secrets.PRODUCTION_REPO }}\`](https://github.com/${{ secrets.PRODUCTION_REPO }}) |
+          | **Production Branch** | \`${{ secrets.PRODUCTION_BRANCH || 'main' }}\` |
+          | **Source Commit** | [\`${{ github.sha }}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |
+          | **Mirror Branch** | [\`production-mirror\`](${{ github.server_url }}/${{ github.repository }}/tree/production-mirror) |
+          | **Triggered By** | ${{ github.event_name }} |
+          | **Timestamp** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |
+
+          ## Actions Performed
+
+          - ✅ Created production mirror branch
+          - ✅ Removed development workflows (.github/workflows/)
+          - ✅ Pushed to source repo (production-mirror branch)
+          - ✅ Synced to production repository
+
+          ## Production Repository
+
+          The production repository now contains:
+          - 📦 All application code (latest from main)
+          - 📜 Complete git history
+          - 🚫 No development workflows (removed)
+          - ✅ Independent production workflows (maintained separately)
+
+          View production repo: https://github.com/${{ secrets.PRODUCTION_REPO }}/tree/${{ secrets.PRODUCTION_BRANCH || 'main' }}
+
+          ---
+
+          💡 **Note**: Production repository maintains its own workflows in \`.github/workflows/\`.
+          These are not affected by this sync and should be managed independently.
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Switch back to main branch
+          git checkout main || git checkout master || true
+
+          echo "::notice::Cleanup completed"
+
+  verify-production:
+    name: Verify Production Repo (Optional)
+    needs: mirror-to-production
+    runs-on: ubuntu-latest
+    if: success() && github.event_name == 'push'
+    continue-on-error: true
+
+    steps:
+      - name: Check production repository
+        env:
+          PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
+          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
+        run: |
+          echo "::group::Verifying production repository"
+
+          # Clone production repo (shallow)
+          git clone --depth=1 --branch="${PRODUCTION_BRANCH}" \
+            "https://x-access-token:${{ secrets.GH_PAT }}@github.com/${PRODUCTION_REPO}.git" \
+            production-check
+
+          cd production-check
+
+          # Verify structure
+          echo "::notice::Production repo structure:"
+          ls -la
+
+          # Check for workflows
+          if [ -d ".github/workflows" ]; then
+            WORKFLOW_COUNT=$(find .github/workflows -type f -name "*.yml" -o -name "*.yaml" 2>/dev/null | wc -l)
+            echo "::notice::✅ Production has $WORKFLOW_COUNT workflow(s)"
+            echo "::notice::Production workflows:"
+            find .github/workflows -type f -name "*.yml" -o -name "*.yaml" 2>/dev/null || echo "None"
+          else
+            echo "::warning::No .github/workflows/ found in production repo"
+            echo "::warning::You may want to add production-specific workflows"
+          fi
+
+          echo "::endgroup::"
