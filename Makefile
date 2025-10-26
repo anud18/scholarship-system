@@ -160,8 +160,8 @@ build-docker: ## Build Docker images
 
 # Docker Commands
 docker-up: ## Docker - Start all services with Docker Compose
-	@echo "$(GREEN)Starting services with Docker Compose...$(NC)"
-	docker-compose up -d
+	@echo "$(GREEN)Starting services with Docker Compose (dev environment)...$(NC)"
+	docker compose -f docker-compose.dev.yml up -d
 	@echo "$(GREEN)✅ Services started!$(NC)"
 	@echo "$(CYAN)Backend: http://localhost:8000$(NC)"
 	@echo "$(CYAN)Frontend: http://localhost:3000$(NC)"
@@ -169,21 +169,21 @@ docker-up: ## Docker - Start all services with Docker Compose
 
 docker-down: ## Docker - Stop all Docker Compose services
 	@echo "$(GREEN)Stopping Docker services...$(NC)"
-	docker-compose down
+	docker compose -f docker-compose.dev.yml down
 	@echo "$(GREEN)✅ Services stopped!$(NC)"
 
 docker-restart: ## Docker - Restart all Docker Compose services
 	@echo "$(GREEN)Restarting Docker services...$(NC)"
-	docker-compose restart
+	docker compose -f docker-compose.dev.yml restart
 	@echo "$(GREEN)✅ Services restarted!$(NC)"
 
 docker-logs: ## Docker - Show logs from all services
 	@echo "$(GREEN)Showing Docker logs...$(NC)"
-	docker-compose logs -f
+	docker compose -f docker-compose.dev.yml logs -f
 
 docker-clean: ## Docker - Clean up Docker resources
 	@echo "$(GREEN)Cleaning up Docker resources...$(NC)"
-	docker-compose down -v
+	docker compose -f docker-compose.dev.yml down -v
 	docker system prune -f
 	@echo "$(GREEN)✅ Docker cleanup completed!$(NC)"
 

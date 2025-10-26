@@ -1,8 +1,0 @@
-{
-  "devDependencies": {
-    "@babel/preset-react": "^7.27.1"
-  },
-  "dependencies": {
-    "node-fetch": "^2.7.0"
-  }
-}
