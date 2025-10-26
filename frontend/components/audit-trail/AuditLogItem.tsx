@@ -148,7 +148,7 @@ export function AuditLogItem({ log, locale = "zh" }: AuditLogItemProps) {
         </div>
 
         {/* Main card */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden mb-6 ml-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden mb-6 mx-6">
           {/* Header - Always visible */}
           <div className="p-4">
             <div className="flex items-start justify-between gap-3 mb-3">

@@ -941,7 +941,7 @@ export function ApplicationReviewDialog({
       // Try to get files from submitted_form_data.documents
       if (appData.submitted_form_data?.documents) {
         const files = appData.submitted_form_data.documents.map((doc: any) => ({
-          id: doc.file_id,
+          id: doc.document_id || doc.file_id || doc.id,
           filename: doc.filename,
           original_filename: doc.original_filename,
           file_size: doc.file_size,

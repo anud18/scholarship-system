@@ -346,7 +346,7 @@ export function ApplicationDetailDialog({
         // 將 documents 轉換為 ApplicationFile 格式以保持向後兼容
         const files = application.submitted_form_data.documents.map(
           (doc: any) => ({
-            id: doc.file_id,
+            id: doc.document_id || doc.file_id || doc.id,
             filename: doc.filename,
             original_filename: doc.original_filename,
             file_size: doc.file_size,

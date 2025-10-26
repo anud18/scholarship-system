@@ -1062,7 +1062,7 @@ export function EnhancedStudentPortal({
         if (doc.document_id && doc.original_filename) {
           // 直接使用後端返回的文件數據，轉換為 FileUpload 組件期望的格式
           const fileData = {
-            id: doc.file_id,
+            id: doc.document_id || doc.file_id || doc.id,
             filename: doc.filename || doc.original_filename,
             original_filename: doc.original_filename,
             file_size: doc.file_size,
