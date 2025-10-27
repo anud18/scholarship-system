@@ -555,6 +555,7 @@ export function ApplicationReviewDialog({
   }>({});
   const [applicationFields, setApplicationFields] = useState<string[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reviewComment, setReviewComment] = useState("");
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
@@ -627,12 +628,25 @@ export function ApplicationReviewDialog({
 
       // 檢查是否成功（success 為 true 或 response 中有 data）
       if (response?.success || response?.data) {
-        toast.success(
-          locale === "zh" ? "核准成功" : "Approval Successful",
-          {
-            description: locale === "zh" ? "申請已核准" : "Application has been approved",
-          }
-        );
+        // 檢查是否自動重新執行了分發
+        const redistribution = response.data?.redistribution_info;
+        if (redistribution?.auto_redistributed) {
+          const processedCount = redistribution.rankings_processed || 1;
+          const successfulCount = redistribution.successful_count || 0;
+          toast.success(
+            locale === "zh"
+              ? `審核完成並已自動重新執行分配，處理 ${processedCount} 個排名（成功 ${successfulCount} 個），分配 ${redistribution.total_allocated} 名學生`
+              : `Review completed with auto-redistribution for ${processedCount} rankings (${successfulCount} successful), ${redistribution.total_allocated} students allocated`,
+            { duration: 6000 }
+          );
+        } else {
+          toast.success(
+            locale === "zh" ? "核准成功" : "Approval Successful",
+            {
+              description: locale === "zh" ? "申請已核准" : "Application has been approved",
+            }
+          );
+        }
         setAdminComments("");
         // Refresh application data
         loadApplicationDetails(detailedApplication.id);
@@ -677,12 +691,25 @@ export function ApplicationReviewDialog({
 
       // 檢查是否成功（success 為 true 或 response 中有 data）
       if (response?.success || response?.data) {
-        toast.success(
-          locale === "zh" ? "駁回成功" : "Rejection Successful",
-          {
-            description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
-          }
-        );
+        // 檢查是否自動重新執行了分發
+        const redistribution = response.data?.redistribution_info;
+        if (redistribution?.auto_redistributed) {
+          const processedCount = redistribution.rankings_processed || 1;
+          const successfulCount = redistribution.successful_count || 0;
+          toast.success(
+            locale === "zh"
+              ? `審核完成並已自動重新執行分配，處理 ${processedCount} 個排名（成功 ${successfulCount} 個），分配 ${redistribution.total_allocated} 名學生`
+              : `Review completed with auto-redistribution for ${processedCount} rankings (${successfulCount} successful), ${redistribution.total_allocated} students allocated`,
+            { duration: 6000 }
+          );
+        } else {
+          toast.success(
+            locale === "zh" ? "駁回成功" : "Rejection Successful",
+            {
+              description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
+            }
+          );
+        }
         setAdminComments("");
         // Refresh application data
         loadApplicationDetails(detailedApplication.id);
@@ -941,7 +968,7 @@ export function ApplicationReviewDialog({
       // Try to get files from submitted_form_data.documents
       if (appData.submitted_form_data?.documents) {
         const files = appData.submitted_form_data.documents.map((doc: any) => ({
-          id: doc.document_id || doc.file_id || doc.id,
+          id: doc.file_id || doc.id,
           filename: doc.filename,
           original_filename: doc.original_filename,
           file_size: doc.file_size,
@@ -1014,16 +1041,36 @@ export function ApplicationReviewDialog({
   };
 
   // Handle approve
-  const handleApprove = () => {
-    if (detailedApplication && onApprove) {
-      onApprove(detailedApplication.id, reviewComment);
+  const handleApprove = async () => {
+    if (detailedApplication && onApprove && !isSubmitting) {
+      try {
+        setIsSubmitting(true);
+        await onApprove(detailedApplication.id, reviewComment);
+        // Close dialog after successful approval
+        onOpenChange(false);
+      } catch (error) {
+        console.error('Failed to approve application:', error);
+        // Error handling is done in the parent component (toast notification)
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
   // Handle reject
-  const handleReject = () => {
-    if (detailedApplication && onReject) {
-      onReject(detailedApplication.id, reviewComment);
+  const handleReject = async () => {
+    if (detailedApplication && onReject && !isSubmitting) {
+      try {
+        setIsSubmitting(true);
+        await onReject(detailedApplication.id, reviewComment);
+        // Close dialog after successful rejection
+        onOpenChange(false);
+      } catch (error) {
+        console.error('Failed to reject application:', error);
+        // Error handling is done in the parent component (toast notification)
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -1532,18 +1579,22 @@ export function ApplicationReviewDialog({
                       </CardHeader>
                       <CardContent className="space-y-2">
                         <div className="flex gap-2">
-                          <Button onClick={handleApprove} className="flex-1" disabled={!onApprove}>
+                          <Button
+                            onClick={handleApprove}
+                            className="flex-1"
+                            disabled={!onApprove || isSubmitting}
+                          >
                             <CheckCircle className="h-4 w-4 mr-1" />
-                            {locale === "zh" ? "學院核准" : "Approve"}
+                            {isSubmitting ? (locale === "zh" ? "提交中..." : "Submitting...") : (locale === "zh" ? "學院核准" : "Approve")}
                           </Button>
                           <Button
                             variant="destructive"
                             onClick={handleReject}
                             className="flex-1"
-                            disabled={!onReject}
+                            disabled={!onReject || isSubmitting}
                           >
                             <XCircle className="h-4 w-4 mr-1" />
-                            {locale === "zh" ? "學院駁回" : "Reject"}
+                            {isSubmitting ? (locale === "zh" ? "提交中..." : "Submitting...") : (locale === "zh" ? "學院駁回" : "Reject")}
                           </Button>
                         </div>
                         <Button

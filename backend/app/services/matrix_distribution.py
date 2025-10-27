@@ -12,7 +12,7 @@ where scholarships are allocated based on:
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -291,6 +291,19 @@ class MatrixDistributionService:
                     item.status = "rejected"
                     # Determine specific rejection reason only if no backup either
                     item.allocation_reason = self._determine_rejection_reason(item, item.application, quota_matrix)
+
+        # Batch update Application.status for allocated items (正取學生)
+        # According to user requirement: 正取學生自動更新為 approved，備取學生保持原狀態不變
+        allocated_application_ids = [
+            item.application_id for item in sorted_items if item.is_allocated  # Only admitted students (正取)
+        ]
+
+        if allocated_application_ids:
+            update_stmt = (
+                update(Application).where(Application.id.in_(allocated_application_ids)).values(status="approved")
+            )
+            await self.db.execute(update_stmt)
+            logger.info(f"Updated {len(allocated_application_ids)} applications to 'approved' status")
 
         # Flush changes to database
         await self.db.flush()

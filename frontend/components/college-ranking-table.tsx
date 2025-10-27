@@ -815,8 +815,8 @@ export function CollegeRankingTable({
           onOpenChange={(open) => !open && setSelectedAppForDialog(null)}
           locale={locale}
           academicYear={academicYear}
-          onApprove={(id) => onReviewApplication(id, 'approve')}
-          onReject={(id) => onReviewApplication(id, 'reject')}
+          onApprove={(id, comments) => onReviewApplication(id, 'approve', comments)}
+          onReject={(id, comments) => onReviewApplication(id, 'reject', comments)}
         />
       )}
     </div>

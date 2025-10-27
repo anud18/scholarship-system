@@ -104,12 +104,10 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
       setLoading(true);
 
       // 使用新的 scholarship-configurations API 來獲取實際配置的學期
-      const API_BASE =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
       if (activePeriodsOnly) {
         // 獲取有實際申請資料的學期
-        const url = `${API_BASE}/api/v1/reference-data/active-academic-periods`;
+        const url = `/api/v1/reference-data/active-academic-periods`;
         const response = await fetch(url);
         if (!response.ok)
           throw new Error("Failed to fetch active academic periods");
@@ -217,10 +215,8 @@ export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
   const loadBasicData = async () => {
     try {
       setLoading(true);
-      const API_BASE =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await fetch(
-        `${API_BASE}/api/v1/reference-data/semesters`
+        `/api/v1/reference-data/semesters`
       );
       if (!response.ok) throw new Error("Failed to fetch semester data");
 

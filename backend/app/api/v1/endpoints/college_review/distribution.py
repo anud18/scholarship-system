@@ -198,12 +198,18 @@ async def get_quota_status(
     current_user: User = Depends(require_college),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get quota status for a scholarship type"""
+    """Get quota status for a scholarship type
+
+    Returns quota status including college-specific quota if user has college_code
+    """
 
     try:
         service = CollegeReviewService(db)
         quota_status = await service.get_quota_status(
-            scholarship_type_id=scholarship_type_id, academic_year=academic_year, semester=semester
+            scholarship_type_id=scholarship_type_id,
+            academic_year=academic_year,
+            semester=semester,
+            college_code=current_user.college_code,  # Pass college_code to calculate college quota
         )
 
         return ApiResponse(success=True, message="Quota status retrieved successfully", data=quota_status)
@@ -217,6 +223,29 @@ async def get_quota_status(
     except Exception as e:
         logger.error(f"Unexpected error retrieving quota status: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota status")
+
+
+@router.get("/rankings/{ranking_id}/roster-status")
+async def get_ranking_roster_status(
+    ranking_id: int,
+    current_user: User = Depends(require_college),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get roster status for a ranking
+    查詢排名的造冊狀態和進展
+    """
+    try:
+        service = CollegeReviewService(db)
+        roster_status = await service.check_ranking_roster_status(ranking_id)
+
+        return ApiResponse(success=True, message="Roster status retrieved successfully", data=roster_status)
+
+    except Exception as e:
+        logger.error(f"Error retrieving roster status for ranking {ranking_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve roster status"
+        )
 
 
 @router.get("/rankings/{ranking_id}/distribution-details")
@@ -399,6 +428,20 @@ async def get_distribution_details(
                 "application_id": app.id,
                 "app_id": app.app_id,
             }
+
+            # 優先處理被駁回的學生
+            if item.status == "rejected":
+                rejection_reason = item.allocation_reason or "申請已被駁回"
+                rejected_students.append(
+                    {
+                        "rank_position": item.rank_position,
+                        "student_id": student_id,
+                        "student_name": student_name,
+                        "application_id": app.id,
+                        "reason": rejection_reason,
+                    }
+                )
+                continue  # 跳過正取/備取處理
 
             # Handle primary allocation (正取)
             if item.is_allocated and item.allocated_sub_type:

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
 import {
@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ConfigSelector } from "../shared/ConfigSelector";
 import {
   Table,
   TableBody,
@@ -42,7 +43,6 @@ import {
   List,
   Download,
   GraduationCap,
-  Calendar,
   School,
   Award,
   Building,
@@ -50,6 +50,7 @@ import {
 import { toast } from "sonner";
 import { useReferenceData, getStudyingStatusName, getAcademyName, getDepartmentName } from "@/hooks/use-reference-data";
 import * as XLSX from "xlsx";
+import { apiClient } from "@/lib/api";
 
 interface ApplicationReviewPanelProps {
   user: User;
@@ -79,6 +80,8 @@ export function ApplicationReviewPanel({
     updateApplicationStatus,
     fetchCollegeApplications,
     activeScholarshipTab,
+    collegeQuotaInfo,
+    setCollegeQuotaInfo,
     showDeleteDialog,
     setShowDeleteDialog,
     applicationToDelete,
@@ -95,6 +98,63 @@ export function ApplicationReviewPanel({
   // Local state for status filter
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Fetch college quota when scholarship type, year, or semester changes
+  const fetchCollegeQuota = useCallback(async () => {
+    if (!activeScholarshipTab || !selectedAcademicYear) {
+      setCollegeQuotaInfo(null);
+      return;
+    }
+
+    try {
+      // Find scholarship type ID from availableOptions
+      const scholarshipType = availableOptions?.scholarship_types?.find(
+        st => st.code === activeScholarshipTab
+      );
+
+      if (!scholarshipType || !scholarshipType.id) {
+        console.warn("Scholarship type ID not found for:", activeScholarshipTab);
+        setCollegeQuotaInfo(null);
+        return;
+      }
+
+      console.log("Fetching college quota for:", {
+        scholarshipTypeId: scholarshipType.id,
+        academicYear: selectedAcademicYear,
+        semester: selectedSemester,
+      });
+
+      const response = await apiClient.college.getQuotaStatus(
+        scholarshipType.id,
+        selectedAcademicYear,
+        selectedSemester
+      );
+
+      if (response.success && response.data) {
+        setCollegeQuotaInfo({
+          collegeQuota: response.data.college_quota ?? null,
+          breakdown: response.data.college_quota_breakdown ?? {},
+        });
+        console.log("College quota fetched:", response.data.college_quota);
+      } else {
+        setCollegeQuotaInfo(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch college quota:", error);
+      setCollegeQuotaInfo(null);
+    }
+  }, [
+    activeScholarshipTab,
+    selectedAcademicYear,
+    selectedSemester,
+    availableOptions,
+    setCollegeQuotaInfo,
+  ]);
+
+  // Fetch college quota when dependencies change
+  useEffect(() => {
+    fetchCollegeQuota();
+  }, [fetchCollegeQuota]);
 
   // Filter applications based on status and search query
   const filteredApplications = applications.filter(app => {
@@ -124,16 +184,29 @@ export function ApplicationReviewPanel({
 
   const handleApprove = async (appId: number, comments?: string) => {
     try {
-      await updateApplicationStatus(appId, "approved", comments || "學院核准通過");
-      console.log(`College approved application ${appId}`);
+      const result = await updateApplicationStatus(appId, "approved", comments || "學院核准通過");
+      console.log(`College approved application ${appId}`, result);
 
-      // 顯示成功提示
-      toast.success(
-        locale === "zh" ? "核准成功" : "Approval Successful",
-        {
-          description: locale === "zh" ? "申請已核准" : "Application has been approved",
-        }
-      );
+      // 檢查是否自動重新執行了分發
+      const redistribution = result?.redistribution_info;
+      if (redistribution?.auto_redistributed) {
+        const processedCount = redistribution.rankings_processed || 1;
+        const successfulCount = redistribution.successful_count || 0;
+        toast.success(
+          locale === "zh"
+            ? `審核完成並已自動重新執行分配，處理 ${processedCount} 個排名（成功 ${successfulCount} 個），分配 ${redistribution.total_allocated} 名學生`
+            : `Review completed with auto-redistribution for ${processedCount} rankings (${successfulCount} successful), ${redistribution.total_allocated} students allocated`,
+          { duration: 6000 }
+        );
+      } else {
+        // 顯示成功提示
+        toast.success(
+          locale === "zh" ? "核准成功" : "Approval Successful",
+          {
+            description: locale === "zh" ? "申請已核准" : "Application has been approved",
+          }
+        );
+      }
 
       // 關閉 dialog
       setSelectedApplication(null);
@@ -157,16 +230,29 @@ export function ApplicationReviewPanel({
 
   const handleReject = async (appId: number, comments?: string) => {
     try {
-      await updateApplicationStatus(appId, "rejected", comments || "學院駁回申請");
-      console.log(`College rejected application ${appId}`);
+      const result = await updateApplicationStatus(appId, "rejected", comments || "學院駁回申請");
+      console.log(`College rejected application ${appId}`, result);
 
-      // 顯示成功提示
-      toast.success(
-        locale === "zh" ? "駁回成功" : "Rejection Successful",
-        {
-          description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
-        }
-      );
+      // 檢查是否自動重新執行了分發
+      const redistribution = result?.redistribution_info;
+      if (redistribution?.auto_redistributed) {
+        const processedCount = redistribution.rankings_processed || 1;
+        const successfulCount = redistribution.successful_count || 0;
+        toast.success(
+          locale === "zh"
+            ? `審核完成並已自動重新執行分配，處理 ${processedCount} 個排名（成功 ${successfulCount} 個），分配 ${redistribution.total_allocated} 名學生`
+            : `Review completed with auto-redistribution for ${processedCount} rankings (${successfulCount} successful), ${redistribution.total_allocated} students allocated`,
+          { duration: 6000 }
+        );
+      } else {
+        // 顯示成功提示
+        toast.success(
+          locale === "zh" ? "駁回成功" : "Rejection Successful",
+          {
+            description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
+          }
+        );
+      }
 
       // 關閉 dialog
       setSelectedApplication(null);
@@ -311,9 +397,11 @@ export function ApplicationReviewPanel({
 
         <div className="flex items-center gap-2">
           {/* 學期學年選擇 */}
-          <Select
-            value={selectedCombination || ""}
-            onValueChange={value => {
+          <ConfigSelector
+            selectedCombination={selectedCombination}
+            availableYears={availableOptions?.academic_years || []}
+            availableSemesters={availableOptions?.semesters || []}
+            onCombinationChange={(value) => {
               setSelectedCombination(value);
               const [year, semester] = value.split("-");
               setSelectedAcademicYear(parseInt(year));
@@ -325,47 +413,8 @@ export function ApplicationReviewPanel({
                 activeScholarshipTab
               );
             }}
-          >
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="選擇學期">
-                <div className="flex items-center">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  {selectedCombination
-                    ? `${selectedCombination.split("-")[0]} ${
-                        selectedCombination.split("-")[1] === "FIRST"
-                          ? "上學期"
-                          : selectedCombination.split("-")[1] ===
-                              "SECOND"
-                            ? "下學期"
-                            : selectedCombination.split("-")[1] ===
-                                "YEARLY"
-                              ? "全年"
-                              : selectedCombination.split("-")[1]
-                      }`
-                    : "選擇學期"}
-                </div>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {availableOptions?.academic_years?.map(year =>
-                availableOptions?.semesters?.map(semester => (
-                  <SelectItem
-                    key={`${year}-${semester}`}
-                    value={`${year}-${semester}`}
-                  >
-                    {year} 學年度{" "}
-                    {semester === "FIRST"
-                      ? "上學期"
-                      : semester === "SECOND"
-                        ? "下學期"
-                        : semester === "YEARLY"
-                          ? "全年"
-                          : semester}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
+            locale={locale}
+          />
 
           <Button variant="outline" size="sm" onClick={handleExportApplications}>
             <Download className="h-4 w-4 mr-1" />
@@ -450,11 +499,9 @@ export function ApplicationReviewPanel({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {rankingData?.collegeQuota !== undefined
-                ? rankingData.collegeQuota.toLocaleString()
-                : rankingData?.totalQuota !== undefined
-                  ? rankingData.totalQuota.toLocaleString()
-                  : "-"}
+              {collegeQuotaInfo?.collegeQuota !== null && collegeQuotaInfo?.collegeQuota !== undefined
+                ? collegeQuotaInfo.collegeQuota.toLocaleString()
+                : "-"}
             </div>
             <p className="text-xs text-muted-foreground">
               {locale === "zh"

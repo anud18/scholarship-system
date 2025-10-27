@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { apiClient } from "@/lib/api";
 import { useCollegeApplications } from "@/hooks/use-admin";
+import { Semester } from "@/lib/enums";
 
 interface ScholarshipConfig {
   id: number;
@@ -83,11 +84,18 @@ interface CollegeManagementContextType {
 
   // Available options
   availableOptions: {
-    scholarship_types: Array<{ code: string; name: string; name_en?: string }>;
+    scholarship_types: Array<{ id: number; code: string; name: string; name_en?: string }>;
     academic_years: number[];
     semesters: string[];
   } | null;
   setAvailableOptions: (options: any) => void;
+
+  // College quota info (for review panel)
+  collegeQuotaInfo: {
+    collegeQuota: number | null;
+    breakdown: Record<string, number>;
+  } | null;
+  setCollegeQuotaInfo: (info: { collegeQuota: number | null; breakdown: Record<string, number> } | null) => void;
 
   // Managed college
   managedCollege: {
@@ -176,9 +184,15 @@ export function CollegeManagementProvider({
 
   // Available options
   const [availableOptions, setAvailableOptions] = useState<{
-    scholarship_types: Array<{ code: string; name: string; name_en?: string }>;
+    scholarship_types: Array<{ id: number; code: string; name: string; name_en?: string }>;
     academic_years: number[];
     semesters: string[];
+  } | null>(null);
+
+  // College quota info (for review panel)
+  const [collegeQuotaInfo, setCollegeQuotaInfo] = useState<{
+    collegeQuota: number | null;
+    breakdown: Record<string, number>;
   } | null>(null);
 
   // Managed college
@@ -222,12 +236,12 @@ export function CollegeManagementProvider({
     );
 
     const desiredSemester = selectedSemester
-      ? selectedSemester === "YEARLY"
+      ? selectedSemester === Semester.YEARLY
         ? null
-        : selectedSemester.toLowerCase()
+        : selectedSemester
       : undefined;
 
-    return rankings.filter(ranking => {
+    const filtered = rankings.filter(ranking => {
       const matchesScholarship = activeConfig
         ? ranking.scholarship_type_id === activeConfig.id
         : true;
@@ -255,6 +269,9 @@ export function CollegeManagementProvider({
 
       return matchesScholarship && matchesYear && matchesSemester;
     });
+
+    // 按 ID 降序排序，保證順序穩定，避免卡片跳動
+    return filtered.sort((a, b) => b.id - a.id);
   }, [
     rankings,
     scholarshipConfig,
@@ -478,6 +495,8 @@ export function CollegeManagementProvider({
     setSelectedScholarshipType,
     availableOptions,
     setAvailableOptions,
+    collegeQuotaInfo,
+    setCollegeQuotaInfo,
     managedCollege,
     setManagedCollege,
     collegeDisplayName,

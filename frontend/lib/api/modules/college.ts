@@ -219,6 +219,18 @@ export function createCollegeApi() {
     },
 
     /**
+     * Get roster status for a ranking
+     * 查詢排名的造冊狀態和進展
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    getRankingRosterStatus: async (rankingId: number): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.GET('/api/v1/college-review/rankings/{ranking_id}/roster-status' as any, {
+        params: { path: { ranking_id: rankingId } },
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
      * Get quota status for specific scholarship type and period
      * Type-safe: Query parameters validated against OpenAPI
      */
@@ -265,6 +277,7 @@ export function createCollegeApi() {
     getAvailableCombinations: async (): Promise<
       ApiResponse<{
         scholarship_types: Array<{
+          id: number;
           code: string;
           name: string;
           name_en?: string;
@@ -276,6 +289,7 @@ export function createCollegeApi() {
       const response = await typedClient.raw.GET('/api/v1/college-review/available-combinations', {});
       return toApiResponse<{
         scholarship_types: Array<{
+          id: number;
           code: string;
           name: string;
           name_en?: string;

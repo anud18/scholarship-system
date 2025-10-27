@@ -331,11 +331,13 @@ export function useCollegeApplications() {
       try {
         setError(null);
 
-        // Use the applications endpoint which allows staff (including college role)
-        // This endpoint uses require_staff permission instead of require_admin
-        const response = await apiClient.applications.updateApplicationStatus(
+        // Use college review API which triggers auto-redistribution
+        const response = await apiClient.college.reviewApplication(
           applicationId,
-          { status, comments: reviewNotes }
+          {
+            recommendation: status === 'approved' ? 'approve' : 'reject',
+            review_comments: reviewNotes,
+          }
         );
 
         if (response.success && response.data) {
@@ -510,12 +512,10 @@ export function useScholarshipSpecificApplications() {
       }
 
       try {
-        const response = await apiClient.applications.updateStatus(
+        const response = await apiClient.admin.updateApplicationStatus(
           applicationId,
-          {
-            status,
-            comments,
-          }
+          status,
+          comments
         );
 
         if (response.success) {

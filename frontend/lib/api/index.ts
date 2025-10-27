@@ -34,6 +34,7 @@ import { createUserProfilesApi } from './modules/user-profiles';
 import { createEmailManagementApi } from './modules/email-management';
 import { createAdminApi } from './modules/admin';
 import { createDocumentRequestsApi } from './modules/document-requests';
+import { createPaymentRostersApi } from './modules/payment-rosters';
 
 // Re-export ALL types from legacy api.ts for backward compatibility
 // TODO: Move these to a dedicated types.ts file in the modular structure
@@ -131,6 +132,7 @@ class ExtendedApiClient extends ApiClient {
   public emailManagement: ReturnType<typeof createEmailManagementApi>;
   public admin: ReturnType<typeof createAdminApi>;
   public documentRequests: ReturnType<typeof createDocumentRequestsApi>;
+  public paymentRosters: ReturnType<typeof createPaymentRostersApi>;
 
   // Backward compatibility alias
   public system: ReturnType<typeof createSystemSettingsApi>;
@@ -159,6 +161,7 @@ class ExtendedApiClient extends ApiClient {
     this.emailManagement = createEmailManagementApi(); // Now using typed client internally
     this.admin = createAdminApi(); // Now using typed client internally
     this.documentRequests = createDocumentRequestsApi(); // Now using typed client internally
+    this.paymentRosters = createPaymentRostersApi(); // Now using typed client internally
 
     // Initialize backward compatibility alias
     this.system = this.systemSettings;

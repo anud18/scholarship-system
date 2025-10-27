@@ -67,6 +67,183 @@ class CollegeReviewService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def check_ranking_roster_status(self, ranking_id: int) -> Dict[str, Any]:
+        """
+        檢查排名是否已開始造冊
+        Returns:
+            {
+                "has_roster": bool,
+                "can_redistribute": bool,
+                "roster_info": {...} or None
+            }
+        """
+        from app.models.payment_roster import PaymentRoster, RosterStatus
+
+        stmt = (
+            select(PaymentRoster)
+            .where(PaymentRoster.ranking_id == ranking_id)
+            .order_by(PaymentRoster.created_at.desc())
+        )
+
+        result = await self.db.execute(stmt)
+        roster = result.scalar_one_or_none()
+
+        if not roster:
+            return {"has_roster": False, "can_redistribute": True, "roster_info": None}
+
+        # 如果造冊狀態是 draft 或 failed，視為可以重新分發
+        # TODO: 記得來這邊看看 emun 有沒有對 測試看看
+        can_redistribute = roster.status in [RosterStatus.DRAFT, RosterStatus.FAILED]
+
+        return {
+            "has_roster": True,
+            "can_redistribute": can_redistribute,
+            "roster_info": {
+                "roster_code": roster.roster_code,
+                "status": roster.status.value,
+                "period_label": roster.period_label,
+                "created_at": roster.created_at.isoformat(),
+                "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+            },
+        }
+
+    async def auto_redistribute_after_status_change(self, application_id: int, executor_id: int) -> Dict[str, Any]:
+        """
+        Check and execute auto-redistribution for ALL rankings under the scholarship configuration.
+
+        When an application's status changes, this redistributes ALL rankings that share the same
+        scholarship_type_id, academic_year, and semester to ensure quota allocation consistency.
+
+        Args:
+            application_id: ID of the application whose status changed
+            executor_id: ID of the user who triggered the status change
+
+        Returns:
+            Dict containing:
+            - auto_redistributed: bool - Whether any redistribution was executed
+            - total_allocated: int - Total number of students allocated across all rankings
+            - rankings_processed: int - Number of rankings processed
+            - results: list - List of results for each ranking
+            - reason: str - Reason for redistribution or skip
+        """
+        # Get application information
+        app_stmt = select(Application).where(Application.id == application_id)
+        app_result = await self.db.execute(app_stmt)
+        application = app_result.scalar_one_or_none()
+
+        if not application:
+            logger.warning(f"Application {application_id} not found, skip auto-redistribution")
+            return {"auto_redistributed": False, "reason": "application_not_found"}
+
+        logger.info(
+            f"Starting auto-redistribution for scholarship configuration: "
+            f"type_id={application.scholarship_type_id}, year={application.academic_year}, "
+            f"semester={application.semester}"
+        )
+
+        # Get all rankings for this scholarship configuration
+        rankings_stmt = select(CollegeRanking).where(
+            and_(
+                CollegeRanking.scholarship_type_id == application.scholarship_type_id,
+                CollegeRanking.academic_year == application.academic_year,
+                CollegeRanking.semester == application.semester,
+            )
+        )
+        rankings_result = await self.db.execute(rankings_stmt)
+        rankings = rankings_result.scalars().all()
+
+        if not rankings:
+            logger.warning(
+                f"No rankings found for scholarship configuration "
+                f"(type_id={application.scholarship_type_id}, year={application.academic_year}, "
+                f"semester={application.semester}), skip auto-redistribution"
+            )
+            return {"auto_redistributed": False, "reason": "no_rankings"}
+
+        logger.info(f"Found {len(rankings)} rankings to process for auto-redistribution")
+
+        # Process each ranking
+        redistribution_results = []
+        total_allocated = 0
+        successful_count = 0
+
+        for ranking in rankings:
+            ranking_result = {
+                "ranking_id": ranking.id,
+                "sub_type_code": ranking.sub_type_code,
+            }
+
+            # Check roster status
+            roster_status = await self.check_ranking_roster_status(ranking.id)
+            logger.info(
+                f"Ranking {ranking.id} ({ranking.sub_type_code}): "
+                f"has_roster={roster_status['has_roster']}, can_redistribute={roster_status['can_redistribute']}"
+            )
+
+            if roster_status["can_redistribute"]:
+                # Execute redistribution
+                logger.info(f"🔄 Starting auto-redistribution for ranking {ranking.id} ({ranking.sub_type_code})")
+                try:
+                    from app.services.matrix_distribution import MatrixDistributionService
+
+                    matrix_service = MatrixDistributionService(self.db)
+                    distribution_result = await matrix_service.execute_matrix_distribution(
+                        ranking_id=ranking.id, executor_id=executor_id
+                    )
+
+                    allocated = distribution_result.get("total_allocated", 0)
+                    total_allocated += allocated
+                    successful_count += 1
+
+                    ranking_result.update({"status": "success", "allocated": allocated})
+
+                    logger.info(
+                        f"✅ Redistributed ranking {ranking.id} ({ranking.sub_type_code}), " f"allocated: {allocated}"
+                    )
+
+                except Exception as e:
+                    logger.error(
+                        f"❌ Failed to redistribute ranking {ranking.id} ({ranking.sub_type_code}): {str(e)}",
+                        exc_info=True,
+                    )
+                    ranking_result.update({"status": "failed", "error": str(e)})
+
+            else:
+                # Roster exists - cannot redistribute
+                roster_code = (
+                    roster_status.get("roster_info", {}).get("roster_code", "UNKNOWN")
+                    if roster_status.get("roster_info")
+                    else "NONE"
+                )
+                logger.info(
+                    f"⚠️ Ranking {ranking.id} ({ranking.sub_type_code}) has active roster, "
+                    f"skip auto-redistribution. Roster: {roster_code}"
+                )
+                ranking_result.update(
+                    {
+                        "status": "skipped",
+                        "reason": "roster_exists",
+                        "roster_code": roster_code,
+                    }
+                )
+
+            redistribution_results.append(ranking_result)
+
+        # Summary
+        logger.info(
+            f"📊 Auto-redistribution summary: {successful_count}/{len(rankings)} rankings redistributed, "
+            f"total allocated: {total_allocated}"
+        )
+
+        return {
+            "auto_redistributed": successful_count > 0,
+            "total_allocated": total_allocated,
+            "rankings_processed": len(rankings),
+            "successful_count": successful_count,
+            "results": redistribution_results,
+            "reason": "status_changed",
+        }
+
     @staticmethod
     def _normalize_semester_value(semester: Optional[Any]) -> Optional[str]:
         """Normalize semester representations to canonical string or None for yearly."""
@@ -217,8 +394,9 @@ class CollegeReviewService:
                 # Also reset allocation fields for rejected items
                 ranking_item.allocated_sub_type = None
                 ranking_item.is_allocated = False
-                ranking_item.allocation_reason = None
+                ranking_item.allocation_reason = "申請已被駁回"  # 明確原因
                 ranking_item.backup_position = None
+                ranking_item.backup_allocations = None  # 清除備取分配記錄
             elif recommendation == "conditional":
                 ranking_item.status = "ranked"  # 條件核准也保持 ranked
                 # Reset allocation fields for conditional approval too
@@ -228,6 +406,16 @@ class CollegeReviewService:
                 ranking_item.backup_position = None
 
         await self.db.flush()  # Flush ranking item updates
+
+        # ============ 檢查是否需要自動重新執行分發 ============
+        # Use the reusable auto-redistribution method
+        redistribution_info = await self.auto_redistribute_after_status_change(
+            application_id=application_id, executor_id=reviewer_id
+        )
+
+        # Store redistribution info for return to frontend
+        college_review._redistribution_info = redistribution_info
+        # ============ 結束自動重新分發邏輯 ============
 
         # 觸發學院審查提交事件（會觸發自動化郵件規則）
         try:
@@ -1024,15 +1212,29 @@ class CollegeReviewService:
         scholarship_type_id: int,
         academic_year: int,
         semester: Optional[str] = None,
+        college_code: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Get quota status for a scholarship type"""
+        """Get quota status for a scholarship type
+
+        Args:
+            scholarship_type_id: Scholarship type ID
+            academic_year: Academic year
+            semester: Semester (optional)
+            college_code: College code to calculate college-specific quota (optional)
+
+        Returns:
+            Dictionary with quota status including college_quota if college_code provided
+        """
+
+        # Normalize semester using existing helper (handles YEARLY -> None conversion)
+        normalized_semester = self._normalize_semester_value(semester)
 
         # Get configuration
         config_stmt = select(ScholarshipConfiguration).where(
             and_(
                 ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
                 ScholarshipConfiguration.academic_year == academic_year,
-                ScholarshipConfiguration.semester == semester,
+                ScholarshipConfiguration.semester == normalized_semester,
                 ScholarshipConfiguration.is_active.is_(True),
             )
         )
@@ -1049,7 +1251,7 @@ class CollegeReviewService:
                 func.count(Application.id).label("total"),
                 func.sum(
                     case(
-                        [(Application.quota_allocation_status == "allocated", 1)],
+                        (Application.quota_allocation_status == "allocated", 1),
                         else_=0,
                     )
                 ).label("allocated"),
@@ -1058,7 +1260,7 @@ class CollegeReviewService:
                 and_(
                     Application.scholarship_type_id == scholarship_type_id,
                     Application.academic_year == academic_year,
-                    Application.semester == semester,
+                    Application.semester == normalized_semester,
                 )
             )
             .group_by(Application.sub_scholarship_type)
@@ -1085,6 +1287,41 @@ class CollegeReviewService:
                 "remaining": (sub_quota - (allocated or 0)) if sub_quota else None,
                 "utilization_rate": ((allocated or 0) / sub_quota * 100) if sub_quota else None,
             }
+
+        # Calculate college-specific quota if college_code provided
+        college_quota: Optional[int] = None
+        college_quota_breakdown: Dict[str, int] = {}
+
+        if college_code and config.has_college_quota and isinstance(config.quotas, dict):
+            logger.info(f"Calculating college quota for college_code={college_code}")
+            total_college_quota = 0
+
+            for sub_type_code, college_quotas in config.quotas.items():
+                if not isinstance(college_quotas, dict):
+                    continue
+
+                if college_code in college_quotas:
+                    quota_value = college_quotas[college_code]
+                    try:
+                        numeric_quota = int(quota_value)
+                        if numeric_quota > 0:
+                            total_college_quota += numeric_quota
+                            college_quota_breakdown[sub_type_code] = numeric_quota
+                            logger.debug(
+                                f"  Sub-type {sub_type_code}: {numeric_quota} quota for college {college_code}"
+                            )
+                    except (TypeError, ValueError) as e:
+                        logger.warning(f"Invalid quota value for {sub_type_code}/{college_code}: {quota_value} ({e})")
+                        pass
+
+            if total_college_quota > 0:
+                college_quota = total_college_quota
+                logger.info(f"Total college quota for {college_code}: {college_quota}")
+            else:
+                logger.info(f"No college quota found for {college_code}")
+
+        quota_status["college_quota"] = college_quota
+        quota_status["college_quota_breakdown"] = college_quota_breakdown
 
         return quota_status
 

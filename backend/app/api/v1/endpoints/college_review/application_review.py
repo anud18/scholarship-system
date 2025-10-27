@@ -149,20 +149,32 @@ async def create_college_review(
             description=f"College review created with recommendation: {review_data.recommendation}",
             new_values={
                 "recommendation": review_data.recommendation,
-                "academic_score": review_data.academic_score,
-                "professor_review_score": review_data.professor_review_score,
-                "college_criteria_score": review_data.college_criteria_score,
-                "special_circumstances_score": review_data.special_circumstances_score,
-                "decision_reason": review_data.decision_reason,
-                "is_priority": review_data.is_priority,
+                "review_comments": getattr(review_data, "review_comments", None),
+                "decision_reason": getattr(review_data, "decision_reason", None),
+                "is_priority": getattr(review_data, "is_priority", None),
+                "needs_special_attention": getattr(review_data, "needs_special_attention", None),
             },
             status="success",
         )
 
+        # 提取 redistribution_info（如果存在）
+        redistribution_info = getattr(college_review, "_redistribution_info", None)
+
+        review_response_data = CollegeReviewResponse.from_orm(college_review)
+        response_data = (
+            review_response_data.model_dump()
+            if hasattr(review_response_data, "model_dump")
+            else review_response_data.dict()
+        )
+
+        # 附加重新分發資訊到響應
+        if redistribution_info:
+            response_data["redistribution_info"] = redistribution_info
+
         return ApiResponse(
             success=True,
             message="College review created successfully",
-            data=CollegeReviewResponse.from_orm(college_review),
+            data=response_data,
         )
 
     except ValueError as e:

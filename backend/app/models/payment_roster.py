@@ -73,6 +73,7 @@ class PaymentRoster(Base):
     # 造冊基本資訊
     roster_code = Column(String(50), unique=True, nullable=False, index=True)  # ROSTER-2025-01-PHD001
     scholarship_configuration_id = Column(Integer, ForeignKey("scholarship_configurations.id"), nullable=False)
+    ranking_id = Column(Integer, ForeignKey("college_rankings.id"), nullable=True, index=True)  # 關聯的排名ID（可選）
 
     # 期間標記
     period_label = Column(String(20), nullable=False, index=True)  # 2025-01, 2025-H1, 2025
@@ -120,6 +121,7 @@ class PaymentRoster(Base):
 
     # 關聯
     scholarship_configuration = relationship("ScholarshipConfiguration")
+    ranking = relationship("CollegeRanking", lazy="select")  # 關聯的排名（可選）
     creator = relationship("User", foreign_keys=[created_by])
     locker = relationship("User", foreign_keys=[locked_by])
     items = relationship("PaymentRosterItem", back_populates="roster", cascade="all, delete-orphan")

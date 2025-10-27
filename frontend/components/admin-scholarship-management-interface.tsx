@@ -336,10 +336,9 @@ export function AdminScholarshipManagementInterface({
         ? window.localStorage?.getItem("auth_token")
         : null;
 
-      const API_BASE =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      // Use relative path to leverage Next.js API proxy (CLAUDE.md architecture)
       const response = await fetch(
-        `${API_BASE}/api/v1/scholarships/${type}/upload-terms`,
+        `/api/v1/scholarships/${type}/upload-terms`,
         {
           method: "POST",
           body: formData,

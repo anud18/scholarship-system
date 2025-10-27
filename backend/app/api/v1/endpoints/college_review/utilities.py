@@ -139,6 +139,7 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
 
         scholarship_types = [
             {
+                "id": st.id,
                 "code": st.code,
                 "name": st.name,
                 "name_en": st.name_en if st.name_en else st.name,
@@ -176,7 +177,7 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
                 if value_lower in {"yearly"}:
                     has_yearly_scholarships = True
                 else:
-                    semesters_set.add(value_lower.upper())
+                    semesters_set.add(value_lower)  # Keep lowercase to match database enum
             else:
                 # No semester means yearly scholarship
                 has_yearly_scholarships = True
@@ -184,9 +185,9 @@ async def get_available_combinations(current_user: User = Depends(require_colleg
         academic_years = sorted(list(academic_years_set))
         semester_strings = sorted(list(semesters_set))
 
-        # Add a special "YEARLY" option if there are yearly scholarships
+        # Add a special "yearly" option if there are yearly scholarships (lowercase to match database)
         if has_yearly_scholarships:
-            semester_strings.append("YEARLY")
+            semester_strings.append("yearly")
 
         response_data = {
             "scholarship_types": scholarship_types,

@@ -111,7 +111,7 @@ export function MockSSOLogin() {
   const fetchDeveloperProfiles = async () => {
     try {
       const developersResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/dev-profiles/developers`
+        `/api/v1/auth/dev-profiles/developers`
       );
       if (!developersResponse.ok) return;
 
@@ -123,7 +123,7 @@ export function MockSSOLogin() {
       for (const developerId of developersData.data) {
         try {
           const profilesResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/dev-profiles/${developerId}`
+            `/api/v1/auth/dev-profiles/${developerId}`
           );
           if (profilesResponse.ok) {
             const profilesData = await profilesResponse.json();

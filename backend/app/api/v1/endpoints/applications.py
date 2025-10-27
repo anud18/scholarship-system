@@ -18,6 +18,7 @@ from app.models.user import User
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationStatusUpdate,
+    ApplicationStatusUpdateResponse,
     ApplicationUpdate,
     ProfessorReviewCreate,
     StudentDataSchema,
@@ -611,7 +612,15 @@ async def get_applications_for_review(
     }
 
 
-@router.put("/{id}/status")
+@router.put(
+    "/{id}/status",
+    responses={
+        200: {
+            "description": "Application status updated successfully",
+            "model": ApplicationStatusUpdateResponse,
+        }
+    },
+)
 async def update_application_status(
     id: int = Path(..., description="Application ID"),
     status_update: ApplicationStatusUpdate = ...,
@@ -619,7 +628,12 @@ async def update_application_status(
     db: AsyncSession = Depends(get_db),
     request: Request = None,
 ):
-    """Update application status (staff only)"""
+    """Update application status (staff only)
+
+    This endpoint updates an application's status and automatically triggers redistribution
+    if the status changes to 'approved' or 'rejected'. The response includes information
+    about any auto-redistribution that was performed.
+    """
     # Get application before update to capture old status
     service = ApplicationService(db)
     app_before = await service.get_application_by_id(id, current_user)
@@ -627,6 +641,16 @@ async def update_application_status(
 
     # Update status
     result = await service.update_application_status(id, current_user, status_update)
+
+    # Check and execute auto-redistribution if status changed to approved/rejected
+    redistribution_info = {"auto_redistributed": False}
+    if status_update.status in ["approved", "rejected"]:
+        from app.services.college_review_service import CollegeReviewService
+
+        review_service = CollegeReviewService(db)
+        redistribution_info = await review_service.auto_redistribute_after_status_change(
+            application_id=id, executor_id=current_user.id
+        )
 
     # Log audit trail for status update
     audit_service = ApplicationAuditService(db)
@@ -640,10 +664,15 @@ async def update_application_status(
         request=request,
     )
 
+    # Prepare result data with redistribution info
+    result_dict = result.model_dump() if hasattr(result, "model_dump") else result.dict()
     return {
         "success": True,
         "message": "狀態已更新",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": {
+            **result_dict,
+            "redistribution_info": redistribution_info,
+        },
     }
 
 

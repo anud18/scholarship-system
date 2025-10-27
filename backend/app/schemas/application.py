@@ -384,6 +384,107 @@ class ApplicationResponse(BaseModel):
         )
 
 
+class RedistributionRankingResult(BaseModel):
+    """Individual ranking redistribution result"""
+
+    ranking_id: int = Field(..., description="Ranking ID")
+    sub_type_code: Optional[str] = Field(None, description="Sub-type code")
+    status: str = Field(..., description="Status: success, failed, or skipped")
+    allocated: Optional[int] = Field(None, description="Number of students allocated (if successful)")
+    error: Optional[str] = Field(None, description="Error message (if failed)")
+    reason: Optional[str] = Field(None, description="Reason for skip (if skipped)")
+    roster_code: Optional[str] = Field(None, description="Roster code (if roster exists)")
+
+
+class RedistributionInfo(BaseModel):
+    """Auto-redistribution information after status change"""
+
+    auto_redistributed: bool = Field(..., description="Whether any redistribution was executed")
+    total_allocated: Optional[int] = Field(None, description="Total number of students allocated across all rankings")
+    rankings_processed: Optional[int] = Field(None, description="Number of rankings processed")
+    successful_count: Optional[int] = Field(None, description="Number of rankings successfully redistributed")
+    results: Optional[List[RedistributionRankingResult]] = Field(None, description="List of results for each ranking")
+    reason: Optional[str] = Field(None, description="Reason for redistribution or skip")
+
+
+class ApplicationStatusUpdateResponse(BaseModel):
+    """Response for application status update with redistribution info"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    # Include all ApplicationResponse fields
+    id: int
+    app_id: str
+    user_id: int
+    student_id: Optional[str] = None
+    scholarship_type_id: int
+    scholarship_type: Optional[str] = None
+    scholarship_type_zh: Optional[str] = None
+    scholarship_name: Optional[str] = None
+    amount: Optional[Decimal] = None
+    currency: Optional[str] = "TWD"
+    scholarship_subtype_list: Optional[List[str]] = []
+    status: str
+    status_name: Optional[str]
+    is_renewal: bool = Field(False, description="是否為續領申請")
+    academic_year: int
+    semester: Optional[str] = None
+    student_data: Dict[str, Any]
+    submitted_form_data: Dict[str, Any]
+    agree_terms: bool = False
+    professor_id: Optional[int] = None
+    reviewer_id: Optional[int] = None
+    final_approver_id: Optional[int] = None
+    submitted_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    meta_data: Optional[Dict[str, Any]] = None
+    reviews: List[ApplicationReviewResponse] = []
+    professor_reviews: List[ProfessorReviewResponse] = []
+
+    # Additional display fields
+    student_name: Optional[str] = None
+    student_no: Optional[str] = None
+    student_name_en: Optional[str] = None
+    student_pid: Optional[str] = None
+    student_email: Optional[str] = None
+    student_phone: Optional[str] = None
+
+    # === Academic Organization ===
+    academy_code: Optional[str] = None
+    academy_name: Optional[str] = None
+    department_code: Optional[str] = None
+    department_name: Optional[str] = None
+    degree: Optional[int] = None
+    studying_status: Optional[int] = None
+    studying_status_name: Optional[str] = None
+
+    # === Enrollment Information ===
+    enroll_year: Optional[int] = None
+    enroll_term: Optional[int] = None
+    enroll_type: Optional[int] = None
+    term_count: Optional[int] = None
+
+    # === Identity & Status ===
+    student_identity: Optional[int] = None
+    school_identity: Optional[int] = None
+    gender: Optional[int] = None
+
+    # === Academic Performance ===
+    gpa: Optional[float] = None
+    class_ranking: Optional[int] = None
+    class_ranking_percent: Optional[float] = None
+    dept_ranking: Optional[int] = None
+    dept_ranking_percent: Optional[float] = None
+
+    # Auto-redistribution info (only present for status updates)
+    redistribution_info: Optional[RedistributionInfo] = Field(
+        None, description="Auto-redistribution information (present after status change to approved/rejected)"
+    )
+
+
 class ApplicationReviewCreate(BaseModel):
     """Application review creation schema"""
 

@@ -1,14 +1,12 @@
 import { ApiResponse } from "@/lib/api";
 import { ScholarshipTypeConfig, SubTypeConfig } from "@/types/quota";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 const apiCall = async (url: string, options: RequestInit = {}) => {
   // Get auth token from localStorage if available
   const token =
     typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
 
-  const response = await fetch(`${API_BASE}${url}`, {
+  const response = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
       ...(token && { Authorization: `Bearer ${token}` }),

@@ -166,8 +166,8 @@ const transformApplicationData = (app: any): DashboardApplication => {
       documents: submittedFormData.documents.map((doc: any) => ({
         ...doc,
         // Map API response fields to expected format for ApplicationDetailDialog
-        id: doc.file_id || doc.id || doc.document_id, // Use document_id as fallback
-        file_id: doc.file_id || doc.id || doc.document_id,
+        id: doc.file_id || doc.id,
+        file_id: doc.file_id || doc.id,
         filename: doc.filename || doc.original_filename,
         original_filename: doc.original_filename,
         file_path: doc.file_path,
@@ -870,7 +870,7 @@ export function AdminScholarshipDashboard({
                               <div className="flex items-center justify-between gap-2 p-2 bg-green-50 border border-green-200 rounded-md">
                                 <div className="flex items-center gap-1">
                                   <CheckCircle className="h-4 w-4 text-green-600" />
-                                  <span className="text-sm font-medium text-green-800">
+                                    <span className="text-sm font-medium text-green-800 whitespace-nowrap">
                                     {(() => {
                                       console.log(
                                         "🎯 Display logic - App:",
@@ -957,7 +957,7 @@ export function AdminScholarshipDashboard({
                           <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-md">
                             <CheckCircle className="h-4 w-4 text-green-600" />
                             <div className="flex items-center gap-1">
-                              <span className="text-sm font-medium text-green-800">
+                              <span className="text-sm font-medium text-green-800 whitespace-nowrap">
                                 {(() => {
                                   console.log(
                                     "🎯 Display logic (readonly) - App:",

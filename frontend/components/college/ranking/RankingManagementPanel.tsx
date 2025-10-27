@@ -3,6 +3,7 @@
 import { User } from "@/types/user";
 import { useCollegeManagement } from "@/contexts/college-management-context";
 import { useState, useEffect, useCallback } from "react";
+import { Semester } from "@/lib/enums";
 import {
   Card,
   CardContent,
@@ -11,20 +12,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { CollegeRankingTable } from "@/components/college-ranking-table";
+import { ConfigSelector } from "../shared/ConfigSelector";
+import { RankingCardList } from "../shared/RankingCardList";
 import {
   Plus,
-  Trophy,
-  Clock,
   Loader2,
-  Lock,
-  LockOpen,
-  Trash2,
-  Pencil,
-  Check,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
@@ -59,7 +52,11 @@ export function RankingManagementPanel({
     setRankings,
     scholarshipConfig,
     selectedAcademicYear,
+    setSelectedAcademicYear,
     selectedSemester,
+    setSelectedSemester,
+    selectedCombination,
+    setSelectedCombination,
     availableOptions,
     activeScholarshipTab,
     editingRankingId,
@@ -176,14 +173,14 @@ export function RankingManagementPanel({
       const useSemester = selectedSemester || academicConfig.currentSemester;
 
       const semesterName =
-        useSemester === "FIRST" ? "上學期" :
-        useSemester === "SECOND" ? "下學期" : "全年";
+        useSemester === Semester.FIRST ? "上學期" :
+        useSemester === Semester.SECOND ? "下學期" : "全年";
 
       const response = await apiClient.college.createRanking({
         scholarship_type_id: targetScholarshipId,
         sub_type_code: targetSubTypeCode,
         academic_year: useYear,
-        semester: useSemester === "YEARLY" ? null : useSemester.toLowerCase(),
+        semester: useSemester === Semester.YEARLY ? null : useSemester,
         ranking_name: `${scholarshipType.name} - ${useYear} ${semesterName}`,
         force_new: true, // Always create a new ranking when user clicks "建立新排名"
       });
@@ -283,23 +280,48 @@ export function RankingManagementPanel({
     comments?: string
   ) => {
     try {
-      await apiClient.college.reviewApplication(applicationId, {
+      const response = await apiClient.college.reviewApplication(applicationId, {
         recommendation: action,
         review_comments: comments,
       });
-      if (selectedRanking) {
-        await fetchRankingDetails(selectedRanking);
+
+      // 檢查是否自動重新執行了分發
+      if (response.success && response.data) {
+        const redistribution = response.data.redistribution_info;
+
+        if (redistribution?.auto_redistributed) {
+          toast.success(
+            `審核完成並已自動重新執行分發，分配 ${redistribution.total_allocated} 名學生`,
+            { duration: 5000 }
+          );
+        } else if (redistribution?.reason === "roster_exists") {
+          toast.warning(
+            `審核完成。此排名已開始造冊 (${redistribution.roster_info?.roster_code})，未重新執行分發`,
+            { duration: 6000 }
+          );
+        } else {
+          toast.success(`審核${action === 'approve' ? '核准' : '駁回'}完成`);
+        }
       }
-      // 同時更新 Context 中的申請列表，讓學院審核管理頁面也能看到最新狀態
-      await fetchCollegeApplications(
-        selectedAcademicYear,
-        selectedSemester,
-        activeScholarshipTab
-      );
+
+      // 刷新所有相關資料以確保 UI 同步
+      await Promise.all([
+        // 刷新當前排名的詳細資訊（包含最新的分配結果）
+        selectedRanking ? fetchRankingDetails(selectedRanking) : Promise.resolve(),
+        // 刷新排名列表（更新分配計數等統計資訊）
+        fetchRankings(),
+        // 刷新申請列表（更新學生狀態）
+        fetchCollegeApplications(
+          selectedAcademicYear,
+          selectedSemester,
+          activeScholarshipTab
+        ),
+      ]);
     } catch (error) {
       console.error("Failed to review application:", error);
+      toast.error("審核提交失敗");
     }
-  }, [selectedRanking, fetchRankingDetails, fetchCollegeApplications, selectedAcademicYear, selectedSemester, activeScholarshipTab]);
+  }, [selectedRanking, fetchRankingDetails, fetchRankings, fetchCollegeApplications, selectedAcademicYear, selectedSemester, activeScholarshipTab]);
 
   const handleExecuteDistribution = useCallback(async () => {
     if (selectedRanking) {
@@ -426,10 +448,26 @@ export function RankingManagementPanel({
             管理獎學金申請的排序和排名
           </p>
         </div>
-        <Button onClick={createNewRanking}>
-          <Plus className="h-4 w-4 mr-2" />
-          建立新排名
-        </Button>
+
+        <div className="flex items-center gap-2">
+          <ConfigSelector
+            selectedCombination={selectedCombination}
+            availableYears={availableOptions?.academic_years || []}
+            availableSemesters={availableOptions?.semesters || []}
+            onCombinationChange={(value) => {
+              setSelectedCombination(value);
+              const [year, semester] = value.split("-");
+              setSelectedAcademicYear(parseInt(year));
+              setSelectedSemester(semester || undefined);
+            }}
+            locale={locale}
+          />
+
+          <Button onClick={createNewRanking}>
+            <Plus className="h-4 w-4 mr-2" />
+            建立新排名
+          </Button>
+        </div>
       </div>
 
       {/* Ranking Selection */}
@@ -439,155 +477,42 @@ export function RankingManagementPanel({
           <CardDescription>選擇要管理的排名清單</CardDescription>
         </CardHeader>
         <CardContent>
-          {filteredRankings.length === 0 ? (
-            <div className="text-center py-12">
-              <Trophy className="h-12 w-12 mx-auto mb-4 text-nycu-blue-300" />
-              <h3 className="text-lg font-semibold text-nycu-navy-800 mb-2">
-                暫無符合條件的排名
-              </h3>
-              <p className="text-nycu-navy-600 mb-4">
-                {scholarshipType.name} 目前在選定的學年度與學期沒有排名
-              </p>
-              <Button onClick={createNewRanking} variant="outline">
-                <Plus className="h-4 w-4 mr-2" />
-                立即建立排名
-              </Button>
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredRankings.map((ranking: any) => {
-                const isSelected = selectedRanking === ranking.id;
-                const isLocked = Boolean(ranking.is_finalized);
-
-                return (
-                  <Card
-                    key={ranking.id}
-                    className={`cursor-pointer ${isSelected ? 'border-blue-500 bg-blue-50/80' : 'border-slate-200'}`}
-                    onClick={() => {
-                      setSelectedRanking(ranking.id);
-                      fetchRankingDetails(ranking.id);
-                    }}
-                  >
-                    <CardContent className="space-y-3 p-5">
-                      <div className="flex items-start justify-between">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={isLocked ? "default" : "secondary"}>
-                            {isLocked ? <Lock className="h-3 w-3 mr-1" /> : <Clock className="h-3 w-3 mr-1" />}
-                            {isLocked ? "已鎖定" : "進行中"}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (isLocked) {
-                                handleUnfinalizeRanking(ranking.id);
-                              } else {
-                                handleFinalizeRanking(ranking.id);
-                              }
-                            }}
-                          >
-                            {isLocked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
-                          </Button>
-                          {!isLocked && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-600"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setRankingToDelete(ranking);
-                                setShowDeleteRankingDialog(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      {editingRankingId === ranking.id ? (
-                        <div
-                          className="flex flex-1 items-center gap-2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Input
-                            value={editingRankingName}
-                            onChange={(e) => setEditingRankingName(e.target.value)}
-                            className="h-8 flex-1 text-sm"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                handleSaveRankingName(ranking.id);
-                              } else if (e.key === "Escape") {
-                                handleCancelEditRankingName();
-                              }
-                            }}
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 p-0 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSaveRankingName(ranking.id);
-                            }}
-                          >
-                            <Check className="h-4 w-4" />
-                            <span className="sr-only">
-                              {locale === "zh" ? "儲存名稱" : "Save name"}
-                            </span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 p-0 text-slate-500 hover:bg-slate-100"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCancelEditRankingName();
-                            }}
-                          >
-                            <X className="h-4 w-4" />
-                            <span className="sr-only">
-                              {locale === "zh" ? "取消編輯" : "Cancel edit"}
-                            </span>
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <h3 className="flex-1 text-sm font-semibold text-slate-800">
-                            {ranking.ranking_name}
-                          </h3>
-                          {!isLocked && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 p-0 text-slate-500 hover:bg-blue-50 hover:text-blue-600"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditRankingName(ranking);
-                              }}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                              <span className="sr-only">
-                                {locale === "zh" ? "重新命名" : "Rename"}
-                              </span>
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <Trophy className="h-3.5 w-3.5" />
-                        <span>申請數 {ranking.total_applications ?? 0}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
+          <RankingCardList
+            rankings={filteredRankings}
+            selectedRankingId={selectedRanking}
+            onRankingSelect={(id) => {
+              setSelectedRanking(id);
+              fetchRankingDetails(id);
+            }}
+            showActions={true}
+            showOnlyDistributed={false}
+            emptyStateConfig={{
+              title: "暫無符合條件的排名",
+              description: `${scholarshipType.name} 目前在選定的學年度與學期沒有排名`,
+              actionButton: {
+                label: "立即建立排名",
+                onClick: createNewRanking,
+              },
+            }}
+            editingId={editingRankingId}
+            editingName={editingRankingName}
+            onEdit={handleEditRankingName}
+            onEditNameChange={setEditingRankingName}
+            onEditNameSave={handleSaveRankingName}
+            onEditNameCancel={handleCancelEditRankingName}
+            onDelete={(ranking) => {
+              setRankingToDelete(ranking);
+              setShowDeleteRankingDialog(true);
+            }}
+            onToggleLock={(id, isLocked) => {
+              if (isLocked) {
+                handleUnfinalizeRanking(id);
+              } else {
+                handleFinalizeRanking(id);
+              }
+            }}
+            locale={locale}
+          />
         </CardContent>
       </Card>
 

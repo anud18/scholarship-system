@@ -21,6 +21,7 @@ class RosterCreateRequest(BaseModel):
     roster_cycle: RosterCycle = Field(..., description="造冊週期")
     academic_year: int = Field(..., description="學年度")
     student_verification_enabled: bool = Field(True, description="是否啟用學籍驗證")
+    ranking_id: Optional[int] = Field(None, description="指定排名ID（若有多個排名時使用）")
 
 
 class RosterExportRequest(BaseModel):
@@ -77,6 +78,7 @@ class RosterResponse(BaseModel):
     id: int
     roster_code: str
     scholarship_configuration_id: int
+    ranking_id: Optional[int] = None  # 關聯的排名ID（可選）
     period_label: str
     roster_cycle: RosterCycle
     academic_year: int
@@ -93,6 +95,7 @@ class RosterResponse(BaseModel):
 
     # 前端需要的額外欄位
     scholarship_config_name: Optional[str] = None
+    ranking_name: Optional[str] = None  # 關聯排名的名稱
     student_count: Optional[int] = None
     roster_name: Optional[str] = None  # 對應 roster_code
     roster_period: Optional[str] = None  # 對應 roster_cycle.value

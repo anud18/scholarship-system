@@ -46,6 +46,7 @@ class RosterService:
         trigger_type: RosterTriggerType = RosterTriggerType.MANUAL,
         student_verification_enabled: bool = True,
         force_regenerate: bool = False,
+        ranking_id: Optional[int] = None,  # 新增：指定排名ID
     ) -> PaymentRoster:
         """
         產生造冊
@@ -122,6 +123,7 @@ class RosterService:
                     trigger_type=trigger_type,
                     created_by=created_by_user_id,
                     student_verification_enabled=student_verification_enabled,
+                    ranking_id=ranking_id,  # 新增：關聯排名ID
                     started_at=datetime.now(timezone.utc),
                 )
                 self.db.add(roster)
@@ -166,7 +168,9 @@ class RosterService:
                 )
 
             # 取得符合條件的申請
-            applications = self._get_eligible_applications(scholarship_configuration_id, period_label, academic_year)
+            applications = self._get_eligible_applications(
+                scholarship_configuration_id, period_label, academic_year, ranking_id
+            )
 
             roster.total_applications = len(applications)
             logger.info(f"Found {len(applications)} eligible applications")
@@ -439,9 +443,16 @@ class RosterService:
         return f"ROSTER-{academic_year}-{period_label}-{config.config_code}"
 
     def _get_eligible_applications(
-        self, scholarship_configuration_id: int, period_label: str, academic_year: int
+        self, scholarship_configuration_id: int, period_label: str, academic_year: int, ranking_id: Optional[int] = None
     ) -> List[Application]:
-        """取得符合條件的申請"""
+        """
+        取得符合條件的申請
+
+        如果指定 ranking_id，只選取該排名中已分配的申請（正取學生）
+        否則選取所有 approved 狀態的申請
+        """
+        from app.models.college_review import CollegeRankingItem
+
         # 基本條件：已核准的申請
         query = (
             self.db.query(Application)
@@ -454,6 +465,12 @@ class RosterService:
                 )
             )
         )
+
+        # 如果指定了 ranking_id，只選取該排名中已分配的申請
+        if ranking_id is not None:
+            query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
+                and_(CollegeRankingItem.ranking_id == ranking_id, CollegeRankingItem.is_allocated == True)  # 只選正取
+            )
 
         # 根據期間標記篩選
         if period_label.endswith("-H1") or period_label.endswith("-H2"):
@@ -512,6 +529,26 @@ class RosterService:
             is_included = False
             exclusion_reason = "缺少銀行帳戶資訊"
 
+        # 查詢 CollegeRankingItem 以取得備取資訊
+        backup_info = None
+        if roster.ranking_id:
+            from app.models.college_review import CollegeRankingItem
+
+            ranking_item = (
+                self.db.query(CollegeRankingItem)
+                .filter(
+                    and_(
+                        CollegeRankingItem.application_id == application.id,
+                        CollegeRankingItem.ranking_id == roster.ranking_id,
+                    )
+                )
+                .first()
+            )
+
+            if ranking_item and ranking_item.backup_allocations:
+                backup_info = ranking_item.backup_allocations
+                logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
+
         roster_item = PaymentRosterItem(
             roster_id=roster.id,
             application_id=application.id,
@@ -532,6 +569,7 @@ class RosterService:
             rule_validation_result=eligibility_result,
             failed_rules=eligibility_result.get("failed_rules", []) if eligibility_result else [],
             warning_rules=eligibility_result.get("warning_rules", []) if eligibility_result else [],
+            backup_info=backup_info,  # 新增：備取資訊
         )
 
         self.db.add(roster_item)

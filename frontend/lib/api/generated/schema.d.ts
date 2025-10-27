@@ -825,6 +825,10 @@ export interface paths {
         /**
          * Update Application Status
          * @description Update application status (staff only)
+         *
+         *     This endpoint updates an application's status and automatically triggers redistribution
+         *     if the status changes to 'approved' or 'rejected'. The response includes information
+         *     about any auto-redistribution that was performed.
          */
         put: operations["update_application_status_api_v1_applications__id__status_put"];
         post?: never;
@@ -4476,8 +4480,31 @@ export interface paths {
         /**
          * Get Quota Status
          * @description Get quota status for a scholarship type
+         *
+         *     Returns quota status including college-specific quota if user has college_code
          */
         get: operations["get_quota_status_api_v1_college_review_quota_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/rankings/{ranking_id}/roster-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ranking Roster Status
+         * @description Get roster status for a ranking
+         *     查詢排名的造冊狀態和進展
+         */
+        get: operations["get_ranking_roster_status_api_v1_college_review_rankings__ranking_id__roster_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5579,6 +5606,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/available-rankings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Available Rankings
+         * @description 查詢可用於造冊的排名清單
+         *     Get available rankings for roster generation
+         *
+         *     Returns rankings that have executed distribution and can be used for roster creation.
+         */
+        get: operations["get_available_rankings_api_v1_payment_rosters_available_rankings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/payment-rosters": {
         parameters: {
             query?: never;
@@ -6525,6 +6575,28 @@ export interface components {
             documents: components["schemas"]["DocumentData"][];
         };
         /**
+         * ApplicationReviewResponse
+         * @description Application review response schema
+         */
+        ApplicationReviewResponse: {
+            /** Id */
+            id: number;
+            /** Reviewer Id */
+            reviewer_id: number;
+            /** Review Stage */
+            review_stage: string;
+            /** Review Status */
+            review_status: string;
+            /** Comments */
+            comments: string | null;
+            /** Recommendation */
+            recommendation: string | null;
+            /** Decision Reason */
+            decision_reason: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+        };
+        /**
          * ApplicationStatusUpdate
          * @description Application status update schema
          */
@@ -6544,6 +6616,155 @@ export interface components {
              * @description Reason for rejection
              */
             rejection_reason?: string | null;
+        };
+        /**
+         * ApplicationStatusUpdateResponse
+         * @description Response for application status update with redistribution info
+         */
+        ApplicationStatusUpdateResponse: {
+            /** Id */
+            id: number;
+            /** App Id */
+            app_id: string;
+            /** User Id */
+            user_id: number;
+            /** Student Id */
+            student_id?: string | null;
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
+            /** Scholarship Type */
+            scholarship_type?: string | null;
+            /** Scholarship Type Zh */
+            scholarship_type_zh?: string | null;
+            /** Scholarship Name */
+            scholarship_name?: string | null;
+            /** Amount */
+            amount?: string | null;
+            /**
+             * Currency
+             * @default TWD
+             */
+            currency: string | null;
+            /**
+             * Scholarship Subtype List
+             * @default []
+             */
+            scholarship_subtype_list: string[] | null;
+            /** Status */
+            status: string;
+            /** Status Name */
+            status_name: string | null;
+            /**
+             * Is Renewal
+             * @description 是否為續領申請
+             * @default false
+             */
+            is_renewal: boolean;
+            /** Academic Year */
+            academic_year: number;
+            /** Semester */
+            semester?: string | null;
+            /** Student Data */
+            student_data: {
+                [key: string]: unknown;
+            };
+            /** Submitted Form Data */
+            submitted_form_data: {
+                [key: string]: unknown;
+            };
+            /**
+             * Agree Terms
+             * @default false
+             */
+            agree_terms: boolean;
+            /** Professor Id */
+            professor_id?: number | null;
+            /** Reviewer Id */
+            reviewer_id?: number | null;
+            /** Final Approver Id */
+            final_approver_id?: number | null;
+            /** Submitted At */
+            submitted_at?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Approved At */
+            approved_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Meta Data */
+            meta_data?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Reviews
+             * @default []
+             */
+            reviews: components["schemas"]["ApplicationReviewResponse"][];
+            /**
+             * Professor Reviews
+             * @default []
+             */
+            professor_reviews: components["schemas"]["ProfessorReviewResponse"][];
+            /** Student Name */
+            student_name?: string | null;
+            /** Student No */
+            student_no?: string | null;
+            /** Student Name En */
+            student_name_en?: string | null;
+            /** Student Pid */
+            student_pid?: string | null;
+            /** Student Email */
+            student_email?: string | null;
+            /** Student Phone */
+            student_phone?: string | null;
+            /** Academy Code */
+            academy_code?: string | null;
+            /** Academy Name */
+            academy_name?: string | null;
+            /** Department Code */
+            department_code?: string | null;
+            /** Department Name */
+            department_name?: string | null;
+            /** Degree */
+            degree?: number | null;
+            /** Studying Status */
+            studying_status?: number | null;
+            /** Studying Status Name */
+            studying_status_name?: string | null;
+            /** Enroll Year */
+            enroll_year?: number | null;
+            /** Enroll Term */
+            enroll_term?: number | null;
+            /** Enroll Type */
+            enroll_type?: number | null;
+            /** Term Count */
+            term_count?: number | null;
+            /** Student Identity */
+            student_identity?: number | null;
+            /** School Identity */
+            school_identity?: number | null;
+            /** Gender */
+            gender?: number | null;
+            /** Gpa */
+            gpa?: number | null;
+            /** Class Ranking */
+            class_ranking?: number | null;
+            /** Class Ranking Percent */
+            class_ranking_percent?: number | null;
+            /** Dept Ranking */
+            dept_ranking?: number | null;
+            /** Dept Ranking Percent */
+            dept_ranking_percent?: number | null;
+            /** @description Auto-redistribution information (present after status change to approved/rejected) */
+            redistribution_info?: components["schemas"]["RedistributionInfo"] | null;
         };
         /**
          * ApplicationUpdate
@@ -7554,6 +7775,53 @@ export interface components {
             comments?: string | null;
         };
         /**
+         * ProfessorReviewItemResponse
+         * @description Professor review item response schema
+         */
+        ProfessorReviewItemResponse: {
+            /** Id */
+            id: number;
+            /** Review Id */
+            review_id: number;
+            /** Sub Type Code */
+            sub_type_code: string;
+            /** Is Recommended */
+            is_recommended: boolean;
+            /** Comments */
+            comments?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * ProfessorReviewResponse
+         * @description Professor review response schema
+         */
+        ProfessorReviewResponse: {
+            /** Id */
+            id: number;
+            /** Application Id */
+            application_id: number;
+            /** Professor Id */
+            professor_id: number;
+            /** Recommendation */
+            recommendation?: string | null;
+            /** Review Status */
+            review_status?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Items
+             * @description Individual sub-type recommendations
+             * @default []
+             */
+            items: components["schemas"]["ProfessorReviewItemResponse"][];
+        };
+        /**
          * QuotaDistributionRequest
          * @description Schema for quota distribution request
          */
@@ -7609,6 +7877,83 @@ export interface components {
             ranking_name: string;
         };
         /**
+         * RedistributionInfo
+         * @description Auto-redistribution information after status change
+         */
+        RedistributionInfo: {
+            /**
+             * Auto Redistributed
+             * @description Whether any redistribution was executed
+             */
+            auto_redistributed: boolean;
+            /**
+             * Total Allocated
+             * @description Total number of students allocated across all rankings
+             */
+            total_allocated?: number | null;
+            /**
+             * Rankings Processed
+             * @description Number of rankings processed
+             */
+            rankings_processed?: number | null;
+            /**
+             * Successful Count
+             * @description Number of rankings successfully redistributed
+             */
+            successful_count?: number | null;
+            /**
+             * Results
+             * @description List of results for each ranking
+             */
+            results?: components["schemas"]["RedistributionRankingResult"][] | null;
+            /**
+             * Reason
+             * @description Reason for redistribution or skip
+             */
+            reason?: string | null;
+        };
+        /**
+         * RedistributionRankingResult
+         * @description Individual ranking redistribution result
+         */
+        RedistributionRankingResult: {
+            /**
+             * Ranking Id
+             * @description Ranking ID
+             */
+            ranking_id: number;
+            /**
+             * Sub Type Code
+             * @description Sub-type code
+             */
+            sub_type_code?: string | null;
+            /**
+             * Status
+             * @description Status: success, failed, or skipped
+             */
+            status: string;
+            /**
+             * Allocated
+             * @description Number of students allocated (if successful)
+             */
+            allocated?: number | null;
+            /**
+             * Error
+             * @description Error message (if failed)
+             */
+            error?: string | null;
+            /**
+             * Reason
+             * @description Reason for skip (if skipped)
+             */
+            reason?: string | null;
+            /**
+             * Roster Code
+             * @description Roster code (if roster exists)
+             */
+            roster_code?: string | null;
+        };
+        /**
          * RosterCreateRequest
          * @description 造冊建立請求
          */
@@ -7636,6 +7981,11 @@ export interface components {
              * @default true
              */
             student_verification_enabled: boolean;
+            /**
+             * Ranking Id
+             * @description 指定排名ID（若有多個排名時使用）
+             */
+            ranking_id?: number | null;
         };
         /**
          * RosterCycle
@@ -10053,13 +10403,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description Application status updated successfully */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ApplicationStatusUpdateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16693,6 +17043,37 @@ export interface operations {
             };
         };
     };
+    get_ranking_roster_status_api_v1_college_review_rankings__ranking_id__roster_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_distribution_details_api_v1_college_review_rankings__ranking_id__distribution_details_get: {
         parameters: {
             query?: never;
@@ -18100,6 +18481,42 @@ export interface operations {
                 "application/json": components["schemas"]["RosterCreateRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_available_rankings_api_v1_payment_rosters_available_rankings_get: {
+        parameters: {
+            query: {
+                /** @description 獎學金配置ID */
+                scholarship_configuration_id: number;
+                /** @description 學年度 */
+                academic_year: number;
+                /** @description 學期 */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

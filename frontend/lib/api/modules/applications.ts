@@ -14,6 +14,9 @@ import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
 import type { ApiResponse, Application, ApplicationFile } from '../../api.legacy';
+import type { components } from '../generated/schema';
+
+type ApplicationStatusUpdateResponse = components['schemas']['ApplicationStatusUpdateResponse'];
 
 type ApplicationCreate = {
   scholarship_type: string;
@@ -114,18 +117,21 @@ export function createApplicationsApi() {
      * Update application status (staff/admin only)
      * Type-safe: Path parameter and body validated against OpenAPI
      *
+     * Returns ApplicationStatusUpdateResponse which includes redistribution_info
+     * when status changes to approved/rejected.
+     *
      * @param id - Application ID
      * @param statusData - Status update data with status and optional comments
      */
     updateApplicationStatus: async (
       id: number,
       statusData: { status: string; comments?: string; rejection_reason?: string }
-    ): Promise<ApiResponse<Application>> => {
+    ): Promise<ApiResponse<ApplicationStatusUpdateResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}/status', {
         params: { path: { id } },
         body: statusData as any,
       });
-      return toApiResponse<Application>(response);
+      return toApiResponse<ApplicationStatusUpdateResponse>(response);
     },
 
     /**
@@ -135,12 +141,12 @@ export function createApplicationsApi() {
     updateStatus: async (
       id: number,
       statusData: { status: string; comments?: string }
-    ): Promise<ApiResponse<Application>> => {
+    ): Promise<ApiResponse<ApplicationStatusUpdateResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}/status', {
         params: { path: { id } },
         body: statusData as any,
       });
-      return toApiResponse<Application>(response);
+      return toApiResponse<ApplicationStatusUpdateResponse>(response);
     },
 
     /**

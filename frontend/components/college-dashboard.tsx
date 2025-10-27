@@ -1133,19 +1133,37 @@ export function CollegeDashboard({
         review_comments: comments,
       });
 
-      if (response.success) {
-        alert(`${action === 'approve' ? '核准' : '駁回'}成功：申請 #${applicationId} 已${action === 'approve' ? '核准' : '駁回'}`);
+      if (response.success && response.data) {
+        // Check for redistribution info and show appropriate notification
+        const redistribution = response.data.redistribution_info;
 
-        // Refresh ranking data to show updated review status
-        if (selectedRanking) {
-          await fetchRankingDetails(selectedRanking);
+        if (redistribution?.auto_redistributed) {
+          toast.success(
+            `審核完成並已自動重新執行分發，分配 ${redistribution.total_allocated} 名學生`,
+            { duration: 5000 }
+          );
+        } else if (redistribution?.reason === "roster_exists") {
+          toast.warning(
+            `審核完成。此排名已開始造冊 (${redistribution.roster_info?.roster_code})，未重新執行分發`,
+            { duration: 6000 }
+          );
+        } else {
+          toast.success(`審核${action === 'approve' ? '核准' : '駁回'}完成`);
         }
+
+        // 刷新所有相關資料以確保 UI 同步
+        await Promise.all([
+          // 刷新當前排名的詳細資訊（包含最新的分配結果）
+          selectedRanking ? fetchRankingDetails(selectedRanking) : Promise.resolve(),
+          // 刷新排名列表（更新分配計數等統計資訊）
+          fetchRankings(),
+        ]);
       } else {
         throw new Error(response.message || '操作失敗');
       }
     } catch (error) {
       console.error('Review submission error:', error);
-      alert(`提交失敗：${error instanceof Error ? error.message : '無法提交審查意見'}`);
+      toast.error(`提交失敗：${error instanceof Error ? error.message : '無法提交審查意見'}`);
     }
   };
 
