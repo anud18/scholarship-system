@@ -11,11 +11,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { DistributionResultsPanel } from "@/components/distribution-results-panel";
 import { ConfigSelector } from "../shared/ConfigSelector";
 import { RankingCardList } from "../shared/RankingCardList";
-import { Loader2, PackageCheck, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { Loader2, PackageCheck, CheckCircle2, Clock, AlertCircle, Lock, FileText } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { Progress } from "@/components/ui/progress";
 
 interface DistributionPanelProps {
   user: User;
@@ -51,9 +53,15 @@ export function DistributionPanel({
     roster_info?: {
       roster_code: string;
       status: string;
+      roster_cycle: 'monthly' | 'semi_yearly' | 'yearly';
       period_label: string;
       created_at: string;
       completed_at?: string;
+    };
+    roster_statistics?: {
+      total_periods_completed: number;
+      expected_total_periods: number;
+      completion_rate: number;
     };
   } | null>(null);
 
@@ -133,6 +141,50 @@ export function DistributionPanel({
     fetchRosterStatus();
   }, [selectedRanking]);
 
+  // 輔助函數：週期標籤轉換
+  const getCycleLabel = (cycle: string) => {
+    const labels = {
+      'monthly': locale === 'zh' ? '按月造冊' : 'Monthly',
+      'semi_yearly': locale === 'zh' ? '按半年造冊' : 'Semi-yearly',
+      'yearly': locale === 'zh' ? '按年造冊' : 'Yearly',
+    };
+    return labels[cycle as keyof typeof labels] || cycle;
+  };
+
+  // 輔助函數：狀態標籤轉換
+  const getStatusLabel = (status: string) => {
+    const labels = {
+      'draft': locale === 'zh' ? '草稿' : 'Draft',
+      'processing': locale === 'zh' ? '處理中' : 'Processing',
+      'completed': locale === 'zh' ? '已完成' : 'Completed',
+      'locked': locale === 'zh' ? '已鎖定' : 'Locked',
+      'failed': locale === 'zh' ? '失敗' : 'Failed',
+    };
+    return labels[status as keyof typeof labels] || status;
+  };
+
+  // 輔助函數：狀態圖標
+  const getStatusIcon = (status: string) => {
+    const icons = {
+      'completed': <CheckCircle2 className="h-5 w-5 text-green-600" />,
+      'locked': <Lock className="h-5 w-5 text-green-700" />,
+      'processing': <Clock className="h-5 w-5 text-blue-600" />,
+      'draft': <FileText className="h-5 w-5 text-amber-600" />,
+      'failed': <AlertCircle className="h-5 w-5 text-red-600" />,
+    };
+    return icons[status as keyof typeof icons] || <AlertCircle className="h-5 w-5 text-slate-600" />;
+  };
+
+  // 輔助函數：格式化日期
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString(locale === 'zh' ? 'zh-TW' : 'en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
@@ -195,71 +247,74 @@ export function DistributionPanel({
           ) : rankingData ? (
             <>
               {/* Roster Status Display */}
-              {rosterStatus && rosterStatus.has_roster && (
-                <Alert
-                  variant={
-                    rosterStatus.roster_info?.status === "completed" ||
-                    rosterStatus.roster_info?.status === "locked"
-                      ? "default"
-                      : rosterStatus.roster_info?.status === "processing"
-                      ? "default"
-                      : "destructive"
-                  }
-                  className={
-                    rosterStatus.roster_info?.status === "completed" ||
-                    rosterStatus.roster_info?.status === "locked"
-                      ? "border-green-500 bg-green-50"
-                      : rosterStatus.roster_info?.status === "processing"
-                      ? "border-blue-500 bg-blue-50"
-                      : ""
-                  }
-                >
-                  {rosterStatus.roster_info?.status === "completed" ||
-                  rosterStatus.roster_info?.status === "locked" ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  ) : rosterStatus.roster_info?.status === "processing" ? (
-                    <Clock className="h-4 w-4 text-blue-600" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4" />
-                  )}
-                  <AlertTitle className="font-semibold">
-                    造冊狀態：
-                    {rosterStatus.roster_info?.status === "draft" && "草稿"}
-                    {rosterStatus.roster_info?.status === "processing" && "處理中"}
-                    {rosterStatus.roster_info?.status === "completed" && "已完成"}
-                    {rosterStatus.roster_info?.status === "locked" && "已鎖定"}
-                    {rosterStatus.roster_info?.status === "failed" && "失敗"}
-                  </AlertTitle>
-                  <AlertDescription className="mt-2 space-y-1">
-                    <div>
-                      <strong>造冊代碼：</strong>
-                      {rosterStatus.roster_info?.roster_code}
-                    </div>
-                    <div>
-                      <strong>期間：</strong>
-                      {rosterStatus.roster_info?.period_label}
-                    </div>
-                    <div>
-                      <strong>建立時間：</strong>
-                      {new Date(
-                        rosterStatus.roster_info?.created_at || ""
-                      ).toLocaleString("zh-TW")}
-                    </div>
-                    {rosterStatus.roster_info?.completed_at && (
-                      <div>
-                        <strong>完成時間：</strong>
-                        {new Date(
-                          rosterStatus.roster_info.completed_at
-                        ).toLocaleString("zh-TW")}
+              {rosterStatus && rosterStatus.has_roster && rosterStatus.roster_info && (
+                <Card className="border-l-4 border-l-blue-500">
+                  <CardContent className="py-4">
+                    <div className="space-y-3">
+                      {/* 標題行：狀態 + 週期 */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(rosterStatus.roster_info.status)}
+                          <span className="font-medium text-slate-900">
+                            {locale === 'zh' ? '造冊狀態：' : 'Roster Status: '}
+                            {getStatusLabel(rosterStatus.roster_info.status)}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                          {getCycleLabel(rosterStatus.roster_info.roster_cycle)}
+                        </Badge>
                       </div>
-                    )}
-                    {!rosterStatus.can_redistribute && (
-                      <div className="mt-2 text-sm font-medium text-amber-700">
-                        ⚠️ 此排名已開始造冊，無法自動重新執行分發
+
+                      {/* 進度條 (僅按月造冊顯示) */}
+                      {rosterStatus.roster_info.roster_cycle === 'monthly' && rosterStatus.roster_statistics && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm text-slate-600">
+                            <span>{locale === 'zh' ? '已完成期數' : 'Completed Periods'}</span>
+                            <span className="font-mono font-bold text-slate-900">
+                              {rosterStatus.roster_statistics.total_periods_completed}/
+                              {rosterStatus.roster_statistics.expected_total_periods} {locale === 'zh' ? '個月' : 'months'}
+                            </span>
+                          </div>
+                          <Progress
+                            value={rosterStatus.roster_statistics.completion_rate}
+                            className="h-2"
+                            indicatorClassName="bg-green-500"
+                          />
+                        </div>
+                      )}
+
+                      {/* 半年造冊顯示統計 */}
+                      {rosterStatus.roster_info.roster_cycle === 'semi_yearly' && rosterStatus.roster_statistics && (
+                        <div className="text-sm text-slate-600">
+                          <span>{locale === 'zh' ? '已完成期數：' : 'Completed Periods: '}</span>
+                          <span className="font-mono font-bold text-slate-900">
+                            {rosterStatus.roster_statistics.total_periods_completed}/
+                            {rosterStatus.roster_statistics.expected_total_periods} {locale === 'zh' ? '期' : 'periods'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* 最新造冊資訊 */}
+                      <div className="text-xs text-slate-500">
+                        {locale === 'zh' ? '最新造冊：' : 'Latest Roster: '}
+                        {rosterStatus.roster_info.period_label}
+                        （{formatDate(rosterStatus.roster_info.created_at)}）
                       </div>
-                    )}
-                  </AlertDescription>
-                </Alert>
+
+                      {/* 警告訊息 */}
+                      {!rosterStatus.can_redistribute && (
+                        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                          <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                          <span>
+                            {locale === 'zh'
+                              ? '此排名已開始造冊，無法自動重新執行分發'
+                              : 'Roster has been initiated. Cannot auto-redistribute.'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
               )}
 
               <DistributionResultsPanel

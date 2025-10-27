@@ -12,7 +12,6 @@ Includes:
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, desc, func, select
@@ -33,7 +32,7 @@ from app.integrations.nycu_emp import (
 from app.models.application import Application, ApplicationStatus
 from app.models.notification import Notification
 from app.models.scholarship import ScholarshipType
-from app.models.user import AdminScholarship, User, UserRole
+from app.models.user import User
 from app.schemas.notification import NotificationResponse
 
 from ._helpers import apply_scholarship_filter, get_allowed_scholarship_ids
@@ -49,54 +48,54 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
     Get dashboard statistics for admin
 
     Returns system overview data including:
+
+    Primary statistics (matching frontend DashboardStats interface):
+    - total_applications: Total non-draft applications
+    - pending_review: Applications pending review (submitted/under_review)
+    - approved: Approved applications
+    - rejected: Rejected applications
+    - avg_processing_time: Average processing time in days
+
+    Additional statistics (for backward compatibility):
     - totalUsers: Total registered users
-    - activeApplications: Applications in progress (submitted/under_review)
-    - completedReviews: Completed reviews (approved/rejected)
-    - pendingReviews: Pending reviews
+    - activeApplications: Active applications (same as pending_review)
+    - completedReviews: Completed reviews (approved + rejected)
+    - pendingReviews: Pending reviews (same as pending_review)
     - totalScholarships: Total scholarship types
-    - systemUptime: System uptime (percentage)
-    - avgResponseTime: Average application processing time
-    - storageUsed: Storage usage (calculated from uploads)
+    - systemUptime: System uptime percentage
+    - avgResponseTime: Average response time (same as avg_processing_time)
     """
 
     # Get user's scholarship permissions
     allowed_scholarship_ids = await get_allowed_scholarship_ids(current_user, db)
 
-    # 1. Total users
-    stmt = select(func.count(User.id))
+    # 1. Total applications (all non-draft applications)
+    stmt = select(func.count(Application.id)).where(Application.status != ApplicationStatus.draft.value)
+    stmt = apply_scholarship_filter(stmt, Application.scholarship_type_id, allowed_scholarship_ids)
     result = await db.execute(stmt)
-    total_users = result.scalar() or 0
+    total_applications = result.scalar() or 0
 
-    # 2. Active applications (submitted + under_review)
+    # 2. Pending review (submitted + under_review)
     stmt = select(func.count(Application.id)).where(
         Application.status.in_([ApplicationStatus.submitted.value, ApplicationStatus.under_review.value])
     )
     stmt = apply_scholarship_filter(stmt, Application.scholarship_type_id, allowed_scholarship_ids)
     result = await db.execute(stmt)
-    active_applications = result.scalar() or 0
+    pending_review = result.scalar() or 0
 
-    # 3. Completed reviews (approved + rejected)
-    stmt = select(func.count(Application.id)).where(
-        Application.status.in_([ApplicationStatus.approved.value, ApplicationStatus.rejected.value])
-    )
+    # 3. Approved applications
+    stmt = select(func.count(Application.id)).where(Application.status == ApplicationStatus.approved.value)
     stmt = apply_scholarship_filter(stmt, Application.scholarship_type_id, allowed_scholarship_ids)
     result = await db.execute(stmt)
-    completed_reviews = result.scalar() or 0
+    approved = result.scalar() or 0
 
-    # 4. Pending reviews (submitted + under_review)
-    pending_reviews = active_applications  # Same as active applications
-
-    # 5. Total scholarship types
-    stmt = select(func.count(ScholarshipType.id))
-    if not current_user.is_super_admin() and allowed_scholarship_ids:
-        stmt = stmt.where(ScholarshipType.id.in_(allowed_scholarship_ids))
+    # 4. Rejected applications
+    stmt = select(func.count(Application.id)).where(Application.status == ApplicationStatus.rejected.value)
+    stmt = apply_scholarship_filter(stmt, Application.scholarship_type_id, allowed_scholarship_ids)
     result = await db.execute(stmt)
-    total_scholarships = result.scalar() or 0
+    rejected = result.scalar() or 0
 
-    # 6. System uptime (fixed value for now, could be calculated from server start time)
-    system_uptime = "99.9%"
-
-    # 7. Average processing time
+    # 5. Average processing time
     stmt = select(
         func.avg(
             case(
@@ -118,18 +117,36 @@ async def get_dashboard_stats(current_user: User = Depends(require_admin), db: A
     stmt = apply_scholarship_filter(stmt, Application.scholarship_type_id, allowed_scholarship_ids)
     result = await db.execute(stmt)
     avg_days = result.scalar()
-    avg_response_time = f"{avg_days:.1f}天" if avg_days else "N/A"
+    avg_processing_time = f"{avg_days:.1f}天" if avg_days else "N/A"
+
+    # Additional stats for backward compatibility
+    total_users_stmt = select(func.count(User.id))
+    total_users_result = await db.execute(total_users_stmt)
+    total_users = total_users_result.scalar() or 0
+
+    total_scholarships_stmt = select(func.count(ScholarshipType.id))
+    if not current_user.is_super_admin() and allowed_scholarship_ids:
+        total_scholarships_stmt = total_scholarships_stmt.where(ScholarshipType.id.in_(allowed_scholarship_ids))
+    total_scholarships_result = await db.execute(total_scholarships_stmt)
+    total_scholarships = total_scholarships_result.scalar() or 0
 
     return {
         "success": True,
         "message": "Dashboard statistics retrieved successfully",
         "data": {
+            # Primary stats matching frontend DashboardStats interface
+            "total_applications": total_applications,
+            "pending_review": pending_review,
+            "approved": approved,
+            "rejected": rejected,
+            "avg_processing_time": avg_processing_time,
+            # Additional stats for other components
             "totalUsers": total_users,
-            "activeApplications": active_applications,
-            "completedReviews": completed_reviews,
-            "systemUptime": system_uptime,
-            "avgResponseTime": avg_response_time,
-            "pendingReviews": pending_reviews,
+            "activeApplications": pending_review,
+            "completedReviews": approved + rejected,
+            "systemUptime": "99.9%",
+            "avgResponseTime": avg_processing_time,
+            "pendingReviews": pending_review,
             "totalScholarships": total_scholarships,
         },
     }

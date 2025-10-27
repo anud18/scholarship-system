@@ -74,7 +74,8 @@ class CollegeReviewService:
             {
                 "has_roster": bool,
                 "can_redistribute": bool,
-                "roster_info": {...} or None
+                "roster_info": {...} or None,
+                "roster_statistics": {...} or None
             }
         """
         from app.models.payment_roster import PaymentRoster, RosterStatus
@@ -89,11 +90,25 @@ class CollegeReviewService:
         roster = result.scalar_one_or_none()
 
         if not roster:
-            return {"has_roster": False, "can_redistribute": True, "roster_info": None}
+            return {"has_roster": False, "can_redistribute": True, "roster_info": None, "roster_statistics": None}
 
         # 如果造冊狀態是 draft 或 failed，視為可以重新分發
-        # TODO: 記得來這邊看看 emun 有沒有對 測試看看
         can_redistribute = roster.status in [RosterStatus.DRAFT, RosterStatus.FAILED]
+
+        # 計算統計資訊：查詢同一 scholarship_configuration_id 下的所有造冊
+        stats_stmt = select(PaymentRoster).where(
+            and_(
+                PaymentRoster.scholarship_configuration_id == roster.scholarship_configuration_id,
+                PaymentRoster.status.in_([RosterStatus.COMPLETED, RosterStatus.LOCKED]),
+            )
+        )
+        stats_result = await self.db.execute(stats_stmt)
+        completed_rosters = stats_result.scalars().all()
+
+        # 計算預期總期數（根據週期類型）
+        expected_total_periods = self._calculate_expected_periods(roster.roster_cycle, roster.academic_year)
+        total_periods_completed = len(completed_rosters)
+        completion_rate = (total_periods_completed / expected_total_periods * 100) if expected_total_periods > 0 else 0
 
         return {
             "has_roster": True,
@@ -101,11 +116,39 @@ class CollegeReviewService:
             "roster_info": {
                 "roster_code": roster.roster_code,
                 "status": roster.status.value,
+                "roster_cycle": roster.roster_cycle.value,
                 "period_label": roster.period_label,
                 "created_at": roster.created_at.isoformat(),
                 "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
             },
+            "roster_statistics": {
+                "total_periods_completed": total_periods_completed,
+                "expected_total_periods": expected_total_periods,
+                "completion_rate": round(completion_rate, 1),
+            },
         }
+
+    def _calculate_expected_periods(self, roster_cycle, academic_year: int) -> int:
+        """
+        根據造冊週期計算預期總期數
+
+        Args:
+            roster_cycle: 造冊週期枚舉
+            academic_year: 學年度
+
+        Returns:
+            int: 預期總期數
+        """
+        from app.models.payment_roster import RosterCycle
+
+        if roster_cycle == RosterCycle.MONTHLY:
+            return 12  # 按月造冊，一年 12 個月
+        elif roster_cycle == RosterCycle.SEMI_YEARLY:
+            return 2  # 按半年造冊，一年 2 期
+        elif roster_cycle == RosterCycle.YEARLY:
+            return 1  # 按年造冊，一年 1 期
+        else:
+            return 1  # 預設為 1
 
     async def auto_redistribute_after_status_change(self, application_id: int, executor_id: int) -> Dict[str, Any]:
         """
