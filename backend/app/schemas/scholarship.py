@@ -33,13 +33,6 @@ class SubTypeSelectionModeEnum(str, Enum):
     HIERARCHICAL = "hierarchical"  # 需依序選取：A → AB → ABC
 
 
-class ScholarshipSubTypeEnum(str, Enum):
-    GENERAL = "general"  # 一般獎學金（無子類型時的預設值）
-    NSTC = "nstc"  # 國科會
-    MOE_1W = "moe_1w"  # 教育部+指導教授配合款一萬
-    MOE_2W = "moe_2w"  # 教育部+指導教授配合款兩萬
-
-
 class ScholarshipTypeBase(BaseModel):
     code: str
     name: str
@@ -70,11 +63,8 @@ class ScholarshipTypeBase(BaseModel):
     @field_validator("sub_type_list")
     @classmethod
     def validate_sub_type_list(cls, v):
-        if v is not None:
-            valid_types = [e.value for e in ScholarshipSubTypeEnum]
-            for sub_type in v:
-                if sub_type not in valid_types:
-                    raise ValueError(f"Invalid sub_type: {sub_type}")
+        # Sub-types are configuration-driven, no hard-coded validation needed
+        # Validation happens at database/service layer via ScholarshipSubTypeConfig
         return v
 
     @field_validator("amount")
@@ -302,15 +292,16 @@ class ScholarshipSubTypeConfigBase(BaseModel):
     @field_validator("sub_type_code")
     @classmethod
     def validate_sub_type_code(cls, v):
-        valid_types = [e.value for e in ScholarshipSubTypeEnum]
-        if v not in valid_types:
-            raise ValueError(f"Invalid sub_type_code: {v}")
-        return v
+        # Sub-types are configuration-driven, no enum validation needed
+        # Basic format check: lowercase with underscores
+        if not v or not v.strip():
+            raise ValueError("sub_type_code cannot be empty")
+        return v.lower().strip()
 
     @model_validator(mode="after")
     def validate_name_for_general(self):
         # For general sub-type, use default name if not provided
-        if self.sub_type_code == ScholarshipSubTypeEnum.GENERAL.value and not self.name:
+        if self.sub_type_code == "general" and not self.name:
             self.name = "一般獎學金"
         return self
 

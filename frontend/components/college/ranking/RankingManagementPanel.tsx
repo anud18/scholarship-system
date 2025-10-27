@@ -74,35 +74,11 @@ export function RankingManagementPanel({
     getScholarshipConfig,
     setActiveTab,
     fetchCollegeApplications,
+    incrementDataVersion,
+    activeTab,
+    dataVersion,
+    fetchRankings,
   } = useCollegeManagement();
-  // Fetch rankings on mount
-  const fetchRankings = useCallback(async () => {
-    try {
-      console.log("Fetching rankings...");
-      const response = await apiClient.college.getRankings();
-      if (response.success && response.data) {
-        console.log(`Fetched ${response.data.length} rankings:`, response.data);
-        const normalizedRankings = response.data.map((ranking: any) => {
-          const rawSemester =
-            typeof ranking.semester === "string" && ranking.semester.length > 0
-              ? ranking.semester.toLowerCase()
-              : null;
-          const safeSemester =
-            rawSemester && rawSemester !== "yearly"
-              ? rawSemester
-              : null;
-          return { ...ranking, semester: safeSemester };
-        });
-        setRankings(normalizedRankings);
-      }
-    } catch (error) {
-      console.error("Failed to fetch rankings:", error);
-    }
-  }, [setRankings]);
-
-  useEffect(() => {
-    fetchRankings();
-  }, [fetchRankings]);
 
   const fetchRankingDetails = useCallback(async (rankingId: number) => {
     setIsRankingLoading(true);
@@ -154,6 +130,30 @@ export function RankingManagementPanel({
     }
   }, [setIsRankingLoading, setRankingData]);
 
+  // Auto-refresh when switching to ranking tab or when data version changes
+  useEffect(() => {
+    // Only refresh when:
+    // 1. Current tab is "ranking"
+    // 2. Not currently loading
+    if (activeTab === "ranking") {
+      console.log(`[RankingManagementPanel] Auto-refreshing (dataVersion: ${dataVersion})`);
+
+      // Refresh rankings list
+      fetchRankings();
+
+      // Also refresh applications list (in case application status changed in review tab)
+      fetchCollegeApplications(selectedAcademicYear, selectedSemester, activeScholarshipTab);
+
+      // If a ranking is selected, also refresh its details
+      if (selectedRanking && !isRankingLoading) {
+        fetchRankingDetails(selectedRanking);
+      }
+    }
+    // Note: Removed isRankingLoading and fetchRankingDetails from deps to prevent infinite loop
+    // The condition check (!isRankingLoading) inside the effect is sufficient
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, dataVersion, fetchRankings, selectedRanking]);
+
   const createNewRanking = useCallback(async () => {
     try {
       const academicConfig = await getAcademicConfig();
@@ -193,6 +193,8 @@ export function RankingManagementPanel({
           setSelectedRanking(response.data.id);
           // Load ranking details
           await fetchRankingDetails(response.data.id);
+          // Increment data version
+          incrementDataVersion();
 
           // Show success notification
           toast.success(
@@ -230,6 +232,7 @@ export function RankingManagementPanel({
     fetchRankingDetails,
     toast,
     locale,
+    incrementDataVersion,
   ]);
 
   const handleRankingChange = useCallback(async (newOrder: any[]) => {
@@ -317,25 +320,37 @@ export function RankingManagementPanel({
           activeScholarshipTab
         ),
       ]);
+
+      // Increment data version to notify other panels (e.g., DistributionPanel) to refresh
+      incrementDataVersion();
+      console.log('[RankingManagementPanel] Data version incremented after review');
     } catch (error) {
       console.error("Failed to review application:", error);
       toast.error("審核提交失敗");
     }
-  }, [selectedRanking, fetchRankingDetails, fetchRankings, fetchCollegeApplications, selectedAcademicYear, selectedSemester, activeScholarshipTab]);
+  }, [selectedRanking, fetchRankingDetails, fetchRankings, fetchCollegeApplications, selectedAcademicYear, selectedSemester, activeScholarshipTab, incrementDataVersion]);
 
   const handleExecuteDistribution = useCallback(async () => {
     if (selectedRanking) {
       try {
         const response = await apiClient.college.executeMatrixDistribution(selectedRanking);
         if (response.success) {
-          await fetchRankingDetails(selectedRanking);
+          // Refresh both ranking details and rankings list
+          await Promise.all([
+            fetchRankingDetails(selectedRanking),
+            fetchRankings(),  // Refresh rankings list to update distribution_executed field
+          ]);
+
+          // Increment data version to notify other panels
+          incrementDataVersion();
+          console.log('[RankingManagementPanel] Data version incremented after distribution');
           setActiveTab("distribution");
         }
       } catch (error) {
         console.error("Failed to execute distribution:", error);
       }
     }
-  }, [selectedRanking, fetchRankingDetails, setActiveTab]);
+  }, [selectedRanking, fetchRankingDetails, fetchRankings, setActiveTab, incrementDataVersion]);
 
   const handleFinalizeRanking = useCallback(async (targetRankingId?: number) => {
     const rankingId = targetRankingId ?? selectedRanking;
@@ -348,12 +363,13 @@ export function RankingManagementPanel({
         if (rankingData && rankingId === selectedRanking) {
           setRankingData({ ...rankingData, isFinalized: true });
         }
+        incrementDataVersion();
         toast.success(locale === 'zh' ? '排名已成功鎖定' : 'Ranking has been locked successfully');
       }
     } catch (error) {
       console.error("Failed to finalize ranking:", error);
     }
-  }, [selectedRanking, rankingData, fetchRankings, setRankingData, toast, locale]);
+  }, [selectedRanking, rankingData, fetchRankings, setRankingData, toast, locale, incrementDataVersion]);
 
   const handleUnfinalizeRanking = useCallback(async (targetRankingId?: number) => {
     const rankingId = targetRankingId ?? selectedRanking;
@@ -366,12 +382,13 @@ export function RankingManagementPanel({
         if (rankingData && rankingId === selectedRanking) {
           setRankingData({ ...rankingData, isFinalized: false });
         }
+        incrementDataVersion();
         toast.success(locale === 'zh' ? '排名已成功解除鎖定' : 'Ranking unlocked');
       }
     } catch (error) {
       console.error("Failed to unfinalize ranking:", error);
     }
-  }, [selectedRanking, rankingData, fetchRankings, setRankingData, toast, locale]);
+  }, [selectedRanking, rankingData, fetchRankings, setRankingData, toast, locale, incrementDataVersion]);
 
   const handleImportExcel = useCallback(async (data: any[]) => {
     if (!selectedRanking) throw new Error("No ranking selected");
@@ -380,6 +397,7 @@ export function RankingManagementPanel({
       const response = await apiClient.college.importRankingExcel(selectedRanking, data);
       if (response.success) {
         await fetchRankingDetails(selectedRanking);
+        incrementDataVersion();
       } else {
         throw new Error(response.message || "Failed to import");
       }
@@ -387,7 +405,7 @@ export function RankingManagementPanel({
       console.error("Failed to import Excel:", error);
       throw error;
     }
-  }, [selectedRanking, fetchRankingDetails]);
+  }, [selectedRanking, fetchRankingDetails, incrementDataVersion]);
 
   const handleDeleteRanking = useCallback(async () => {
     if (!rankingToDelete) return;
@@ -400,13 +418,14 @@ export function RankingManagementPanel({
           setRankingData(null);
         }
         await fetchRankings();
+        incrementDataVersion();
         setShowDeleteRankingDialog(false);
         setRankingToDelete(null);
       }
     } catch (error) {
       console.error("Failed to delete ranking:", error);
     }
-  }, [rankingToDelete, selectedRanking, fetchRankings, setSelectedRanking, setRankingData, setShowDeleteRankingDialog, setRankingToDelete]);
+  }, [rankingToDelete, selectedRanking, fetchRankings, setSelectedRanking, setRankingData, setShowDeleteRankingDialog, setRankingToDelete, incrementDataVersion]);
 
   const handleEditRankingName = useCallback((ranking: any) => {
     setEditingRankingId(ranking.id);

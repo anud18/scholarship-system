@@ -927,5 +927,51 @@ export function createAdminApi() {
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
+
+    // ========== Unified Review System (Admin Role) ==========
+
+    /**
+     * Get reviewable sub-types for an application (admin role)
+     * Uses multi-role review API - supports professor, college, and admin roles.
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    getReviewableSubTypes: async (applicationId: number): Promise<ApiResponse<any[]>> => {
+      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/sub-types' as any, {
+        params: { path: { application_id: applicationId } },
+      });
+      return toApiResponse<any[]>(response);
+    },
+
+    /**
+     * Get current admin user's review for an application
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    getApplicationReview: async (applicationId: number): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/review' as any, {
+        params: { path: { application_id: applicationId } },
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
+     * Submit review for an application (admin role, unified review system)
+     * Type-safe: Path parameter and request body validated against OpenAPI
+     */
+    submitApplicationReview: async (
+      applicationId: number,
+      reviewData: {
+        items: Array<{
+          sub_type_code: string;
+          recommendation: 'approve' | 'reject';
+          comments?: string;
+        }>;
+      }
+    ): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.POST('/api/v1/reviews/applications/{application_id}/review' as any, {
+        params: { path: { application_id: applicationId } },
+        body: reviewData,
+      });
+      return toApiResponse<any>(response);
+    },
   };
 }

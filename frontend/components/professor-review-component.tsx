@@ -48,7 +48,7 @@ interface SubTypeOption {
 
 interface ReviewItem {
   sub_type_code: string;
-  is_recommended: boolean;
+  recommendation: 'approve' | 'reject' | 'pending';
   comments?: string;
 }
 
@@ -141,7 +141,7 @@ function ProfessorReviewComponentInner({
       console.log("Initializing reviewData.items from subTypes effect");
       const initialItems = subTypes.map(subType => ({
         sub_type_code: subType.value,
-        is_recommended: false,
+        recommendation: 'pending' as const,
         comments: "",
       }));
 
@@ -210,7 +210,7 @@ function ProfessorReviewComponentInner({
         console.log("Initializing items for sub-types:", subTypes);
         return subTypes.map(subType => ({
           sub_type_code: subType.value,
-          is_recommended: false,
+          recommendation: 'pending' as const,
           comments: "",
         }));
       };
@@ -245,7 +245,7 @@ function ProfessorReviewComponentInner({
             return (
               existingItem || {
                 sub_type_code: subType.value,
-                is_recommended: false,
+                recommendation: 'pending' as const,
                 comments: "",
               }
             );
@@ -303,18 +303,33 @@ function ProfessorReviewComponentInner({
     try {
       let response: ApiResponse<any>;
 
+      // Filter out pending items - only send approve/reject items to API
+      const filteredItems = reviewData.items
+        .filter(
+          item => item.recommendation === 'approve' || item.recommendation === 'reject'
+        )
+        .map(item => ({
+          sub_type_code: item.sub_type_code,
+          recommendation: item.recommendation as 'approve' | 'reject',
+          comments: item.comments
+        }));
+
+      const submissionData = {
+        items: filteredItems
+      };
+
       if (existingReview) {
         // Update existing review
         response = await apiClient.professor.updateReview(
           selectedApplication.id,
           existingReview.id,
-          reviewData
+          submissionData
         );
       } else {
         // Submit new review
         response = await apiClient.professor.submitReview(
           selectedApplication.id,
-          reviewData
+          submissionData
         );
       }
 
@@ -631,7 +646,7 @@ function ProfessorReviewComponentInner({
                       const reviewItem = reviewData.items.find(
                         item => item.sub_type_code === subType.value
                       );
-                      const isRecommended = reviewItem?.is_recommended || false;
+                      const isRecommended = reviewItem?.recommendation === 'approve';
 
                       return (
                         <div
@@ -653,8 +668,8 @@ function ProfessorReviewComponentInner({
                                   );
                                   updateReviewItem(
                                     subType.value,
-                                    "is_recommended",
-                                    !!checked
+                                    "recommendation",
+                                    checked ? 'approve' : 'reject'
                                   );
                                 }}
                               />
@@ -697,8 +712,8 @@ function ProfessorReviewComponentInner({
                                 );
                                 updateReviewItem(
                                   subType.value,
-                                  "is_recommended",
-                                  true
+                                  "recommendation",
+                                  'approve'
                                 );
                               }}
                             >
@@ -715,8 +730,8 @@ function ProfessorReviewComponentInner({
                                 );
                                 updateReviewItem(
                                   subType.value,
-                                  "is_recommended",
-                                  false
+                                  "recommendation",
+                                  'reject'
                                 );
                               }}
                             >
@@ -758,7 +773,7 @@ function ProfessorReviewComponentInner({
                       <p>
                         Recommended count:{" "}
                         {
-                          reviewData.items.filter(item => item.is_recommended)
+                          reviewData.items.filter(item => item.recommendation === 'approve')
                             .length
                         }
                       </p>

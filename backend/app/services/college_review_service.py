@@ -19,9 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BusinessLogicError, NotFoundError
-from app.models.application import Application, ApplicationStatus, ProfessorReview
+from app.models.application import Application, ApplicationStatus
 from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview, QuotaDistribution
 from app.models.enums import Semester
+from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.services.email_automation_service import email_automation_service
 
@@ -346,7 +347,7 @@ class CollegeReviewService:
             select(Application)
             .options(
                 selectinload(Application.scholarship_type_ref),
-                selectinload(Application.professor_reviews),
+                selectinload(Application.reviews),  # Unified review system
                 selectinload(Application.files),
             )
             .where(Application.id == application_id)
@@ -521,9 +522,10 @@ class CollegeReviewService:
             select(Application)
             .options(
                 selectinload(Application.scholarship_type_ref),
-                selectinload(Application.professor_reviews).selectinload(ProfessorReview.professor),
+                selectinload(Application.reviews).selectinload(
+                    ApplicationReview.reviewer
+                ),  # Unified review system with reviewer info
                 selectinload(Application.files),
-                selectinload(Application.reviews),  # Load all application reviews
                 selectinload(Application.student),  # Load student information
             )
             .where(
@@ -544,9 +546,7 @@ class CollegeReviewService:
         if scholarship_type_id:
             stmt = stmt.where(Application.scholarship_type_id == scholarship_type_id)
 
-        # Filter by scholarship type code (case-insensitive)
-        if scholarship_type:
-            stmt = stmt.where(func.upper(Application.main_scholarship_type) == scholarship_type.upper())
+        # scholarship_type parameter deprecated - use scholarship_type_id instead
 
         if sub_type:
             stmt = stmt.where(func.upper(Application.sub_scholarship_type) == sub_type.upper())
@@ -627,7 +627,7 @@ class CollegeReviewService:
                 "app_id": app.app_id,
                 "student_id": student_id or "N/A",
                 "student_name": student_name or "N/A",
-                "scholarship_type": app.main_scholarship_type,
+                "scholarship_type_id": app.scholarship_type_id,
                 "scholarship_type_zh": app.scholarship_type_ref.name if app.scholarship_type_ref else "未知獎學金",
                 "sub_type": app.sub_scholarship_type,
                 "academic_year": app.academic_year,
@@ -637,7 +637,10 @@ class CollegeReviewService:
                 "created_at": app.created_at,
                 "student_data": student_payload,
                 "is_renewal": app.is_renewal if hasattr(app, "is_renewal") else False,
-                "professor_review_completed": len(app.professor_reviews) > 0,
+                # Check if professor has reviewed (unified review system - check if any reviewer with professor role exists)
+                "professor_review_completed": any(
+                    review.reviewer.role == "professor" for review in app.reviews if hasattr(review, "reviewer")
+                ),
                 "college_review_completed": college_review is not None,
                 # Note: college_review_score removed - use final_rank instead
                 "college_review_rank": college_review.final_rank if college_review else None,
@@ -1321,15 +1324,29 @@ class CollegeReviewService:
         }
 
         for sub_type, total, allocated in app_counts:
-            sub_quota = config.get_sub_type_total_quota(sub_type) if config.has_quota_limit else None
+            # Normalize sub_type to lowercase to prevent duplicate keys
+            # sub_type is always a string now (no longer enum)
+            normalized_sub_type = (sub_type or "general").lower().strip()
 
-            quota_status["sub_types"][sub_type] = {
-                "total_applications": total,
-                "allocated": allocated or 0,
-                "quota": sub_quota,
-                "remaining": (sub_quota - (allocated or 0)) if sub_quota else None,
-                "utilization_rate": ((allocated or 0) / sub_quota * 100) if sub_quota else None,
-            }
+            sub_quota = config.get_sub_type_total_quota(normalized_sub_type) if config.has_quota_limit else None
+
+            # Merge data if key already exists (handles mixed case in database)
+            if normalized_sub_type in quota_status["sub_types"]:
+                existing = quota_status["sub_types"][normalized_sub_type]
+                existing["total_applications"] += total
+                existing["allocated"] = (existing["allocated"] or 0) + (allocated or 0)
+                # Recalculate derived fields
+                if sub_quota:
+                    existing["remaining"] = sub_quota - existing["allocated"]
+                    existing["utilization_rate"] = existing["allocated"] / sub_quota * 100
+            else:
+                quota_status["sub_types"][normalized_sub_type] = {
+                    "total_applications": total,
+                    "allocated": allocated or 0,
+                    "quota": sub_quota,
+                    "remaining": (sub_quota - (allocated or 0)) if sub_quota else None,
+                    "utilization_rate": ((allocated or 0) / sub_quota * 100) if sub_quota else None,
+                }
 
         # Calculate college-specific quota if college_code provided
         college_quota: Optional[int] = None

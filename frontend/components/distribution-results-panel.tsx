@@ -134,6 +134,10 @@ const VERIFIED_STATUSES = new Set([
   "college_reviewed",
 ]);
 
+const PARTIAL_APPROVED_STATUSES = new Set([
+  "partial_approve",  // Backend actual status value
+]);
+
 const REJECTED_STATUSES = new Set([
   "rejected",
   "returned",
@@ -224,6 +228,11 @@ const normalizeSubtypeEntries = (value: any): string[] => {
     }
 
     if (typeof item === "object") {
+      // Skip rejected subtypes (filtered out from distribution)
+      if (item.is_rejected === true) {
+        return;
+      }
+
       const possible =
         item.code ||
         item.sub_type ||
@@ -257,19 +266,26 @@ const getStatusBadgeMeta = (
           className: "bg-emerald-100 text-emerald-700",
           icon: "🟢",
         }
-      : REJECTED_STATUSES.has(normalized)
+      : PARTIAL_APPROVED_STATUSES.has(normalized)
         ? {
-            labelZh: "不符合",
-            labelEn: "Not Eligible",
-            className: "bg-rose-100 text-rose-700",
-            icon: "🔴",
+            labelZh: "部分核准",
+            labelEn: "Partial Approval",
+            className: "bg-blue-100 text-blue-700",
+            icon: "🔵",
           }
-        : {
-            labelZh: "待檢核",
-            labelEn: "Pending",
-            className: "bg-amber-100 text-amber-700",
-            icon: "🟠",
-          };
+        : REJECTED_STATUSES.has(normalized)
+          ? {
+              labelZh: "不符合",
+              labelEn: "Not Eligible",
+              className: "bg-rose-100 text-rose-700",
+              icon: "🔴",
+            }
+          : {
+              labelZh: "待檢核",
+              labelEn: "Pending",
+              className: "bg-amber-100 text-amber-700",
+              icon: "🟠",
+            };
 
   return {
     label: locale === "zh" ? meta.labelZh : meta.labelEn,

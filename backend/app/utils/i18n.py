@@ -277,12 +277,7 @@ class ScholarshipI18n:
         if "status" in localized_data:
             localized_data["status_text"] = cls.get_application_status_text(localized_data["status"], language)
 
-        # Translate scholarship types
-        if "main_scholarship_type" in localized_data:
-            localized_data["main_type_text"] = cls.get_scholarship_type_text(
-                localized_data["main_scholarship_type"], language
-            )
-
+        # Translate scholarship types (main_scholarship_type removed - use scholarship_type_id instead)
         if "sub_scholarship_type" in localized_data:
             localized_data["sub_type_text"] = cls.get_scholarship_type_text(
                 localized_data["sub_scholarship_type"], language

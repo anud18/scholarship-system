@@ -569,7 +569,7 @@ class ApplicationAuditService:
                     # Add application context
                     "application_id": application.id,
                     "app_id": application.app_id,
-                    "scholarship_type": application.main_scholarship_type,
+                    "scholarship_type_id": application.scholarship_type_id,
                     "student_name": application.student_data.get("std_cname") if application.student_data else None,
                 }
                 enriched_logs.append(log_dict)

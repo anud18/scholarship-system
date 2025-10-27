@@ -78,6 +78,7 @@ function CollegeManagementContent({ user }: { user: User }) {
     setManagedCollege,
     scholarshipConfigError,
     refreshPermissions,
+    fetchRankings,
   } = useCollegeManagement();
 
   // Fetch managed college information on component mount
@@ -152,6 +153,9 @@ function CollegeManagementContent({ user }: { user: User }) {
           selectedSemester,
           firstScholarshipType
         );
+
+        // Fetch rankings for all tabs
+        fetchRankings();
       }
     }
   }, [

@@ -1,20 +1,29 @@
 """
-Enhanced scholarship management API endpoints for Issue #10
-Provides comprehensive scholarship application management with priority processing and quota management
+Enhanced scholarship management API endpoints - REFACTORED
+Provides comprehensive scholarship application management with priority processing
+
+Major changes:
+- Removed ScholarshipMainType enum dependency
+- Removed ScholarshipQuotaService (replaced by QuotaService)
+- main_scholarship_type field removed from all responses
+- Quota endpoints deprecated (use quota_dashboard endpoints instead)
+- Dashboard and types endpoints now use ScholarshipType table
 """
 
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
-from sqlalchemy import and_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user, require_admin, require_staff, require_student
 from app.db.deps import get_db
-from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
+from app.models.application import Application, ApplicationStatus
+from app.models.scholarship import ScholarshipStatus, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
-from app.services.scholarship_service import ScholarshipApplicationService, ScholarshipQuotaService
+from app.services.scholarship_service import ScholarshipApplicationService
+from app.utils.scholarship_helpers import get_distinct_sub_types
 
 router = APIRouter()
 
@@ -60,8 +69,7 @@ async def create_comprehensive_application(
             data={
                 "application_id": application.id,
                 "app_id": application.app_id,
-                "priority_score": application.priority_score,
-                "main_type": application.main_scholarship_type,
+                "scholarship_type_id": application.scholarship_type_id,
                 "sub_type": application.sub_scholarship_type,
                 "is_renewal": application.is_renewal,
             },
@@ -140,10 +148,8 @@ async def get_applications_by_priority(
                     "id": app.id,
                     "app_id": app.app_id,
                     "student_id": app.student_id,
-                    "scholarship_type": app.scholarship_type,
-                    "main_type": app.main_scholarship_type,
+                    "scholarship_type_id": app.scholarship_type_id,
                     "sub_type": app.sub_scholarship_type,
-                    "priority_score": app.priority_score,
                     "is_renewal": app.is_renewal,
                     "status": app.status,
                     "submitted_at": app.submitted_at.isoformat() if app.submitted_at else None,
@@ -172,7 +178,7 @@ async def get_applications_by_priority(
         sync_session.close()
 
 
-# Quota Management Endpoints
+# Quota Management Endpoints - DEPRECATED
 
 
 @router.get("/quota/status")
@@ -183,34 +189,17 @@ async def get_quota_status(
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get quota status for a scholarship type combination"""
-    from sqlalchemy.orm import sessionmaker
+    """
+    DEPRECATED: Use /api/v1/quota-dashboard/overview or /detailed endpoints instead
 
-    # Validate enum values
-    try:
-        main_type_enum = ScholarshipMainType(main_type)
-        sub_type_enum = ScholarshipSubType(sub_type)
-        main_type_value = main_type_enum.value
-        sub_type_value = sub_type_enum.value
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid scholarship type: {str(e)}")
-
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        service = ScholarshipQuotaService(sync_session)
-        quota_status = service.get_quota_status_by_type(main_type_value, sub_type_value, semester)
-
-        return ApiResponse(
-            success=True,
-            message="Quota status retrieved successfully",
-            data=quota_status,
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get quota status: {str(e)}")
-    finally:
-        sync_session.close()
+    This endpoint used removed ScholarshipMainType enum and ScholarshipQuotaService.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="This endpoint is deprecated. Use /api/v1/quota-dashboard/overview "
+        "or /api/v1/quota-dashboard/detailed/{scholarship_type_id}/{sub_type} instead. "
+        "Quota management now uses configuration-driven approach via ScholarshipConfiguration.",
+    )
 
 
 @router.post("/quota/process-by-priority")
@@ -221,30 +210,16 @@ async def process_applications_by_priority(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Process applications by priority within quota limits"""
-    from sqlalchemy.orm import sessionmaker
+    """
+    DEPRECATED: Priority processing logic moved to college review workflow
 
-    # Validate enum values
-    try:
-        main_type_enum = ScholarshipMainType(main_type)
-        sub_type_enum = ScholarshipSubType(sub_type)
-        main_type_value = main_type_enum.value
-        sub_type_value = sub_type_enum.value
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid scholarship type: {str(e)}")
-
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        service = ScholarshipQuotaService(sync_session)
-        result = service.process_applications_by_priority(main_type_value, sub_type_value, semester)
-
-        return ApiResponse(success=True, message="Applications processed successfully", data=result)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process applications: {str(e)}")
-    finally:
-        sync_session.close()
+    This endpoint used removed ScholarshipQuotaService.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="This endpoint is deprecated. Priority processing is now handled "
+        "through the college review workflow (/api/v1/college-review/ranking endpoints).",
+    )
 
 
 # Renewal Processing Endpoints
@@ -282,55 +257,63 @@ async def process_renewal_applications(
 
 @router.get("/analytics/dashboard")
 async def get_scholarship_dashboard(
+    academic_year: int = Query(..., description="Academic year"),
     semester: Optional[str] = Query(None),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
     """Get comprehensive scholarship management dashboard data"""
-    from sqlalchemy import and_, func
-    from sqlalchemy.orm import sessionmaker
-
-    sync_session = sessionmaker(bind=db.bind)()
-
     try:
-        # Get overall statistics
-        query = sync_session.query(Application)
+        # Build base query filter
+        conditions = [Application.academic_year == academic_year]
         if semester:
-            query = query.filter(Application.semester == semester)
+            conditions.append(Application.semester == semester)
 
-        total_applications = query.count()
-        renewal_applications = query.filter(Application.is_renewal.is_(True)).count()
+        # Get overall statistics
+        total_result = await db.execute(select(func.count(Application.id)).where(and_(*conditions)))
+        total_applications = total_result.scalar() or 0
+
+        renewal_result = await db.execute(
+            select(func.count(Application.id)).where(and_(*conditions, Application.is_renewal.is_(True)))
+        )
+        renewal_applications = renewal_result.scalar() or 0
         new_applications = total_applications - renewal_applications
 
         # Status breakdown
         status_breakdown = {}
         for status in ApplicationStatus:
-            count = query.filter(Application.status == status.value).count()
+            status_result = await db.execute(
+                select(func.count(Application.id)).where(and_(*conditions, Application.status == status.value))
+            )
+            count = status_result.scalar() or 0
             status_breakdown[status.value] = count
 
-        # Type breakdown
-        type_breakdown = {}
-        for main_type in ScholarshipMainType:
-            for sub_type in ScholarshipSubType:
-                count = query.filter(
-                    and_(
-                        Application.main_scholarship_type == main_type.value,
-                        Application.sub_scholarship_type == sub_type.value,
-                    )
-                ).count()
-                if count > 0:
-                    type_breakdown[f"{main_type.value}_{sub_type.value}"] = count
-
-        # Priority score statistics
-        priority_stats = (
-            sync_session.query(
-                func.avg(Application.priority_score),
-                func.min(Application.priority_score),
-                func.max(Application.priority_score),
-            )
-            .filter(Application.priority_score.isnot(None))
-            .first()
+        # Get all active scholarship types
+        scholarship_types_result = await db.execute(
+            select(ScholarshipType).where(ScholarshipType.status == ScholarshipStatus.active.value)
         )
+        scholarship_types = scholarship_types_result.scalars().all()
+
+        # Get distinct sub-types for filtering
+        sub_types = await get_distinct_sub_types(db, academic_year=academic_year, semester=semester)
+
+        # Type breakdown by scholarship_type_id and sub_type
+        type_breakdown = {}
+        for scholarship_type in scholarship_types:
+            for sub_type in sub_types:
+                count_result = await db.execute(
+                    select(func.count(Application.id)).where(
+                        and_(
+                            *conditions,
+                            Application.scholarship_type_id == scholarship_type.id,
+                            Application.sub_scholarship_type == sub_type,
+                        )
+                    )
+                )
+                count = count_result.scalar() or 0
+                if count > 0:
+                    key = f"{scholarship_type.code}_{sub_type}"
+                    type_breakdown[key] = count
 
         return ApiResponse(
             success=True,
@@ -340,36 +323,51 @@ async def get_scholarship_dashboard(
                     "total_applications": total_applications,
                     "renewal_applications": renewal_applications,
                     "new_applications": new_applications,
+                    "academic_year": academic_year,
                     "semester": semester,
                 },
                 "status_breakdown": status_breakdown,
                 "type_breakdown": type_breakdown,
-                "priority_stats": {
-                    "average": float(priority_stats[0]) if priority_stats[0] else 0,
-                    "minimum": priority_stats[1] if priority_stats[1] else 0,
-                    "maximum": priority_stats[2] if priority_stats[2] else 0,
-                },
             },
         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard data: {str(e)}")
-    finally:
-        sync_session.close()
 
 
 @router.get("/types/available")
 async def get_available_scholarship_types(
     current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
-    """Get available scholarship main and sub types"""
-    main_types = [{"value": t.value, "name": t.value.replace("_", " ").title()} for t in ScholarshipMainType]
-    sub_types = [{"value": t.value, "name": t.value.replace("_", " ").title()} for t in ScholarshipSubType]
+    """Get available scholarship types from configuration"""
+    # Get all active scholarship types from database
+    scholarship_types_result = await db.execute(
+        select(ScholarshipType).where(ScholarshipType.status == ScholarshipStatus.active.value)
+    )
+    scholarship_types = scholarship_types_result.scalars().all()
+
+    types_list = [
+        {
+            "id": st.id,
+            "code": st.code,
+            "name": st.name,
+            "description": st.description,
+        }
+        for st in scholarship_types
+    ]
+
+    # Get distinct sub-types from applications (configuration-driven)
+    sub_types = await get_distinct_sub_types(db)
+
+    sub_types_list = [{"value": st, "name": st.replace("_", " ").title()} for st in sub_types]
 
     return ApiResponse(
         success=True,
         message="Available scholarship types retrieved",
-        data={"main_types": main_types, "sub_types": sub_types},
+        data={
+            "scholarship_types": types_list,
+            "sub_types": sub_types_list,
+        },
     )
 
 
@@ -378,8 +376,9 @@ async def get_available_scholarship_types(
 
 @router.post("/dev/simulate-priority-processing")
 async def simulate_priority_processing(
+    academic_year: int = Body(...),
     semester: str = Body(...),
-    main_type: str = Body(...),
+    scholarship_type_id: int = Body(...),
     sub_type: str = Body(...),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -390,16 +389,13 @@ async def simulate_priority_processing(
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Only available in development mode")
 
-    from sqlalchemy.orm import sessionmaker
-
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        # Get applications for simulation
-        query = sync_session.query(Application).filter(
+    # Get applications for simulation
+    applications_result = await db.execute(
+        select(Application).where(
             and_(
+                Application.academic_year == academic_year,
                 Application.semester == semester,
-                Application.main_scholarship_type == main_type,
+                Application.scholarship_type_id == scholarship_type_id,
                 Application.sub_scholarship_type == sub_type,
                 Application.status.in_(
                     [
@@ -409,41 +405,35 @@ async def simulate_priority_processing(
                 ),
             )
         )
+    )
+    applications = applications_result.scalars().all()
 
-        applications = query.all()
-
-        # Simulate processing
-        simulation_results = []
-        for app in applications:
-            priority_score = app.calculate_priority_score()
-            simulation_results.append(
-                {
-                    "app_id": app.app_id,
-                    "student_id": app.student_id,
-                    "is_renewal": app.is_renewal,
-                    "original_priority": app.priority_score,
-                    "calculated_priority": priority_score,
-                    "submission_date": app.submitted_at.isoformat() if app.submitted_at else None,
-                }
-            )
-
-        # Sort by priority
-        simulation_results.sort(key=lambda x: x["calculated_priority"], reverse=True)
-
-        return ApiResponse(
-            success=True,
-            message=f"Simulated processing for {len(simulation_results)} applications",
-            data={
-                "simulation_results": simulation_results,
-                "parameters": {
-                    "semester": semester,
-                    "main_type": main_type,
-                    "sub_type": sub_type,
-                },
-            },
+    # Simulate processing
+    simulation_results = []
+    for app in applications:
+        simulation_results.append(
+            {
+                "app_id": app.app_id,
+                "user_id": app.user_id,
+                "is_renewal": app.is_renewal,
+                "submission_date": app.submitted_at.isoformat() if app.submitted_at else None,
+                "status": app.status,
+            }
         )
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}")
-    finally:
-        sync_session.close()
+    # Sort by submission date (renewal applications first)
+    simulation_results.sort(key=lambda x: (not x["is_renewal"], x["submission_date"] or ""))
+
+    return ApiResponse(
+        success=True,
+        message=f"Simulated processing for {len(simulation_results)} applications",
+        data={
+            "simulation_results": simulation_results,
+            "parameters": {
+                "academic_year": academic_year,
+                "semester": semester,
+                "scholarship_type_id": scholarship_type_id,
+                "sub_type": sub_type,
+            },
+        },
+    )

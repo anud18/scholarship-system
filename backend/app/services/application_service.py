@@ -14,8 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError, ValidationError
-from app.models.application import Application, ApplicationStatus, ProfessorReview, ProfessorReviewItem
+from app.models.application import Application, ApplicationStatus, ReviewStatus
 from app.models.enums import Semester
+from app.models.review import ApplicationReview
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType, SubTypeSelectionMode
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
@@ -37,6 +38,21 @@ from app.services.student_service import StudentService
 func: Any = sa_func
 
 logger = logging.getLogger(__name__)
+
+
+# TODO: DEPRECATED - Remove these after refactoring all professor review functions
+# These are placeholder classes to prevent undefined name errors
+# The unified review system (ApplicationReview) should be used instead
+class ProfessorReview:
+    """DEPRECATED: Use ApplicationReview instead"""
+
+    pass
+
+
+class ProfessorReviewItem:
+    """DEPRECATED: Use ApplicationReviewItem instead"""
+
+    pass
 
 
 async def get_student_data_from_user(user: User) -> Optional[Dict[str, Any]]:
@@ -437,14 +453,11 @@ class ApplicationService:
         if scholarship.sub_type_selection_mode:
             sub_type_selection_mode = scholarship.sub_type_selection_mode
 
-        # Determine main scholarship type from scholarship type code
-        main_scholarship_type = application_data.scholarship_type.upper()
-
         # Determine sub scholarship type from selected subtypes (use first one if any)
         scholarship_subtype_list = application_data.scholarship_subtype_list or []
-        sub_scholarship_type = "GENERAL"  # Default
+        sub_scholarship_type = "general"  # Default (lowercase, configuration-driven)
         if scholarship_subtype_list:
-            sub_scholarship_type = scholarship_subtype_list[0].upper()
+            sub_scholarship_type = scholarship_subtype_list[0].lower()  # Normalize to lowercase
 
         # Create application
         application = Application(
@@ -456,7 +469,6 @@ class ApplicationService:
             amount=config.amount,
             scholarship_subtype_list=scholarship_subtype_list,
             sub_type_selection_mode=sub_type_selection_mode,
-            main_scholarship_type=main_scholarship_type,
             sub_scholarship_type=sub_scholarship_type,
             is_renewal=False,  # New applications are never renewals
             academic_year=academic_year,
@@ -531,7 +543,6 @@ class ApplicationService:
             .options(
                 selectinload(Application.files),
                 selectinload(Application.reviews),
-                selectinload(Application.professor_reviews),
             )
         )
         result = await self.db.execute(stmt)
@@ -780,8 +791,7 @@ class ApplicationService:
             select(Application)
             .options(
                 selectinload(Application.files),
-                selectinload(Application.reviews),
-                selectinload(Application.professor_reviews),
+                selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
                 selectinload(Application.scholarship_configuration).selectinload(
                     ScholarshipConfiguration.scholarship_type
                 ),
@@ -934,8 +944,20 @@ class ApplicationService:
             "created_at": application.created_at,
             "updated_at": application.updated_at,
             "meta_data": application.meta_data,
-            "reviews": application.reviews or [],
-            "professor_reviews": application.professor_reviews or [],
+            "reviews": [
+                {
+                    "id": review.id,
+                    "application_id": review.application_id,
+                    "reviewer_id": review.reviewer_id,
+                    "recommendation": review.recommendation,
+                    "comments": review.comments,
+                    "reviewed_at": review.reviewed_at,
+                    "created_at": review.created_at,
+                    "reviewer_name": review.reviewer.name if review.reviewer else None,
+                    "reviewer_role": review.reviewer.role if review.reviewer else None,
+                }
+                for review in (application.reviews or [])
+            ],
             # Additional display fields
             "scholarship_type": scholarship_type_name,
             "scholarship_type_zh": scholarship_type_zh,
@@ -1088,7 +1110,6 @@ class ApplicationService:
             .options(
                 selectinload(Application.files),
                 selectinload(Application.reviews),
-                selectinload(Application.professor_reviews),
                 selectinload(Application.scholarship),
             )
             .where(Application.id == application_id)
@@ -1117,7 +1138,7 @@ class ApplicationService:
         application.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
-        await self.db.refresh(application, ["files", "reviews", "professor_reviews", "scholarship", "student"])
+        await self.db.refresh(application, ["files", "reviews", "scholarship", "student"])
 
         # 發送自動化通知
         try:
@@ -1264,17 +1285,6 @@ class ApplicationService:
                     "reviewed_at": review.reviewed_at,
                 }
                 for review in application.reviews
-            ],
-            "professor_reviews": [
-                {
-                    "id": review.id,
-                    "professor_id": review.professor_id,
-                    "professor_name": review.professor_name,
-                    "score": review.score,
-                    "comments": review.comments,
-                    "reviewed_at": review.reviewed_at,
-                }
-                for review in application.professor_reviews
             ],
         }
 
@@ -1441,7 +1451,7 @@ class ApplicationService:
         # Create/update ApplicationReview record for comments and rejection reason
         # instead of storing directly on Application
         if hasattr(status_update, "comments") or hasattr(status_update, "rejection_reason"):
-            from app.models.application import ApplicationReview, ReviewStatus
+            #             from app.models.application import ApplicationReview, ReviewStatus
 
             review = ApplicationReview(
                 application_id=application.id,
@@ -1487,7 +1497,7 @@ class ApplicationService:
 
     async def create_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
         """Create a professor review record and notify college reviewers"""
-        from app.models.application import ProfessorReview, ProfessorReviewItem
+        #         from app.models.application import ProfessorReview, ProfessorReviewItem
 
         stmt = select(Application).where(Application.id == application_id)
         result = await self.db.execute(stmt)
@@ -1843,7 +1853,6 @@ class ApplicationService:
             select(Application)
             .options(
                 selectinload(Application.reviews),
-                selectinload(Application.professor_reviews),
             )
             .where(Application.id == application_id)
         )
@@ -2093,7 +2102,6 @@ class ApplicationService:
                     selectinload(Application.scholarship_configuration).selectinload(
                         ScholarshipConfiguration.scholarship_type
                     ),
-                    selectinload(Application.professor_reviews),
                     selectinload(Application.student),
                 )
                 .join(Application.scholarship_configuration)
@@ -2169,7 +2177,6 @@ class ApplicationService:
                         app_id=app.app_id,
                         user_id=app.user_id,
                         student_id=app.student_data.get("std_stdcode", "") if app.student_data else "",
-                        scholarship_type=app.main_scholarship_type.lower() if app.main_scholarship_type else "",
                         scholarship_type_id=app.scholarship_type_id,
                         scholarship_type_zh=scholarship_type_zh or "未設定",
                         scholarship_name=app.scholarship_name or "",
@@ -2706,7 +2713,8 @@ class ApplicationService:
         """Assign professor to application with notification"""
         try:
             from app.core.exceptions import NotFoundError, ValidationError
-            from app.models.application import ApplicationReview, ProfessorReview
+
+            #             from app.models.application import ApplicationReview, ProfessorReview
             from app.models.notification import NotificationChannel, NotificationPriority, NotificationType
             from app.models.user import UserRole
             from app.services.email_service import EmailService
@@ -2718,8 +2726,6 @@ class ApplicationService:
                 .options(
                     selectinload(Application.scholarship_configuration),
                     selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
-                    selectinload(Application.professor_reviews).selectinload(ProfessorReview.professor),
-                    selectinload(Application.professor_reviews).selectinload(ProfessorReview.items),
                     selectinload(Application.student),
                     selectinload(Application.professor),
                     selectinload(Application.reviewer),

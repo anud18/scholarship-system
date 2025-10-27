@@ -273,8 +273,7 @@ class BulkApprovalService:
             if scholarship_type_id:
                 stmt = stmt.where(Application.scholarship_type_id == scholarship_type_id)
 
-            if main_type:
-                stmt = stmt.where(Application.main_scholarship_type == main_type)
+            # main_type filter removed - use scholarship_type_id instead
 
             if sub_type:
                 stmt = stmt.where(Application.sub_scholarship_type == sub_type)

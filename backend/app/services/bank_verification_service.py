@@ -3,6 +3,7 @@ Bank Account Verification Service
 Compares user-entered bank information with OCR-extracted data from passbook images
 """
 
+import copy
 import difflib
 import re
 from typing import Any, Dict, List, Optional
@@ -12,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import OCRError
 from app.models.application import Application, ApplicationFile
+from app.models.payment_roster import PaymentRosterItem
+from app.models.student_bank_account import StudentBankAccount
 from app.services.ocr_service import get_ocr_service
 
 
@@ -20,6 +23,31 @@ class BankVerificationService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    def validate_postal_account_format(self, account_number: str) -> tuple[bool, Optional[str]]:
+        """
+        Validate postal account number format
+
+        Taiwanese postal accounts should be 14 digits (format: 7 digits + 7 digits)
+
+        Returns:
+            tuple[bool, Optional[str]]: (is_valid, error_message)
+        """
+        if not account_number:
+            return False, "帳號不可為空"
+
+        # Remove all non-digit characters (spaces, dashes, etc.)
+        cleaned = re.sub(r"\D", "", account_number)
+
+        # Check if it's exactly 14 digits
+        if len(cleaned) != 14:
+            return False, f"郵局帳號必須為 14 位數字，目前為 {len(cleaned)} 位"
+
+        # Check if all characters are digits
+        if not cleaned.isdigit():
+            return False, "郵局帳號只能包含數字"
+
+        return True, None
 
     def normalize_text(self, text: str) -> str:
         """Normalize text for comparison"""
@@ -191,11 +219,16 @@ class BankVerificationService:
                 "verification_status": "ocr_failed",
             }
 
-        # Compare fields
+        # Compare fields with separate status tracking
         comparisons = {}
         overall_match = True
         total_confidence = 0.0
         compared_fields = 0
+
+        # Separate status for account number and holder
+        account_number_status = "unknown"
+        account_holder_status = "unknown"
+        requires_manual_review = False
 
         field_mappings = {
             "account_number": "郵局帳號",
@@ -206,9 +239,24 @@ class BankVerificationService:
             form_value = form_bank_fields.get(field_key, "")
             ocr_value = ocr_result.get(field_key, "")
 
+            # Set status to no_data if both values are missing
+            if not form_value and not ocr_value:
+                if field_key == "account_number":
+                    account_number_status = "no_data"
+                elif field_key == "account_holder":
+                    account_holder_status = "no_data"
+                continue
+
             if form_value or ocr_value:
                 similarity = self.calculate_similarity(form_value, ocr_value)
                 is_match = similarity >= 0.8  # 80% similarity threshold
+                confidence_level = "high" if similarity >= 0.9 else "medium" if similarity >= 0.7 else "low"
+
+                # Determine if manual review is needed
+                needs_manual_review = False
+                if not is_match or confidence_level == "low":
+                    needs_manual_review = True
+                    requires_manual_review = True
 
                 comparisons[field_key] = {
                     "field_name": field_name,
@@ -216,8 +264,27 @@ class BankVerificationService:
                     "ocr_value": ocr_value,
                     "similarity_score": round(similarity, 3),
                     "is_match": is_match,
-                    "confidence": "high" if similarity >= 0.9 else "medium" if similarity >= 0.7 else "low",
+                    "confidence": confidence_level,
+                    "needs_manual_review": needs_manual_review,
+                    "manual_review_status": "pending" if needs_manual_review else None,
+                    "manual_review_corrected_value": None,
                 }
+
+                # Set individual field status
+                if field_key == "account_number":
+                    if is_match and confidence_level == "high":
+                        account_number_status = "verified"
+                    elif needs_manual_review:
+                        account_number_status = "needs_review"
+                    else:
+                        account_number_status = "failed"
+                elif field_key == "account_holder":
+                    if is_match and confidence_level == "high":
+                        account_holder_status = "verified"
+                    elif needs_manual_review:
+                        account_holder_status = "needs_review"
+                    else:
+                        account_holder_status = "failed"
 
                 if not is_match:
                     overall_match = False
@@ -242,6 +309,9 @@ class BankVerificationService:
             "success": True,
             "application_id": application_id,
             "verification_status": verification_status,
+            "account_number_status": account_number_status,
+            "account_holder_status": account_holder_status,
+            "requires_manual_review": requires_manual_review,
             "overall_match": overall_match,
             "average_confidence": round(average_confidence, 3),
             "compared_fields": compared_fields,
@@ -252,14 +322,21 @@ class BankVerificationService:
                 "file_path": passbook_doc.filename,
                 "original_filename": passbook_doc.original_filename,
                 "upload_time": passbook_doc.uploaded_at.isoformat() if passbook_doc.uploaded_at else None,
+                "file_id": passbook_doc.id,
+                "object_name": passbook_doc.object_name,
             },
-            "recommendations": self.generate_recommendations(verification_status, comparisons),
+            "recommendations": self.generate_recommendations(
+                verification_status, comparisons, account_number_status, account_holder_status
+            ),
         }
 
-    def generate_recommendations(self, status: str, comparisons: Dict[str, Any]) -> List[str]:
+    def generate_recommendations(
+        self, status: str, comparisons: Dict[str, Any], account_number_status: str, account_holder_status: str
+    ) -> List[str]:
         """Generate recommendations based on verification results"""
         recommendations = []
 
+        # Overall status
         if status == "verified":
             recommendations.append("✅ 郵局帳號資訊驗證通過，資料一致性良好")
         elif status == "likely_verified":
@@ -267,15 +344,32 @@ class BankVerificationService:
         elif status == "verification_failed":
             recommendations.append("❌ 郵局帳號資訊不一致，需要人工審核")
 
-            # Add specific field recommendations
-            for field_key, comparison in comparisons.items():
-                if not comparison["is_match"]:
-                    recommendations.append(
-                        f"• {comparison['field_name']}: 表單填寫「{comparison['form_value']}」"
-                        f"與存摺顯示「{comparison['ocr_value']}」不符"
-                    )
+        # Individual field status
+        account_number_comp = comparisons.get("account_number", {})
+        if account_number_status == "verified":
+            recommendations.append("✅ 帳號: 通過")
+        elif account_number_status == "needs_review":
+            recommendations.append(
+                f"⚠️ 帳號: 需人工檢閱 (表單:「{account_number_comp.get('form_value', '')}」 vs OCR:「{account_number_comp.get('ocr_value', '')}」)"
+            )
+        elif account_number_status == "failed":
+            recommendations.append(
+                f"❌ 帳號: 不通過 (表單:「{account_number_comp.get('form_value', '')}」 vs OCR:「{account_number_comp.get('ocr_value', '')}」)"
+            )
 
-        if any(comp["confidence"] == "low" for comp in comparisons.values()):
+        account_holder_comp = comparisons.get("account_holder", {})
+        if account_holder_status == "verified":
+            recommendations.append("✅ 戶名: 通過")
+        elif account_holder_status == "needs_review":
+            recommendations.append(
+                f"⚠️ 戶名: 需人工檢閱 (表單:「{account_holder_comp.get('form_value', '')}」 vs OCR:「{account_holder_comp.get('ocr_value', '')}」)"
+            )
+        elif account_holder_status == "failed":
+            recommendations.append(
+                f"❌ 戶名: 不通過 (表單:「{account_holder_comp.get('form_value', '')}」 vs OCR:「{account_holder_comp.get('ocr_value', '')}」)"
+            )
+
+        if any(comp.get("confidence") == "low" for comp in comparisons.values()):
             recommendations.append("⚠️ 部分欄位OCR信心度較低，建議人工確認")
 
         return recommendations
@@ -331,3 +425,253 @@ class BankVerificationService:
                 }
 
         return results
+
+    async def manual_review_bank_info(
+        self,
+        application_id: int,
+        account_number_approved: Optional[bool],
+        account_number_corrected: Optional[str],
+        account_holder_approved: Optional[bool],
+        account_holder_corrected: Optional[str],
+        review_notes: Optional[str],
+        reviewer_username: str,
+    ) -> Dict[str, Any]:
+        """
+        Process manual review of bank account information
+
+        Args:
+            application_id: Application ID to review
+            account_number_approved: Whether account number is approved (True/False/None)
+            account_number_corrected: Corrected account number if needed
+            account_holder_approved: Whether account holder is approved (True/False/None)
+            account_holder_corrected: Corrected account holder name if needed
+            review_notes: Notes from manual review
+            reviewer_username: Username of the reviewer
+
+        Returns:
+            Dict containing review results and updated information
+        """
+        from datetime import datetime, timezone
+
+        try:
+            # Get application
+            stmt = select(Application).where(Application.id == application_id)
+            result = await self.db.execute(stmt)
+            application = result.scalar_one_or_none()
+
+            if not application:
+                raise ValueError(f"Application with ID {application_id} not found")
+
+            # Extract current bank fields
+            current_bank_fields = self.extract_bank_fields_from_application(application)
+
+            # Use deep copy to avoid nested reference issues
+            updated_form_data = (
+                copy.deepcopy(application.submitted_form_data) if application.submitted_form_data else {"fields": {}}
+            )
+
+            # Ensure fields dict exists
+            if "fields" not in updated_form_data:
+                updated_form_data["fields"] = {}
+
+            # Track what was updated
+            account_number_updated = False
+            account_holder_updated = False
+
+            # Validate account number format if provided
+            if account_number_corrected:
+                is_valid, error_message = self.validate_postal_account_format(account_number_corrected)
+                if not is_valid:
+                    raise ValueError(f"帳號格式驗證失敗: {error_message}")
+
+            # Update account number if corrected
+            if account_number_corrected:
+                # Try to find existing field
+                for key in ["postal_account", "bank_account", "account_number"]:
+                    if key in updated_form_data["fields"]:
+                        updated_form_data["fields"][key]["value"] = account_number_corrected
+                        account_number_updated = True
+                        break
+
+                # If no existing field found, create a new one
+                if not account_number_updated:
+                    updated_form_data["fields"]["postal_account"] = {
+                        "field_id": "postal_account",
+                        "field_type": "text",
+                        "value": account_number_corrected,
+                        "required": True,
+                    }
+                    account_number_updated = True
+
+            # Update account holder if corrected
+            if account_holder_corrected:
+                # Try to find existing field
+                for key in ["account_holder", "account_name"]:
+                    if key in updated_form_data["fields"]:
+                        updated_form_data["fields"][key]["value"] = account_holder_corrected
+                        account_holder_updated = True
+                        break
+
+                # If no existing field found, create a new one
+                if not account_holder_updated:
+                    updated_form_data["fields"]["account_holder"] = {
+                        "field_id": "account_holder",
+                        "field_type": "text",
+                        "value": account_holder_corrected,
+                        "required": True,
+                    }
+                    account_holder_updated = True
+
+            # Update application with manual review data
+            application.submitted_form_data = updated_form_data
+
+            # Determine final status for each field
+            # Status logic:
+            # - If corrected value provided: "verified" (admin fixed it)
+            # - If approved=True: "verified"
+            # - If approved=False: "failed" (admin rejected it)
+            # - If approved=None (not touched): "not_reviewed"
+
+            if account_number_corrected:
+                account_number_status = "verified"  # Corrected by admin
+            elif account_number_approved is True:
+                account_number_status = "verified"  # Approved by admin
+            elif account_number_approved is False:
+                account_number_status = "failed"  # Explicitly rejected
+            else:
+                account_number_status = "not_reviewed"  # Not touched
+
+            if account_holder_corrected:
+                account_holder_status = "verified"  # Corrected by admin
+            elif account_holder_approved is True:
+                account_holder_status = "verified"  # Approved by admin
+            elif account_holder_approved is False:
+                account_holder_status = "failed"  # Explicitly rejected
+            else:
+                account_holder_status = "not_reviewed"  # Not touched
+
+            # Query related payment roster items to update their status
+            roster_items_stmt = select(PaymentRosterItem).where(PaymentRosterItem.application_id == application_id)
+            roster_items_result = await self.db.execute(roster_items_stmt)
+            roster_items = roster_items_result.scalars().all()
+
+            # Prepare verification details for storage
+            review_timestamp = datetime.now(timezone.utc)
+            verification_details = {
+                "manual_review": {
+                    "timestamp": review_timestamp.isoformat(),
+                    "reviewed_by": reviewer_username,
+                    "account_number": {
+                        "status": account_number_status,
+                        "corrected_value": account_number_corrected,
+                        "approved": account_number_approved,
+                    },
+                    "account_holder": {
+                        "status": account_holder_status,
+                        "corrected_value": account_holder_corrected,
+                        "approved": account_holder_approved,
+                    },
+                    "notes": review_notes,
+                },
+                "last_updated": review_timestamp.isoformat(),
+            }
+
+            # Update all related roster items with the new verification status
+            for roster_item in roster_items:
+                roster_item.bank_account_number_status = account_number_status
+                roster_item.bank_account_holder_status = account_holder_status
+                roster_item.bank_verification_details = verification_details
+                roster_item.bank_manual_review_notes = review_notes
+
+            # Save verified bank account for future reference
+            # Only save if both account number and holder are verified
+            if account_number_status == "verified" and account_holder_status == "verified":
+                final_account_number = account_number_corrected or current_bank_fields.get("account_number", "")
+                final_account_holder = account_holder_corrected or current_bank_fields.get("account_holder", "")
+
+                if final_account_number and final_account_holder:
+                    # Check if this account already exists for this user
+                    existing_account_stmt = select(StudentBankAccount).where(
+                        StudentBankAccount.user_id == application.user_id,
+                        StudentBankAccount.account_number == final_account_number,
+                    )
+                    existing_account_result = await self.db.execute(existing_account_stmt)
+                    existing_account = existing_account_result.scalar_one_or_none()
+
+                    if existing_account:
+                        # Update existing record
+                        # Get reviewer user_id
+                        from app.models.user import User
+
+                        reviewer_stmt = select(User).where(User.nycu_id == reviewer_username)
+                        reviewer_result = await self.db.execute(reviewer_stmt)
+                        reviewer = reviewer_result.scalar_one_or_none()
+
+                        existing_account.account_holder = final_account_holder
+                        existing_account.verification_status = "verified"
+                        existing_account.verified_at = review_timestamp
+                        existing_account.verified_by_user_id = reviewer.id if reviewer else None
+                        existing_account.verification_source_application_id = application.id
+                        existing_account.is_active = True
+                        existing_account.verification_notes = review_notes
+                    else:
+                        # Create new verified account record
+                        # First, deactivate any other active accounts for this user
+                        deactivate_stmt = select(StudentBankAccount).where(
+                            StudentBankAccount.user_id == application.user_id, StudentBankAccount.is_active == True
+                        )
+                        deactivate_result = await self.db.execute(deactivate_stmt)
+                        active_accounts = deactivate_result.scalars().all()
+                        for acc in active_accounts:
+                            acc.is_active = False
+
+                        # Get reviewer user_id
+                        from app.models.user import User
+
+                        reviewer_stmt = select(User).where(User.nycu_id == reviewer_username)
+                        reviewer_result = await self.db.execute(reviewer_stmt)
+                        reviewer = reviewer_result.scalar_one_or_none()
+
+                        # Create new record
+                        new_account = StudentBankAccount(
+                            user_id=application.user_id,
+                            account_number=final_account_number,
+                            account_holder=final_account_holder,
+                            verification_status="verified",
+                            verified_at=review_timestamp,
+                            verified_by_user_id=reviewer.id if reviewer else None,
+                            verification_source_application_id=application.id,
+                            is_active=True,
+                            verification_notes=review_notes,
+                        )
+                        self.db.add(new_account)
+
+            # Prepare result
+            final_account_number = account_number_corrected or current_bank_fields.get("account_number", "")
+            final_account_holder = account_holder_corrected or current_bank_fields.get("account_holder", "")
+
+            review_result = {
+                "success": True,
+                "application_id": application_id,
+                "account_number_status": account_number_status,
+                "account_holder_status": account_holder_status,
+                "updated_form_data": {
+                    "account_number": final_account_number,
+                    "account_holder": final_account_holder,
+                },
+                "review_timestamp": review_timestamp.isoformat(),
+                "reviewed_by": reviewer_username,
+                "review_notes": review_notes,
+                "roster_items_updated": len(roster_items),
+            }
+
+            # Commit all changes in a transaction
+            await self.db.commit()
+            await self.db.refresh(application)
+
+            return review_result
+
+        except Exception as e:
+            # Rollback on any error
+            await self.db.rollback()
+            raise ValueError(f"Failed to process manual review: {str(e)}") from e

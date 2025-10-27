@@ -35,6 +35,7 @@ import { createEmailManagementApi } from './modules/email-management';
 import { createAdminApi } from './modules/admin';
 import { createDocumentRequestsApi } from './modules/document-requests';
 import { createPaymentRostersApi } from './modules/payment-rosters';
+// import { createReviewApi } from './modules/reviews'; // Not used - professor reviews use professor endpoints with adapter
 
 // Re-export ALL types from legacy api.ts for backward compatibility
 // TODO: Move these to a dedicated types.ts file in the modular structure
@@ -133,6 +134,7 @@ class ExtendedApiClient extends ApiClient {
   public admin: ReturnType<typeof createAdminApi>;
   public documentRequests: ReturnType<typeof createDocumentRequestsApi>;
   public paymentRosters: ReturnType<typeof createPaymentRostersApi>;
+  // public reviews: ReturnType<typeof createReviewApi>; // Not used - professor reviews use professor endpoints
 
   // Backward compatibility alias
   public system: ReturnType<typeof createSystemSettingsApi>;
@@ -162,6 +164,7 @@ class ExtendedApiClient extends ApiClient {
     this.admin = createAdminApi(); // Now using typed client internally
     this.documentRequests = createDocumentRequestsApi(); // Now using typed client internally
     this.paymentRosters = createPaymentRostersApi(); // Now using typed client internally
+    // this.reviews = createReviewApi(); // Not used - professor reviews use professor endpoints
 
     // Initialize backward compatibility alias
     this.system = this.systemSettings;

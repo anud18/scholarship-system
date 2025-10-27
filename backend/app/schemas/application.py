@@ -231,60 +231,25 @@ class ApplicationFileResponse(BaseModel):
 
 
 class ApplicationReviewResponse(BaseModel):
-    """Application review response schema"""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    reviewer_id: int
-    review_stage: str
-    review_status: str
-    # Note: score removed (評分已移除)
-    comments: Optional[str]
-    recommendation: Optional[str]
-    decision_reason: Optional[str]  # 包含拒絕原因
-    reviewed_at: Optional[datetime]
-
-
-class ProfessorReviewItemCreate(BaseModel):
-    """Professor review item creation schema"""
-
-    sub_type_code: str = Field(..., description="Scholarship sub-type code (e.g., 'moe_1w')")
-    is_recommended: bool = Field(..., description="Whether to recommend this sub-type")
-    comments: Optional[str] = Field(None, description="Comments for this specific sub-type")
-
-
-class ProfessorReviewItemResponse(BaseModel):
-    """Professor review item response schema"""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    review_id: int
-    sub_type_code: str
-    is_recommended: bool
-    comments: Optional[str] = None
-    created_at: datetime
-
-
-class ProfessorReviewCreate(BaseModel):
-    recommendation: Optional[str] = None
-    items: List[ProfessorReviewItemCreate] = Field(default=[], description="Individual sub-type recommendations")
-
-
-class ProfessorReviewResponse(BaseModel):
-    """Professor review response schema"""
+    """Application review response schema (unified review system)"""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     application_id: int
-    professor_id: int
-    recommendation: Optional[str] = None
-    review_status: Optional[str] = None
-    reviewed_at: Optional[datetime] = None
-    created_at: Optional[datetime] = None
-    items: List[ProfessorReviewItemResponse] = Field(default=[], description="Individual sub-type recommendations")
+    reviewer_id: int
+    recommendation: str  # 'approve' | 'partial_approve' | 'reject'
+    comments: Optional[str] = None
+    reviewed_at: datetime
+    created_at: datetime
+
+    # Optional: reviewer information
+    reviewer_name: Optional[str] = None
+    reviewer_role: Optional[str] = None
+
+
+# DELETED: Old ProfessorReview schemas removed - using unified review system
+# See app.schemas.review for new unified review schemas
 
 
 class ApplicationResponse(BaseModel):
@@ -324,7 +289,6 @@ class ApplicationResponse(BaseModel):
     meta_data: Optional[Dict[str, Any]] = None
 
     reviews: List[ApplicationReviewResponse] = []
-    professor_reviews: List[ProfessorReviewResponse] = []
 
     # Additional display fields
     student_name: Optional[str] = None
@@ -442,7 +406,6 @@ class ApplicationStatusUpdateResponse(BaseModel):
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
     reviews: List[ApplicationReviewResponse] = []
-    professor_reviews: List[ProfessorReviewResponse] = []
 
     # Additional display fields
     student_name: Optional[str] = None
@@ -652,7 +615,7 @@ class HistoricalApplicationResponse(BaseModel):
     scholarship_name: Optional[str] = None
     scholarship_type_code: Optional[str] = None
     amount: Optional[Decimal] = None
-    main_scholarship_type: Optional[str] = None
+    # main_scholarship_type field removed - use scholarship_type_id instead
     sub_scholarship_type: Optional[str] = None
     is_renewal: Optional[bool] = False
 

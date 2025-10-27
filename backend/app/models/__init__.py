@@ -2,16 +2,7 @@
 Import all models here for easy access
 """
 
-from app.models.application import (
-    Application,
-    ApplicationFile,
-    ApplicationReview,
-    ApplicationStatus,
-    FileType,
-    ProfessorReview,
-    ProfessorReviewItem,
-    ReviewStatus,
-)
+from app.models.application import Application, ApplicationFile, ApplicationStatus, FileType, ReviewStatus
 from app.models.application_field import ApplicationDocument, ApplicationField, FieldType
 from app.models.application_sequence import ApplicationSequence
 from app.models.audit_log import AuditAction, AuditLog
@@ -30,6 +21,7 @@ from app.models.payment_roster import (
     StudentVerificationStatus,
 )
 from app.models.professor_student import ProfessorStudentRelationship
+from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.roster_audit import RosterAuditAction, RosterAuditLevel, RosterAuditLog
 from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule, ScholarshipType
@@ -63,8 +55,7 @@ __all__ = [
     "Application",
     "ApplicationStatus",
     "ApplicationReview",
-    "ProfessorReview",
-    "ProfessorReviewItem",
+    "ApplicationReviewItem",
     "ApplicationFile",
     "ReviewStatus",
     "FileType",

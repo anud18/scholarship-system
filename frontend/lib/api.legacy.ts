@@ -799,7 +799,6 @@ export interface HistoricalApplication {
   scholarship_name?: string;
   scholarship_type_code?: string;
   amount?: number;
-  main_scholarship_type?: string;
   sub_scholarship_type?: string;
   is_renewal?: boolean;
 

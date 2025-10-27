@@ -93,6 +93,36 @@ CREATE TYPE semester AS ENUM ('first', 'second', 'annual');
 - **UserType**: `student`, `employee`
 - **EmployeeStatus**: `在職`, `退休`, `在學`, `畢業` (Chinese values)
 
+#### Special Case: Scholarship Sub-Types (Configuration-Driven)
+
+**IMPORTANT**: Scholarship sub-types (e.g., `nstc`, `moe_1w`, `moe_2w`) are **NOT enum-constrained**.
+
+**Why?**
+- Sub-types are defined in `scholarship_configurations.quotas` JSON field
+- Administrators can add new sub-types without code changes
+- Follows configuration-based architecture principle
+
+**Naming Convention**:
+- Use **lowercase** with **underscore** separation (e.g., `nstc`, `moe_1w`, `new_custom_type`)
+- Stored as `String(50)` in database, not Enum
+- `ScholarshipSubType` enum exists for backward compatibility only (deprecated)
+
+**Example Configuration**:
+```json
+{
+  "quotas": {
+    "nstc": {"C": 12, "A": 8},
+    "moe_1w": {"C": 8, "A": 5},
+    "custom_new_type": {"C": 10}
+  }
+}
+```
+
+**For Developers**:
+- ✅ Use string values directly: `application.sub_scholarship_type = "nstc"`
+- ❌ Don't add new values to `ScholarshipSubType` enum
+- ✅ Normalize to lowercase in application layer: `sub_type.lower().strip()`
+
 #### Enum Synchronization Checklist
 1. Update Python enum in `backend/app/models/enums.py`
 2. Update TypeScript enum in `frontend/lib/enums.ts`

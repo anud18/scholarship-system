@@ -43,6 +43,7 @@ import {
   Shield,
   ShieldCheck,
   ShieldX,
+  Send,
 } from "lucide-react";
 import { Locale } from "@/lib/validators";
 import { Application, HistoricalApplication, User } from "@/lib/api";
@@ -88,6 +89,9 @@ interface ApplicationReviewDialogProps {
   // Admin-specific handlers (optional)
   onAdminApprove?: (id: number) => void;
   onAdminReject?: (id: number) => void;
+
+  // Callback for successful review submission (to trigger data refresh)
+  onReviewSubmitted?: () => void;
 }
 
 // Helper component to display a single field with fallback
@@ -536,6 +540,7 @@ export function ApplicationReviewDialog({
   onDelete,
   onAdminApprove,
   onAdminReject,
+  onReviewSubmitted,
 }: ApplicationReviewDialogProps) {
   const [applicationFiles, setApplicationFiles] = useState<any[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
@@ -559,6 +564,15 @@ export function ApplicationReviewDialog({
   const [error, setError] = useState<string | null>(null);
   const [reviewComment, setReviewComment] = useState("");
   const [detailedApplication, setDetailedApplication] = useState<Application | null>(null);
+
+  // Sub-type review state (for unified review system)
+  const [subTypes, setSubTypes] = useState<any[]>([]);
+  const [reviewItems, setReviewItems] = useState<Array<{
+    sub_type_code: string;
+    recommendation: 'approve' | 'reject' | 'pending';
+    comments?: string;
+  }>>([]);
+  const [existingReview, setExistingReview] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const {
@@ -610,131 +624,7 @@ export function ApplicationReviewDialog({
     setProfessorInfo(professor);
   };
 
-  // Handle admin approval
-  const handleAdminApprove = async () => {
-    if (!detailedApplication) return;
-
-    setIsSubmittingStatus(true);
-    try {
-      const response = await api.applications.updateApplicationStatus(
-        detailedApplication.id,
-        {
-          status: "approved",
-          comments: adminComments,
-        }
-      );
-
-      console.log("Approval response:", response);
-
-      // 檢查是否成功（success 為 true 或 response 中有 data）
-      if (response?.success || response?.data) {
-        // 檢查是否自動重新執行了分發
-        const redistribution = response.data?.redistribution_info;
-        if (redistribution?.auto_redistributed) {
-          const processedCount = redistribution.rankings_processed || 1;
-          const successfulCount = redistribution.successful_count || 0;
-          toast.success(
-            locale === "zh"
-              ? `審核完成並已自動重新執行分配，處理 ${processedCount} 個排名（成功 ${successfulCount} 個），分配 ${redistribution.total_allocated} 名學生`
-              : `Review completed with auto-redistribution for ${processedCount} rankings (${successfulCount} successful), ${redistribution.total_allocated} students allocated`,
-            { duration: 6000 }
-          );
-        } else {
-          toast.success(
-            locale === "zh" ? "核准成功" : "Approval Successful",
-            {
-              description: locale === "zh" ? "申請已核准" : "Application has been approved",
-            }
-          );
-        }
-        setAdminComments("");
-        // Refresh application data
-        loadApplicationDetails(detailedApplication.id);
-        // Call the callback if provided
-        onAdminApprove?.(detailedApplication.id);
-      } else {
-        toast.error(
-          locale === "zh" ? "核准失敗" : "Approval Failed",
-          {
-            description: response?.message || (locale === "zh" ? "無法核准此申請" : "Could not approve this application"),
-          }
-        );
-      }
-    } catch (error) {
-      console.error("Admin approve error:", error);
-      toast.error(
-        locale === "zh" ? "錯誤" : "Error",
-        {
-          description: error instanceof Error ? error.message : (locale === "zh" ? "核准過程中發生錯誤" : "An error occurred during approval"),
-        }
-      );
-    } finally {
-      setIsSubmittingStatus(false);
-    }
-  };
-
-  // Handle admin rejection
-  const handleAdminReject = async () => {
-    if (!detailedApplication) return;
-
-    setIsSubmittingStatus(true);
-    try {
-      const response = await api.applications.updateApplicationStatus(
-        detailedApplication.id,
-        {
-          status: "rejected",
-          comments: adminComments,
-        }
-      );
-
-      console.log("Rejection response:", response);
-
-      // 檢查是否成功（success 為 true 或 response 中有 data）
-      if (response?.success || response?.data) {
-        // 檢查是否自動重新執行了分發
-        const redistribution = response.data?.redistribution_info;
-        if (redistribution?.auto_redistributed) {
-          const processedCount = redistribution.rankings_processed || 1;
-          const successfulCount = redistribution.successful_count || 0;
-          toast.success(
-            locale === "zh"
-              ? `審核完成並已自動重新執行分配，處理 ${processedCount} 個排名（成功 ${successfulCount} 個），分配 ${redistribution.total_allocated} 名學生`
-              : `Review completed with auto-redistribution for ${processedCount} rankings (${successfulCount} successful), ${redistribution.total_allocated} students allocated`,
-            { duration: 6000 }
-          );
-        } else {
-          toast.success(
-            locale === "zh" ? "駁回成功" : "Rejection Successful",
-            {
-              description: locale === "zh" ? "申請已駁回" : "Application has been rejected",
-            }
-          );
-        }
-        setAdminComments("");
-        // Refresh application data
-        loadApplicationDetails(detailedApplication.id);
-        // Call the callback if provided
-        onAdminReject?.(detailedApplication.id);
-      } else {
-        toast.error(
-          locale === "zh" ? "駁回失敗" : "Rejection Failed",
-          {
-            description: response?.message || (locale === "zh" ? "無法駁回此申請" : "Could not reject this application"),
-          }
-        );
-      }
-    } catch (error) {
-      console.error("Admin reject error:", error);
-      toast.error(
-        locale === "zh" ? "錯誤" : "Error",
-        {
-          description: error instanceof Error ? error.message : (locale === "zh" ? "駁回過程中發生錯誤" : "An error occurred during rejection"),
-        }
-      );
-    } finally {
-      setIsSubmittingStatus(false);
-    }
-  };
+  // NOTE: Old admin approve/reject handlers removed - admin now uses unified sub-type review system
 
   // Handle bank verification
   const handleBankVerification = async () => {
@@ -859,6 +749,81 @@ export function ApplicationReviewDialog({
     }
   };
 
+  // Load sub-types and existing review for college and admin users
+  const loadSubTypesAndReview = async (applicationId: number) => {
+    try {
+      // Get available sub-types (route based on role)
+      const subTypesResponse = role === "admin"
+        ? await api.admin.getReviewableSubTypes(applicationId)
+        : await api.college.getSubTypes(applicationId);
+      if (subTypesResponse.success && subTypesResponse.data) {
+        const availableSubTypes = subTypesResponse.data;
+        setSubTypes(availableSubTypes);
+
+        // Initialize items based on available sub-types
+        const initialItems = availableSubTypes.map((subType: any) => ({
+          sub_type_code: subType.value,
+          recommendation: 'pending' as const,
+          comments: "",
+        }));
+
+        // Try to get existing review (route based on role)
+        try {
+          const reviewResponse = role === "admin"
+            ? await api.admin.getApplicationReview(applicationId)
+            : await api.college.getReview(applicationId);
+          if (reviewResponse.success && reviewResponse.data && reviewResponse.data.id > 0) {
+            setExistingReview(reviewResponse.data);
+
+            // Merge existing review items with all available sub-types
+            const existingItems = reviewResponse.data.items || [];
+            const mergedItems = availableSubTypes.map((subType: any) => {
+              const existingItem = existingItems.find(
+                (item: any) => item.sub_type_code === subType.value
+              );
+
+              if (existingItem) {
+                // Ensure all fields are correctly mapped
+                return {
+                  sub_type_code: existingItem.sub_type_code,
+                  recommendation: existingItem.recommendation as 'approve' | 'reject' | 'pending',
+                  comments: existingItem.comments || "",
+                };
+              }
+
+              return {
+                sub_type_code: subType.value,
+                recommendation: 'pending' as const,
+                comments: "",
+              };
+            });
+
+            // Debug logging
+            console.log('📋 Loaded existing review:', {
+              reviewId: reviewResponse.data.id,
+              reviewedAt: reviewResponse.data.reviewed_at,
+              existingItemsCount: existingItems.length,
+              mergedItemsCount: mergedItems.length,
+              mergedItems: mergedItems
+            });
+
+            setReviewItems(mergedItems);
+          } else {
+            // No existing review, use initial items
+            setExistingReview(null);
+            setReviewItems(initialItems);
+          }
+        } catch (e) {
+          // No existing review, use initial items
+          setExistingReview(null);
+          setReviewItems(initialItems);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading sub-types and review:", err);
+    }
+  };
+
   // Load form configuration and files when dialog opens
   useEffect(() => {
     if (open && application) {
@@ -866,13 +831,21 @@ export function ApplicationReviewDialog({
       // Reset review comment when opening a new application
       setReviewComment("");
       setAdminComments("");
+
+      // Load sub-types and existing review for college and admin users
+      if (role === "college" || role === "admin") {
+        loadSubTypesAndReview(application.id);
+      }
     } else {
       setDetailedApplication(null);
       // Clear form state when dialog closes
       setReviewComment("");
       setAdminComments("");
+      setReviewItems([]);
+      setSubTypes([]);
+      setExistingReview(null);
     }
-  }, [open, application]);
+  }, [open, application, role]);
 
   useEffect(() => {
     if (detailedApplication) {
@@ -1040,7 +1013,167 @@ export function ApplicationReviewDialog({
     setIsPreviewDialogOpen(true);
   };
 
-  // Handle approve
+  // Update review item
+  const updateReviewItem = (subTypeCode: string, field: string, value: any) => {
+    setReviewItems(prev =>
+      prev.map(item => {
+        if (item.sub_type_code === subTypeCode) {
+          return { ...item, [field]: value };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Get sub-type label
+  const getSubTypeLabel = (subTypeCode: string) => {
+    const subType = subTypes.find((st: any) => st.value === subTypeCode);
+    return subType?.label || subTypeCode;
+  };
+
+  // Helper function to safely convert error messages to strings
+  const safeErrorMessage = (error: any): string => {
+    if (typeof error === 'string') {
+      return error;
+    }
+    if (error && typeof error === 'object') {
+      // Handle Error objects
+      if (error.message && typeof error.message === 'string') {
+        return error.message;
+      }
+      // Handle arrays (e.g., validation errors)
+      if (Array.isArray(error)) {
+        return error.map(e => safeErrorMessage(e)).join(', ');
+      }
+      // Handle objects with detail field
+      if (error.detail) {
+        return safeErrorMessage(error.detail);
+      }
+      // Fallback: stringify the object
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return String(error);
+      }
+    }
+    return String(error || 'Unknown error');
+  };
+
+  // Submit review using unified format (multi-role: college or admin)
+  const submitReview = async () => {
+    if (!detailedApplication || !reviewItems.length) return;
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      // Filter out pending items - only send approve/reject items to API
+      const filteredItems = reviewItems
+        .filter(item => item.recommendation === 'approve' || item.recommendation === 'reject')
+        .map(item => ({
+          sub_type_code: item.sub_type_code,
+          recommendation: item.recommendation as 'approve' | 'reject',
+          comments: item.comments || "",
+        }));
+
+      if (filteredItems.length === 0) {
+        toast.error(
+          locale === "zh" ? "錯誤" : "Error",
+          {
+            description: locale === "zh"
+              ? "請至少對一個子項目做出審核決定"
+              : "Please make a decision for at least one sub-type",
+          }
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Validate that all rejected items have comments
+      const rejectedWithoutComments = filteredItems.filter(
+        item => item.recommendation === 'reject' && (!item.comments || item.comments.trim() === '')
+      );
+
+      if (rejectedWithoutComments.length > 0) {
+        const itemNames = rejectedWithoutComments
+          .map(item => getSubTypeLabel(item.sub_type_code))
+          .join('、');
+        toast.error(
+          locale === "zh" ? "錯誤" : "Error",
+          {
+            description: locale === "zh"
+              ? `以下項目選擇拒絕但未填寫理由：${itemNames}`
+              : `The following items are rejected without reason: ${itemNames}`,
+          }
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      const submissionData = {
+        items: filteredItems,
+      };
+
+      // Route submission based on role
+      const response = role === "admin"
+        ? await api.admin.submitApplicationReview(detailedApplication.id, submissionData)
+        : await api.college.submitReview(detailedApplication.id, submissionData);
+
+      if (response.success) {
+        toast.success(
+          locale === "zh" ? "成功" : "Success",
+          {
+            description: locale === "zh" ? "審核意見已成功提交" : "Review submitted successfully",
+          }
+        );
+
+        // Call the callback to refresh data in parent component
+        if (onReviewSubmitted) {
+          onReviewSubmitted();
+        }
+
+        // Close dialog
+        onOpenChange(false);
+      } else {
+        throw new Error(safeErrorMessage(response.message) || "Failed to submit review");
+      }
+    } catch (err: any) {
+      console.error("Failed to submit review:", err);
+
+      // Extract detailed error message from various possible locations
+      let errorMessage = "Failed to submit review";
+
+      // Check for API response error details (FastAPI HTTPException)
+      if (err?.response?.data?.detail) {
+        errorMessage = typeof err.response.data.detail === 'string'
+          ? err.response.data.detail
+          : JSON.stringify(err.response.data.detail);
+      }
+      // Check for API response message (our ApiResponse format)
+      else if (err?.response?.data?.message) {
+        errorMessage = safeErrorMessage(err.response.data.message);
+      }
+      // Check for standard Error message
+      else if (err?.message) {
+        errorMessage = safeErrorMessage(err.message);
+      }
+      // Fallback to generic error extraction
+      else {
+        errorMessage = safeErrorMessage(err);
+      }
+
+      toast.error(
+        locale === "zh" ? "錯誤" : "Error",
+        {
+          description: errorMessage,
+        }
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Legacy handlers for backward compatibility (not used with new review system)
   const handleApprove = async () => {
     if (detailedApplication && onApprove && !isSubmitting) {
       try {
@@ -1057,7 +1190,6 @@ export function ApplicationReviewDialog({
     }
   };
 
-  // Handle reject
   const handleReject = async () => {
     if (detailedApplication && onReject && !isSubmitting) {
       try {
@@ -1550,73 +1682,234 @@ export function ApplicationReviewDialog({
 
                 {/* Review Actions Tab (College only) */}
                 {role === "college" && (
-                  <TabsContent value="review" className="space-y-4 mt-4">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">
-                          {locale === "zh" ? "學院審核意見" : "College Review Comments"}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <Textarea
-                          placeholder={
-                            locale === "zh"
-                              ? "請輸入學院審核意見..."
-                              : "Enter college review comments..."
-                          }
-                          value={reviewComment}
-                          onChange={(e) => setReviewComment(e.target.value)}
-                          className="min-h-[100px]"
-                        />
-                      </CardContent>
-                    </Card>
+                  <TabsContent value="review" className="space-y-6 mt-4">
+                    {existingReview && (
+                      <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20">
+                        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <AlertDescription className="text-blue-800 dark:text-blue-300">
+                          {locale === "zh"
+                            ? `您已於 ${new Date(existingReview.reviewed_at).toLocaleString('zh-TW', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false
+                              })} 提交過審核意見，以下為之前的審核內容`
+                            : `You submitted a review on ${new Date(existingReview.reviewed_at).toLocaleString('en-US', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false
+                              })}`}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {subTypes.length > 0 && reviewItems.length > 0 ? (
+                      <Card>
+                        <CardHeader className="space-y-1.5">
+                          <CardTitle className="text-xl">
+                            {locale === "zh" ? "子項目審核" : "Sub-type Reviews"}
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            {locale === "zh"
+                              ? "請針對每個獎學金子項目進行審核並提供意見"
+                              : "Please review each scholarship sub-type and provide your feedback"}
+                          </p>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          {/* Review Items */}
+                          <div className="space-y-6">
+                            {reviewItems.map((item, index) => (
+                              <div
+                                key={item.sub_type_code}
+                                className={`
+                                  rounded-lg border-2 transition-colors
+                                  ${item.recommendation === 'approve' ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20' :
+                                    item.recommendation === 'reject' ? 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20' :
+                                    'border-border bg-card'}
+                                `}
+                              >
+                                <div className="p-4 space-y-4">
+                                  {/* Header with title and status badge */}
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-base leading-tight">
+                                        {getSubTypeLabel(item.sub_type_code)}
+                                      </h4>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        {locale === "zh" ? `項目 ${index + 1} / ${reviewItems.length}` : `Item ${index + 1} / ${reviewItems.length}`}
+                                      </p>
+                                    </div>
+                                    <Badge
+                                      variant={
+                                        item.recommendation === 'approve' ? 'default' :
+                                        item.recommendation === 'reject' ? 'destructive' :
+                                        'secondary'
+                                      }
+                                      className="shrink-0"
+                                    >
+                                      {item.recommendation === 'approve' ? (
+                                        <>
+                                          <CheckCircle className="h-3 w-3 mr-1" />
+                                          {locale === "zh" ? "同意" : "Approved"}
+                                        </>
+                                      ) : item.recommendation === 'reject' ? (
+                                        <>
+                                          <XCircle className="h-3 w-3 mr-1" />
+                                          {locale === "zh" ? "拒絕" : "Rejected"}
+                                        </>
+                                      ) : (
+                                        locale === "zh" ? "待決定" : "Pending"
+                                      )}
+                                    </Badge>
+                                  </div>
 
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">
-                          {locale === "zh" ? "審核操作" : "Review Actions"}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={handleApprove}
-                            className="flex-1"
-                            disabled={!onApprove || isSubmitting}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            {isSubmitting ? (locale === "zh" ? "提交中..." : "Submitting...") : (locale === "zh" ? "學院核准" : "Approve")}
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={handleReject}
-                            className="flex-1"
-                            disabled={!onReject || isSubmitting}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            {isSubmitting ? (locale === "zh" ? "提交中..." : "Submitting...") : (locale === "zh" ? "學院駁回" : "Reject")}
-                          </Button>
-                        </div>
-                        <Button
-                          variant="outline"
-                          onClick={handleRequestDocs}
-                          className="w-full border-orange-200 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
-                          disabled={!onRequestDocs}
-                        >
-                          <FileQuestion className="h-4 w-4 mr-1" />
-                          {locale === "zh" ? "要求補件" : "Request Documents"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={handleDelete}
-                          className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                          disabled={!onDelete}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          {locale === "zh" ? "刪除申請" : "Delete Application"}
-                        </Button>
-                      </CardContent>
-                    </Card>
+                                  {/* Action buttons */}
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="default"
+                                      variant="outline"
+                                      onClick={() => updateReviewItem(item.sub_type_code, 'recommendation', 'approve')}
+                                      className={`flex-1 h-11 transition-colors ${
+                                        item.recommendation === 'approve'
+                                          ? 'bg-green-600 hover:bg-green-700 text-white border-green-600'
+                                          : item.recommendation === 'pending'
+                                          ? 'bg-green-50 hover:bg-green-100 text-green-700 border-green-300 dark:bg-green-950/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-950/30'
+                                          : 'hover:bg-accent'
+                                      }`}
+                                    >
+                                      <CheckCircle className="h-4 w-4 mr-2" />
+                                      {locale === "zh" ? "同意" : "Approve"}
+                                    </Button>
+                                    <Button
+                                      size="default"
+                                      variant="outline"
+                                      onClick={() => updateReviewItem(item.sub_type_code, 'recommendation', 'reject')}
+                                      className={`flex-1 h-11 transition-colors ${
+                                        item.recommendation === 'reject'
+                                          ? 'bg-red-600 hover:bg-red-700 text-white border-red-600'
+                                          : item.recommendation === 'pending'
+                                          ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-300 dark:bg-red-950/20 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/30'
+                                          : 'hover:bg-accent'
+                                      }`}
+                                    >
+                                      <XCircle className="h-4 w-4 mr-2" />
+                                      {locale === "zh" ? "拒絕" : "Reject"}
+                                    </Button>
+                                  </div>
+
+                                  {/* Comments field */}
+                                  <div className="space-y-2">
+                                    <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                      {locale === "zh" ? "審核意見" : "Review Comments"}
+                                      {item.recommendation === 'reject' ? (
+                                        <span className="text-red-600 font-medium ml-1">
+                                          * ({locale === "zh" ? "必填" : "Required"})
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground font-normal ml-1">
+                                          ({locale === "zh" ? "選填" : "Optional"})
+                                        </span>
+                                      )}
+                                    </label>
+                                    <Textarea
+                                      placeholder={
+                                        item.recommendation === 'reject'
+                                          ? (locale === "zh" ? "拒絕時必須填寫理由..." : "Reason required for rejection...")
+                                          : (locale === "zh" ? "請填寫審核意見或建議..." : "Enter your review comments or suggestions...")
+                                      }
+                                      value={item.comments || ""}
+                                      onChange={(e) => updateReviewItem(item.sub_type_code, 'comments', e.target.value)}
+                                      className={`min-h-[100px] resize-none ${
+                                        item.recommendation === 'reject' && (!item.comments || item.comments.trim() === '')
+                                          ? 'border-red-500 focus-visible:ring-red-500'
+                                          : ''
+                                      }`}
+                                    />
+                                    {item.recommendation === 'reject' && (!item.comments || item.comments.trim() === '') && (
+                                      <p className="text-sm text-red-600 mt-1">
+                                        {locale === "zh" ? "拒絕時必須填寫理由" : "Reason is required for rejection"}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Submit section with summary */}
+                          <div className="pt-4 border-t space-y-4">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">
+                                {locale === "zh" ? "審核進度" : "Review Progress"}
+                              </span>
+                              <span className="font-medium">
+                                {reviewItems.filter(item => item.recommendation !== 'pending').length} / {reviewItems.length}
+                              </span>
+                            </div>
+
+                            {reviewItems.filter(item => item.recommendation !== 'pending').length === 0 && (
+                              <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-md p-3">
+                                <AlertCircle className="h-4 w-4 shrink-0" />
+                                <span>
+                                  {locale === "zh"
+                                    ? "請至少對一個子項目做出審核決定"
+                                    : "Please make a decision for at least one sub-type"}
+                                </span>
+                              </div>
+                            )}
+
+                            {reviewItems.some(item =>
+                              item.recommendation === 'reject' && (!item.comments || item.comments.trim() === '')
+                            ) && (
+                              <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-md p-3">
+                                <AlertCircle className="h-4 w-4 shrink-0" />
+                                <span>
+                                  {locale === "zh"
+                                    ? "有拒絕項目尚未填寫理由"
+                                    : "Some rejected items are missing reasons"}
+                                </span>
+                              </div>
+                            )}
+
+                            <Button
+                              onClick={submitReview}
+                              className="w-full h-11"
+                              disabled={
+                                isSubmitting ||
+                                reviewItems.filter(item => item.recommendation !== 'pending').length === 0 ||
+                                reviewItems.some(item => item.recommendation === 'reject' && (!item.comments || item.comments.trim() === ''))
+                              }
+                              size="lg"
+                            >
+                              {isSubmitting ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  {locale === "zh" ? "提交中..." : "Submitting..."}
+                                </>
+                              ) : (
+                                <>
+                                  <Send className="h-4 w-4 mr-2" />
+                                  {locale === "zh" ? "提交審核意見" : "Submit Review"}
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Card>
+                        <CardContent className="py-12 text-center">
+                          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+                          <p className="text-muted-foreground">
+                            {locale === "zh" ? "載入審核表單中..." : "Loading review form..."}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
                   </TabsContent>
                 )}
 
@@ -1838,68 +2131,7 @@ export function ApplicationReviewDialog({
                       </Card>
                     )}
 
-                    {/* Admin Review Actions */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-lg">
-                          {locale === "zh" ? "管理審核操作" : "Admin Review Actions"}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div>
-                          <Label className="text-sm font-medium mb-2">
-                            {locale === "zh" ? "審核意見/理由" : "Review Comments/Reason"}
-                          </Label>
-                          <Textarea
-                            placeholder={
-                              locale === "zh"
-                                ? "請輸入核准或駁回的理由..."
-                                : "Enter reason for approval or rejection..."
-                            }
-                            value={adminComments}
-                            onChange={(e) => setAdminComments(e.target.value)}
-                            className="min-h-[100px]"
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={handleAdminApprove}
-                            className="flex-1"
-                            disabled={isSubmittingStatus}
-                          >
-                            {isSubmittingStatus ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                {locale === "zh" ? "處理中..." : "Processing..."}
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                {locale === "zh" ? "管理員核准" : "Admin Approve"}
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            onClick={handleAdminReject}
-                            className="flex-1"
-                            disabled={isSubmittingStatus}
-                          >
-                            {isSubmittingStatus ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                {locale === "zh" ? "處理中..." : "Processing..."}
-                              </>
-                            ) : (
-                              <>
-                                <XCircle className="h-4 w-4 mr-1" />
-                                {locale === "zh" ? "管理員駁回" : "Admin Reject"}
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    {/* NOTE: Old admin review UI removed - admin now uses unified sub-type review system (same as college) */}
                   </TabsContent>
                 )}
 

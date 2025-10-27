@@ -256,8 +256,8 @@ class ApplicationEnricherService:
                 "academy_code": academy_code,
                 # 審查狀態
                 "review_status": {
-                    "has_professor_review": len(app.get("professor_reviews", [])) > 0,
-                    "professor_review_count": len(app.get("professor_reviews", [])),
+                    "has_review": len(app.get("reviews", [])) > 0,
+                    "review_count": len(app.get("reviews", [])),
                     "files_count": len(app.get("files", [])),
                 },
             }

@@ -608,8 +608,8 @@ class EmailAutomationService:
                                     "app_id": application.app_id,
                                     "student_name": student_data.get("std_cname", ""),
                                     "student_id": student_data.get("std_stdcode", ""),
-                                    "scholarship_type": application.main_scholarship_type or "",
-                                    "scholarship_name": application.main_scholarship_type or "",
+                                    "scholarship_type_id": application.scholarship_type_id or "",
+                                    "scholarship_name": application.scholarship_name or "",
                                     "submit_date": (
                                         application.submitted_at.strftime("%Y-%m-%d")
                                         if application.submitted_at

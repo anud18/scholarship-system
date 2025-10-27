@@ -124,6 +124,7 @@ export function ReviewerDashboard({
       pending_review: "destructive",
       under_review: "outline",
       approved: "default",
+      partial_approve: "outline",
       rejected: "secondary",
     };
     return statusMap[status as keyof typeof statusMap] || "secondary";

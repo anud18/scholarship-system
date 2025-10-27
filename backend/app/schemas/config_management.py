@@ -143,6 +143,9 @@ class BankFieldComparisonSchema(BaseModel):
     similarity_score: float = Field(..., description="Similarity score (0.0-1.0)")
     is_match: bool = Field(..., description="Whether values match within threshold")
     confidence: str = Field(..., description="Confidence level (low/medium/high)")
+    needs_manual_review: bool = Field(False, description="Whether this field needs manual review")
+    manual_review_status: Optional[str] = Field(None, description="Manual review status (pending/approved/rejected)")
+    manual_review_corrected_value: Optional[str] = Field(None, description="Manually corrected value")
 
 
 class BankVerificationResultSchema(BaseModel):
@@ -151,6 +154,15 @@ class BankVerificationResultSchema(BaseModel):
     success: bool = Field(..., description="Whether verification was successful")
     application_id: int = Field(..., description="Application ID")
     verification_status: str = Field(..., description="Overall verification status")
+
+    # Separate verification status for account number and holder name
+    account_number_status: Optional[str] = Field(
+        None, description="Account number verification status (verified/needs_review/failed)"
+    )
+    account_holder_status: Optional[str] = Field(
+        None, description="Account holder verification status (verified/needs_review/failed)"
+    )
+
     overall_match: Optional[bool] = Field(
         None, description="Whether all fields match (only for successful verifications)"
     )
@@ -166,6 +178,7 @@ class BankVerificationResultSchema(BaseModel):
     passbook_document: Optional[Dict[str, str]] = Field(None, description="Information about passbook document")
     recommendations: List[str] = Field([], description="Verification recommendations")
     error: Optional[str] = Field(None, description="Error message if failed")
+    requires_manual_review: bool = Field(False, description="Whether any field requires manual review")
 
 
 class BankVerificationBatchRequestSchema(BaseModel):
@@ -183,6 +196,29 @@ class BankVerificationBatchResultSchema(BaseModel):
     successful_verifications: int = Field(..., description="Number of successful verifications")
     failed_verifications: int = Field(..., description="Number of failed verifications")
     summary: Dict[str, int] = Field({}, description="Summary by verification status")
+
+
+class ManualBankReviewRequestSchema(BaseModel):
+    """Schema for manual bank information review"""
+
+    application_id: int = Field(..., description="Application ID")
+    account_number_approved: Optional[bool] = Field(None, description="Whether account number is approved")
+    account_number_corrected: Optional[str] = Field(None, description="Corrected account number if needed")
+    account_holder_approved: Optional[bool] = Field(None, description="Whether account holder is approved")
+    account_holder_corrected: Optional[str] = Field(None, description="Corrected account holder name if needed")
+    review_notes: Optional[str] = Field(None, description="Notes from manual review")
+
+
+class ManualBankReviewResultSchema(BaseModel):
+    """Schema for manual bank information review result"""
+
+    success: bool = Field(..., description="Whether review was successful")
+    application_id: int = Field(..., description="Application ID")
+    account_number_status: str = Field(..., description="Account number status after review")
+    account_holder_status: str = Field(..., description="Account holder status after review")
+    updated_form_data: Dict[str, str] = Field({}, description="Updated bank data")
+    review_timestamp: datetime = Field(..., description="Review timestamp")
+    reviewed_by: str = Field(..., description="Reviewer username")
 
 
 class ConfigurationExportSchema(BaseModel):

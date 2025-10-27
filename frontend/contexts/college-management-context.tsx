@@ -66,6 +66,10 @@ interface CollegeManagementContextType {
   setIsRankingLoading: (loading: boolean) => void;
   filteredRankings: any[];
 
+  // Data version tracking for cross-tab synchronization
+  dataVersion: number;
+  incrementDataVersion: () => void;
+
   // Configuration
   scholarshipConfig: ScholarshipConfig[];
   setScholarshipConfig: (config: ScholarshipConfig[]) => void;
@@ -136,6 +140,7 @@ interface CollegeManagementContextType {
   getAcademicConfig: () => Promise<AcademicConfig>;
   getScholarshipConfig: () => Promise<ScholarshipConfig[]>;
   fetchAvailableOptions: () => Promise<void>;
+  fetchRankings: () => Promise<void>;
   refreshPermissions: () => Promise<void>;
   scholarshipConfigError: string | null;
   setScholarshipConfigError: (error: string | null) => void;
@@ -171,6 +176,12 @@ export function CollegeManagementProvider({
   const [rankings, setRankings] = useState<any[]>([]);
   const [selectedRanking, setSelectedRanking] = useState<number | null>(null);
   const [isRankingLoading, setIsRankingLoading] = useState(false);
+
+  // Data version tracking for cross-tab synchronization
+  const [dataVersion, setDataVersion] = useState(0);
+  const incrementDataVersion = useCallback(() => {
+    setDataVersion(v => v + 1);
+  }, []);
 
   // Configuration
   const [scholarshipConfig, setScholarshipConfig] = useState<ScholarshipConfig[]>([]);
@@ -434,6 +445,34 @@ export function CollegeManagementProvider({
     }
   }, []);
 
+  const fetchRankings = useCallback(async () => {
+    try {
+      console.log("[Context] Fetching rankings...");
+      const response = await apiClient.college.getRankings();
+
+      if (response.success && response.data) {
+        console.log(`[Context] Fetched ${response.data.length} rankings`);
+
+        // Normalize semester values (consistent with RankingManagementPanel logic)
+        const normalizedRankings = response.data.map((ranking: any) => {
+          const rawSemester =
+            typeof ranking.semester === "string" && ranking.semester.length > 0
+              ? ranking.semester.toLowerCase()
+              : null;
+          const safeSemester =
+            rawSemester && rawSemester !== "yearly"
+              ? rawSemester
+              : null;
+          return { ...ranking, semester: safeSemester };
+        });
+
+        setRankings(normalizedRankings);
+      }
+    } catch (error) {
+      console.error("[Context] Failed to fetch rankings:", error);
+    }
+  }, []);
+
   const refreshPermissions = useCallback(async () => {
     try {
       console.log("Refreshing permissions and scholarship configuration...");
@@ -481,6 +520,8 @@ export function CollegeManagementProvider({
     isRankingLoading,
     setIsRankingLoading,
     filteredRankings,
+    dataVersion,
+    incrementDataVersion,
     scholarshipConfig,
     setScholarshipConfig,
     academicConfig,
@@ -522,6 +563,7 @@ export function CollegeManagementProvider({
     getAcademicConfig,
     getScholarshipConfig,
     fetchAvailableOptions,
+    fetchRankings,
     refreshPermissions,
     scholarshipConfigError,
     setScholarshipConfigError,

@@ -15,23 +15,18 @@ from sqlalchemy import select
 from sqlalchemy.exc import DatabaseError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rate_limiting import professor_rate_limit
 from app.core.security import require_college, require_roles
 from app.db.deps import get_db
 from app.models.audit_log import AuditAction
 from app.models.college_review import CollegeReview
 from app.models.user import User, UserRole
-from app.schemas.college_review import CollegeReviewCreate, CollegeReviewResponse, CollegeReviewUpdate, StudentTermData
+from app.schemas.college_review import CollegeReviewResponse, CollegeReviewUpdate, StudentTermData
 from app.schemas.response import ApiResponse
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.college_review_service import CollegeReviewService, ReviewPermissionError
 from app.services.student_service import StudentService
 
-from ._helpers import (
-    _check_academic_year_permission,
-    _check_application_review_permission,
-    _check_scholarship_permission,
-)
+from ._helpers import _check_academic_year_permission, _check_scholarship_permission
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +34,6 @@ router = APIRouter()
 
 
 @router.get("/applications")
-@professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_applications_for_review(
     request: Request,
     scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
@@ -110,93 +104,11 @@ async def get_applications_for_review(
         )
 
 
-@router.post("/applications/{application_id}/review")
-@professor_rate_limit(requests=50, window_seconds=600)  # 50 review submissions per 10 minutes
-async def create_college_review(
-    request: Request,
-    application_id: int,
-    review_data: CollegeReviewCreate,
-    current_user: User = Depends(require_college),
-    db: AsyncSession = Depends(get_db),
-):
-    """Create or update a college review for an application"""
-
-    # Granular authorization checks for review creation
-    if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
-        raise ReviewPermissionError("College role required for application review")
-
-    # Check if user can review this specific application
-    if not await _check_application_review_permission(current_user, application_id, db):
-        raise ReviewPermissionError(f"User {current_user.id} not authorized to review application {application_id}")
-
-    # Validate application_id
-    if application_id <= 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid application ID")
-
-    try:
-        service = CollegeReviewService(db)
-        college_review = await service.create_or_update_review(
-            application_id=application_id, reviewer_id=current_user.id, review_data=review_data.dict(exclude_unset=True)
-        )
-
-        # Log the college review operation
-        audit_service = ApplicationAuditService(db)
-        await audit_service.log_application_operation(
-            application_id=application_id,
-            action=AuditAction.college_review,
-            user=current_user,
-            request=request,
-            description=f"College review created with recommendation: {review_data.recommendation}",
-            new_values={
-                "recommendation": review_data.recommendation,
-                "review_comments": getattr(review_data, "review_comments", None),
-                "decision_reason": getattr(review_data, "decision_reason", None),
-                "is_priority": getattr(review_data, "is_priority", None),
-                "needs_special_attention": getattr(review_data, "needs_special_attention", None),
-            },
-            status="success",
-        )
-
-        # 提取 redistribution_info（如果存在）
-        redistribution_info = getattr(college_review, "_redistribution_info", None)
-
-        review_response_data = CollegeReviewResponse.from_orm(college_review)
-        response_data = (
-            review_response_data.model_dump()
-            if hasattr(review_response_data, "model_dump")
-            else review_response_data.dict()
-        )
-
-        # 附加重新分發資訊到響應
-        if redistribution_info:
-            response_data["redistribution_info"] = redistribution_info
-
-        return ApiResponse(
-            success=True,
-            message="College review created successfully",
-            data=response_data,
-        )
-
-    except ValueError as e:
-        logger.warning(f"Invalid review data for application {application_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}")
-    except PermissionError as e:
-        logger.warning(f"Permission denied for college review creation by user {current_user.id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application")
-    except IntegrityError as e:
-        logger.error(f"Database integrity error creating review for application {application_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Review creation conflicts with existing data")
-    except DatabaseError as e:
-        logger.error(f"Database error creating review for application {application_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error creating college review for application {application_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while creating the review",
-        )
+# NOTE: Review endpoints moved to /api/v1/reviews/* for multi-role support
+# See backend/app/api/v1/endpoints/reviews.py:
+# - POST /api/v1/reviews/applications/{id}/review (submit review)
+# - GET /api/v1/reviews/applications/{id}/review (get user's review)
+# - GET /api/v1/reviews/applications/{id}/sub-types (get reviewable sub-types)
 
 
 @router.put("/reviews/{review_id}")
@@ -302,7 +214,6 @@ async def update_college_review(
 
 
 @router.get("/students/{student_id}/preview")
-@professor_rate_limit(requests=100, window_seconds=600)  # 100 requests per 10 minutes
 async def get_student_preview(
     request: Request,
     student_id: str,

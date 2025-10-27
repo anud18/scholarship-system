@@ -182,6 +182,12 @@ class PaymentRosterItem(Base):
     # 郵局帳號資訊
     bank_account = Column(String(20))  # 郵局帳號
 
+    # 銀行帳號驗證狀態 (分開帳號和戶名)
+    bank_account_number_status = Column(String(20))  # verified, needs_review, failed, unknown
+    bank_account_holder_status = Column(String(20))  # verified, needs_review, failed, unknown
+    bank_verification_details = Column(JSON)  # 完整的驗證結果 (OCR data, comparisons, etc.)
+    bank_manual_review_notes = Column(Text)  # 人工審核備註
+
     # 地址資訊
     permanent_address = Column(String(500))  # 戶籍地址
     mailing_address = Column(String(500))  # 通訊地址

@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
+from app.models.application import Application, ApplicationStatus
 
 # Student model removed - student data now fetched from external API
 
@@ -157,27 +157,42 @@ class ScholarshipAnalyticsService:
         }
 
     def _analyze_scholarship_types(self, applications: List[Application]) -> Dict[str, Any]:
-        """Analyze scholarship type distribution and performance"""
+        """Analyze scholarship type distribution and performance - REFACTORED for configuration-driven types"""
 
-        # Group by main type
-        main_type_stats = {}
-        for main_type in ScholarshipMainType:
-            main_apps = [app for app in applications if app.main_scholarship_type == main_type.value]
-            if main_apps:
-                main_type_stats[main_type.value] = {
-                    "total_applications": len(main_apps),
-                    "approved": len([app for app in main_apps if app.status == ApplicationStatus.approved.value]),
-                    "approval_rate": len([app for app in main_apps if app.status == ApplicationStatus.approved.value])
-                    / len(main_apps)
+        # Group by scholarship_type_id (configuration-driven)
+        type_stats = {}
+
+        # Get distinct scholarship_type_ids from applications
+        scholarship_type_ids = set(app.scholarship_type_id for app in applications if app.scholarship_type_id)
+
+        for type_id in scholarship_type_ids:
+            type_apps = [app for app in applications if app.scholarship_type_id == type_id]
+            if type_apps:
+                # Try to get scholarship name from first app's relationship
+                type_name = None
+                if type_apps[0].scholarship:
+                    type_name = type_apps[0].scholarship.name or type_apps[0].scholarship.code
+                else:
+                    type_name = f"Type_{type_id}"
+
+                type_stats[type_id] = {
+                    "scholarship_type_id": type_id,
+                    "scholarship_type_name": type_name,
+                    "total_applications": len(type_apps),
+                    "approved": len([app for app in type_apps if app.status == ApplicationStatus.approved.value]),
+                    "approval_rate": len([app for app in type_apps if app.status == ApplicationStatus.approved.value])
+                    / len(type_apps)
                     * 100,
                     "sub_types": {},
                 }
 
-                # Sub-type breakdown
-                for sub_type in ScholarshipSubType:
-                    sub_apps = [app for app in main_apps if app.sub_scholarship_type == sub_type.value]
+                # Sub-type breakdown (configuration-driven)
+                # Get distinct sub-types from current applications
+                sub_types_in_apps = set(app.sub_scholarship_type for app in type_apps if app.sub_scholarship_type)
+                for sub_type_value in sub_types_in_apps:
+                    sub_apps = [app for app in type_apps if app.sub_scholarship_type == sub_type_value]
                     if sub_apps:
-                        main_type_stats[main_type.value]["sub_types"][sub_type.value] = {
+                        type_stats[type_id]["sub_types"][sub_type_value] = {
                             "total": len(sub_apps),
                             "approved": len(
                                 [app for app in sub_apps if app.status == ApplicationStatus.approved.value]
@@ -190,18 +205,18 @@ class ScholarshipAnalyticsService:
                         }
 
         return {
-            "main_type_distribution": main_type_stats,
-            "most_popular_type": max(
-                main_type_stats.keys(),
-                key=lambda k: main_type_stats[k]["total_applications"],
+            "scholarship_type_distribution": type_stats,
+            "most_popular_type_id": max(
+                type_stats.keys(),
+                key=lambda k: type_stats[k]["total_applications"],
             )
-            if main_type_stats
+            if type_stats
             else None,
-            "highest_approval_rate_type": max(
-                main_type_stats.keys(),
-                key=lambda k: main_type_stats[k]["approval_rate"],
+            "highest_approval_rate_type_id": max(
+                type_stats.keys(),
+                key=lambda k: type_stats[k]["approval_rate"],
             )
-            if main_type_stats
+            if type_stats
             else None,
         }
 

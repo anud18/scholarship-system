@@ -177,7 +177,6 @@ class DeadlineChecker:
                         "days_remaining": str(days_remaining),
                         "deadline_type": deadline_label,
                         "scholarship_name": config.scholarship_type.name if config.scholarship_type else "Unknown",
-                        "scholarship_type": application.main_scholarship_type,
                         "scholarship_type_id": config.scholarship_type_id,
                     },
                 )

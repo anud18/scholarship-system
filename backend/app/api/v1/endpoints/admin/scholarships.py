@@ -11,28 +11,25 @@ Handles scholarship-related operations including:
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import desc, distinct, func, or_, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.selectable import Select
 
-from app.core.exceptions import NotFoundError
 from app.core.security import require_admin, require_scholarship_manager
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
-from app.models.scholarship import ScholarshipStatus, ScholarshipSubType, ScholarshipSubTypeConfig, ScholarshipType
-from app.models.user import AdminScholarship, User, UserRole
+from app.models.scholarship import ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipType
+from app.models.user import AdminScholarship, User
 from app.schemas.application import ApplicationListResponse
 from app.schemas.scholarship import (
     ScholarshipSubTypeConfigCreate,
     ScholarshipSubTypeConfigResponse,
     ScholarshipSubTypeConfigUpdate,
 )
-
-from ._helpers import get_allowed_scholarship_ids
 
 logger = logging.getLogger(__name__)
 
@@ -426,8 +423,8 @@ async def get_scholarship_sub_type_configs(
         configs.append(ScholarshipSubTypeConfigResponse.model_validate(config_dict))
 
     # 為 general 子類型添加預設配置（如果沒有配置且在子類型列表中）
-    if ScholarshipSubType.general.value in scholarship.sub_type_list:
-        general_config = scholarship.get_sub_type_config(ScholarshipSubType.general.value)
+    if "general" in scholarship.sub_type_list:
+        general_config = scholarship.get_sub_type_config("general")
         if not general_config:
             # 創建預設的 general 配置
             now = datetime.now(timezone.utc)
@@ -435,7 +432,7 @@ async def get_scholarship_sub_type_configs(
             config_dict = {
                 "id": 0,  # 虛擬 ID
                 "scholarship_type_id": scholarship.id,
-                "sub_type_code": ScholarshipSubType.general.value,
+                "sub_type_code": "general",
                 "name": "一般獎學金",
                 "name_en": "General Scholarship",
                 "description": "一般獎學金",
@@ -479,7 +476,7 @@ async def create_sub_type_config(
         raise HTTPException(status_code=400, detail="Invalid sub_type_code for this scholarship")
 
     # Prevent creating general sub-type configurations
-    if config_data.sub_type_code == ScholarshipSubType.general.value:
+    if config_data.sub_type_code == "general":
         raise HTTPException(
             status_code=400, detail="Cannot create configuration for 'general' sub-type. It uses default values."
         )

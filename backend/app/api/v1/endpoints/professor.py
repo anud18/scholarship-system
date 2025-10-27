@@ -9,20 +9,19 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, sta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthorizationError, NotFoundError
-from app.core.rate_limiting import professor_rate_limit
 from app.core.security import require_professor
 from app.db.deps import get_db
 from app.models.user import User
-from app.schemas.application import ProfessorReviewCreate
 from app.schemas.common import PaginatedResponse
+from app.schemas.review import ReviewItemResponse, ReviewResponse, ReviewSubmitRequest
 from app.services.application_service import ApplicationService
+from app.services.review_service import ReviewService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 @router.get("/applications")
-@professor_rate_limit(requests=100, window_seconds=600)  # 100 requests per 10 minutes
 async def get_professor_applications(
     request: Request,
     status_filter: Optional[str] = Query(None, description="Filter by review status: pending, completed, all"),
@@ -72,50 +71,64 @@ async def get_professor_applications(
 
 
 @router.get("/applications/{application_id}/review")
-@professor_rate_limit(requests=200, window_seconds=600)  # 200 requests per 10 minutes
 async def get_professor_review(
     request: Request,
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get existing professor review for an application"""
-    logger.info("Professor {current_user.id} requesting review for application {application_id}")
+    """Get existing professor review for an application using unified review system"""
+    logger.info(f"Professor {current_user.id} requesting review for application {application_id}")
 
     try:
-        service = ApplicationService(db)
-        review = await service.get_professor_review(application_id=application_id, professor_id=current_user.id)
+        review_service = ReviewService(db)
+        review = await review_service.get_review_by_application_and_reviewer(
+            application_id=application_id, reviewer_id=current_user.id
+        )
 
         if not review:
-            # Return empty review structure for new reviews
-            from app.schemas.application import ProfessorReviewResponse
-
-            response_data = ProfessorReviewResponse(
-                id=0,  # Use 0 to indicate new/unsaved review
-                application_id=application_id,
-                professor_id=current_user.id,
-                recommendation=None,
-                review_status=None,
-                reviewed_at=None,
-                created_at=None,
-                items=[],
-            )
+            # Return null for no review found - frontend should handle this
             return {
                 "success": True,
                 "message": "查詢成功",
-                "data": response_data.model_dump(),
+                "data": None,
             }
+
+        # Return new format response directly
+        review_response = ReviewResponse(
+            id=review.id,
+            application_id=review.application_id,
+            reviewer_id=review.reviewer_id,
+            recommendation=review.recommendation,
+            comments=review.comments,
+            reviewed_at=review.reviewed_at,
+            created_at=review.created_at,
+            items=[
+                ReviewItemResponse(
+                    id=item.id,
+                    review_id=item.review_id,
+                    sub_type_code=item.sub_type_code,
+                    recommendation=item.recommendation,
+                    comments=item.comments,
+                    created_at=item.created_at,
+                )
+                for item in review.items
+            ],
+        )
 
         return {
             "success": True,
             "message": "查詢成功",
-            "data": review.model_dump() if hasattr(review, "model_dump") else review.dict(),
+            "data": review_response.model_dump(),
         }
 
     except NotFoundError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Professor review not found")
     except Exception as e:
         logger.error(f"Error fetching professor review: {str(e)}")
+        import traceback
+
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching review",
@@ -123,51 +136,68 @@ async def get_professor_review(
 
 
 @router.post("/applications/{application_id}/review")
-@professor_rate_limit(requests=100, window_seconds=600)  # 100 review submissions per 10 minutes
 async def submit_professor_review(
     request: Request,
-    review_data: ProfessorReviewCreate,
+    review_data: ReviewSubmitRequest,
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Submit professor review for an application"""
-    logger.info("Professor {current_user.id} submitting review for application {application_id}")
+    """Submit professor review for an application using unified review system"""
+    logger.info(f"Professor {current_user.id} submitting review for application {application_id}")
 
     try:
         service = ApplicationService(db)
+        review_service = ReviewService(db)
 
         # Verify the professor has access to this application
-        logger.info("Endpoint Step 1: Getting application by ID")
         application = await service.get_application_by_id(application_id, current_user)
         if not application:
             raise NotFoundError("Application not found")
-        logger.info("Endpoint Step 2: Application found")
 
         # Check if professor can submit a review (with time restrictions)
-        # Skip time restrictions only if configured to do so (testing environments)
         from app.core.config import settings
 
-        logger.info("Endpoint Step 3: Checking if professor can submit (bypass={settings.bypass_time_restrictions})")
         if not settings.bypass_time_restrictions and not await service.can_professor_submit_review(
             application_id, current_user.id
         ):
             raise AuthorizationError("Professor not authorized to submit review at this time or for this application")
-        logger.info("Endpoint Step 4: Professor authorized to submit")
 
-        # Submit the review
-        logger.info("Endpoint Step 5: Calling submit_professor_review")
-        review = await service.submit_professor_review(
+        # Create review using unified ReviewService - use new format directly
+        items_data = [item.model_dump() for item in review_data.items]
+        review = await review_service.create_review(
             application_id=application_id,
-            professor_id=current_user.id,
-            review_data=review_data.dict(),
+            reviewer_id=current_user.id,
+            items=items_data,
         )
 
-        logger.info("Professor {current_user.id} successfully submitted review for application {application_id}")
+        # Return new format response directly
+        review_response = ReviewResponse(
+            id=review.id,
+            application_id=review.application_id,
+            reviewer_id=review.reviewer_id,
+            recommendation=review.recommendation,
+            comments=review.comments,
+            reviewed_at=review.reviewed_at,
+            created_at=review.created_at,
+            items=[
+                ReviewItemResponse(
+                    id=item.id,
+                    review_id=item.review_id,
+                    sub_type_code=item.sub_type_code,
+                    recommendation=item.recommendation,
+                    comments=item.comments,
+                    created_at=item.created_at,
+                )
+                for item in review.items
+            ],
+        )
+
+        logger.info(f"Professor {current_user.id} successfully submitted review for application {application_id}")
         return {
             "success": True,
             "message": "審核提交成功",
-            "data": review.model_dump() if hasattr(review, "model_dump") else review.dict(),
+            "data": review_response.model_dump(),
         }
 
     except NotFoundError:
@@ -186,49 +216,78 @@ async def submit_professor_review(
 
 
 @router.put("/applications/{application_id}/review/{review_id}")
-@professor_rate_limit(requests=50, window_seconds=600)  # 50 review updates per 10 minutes
 async def update_professor_review(
     request: Request,
-    review_data: ProfessorReviewCreate,
+    review_data: ReviewSubmitRequest,
     application_id: int = Path(..., description="Application ID"),
     review_id: int = Path(..., description="Review ID"),
     current_user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update an existing professor review"""
-    logger.info("Professor {current_user.id} updating review {review_id} for application {application_id}")
+    """Update an existing professor review using unified review system"""
+    logger.info(f"Professor {current_user.id} updating review {review_id} for application {application_id}")
 
     try:
-        service = ApplicationService(db)
+        review_service = ReviewService(db)
 
         # Verify ownership of the review
-        # First, get the review by its ID to check if it exists
-        existing_review_by_id = await service.get_professor_review_by_id(review_id)
-        if not existing_review_by_id:
+        existing_review = await review_service.get_review_by_id(review_id)
+        if not existing_review:
             raise NotFoundError("Professor review not found")
 
-        # Then verify the professor owns this review
-        if existing_review_by_id.professor_id != current_user.id:
+        # Verify the professor owns this review
+        if existing_review.reviewer_id != current_user.id:
             raise AuthorizationError("Professor not authorized to update this review")
 
-        # Also verify the review belongs to the specified application
-        if existing_review_by_id.application_id != application_id:
+        # Verify the review belongs to the specified application
+        if existing_review.application_id != application_id:
             raise AuthorizationError("Review does not belong to the specified application")
 
-        # Update the review
-        review = await service.update_professor_review(review_id=review_id, review_data=review_data.dict())
+        # Update review using unified ReviewService - use new format directly
+        items_data = [item.model_dump() for item in review_data.items]
+        review = await review_service.update_review(
+            review_id=review_id,
+            items=items_data,
+        )
 
-        logger.info("Professor {current_user.id} successfully updated review {review_id}")
+        # Return new format response directly
+        review_response = ReviewResponse(
+            id=review.id,
+            application_id=review.application_id,
+            reviewer_id=review.reviewer_id,
+            recommendation=review.recommendation,
+            comments=review.comments,
+            reviewed_at=review.reviewed_at,
+            created_at=review.created_at,
+            items=[
+                ReviewItemResponse(
+                    id=item.id,
+                    review_id=item.review_id,
+                    sub_type_code=item.sub_type_code,
+                    recommendation=item.recommendation,
+                    comments=item.comments,
+                    created_at=item.created_at,
+                )
+                for item in review.items
+            ],
+        )
+
+        logger.info(f"Professor {current_user.id} successfully updated review {review_id}")
         return {
             "success": True,
             "message": "審核更新成功",
-            "data": review.model_dump() if hasattr(review, "model_dump") else review.dict(),
+            "data": review_response.model_dump(),
         }
 
     except AuthorizationError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except NotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
     except Exception as e:
         logger.error(f"Error updating professor review: {str(e)}")
+        import traceback
+
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while updating review",
@@ -236,7 +295,6 @@ async def update_professor_review(
 
 
 @router.get("/applications/{application_id}/sub-types")
-@professor_rate_limit(requests=300, window_seconds=600)  # 300 requests per 10 minutes (lighter endpoint)
 async def get_application_sub_types(
     request: Request,
     application_id: int = Path(..., description="Application ID"),
@@ -266,7 +324,6 @@ async def get_application_sub_types(
 
 
 @router.get("/stats")
-@professor_rate_limit(requests=150, window_seconds=600)  # 150 requests per 10 minutes
 async def get_professor_review_stats(
     request: Request,
     current_user: User = Depends(require_professor),

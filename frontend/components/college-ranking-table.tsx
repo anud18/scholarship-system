@@ -62,6 +62,7 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
+  Circle,
   FileText,
   Download,
   Send,
@@ -85,7 +86,16 @@ interface Application {
   department_name?: string;
   scholarship_type: string;
   sub_type: string;
-  eligible_subtypes?: string[];  // Eligible sub-scholarship types
+  eligible_subtypes?: Array<{
+    code: string;
+    is_rejected: boolean;
+    rejected_by?: {
+      role: string;
+      name: string;
+      reviewed_at: string;
+    };
+    rejection_reason?: string;
+  }>;  // Eligible sub-scholarship types with review status
   rank_position: number;
   is_allocated: boolean;
   status: string;
@@ -170,6 +180,16 @@ function SortableItem({
         <Badge variant="destructive" className="bg-red-100 text-red-800">
           <XCircle className="w-3 h-3 mr-1" />
           {locale === "zh" ? "駁回" : "Rejected"}
+        </Badge>
+      );
+    }
+
+    // Check for partial approval status
+    if (app.status === 'partial_approve') {
+      return (
+        <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+          <Circle className="w-3 h-3 mr-1 fill-blue-700" />
+          {locale === "zh" ? "部分核准" : "Partial Approval"}
         </Badge>
       );
     }
@@ -259,15 +279,29 @@ function SortableItem({
       <TableCell className="text-center">
         <div className="flex flex-wrap justify-center gap-1">
           {application.eligible_subtypes && application.eligible_subtypes.length > 0 ? (
-            application.eligible_subtypes.map((subtype, idx) => (
-              <Badge
-                key={idx}
-                variant="outline"
-                className={`text-xs ${getSubtypeBadgeColor(subtype)}`}
-              >
-                {getSubtypeLabel(subtype)}
-              </Badge>
-            ))
+            application.eligible_subtypes.map((subtype, idx) => {
+              const isRejected = subtype.is_rejected;
+              const badgeClass = isRejected
+                ? "line-through text-red-500 bg-red-50 border-red-300"
+                : getSubtypeBadgeColor(subtype.code);
+
+              // Build tooltip text for rejected subtypes
+              const tooltipText = isRejected && subtype.rejected_by
+                ? `被 ${subtype.rejected_by.role === 'professor' ? '教授' : subtype.rejected_by.role === 'college' ? '學院' : '管理員'} (${subtype.rejected_by.name}) 拒絕${subtype.rejection_reason ? ': ' + subtype.rejection_reason : ''}`
+                : undefined;
+
+              return (
+                <Badge
+                  key={idx}
+                  variant="outline"
+                  className={`text-xs ${badgeClass}`}
+                  title={tooltipText}
+                >
+                  {getSubtypeLabel(subtype.code)}
+                  {isRejected && <span className="ml-1">✗</span>}
+                </Badge>
+              );
+            })
           ) : (
             <span className="text-xs text-gray-400">-</span>
           )}

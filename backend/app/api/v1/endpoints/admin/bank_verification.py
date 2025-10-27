@@ -21,6 +21,8 @@ from app.schemas.config_management import (
     BankVerificationBatchResultSchema,
     BankVerificationRequestSchema,
     BankVerificationResultSchema,
+    ManualBankReviewRequestSchema,
+    ManualBankReviewResultSchema,
 )
 from app.services.bank_verification_service import BankVerificationService
 
@@ -175,4 +177,78 @@ async def batch_verify_bank_accounts(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to perform batch verification due to an unexpected error.",
+        )
+
+
+@router.post("/bank-verification/manual-review")
+async def manual_review_bank_info(
+    request: ManualBankReviewRequestSchema,
+    http_request: Request,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Process manual review of bank account information (admin only)
+
+    Allows administrators to:
+    - Approve or reject individual fields (account number and account holder)
+    - Provide corrected values if needed
+    - Add review notes
+    """
+    try:
+        from app.services.application_audit_service import ApplicationAuditService
+
+        verification_service = BankVerificationService(db)
+
+        # Process manual review
+        result = await verification_service.manual_review_bank_info(
+            application_id=request.application_id,
+            account_number_approved=request.account_number_approved,
+            account_number_corrected=request.account_number_corrected,
+            account_holder_approved=request.account_holder_approved,
+            account_holder_corrected=request.account_holder_corrected,
+            review_notes=request.review_notes,
+            reviewer_username=current_user.nycu_id,
+        )
+
+        # Log manual review operation
+        application_stmt = select(Application).where(Application.id == request.application_id)
+        application_result = await db.execute(application_stmt)
+        application = application_result.scalar_one_or_none()
+
+        if application:
+            audit_service = ApplicationAuditService(db)
+            await audit_service.log_action(
+                application_id=request.application_id,
+                app_id=application.app_id,
+                action="manual_bank_review",
+                level="info",
+                title="人工審核銀行帳號資訊",
+                description=f"管理員 {current_user.nycu_id} 完成人工審核",
+                user=current_user,
+                meta_data={
+                    "account_number_approved": request.account_number_approved,
+                    "account_number_corrected": request.account_number_corrected,
+                    "account_holder_approved": request.account_holder_approved,
+                    "account_holder_corrected": request.account_holder_corrected,
+                    "review_notes": request.review_notes,
+                    "result": result,
+                },
+                status="success",
+                request=http_request,
+            )
+
+        return {
+            "success": True,
+            "message": "人工審核完成",
+            "data": ManualBankReviewResultSchema(**result),
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error in manual bank review: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="人工審核發生未預期的錯誤",
         )

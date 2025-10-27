@@ -1,7 +1,16 @@
+/**
+ * Common scholarship sub-types (reference only, not exhaustive)
+ *
+ * Note: Sub-types are configuration-driven in scholarship_configurations.quotas.
+ * New sub-types can be added by administrators without code changes.
+ * This enum only lists commonly used values for TypeScript type hints.
+ */
 export enum ScholarshipSubType {
-  NSTC = "nstc", // 國科會
-  MOE = "moe", // 教育部
   GENERAL = "general", // 一般
+  NSTC = "nstc", // 國科會
+  MOE_1W = "moe_1w", // 教育部 1 萬
+  MOE_2W = "moe_2w", // 教育部 2 萬
+  // New values can be added via database configuration
 }
 
 export interface ScholarshipType {

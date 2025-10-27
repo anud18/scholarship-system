@@ -12,12 +12,12 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DistributionResultsPanel } from "@/components/distribution-results-panel";
 import { ConfigSelector } from "../shared/ConfigSelector";
 import { RankingCardList } from "../shared/RankingCardList";
 import { Loader2, PackageCheck, CheckCircle2, Clock, AlertCircle, Lock, FileText } from "lucide-react";
 import { apiClient } from "@/lib/api";
-import { Progress } from "@/components/ui/progress";
 
 interface DistributionPanelProps {
   user: User;
@@ -44,6 +44,8 @@ export function DistributionPanel({
     selectedSemester,
     setSelectedSemester,
     availableOptions,
+    activeTab,
+    dataVersion,
   } = useCollegeManagement();
 
   // State for roster status
@@ -118,6 +120,21 @@ export function DistributionPanel({
     },
     [setIsRankingLoading, setRankingData]
   );
+
+  // Auto-refresh ranking details when switching to distribution tab or when data version changes
+  useEffect(() => {
+    // Only refresh when:
+    // 1. Current tab is "distribution"
+    // 2. A ranking is selected
+    // 3. Data is not currently loading
+    if (activeTab === "distribution" && selectedRanking && !isRankingLoading) {
+      console.log(`[DistributionPanel] Auto-refreshing ranking ${selectedRanking} (dataVersion: ${dataVersion})`);
+      fetchRankingDetails(selectedRanking);
+    }
+    // Note: Removed isRankingLoading and fetchRankingDetails from deps to prevent infinite loop
+    // The condition check (!isRankingLoading) inside the effect is sufficient
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, dataVersion, selectedRanking]);
 
   // Fetch roster status when ranking is selected
   useEffect(() => {
@@ -197,18 +214,110 @@ export function DistributionPanel({
           </p>
         </div>
 
-        <ConfigSelector
-          selectedCombination={selectedCombination}
-          availableYears={availableOptions?.academic_years || []}
-          availableSemesters={availableOptions?.semesters || []}
-          onCombinationChange={(value) => {
-            setSelectedCombination(value);
-            const [year, semester] = value.split("-");
-            setSelectedAcademicYear(parseInt(year));
-            setSelectedSemester(semester || undefined);
-          }}
-          locale={locale}
-        />
+        <div className="flex items-center gap-4">
+          <ConfigSelector
+            selectedCombination={selectedCombination}
+            availableYears={availableOptions?.academic_years || []}
+            availableSemesters={availableOptions?.semesters || []}
+            onCombinationChange={(value) => {
+              setSelectedCombination(value);
+              const [year, semester] = value.split("-");
+              setSelectedAcademicYear(parseInt(year));
+              setSelectedSemester(semester || undefined);
+            }}
+            locale={locale}
+          />
+
+          {/* Compact Roster Status Display */}
+          {selectedRanking && rosterStatus && (
+            <div className="border rounded-lg px-3 py-2 bg-slate-50 flex items-center gap-3">
+              {rosterStatus.has_roster && rosterStatus.roster_info ? (
+                <>
+                  {/* Status Icon & Text */}
+                  <div className="flex items-center gap-1.5">
+                    {getStatusIcon(rosterStatus.roster_info.status)}
+                    <span className="text-sm font-medium text-slate-900">
+                      {getStatusLabel(rosterStatus.roster_info.status)}
+                    </span>
+                  </div>
+
+                  {/* Cycle Badge */}
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 text-xs">
+                    {getCycleLabel(rosterStatus.roster_info.roster_cycle)}
+                  </Badge>
+
+                  {/* Progress for Monthly */}
+                  {rosterStatus.roster_info.roster_cycle === 'monthly' && rosterStatus.roster_statistics && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                            <span className="font-mono font-bold text-slate-900">
+                              {rosterStatus.roster_statistics.total_periods_completed}/
+                              {rosterStatus.roster_statistics.expected_total_periods}
+                            </span>
+                            <span>{locale === 'zh' ? '月' : 'mo'}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="text-xs">
+                            <div>{locale === 'zh' ? '完成進度' : 'Completion'}: {rosterStatus.roster_statistics.completion_rate.toFixed(0)}%</div>
+                            <div>{locale === 'zh' ? '最新造冊' : 'Latest'}: {rosterStatus.roster_info.period_label}</div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+
+                  {/* Progress for Semi-Yearly */}
+                  {rosterStatus.roster_info.roster_cycle === 'semi_yearly' && rosterStatus.roster_statistics && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                            <span className="font-mono font-bold text-slate-900">
+                              {rosterStatus.roster_statistics.total_periods_completed}/
+                              {rosterStatus.roster_statistics.expected_total_periods}
+                            </span>
+                            <span>{locale === 'zh' ? '期' : 'pd'}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="text-xs">
+                            <div>{locale === 'zh' ? '最新造冊' : 'Latest'}: {rosterStatus.roster_info.period_label}</div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+
+                  {/* Warning Badge for Cannot Redistribute */}
+                  {!rosterStatus.can_redistribute && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <AlertCircle className="h-4 w-4 text-amber-600" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">
+                            {locale === 'zh'
+                              ? '此排名已開始造冊，無法自動重新執行分發'
+                              : 'Cannot auto-redistribute'}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <FileText className="h-4 w-4 text-slate-400" />
+                  <span>{locale === 'zh' ? '尚未造冊' : 'No Roster'}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Ranking Selection - Only show distributed rankings */}
@@ -245,85 +354,12 @@ export function DistributionPanel({
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
           ) : rankingData ? (
-            <>
-              {/* Roster Status Display */}
-              {rosterStatus && rosterStatus.has_roster && rosterStatus.roster_info && (
-                <Card className="border-l-4 border-l-blue-500">
-                  <CardContent className="py-4">
-                    <div className="space-y-3">
-                      {/* 標題行：狀態 + 週期 */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(rosterStatus.roster_info.status)}
-                          <span className="font-medium text-slate-900">
-                            {locale === 'zh' ? '造冊狀態：' : 'Roster Status: '}
-                            {getStatusLabel(rosterStatus.roster_info.status)}
-                          </span>
-                        </div>
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
-                          {getCycleLabel(rosterStatus.roster_info.roster_cycle)}
-                        </Badge>
-                      </div>
-
-                      {/* 進度條 (僅按月造冊顯示) */}
-                      {rosterStatus.roster_info.roster_cycle === 'monthly' && rosterStatus.roster_statistics && (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm text-slate-600">
-                            <span>{locale === 'zh' ? '已完成期數' : 'Completed Periods'}</span>
-                            <span className="font-mono font-bold text-slate-900">
-                              {rosterStatus.roster_statistics.total_periods_completed}/
-                              {rosterStatus.roster_statistics.expected_total_periods} {locale === 'zh' ? '個月' : 'months'}
-                            </span>
-                          </div>
-                          <Progress
-                            value={rosterStatus.roster_statistics.completion_rate}
-                            className="h-2"
-                            indicatorClassName="bg-green-500"
-                          />
-                        </div>
-                      )}
-
-                      {/* 半年造冊顯示統計 */}
-                      {rosterStatus.roster_info.roster_cycle === 'semi_yearly' && rosterStatus.roster_statistics && (
-                        <div className="text-sm text-slate-600">
-                          <span>{locale === 'zh' ? '已完成期數：' : 'Completed Periods: '}</span>
-                          <span className="font-mono font-bold text-slate-900">
-                            {rosterStatus.roster_statistics.total_periods_completed}/
-                            {rosterStatus.roster_statistics.expected_total_periods} {locale === 'zh' ? '期' : 'periods'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* 最新造冊資訊 */}
-                      <div className="text-xs text-slate-500">
-                        {locale === 'zh' ? '最新造冊：' : 'Latest Roster: '}
-                        {rosterStatus.roster_info.period_label}
-                        （{formatDate(rosterStatus.roster_info.created_at)}）
-                      </div>
-
-                      {/* 警告訊息 */}
-                      {!rosterStatus.can_redistribute && (
-                        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                          <AlertCircle className="h-3 w-3 flex-shrink-0" />
-                          <span>
-                            {locale === 'zh'
-                              ? '此排名已開始造冊，無法自動重新執行分發'
-                              : 'Roster has been initiated. Cannot auto-redistribute.'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <DistributionResultsPanel
-                rankingId={selectedRanking}
-                applications={rankingData.applications}
-                locale={locale}
-                subTypeQuotaBreakdown={rankingData.collegeQuotaBreakdown}
-              />
-            </>
+            <DistributionResultsPanel
+              rankingId={selectedRanking}
+              applications={rankingData.applications}
+              locale={locale}
+              subTypeQuotaBreakdown={rankingData.collegeQuotaBreakdown}
+            />
           ) : null}
         </div>
       )}

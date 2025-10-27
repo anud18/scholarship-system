@@ -17,16 +17,8 @@ from sqlalchemy.orm import Session
 from app.core.config import DEV_SCHOLARSHIP_SETTINGS, settings
 
 # Import comprehensive scholarship system models
-from app.models.application import (
-    Application,
-    ApplicationReview,
-    ApplicationStatus,
-    ProfessorReview,
-    ProfessorReviewItem,
-    ReviewStatus,
-    ScholarshipMainType,
-    ScholarshipSubType,
-)
+from app.models.application import Application, ApplicationStatus, ReviewStatus
+from app.models.review import ApplicationReview
 
 logger = logging.getLogger(__name__)
 
@@ -449,7 +441,6 @@ class ScholarshipApplicationService:
     #         scholarship_type_id=scholarship_type_id,
     #         scholarship_type=scholarship_type_code,
     #         scholarship_name=scholarship_type.name,
-    #         main_scholarship_type=main_type,
     #         sub_scholarship_type=sub_type,
     #         semester=semester,
     #         academic_year=academic_year,
@@ -494,9 +485,9 @@ class ScholarshipApplicationService:
         # Create initial review record
         self._create_initial_review(application)
 
-        # If requires professor recommendation, create professor review
-        if application.scholarship_type.requires_professor_recommendation:
-            self._create_professor_review_request(application)
+        # NOTE: Professor review is no longer pre-created. It will be created
+        # when the professor actually submits their review through the unified review system.
+        # The old _create_professor_review_request method has been deprecated.
 
         await self.db.commit()
         return True, "Application submitted successfully"
@@ -576,27 +567,16 @@ class ScholarshipApplicationService:
         # Format: APP-{year}-{count+1:06d}
         return f"APP-{academic_year}-{count+1:06d}"
 
-    def _extract_main_type(self, scholarship_code: str) -> str:
-        """Extract main scholarship type from code"""
-        code_upper = scholarship_code.upper()
-        if "UNDERGRADUATE_FRESHMAN" in code_upper:
-            return ScholarshipMainType.undergraduate_freshman.value
-        elif "DIRECT_PHD" in code_upper:
-            return ScholarshipMainType.direct_phd.value
-        elif "PHD" in code_upper:
-            return ScholarshipMainType.phd.value
-        return ScholarshipMainType.phd.value  # Default
-
     def _extract_sub_type(self, scholarship_code: str) -> str:
-        """Extract sub scholarship type from code"""
+        """Extract sub scholarship type from code (configuration-driven)"""
         code_upper = scholarship_code.upper()
         if "NSTC" in code_upper:
-            return ScholarshipSubType.nstc.value
+            return "nstc"
         elif "MOE_1W" in code_upper:
-            return ScholarshipSubType.moe_1w.value
+            return "moe_1w"
         elif "MOE_2W" in code_upper:
-            return ScholarshipSubType.moe_2w.value
-        return ScholarshipSubType.general.value  # Default
+            return "moe_2w"
+        return "general"  # Default
 
     def _calculate_initial_priority(self, is_renewal: bool, student_id: int) -> int:
         """Calculate initial priority score for application"""
@@ -643,41 +623,13 @@ class ScholarshipApplicationService:
         self.db.add(review)
         return review
 
-    def _create_professor_review_request(self, application: "Application") -> "ProfessorReview":
-        """Create professor review request"""
-
-        # In a real implementation, this would determine the appropriate professor
-        professor_id = 1  # Placeholder
-
-        professor_review = ProfessorReview(
-            application_id=application.id,
-            professor_id=professor_id,
-            review_type="recommendation",
-            is_required=True,
-            due_date=datetime.now(timezone.utc) + timedelta(days=14),
-            status=ReviewStatus.PENDING,
-        )
-
-        self.db.add(professor_review)
-
-        # Create standard review items
-        review_items = [
-            ("academic_performance", "Academic performance and achievements", 5),
-            ("research_potential", "Research potential and capability", 5),
-            ("overall_recommendation", "Overall recommendation", 5),
-        ]
-
-        for item_name, description, max_rating in review_items:
-            review_item = ProfessorReviewItem(
-                professor_review_id=professor_review.id,
-                item_name=item_name,
-                item_description=description,
-                max_rating=max_rating,
-                weight=1.0,
-            )
-            self.db.add(review_item)
-
-        return professor_review
+    # DEPRECATED: This method is no longer used. Professor reviews are created
+    # via the unified review system when professors actually submit their reviews.
+    # See ReviewService.create_review() and professor.py endpoints for the new approach.
+    #
+    # def _create_professor_review_request(self, application: "Application") -> "ProfessorReview":
+    #     """Create professor review request"""
+    #     # ... old implementation removed ...
 
     def _meets_renewal_criteria(self, application: "Application") -> bool:
         """Check if renewal application meets auto-approval criteria"""
@@ -692,143 +644,5 @@ class ScholarshipApplicationService:
         return True
 
 
-class ScholarshipQuotaService:
-    """Service for managing scholarship quotas - simplified for existing schema"""
-
-    def __init__(self, db: AsyncSession):
-        self.db = db
-
-    async def get_quota_status_by_type(
-        self, main_scholarship_type: str, sub_scholarship_type: str, semester: str
-    ) -> Dict[str, Any]:
-        """Get quota status for a scholarship type combination"""
-
-        # Count approved applications by type
-        stmt = select(sa_func.count(Application.id)).where(
-            and_(
-                Application.main_scholarship_type == main_scholarship_type,
-                Application.sub_scholarship_type == sub_scholarship_type,
-                Application.semester == semester,
-                Application.status == ApplicationStatus.approved.value,
-            )
-        )
-        result = await self.db.execute(stmt)
-        approved_count = result.scalar()
-
-        # Get pending applications
-        stmt = select(sa_func.count(Application.id)).where(
-            and_(
-                Application.main_scholarship_type == main_scholarship_type,
-                Application.sub_scholarship_type == sub_scholarship_type,
-                Application.semester == semester,
-                Application.status.in_(
-                    [
-                        ApplicationStatus.submitted.value,
-                        ApplicationStatus.under_review.value,
-                    ]
-                ),
-            )
-        )
-        result = await self.db.execute(stmt)
-        pending_count = result.scalar()
-
-        # For now, use default quotas (these would come from configuration)
-        default_quotas = {
-            (ScholarshipMainType.phd.value, ScholarshipSubType.nstc.value): 50,
-            (ScholarshipMainType.phd.value, ScholarshipSubType.general.value): 30,
-            (ScholarshipMainType.direct_phd.value, ScholarshipSubType.nstc.value): 40,
-            (
-                ScholarshipMainType.undergraduate_freshman.value,
-                ScholarshipSubType.general.value,
-            ): 100,
-        }
-
-        total_quota = default_quotas.get((main_scholarship_type, sub_scholarship_type), 20)
-
-        return {
-            "main_type": main_scholarship_type,
-            "sub_type": sub_scholarship_type,
-            "semester": semester,
-            "total_quota": total_quota,
-            "total_used": approved_count,
-            "total_available": total_quota - approved_count,
-            "pending": pending_count,
-            "usage_percent": (approved_count / total_quota * 100) if total_quota > 0 else 0,
-        }
-
-    async def process_applications_by_priority(
-        self, main_scholarship_type: str, sub_scholarship_type: str, semester: str
-    ) -> Dict[str, int]:
-        """Process applications by priority within quota limits"""
-
-        quota_status = self.get_quota_status_by_type(main_scholarship_type, sub_scholarship_type, semester)
-
-        if quota_status["total_available"] <= 0:
-            return {"processed": 0, "approved": 0, "message": "No remaining quota"}
-
-        # Get applications ordered by priority (renewal first, then by submission time)
-        # Note: priority_score removed from ordering
-        stmt = (
-            select(Application)
-            .where(
-                and_(
-                    Application.main_scholarship_type == main_scholarship_type,
-                    Application.sub_scholarship_type == sub_scholarship_type,
-                    Application.semester == semester,
-                    Application.status.in_(
-                        [
-                            ApplicationStatus.submitted.value,
-                            ApplicationStatus.under_review.value,
-                        ]
-                    ),
-                )
-            )
-            .order_by(
-                desc(Application.is_renewal),  # Renewals first
-                asc(Application.submitted_at),  # Then by submission time
-            )
-        )
-        result = await self.db.execute(stmt)
-        applications = result.scalars().all()
-
-        processed_count = 0
-        approved_count = 0
-        remaining_quota = quota_status["total_available"]
-
-        for app in applications:
-            processed_count += 1
-
-            if remaining_quota > 0:
-                # Approve within quota
-                app.status = ApplicationStatus.approved.value
-                app.decision_date = datetime.now(timezone.utc)
-                approved_count += 1
-                remaining_quota -= 1
-            else:
-                # Reject due to quota limit
-                # Note: rejection_reason moved to ApplicationReview model
-                app.status = ApplicationStatus.rejected.value
-                app.decision_date = datetime.now(timezone.utc)
-
-                # Create ApplicationReview record to store rejection reason
-                from app.models.application import ApplicationReview, ReviewStatus
-
-                review = ApplicationReview(
-                    application_id=app.id,
-                    reviewer_id=1,  # System reviewer
-                    review_stage="quota_processing",
-                    review_status=ReviewStatus.REJECTED.value,
-                    recommendation="reject",
-                    decision_reason="Quota limit reached",
-                    reviewed_at=datetime.now(timezone.utc),
-                )
-                self.db.add(review)
-
-        await self.db.commit()
-
-        return {
-            "processed": processed_count,
-            "approved": approved_count,
-            "rejected": processed_count - approved_count,
-            "remaining_quota": remaining_quota,
-        }
+# ScholarshipQuotaService removed - use app.services.quota_service.QuotaService instead
+# The new QuotaService uses configuration-driven quotas from ScholarshipConfiguration table

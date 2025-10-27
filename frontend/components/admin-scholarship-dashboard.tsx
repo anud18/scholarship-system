@@ -49,6 +49,7 @@ import {
   AlertCircle,
   Calendar,
   CheckCircle,
+  Circle,
   Clock,
   CreditCard,
   DollarSign,
@@ -281,7 +282,8 @@ export function AdminScholarshipDashboard({
   const [statusFilter, setStatusFilter] = useState("all");
   const [showApplicationDetail, setShowApplicationDetail] = useState(false);
   const [selectedApplicationForDetail, setSelectedApplicationForDetail] =
-    useState<DashboardApplication | null>(null);
+    useState<Application | null>(null);
+  const [loadingApplicationDetail, setLoadingApplicationDetail] = useState(false);
   const [bankVerificationLoading, setBankVerificationLoading] = useState<
     Record<number, boolean>
   >({});
@@ -445,6 +447,25 @@ export function AdminScholarshipDashboard({
       refetch();
 
       toast.error(error instanceof Error ? error.message : "無法更新申請狀態");
+    }
+  };
+
+  // 獲取完整的申請資料用於 Dialog 顯示
+  const handleViewApplication = async (dashboardApp: DashboardApplication) => {
+    setLoadingApplicationDetail(true);
+    try {
+      const response = await apiClient.applications.getApplicationById(dashboardApp.id);
+      if (response.success && response.data) {
+        setSelectedApplicationForDetail(response.data);
+        setShowApplicationDetail(true);
+      } else {
+        toast.error("無法載入申請詳情");
+      }
+    } catch (error) {
+      console.error("Failed to fetch application details:", error);
+      toast.error("載入申請詳情時發生錯誤");
+    } finally {
+      setLoadingApplicationDetail(false);
     }
   };
 
@@ -771,6 +792,7 @@ export function AdminScholarshipDashboard({
                 <option value="submitted">已提交</option>
                 <option value="under_review">審核中</option>
                 <option value="approved">已核准</option>
+                <option value="partial_approve">部分核准</option>
                 <option value="rejected">已拒絕</option>
               </select>
             </div>
@@ -1018,19 +1040,26 @@ export function AdminScholarshipDashboard({
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      <Badge
-                        variant={
-                          app.status === "approved"
-                            ? "default"
-                            : app.status === "rejected"
-                              ? "destructive"
-                              : app.status === "submitted"
-                                ? "secondary"
-                                : "outline"
-                        }
-                      >
-                        {getStatusName(app.status as any, "zh")}
-                      </Badge>
+                      {app.status === 'partial_approve' ? (
+                        <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+                          <Circle className="w-3 h-3 mr-1 fill-blue-700" />
+                          {getStatusName(app.status as any, "zh")}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant={
+                            app.status === "approved"
+                              ? "default"
+                              : app.status === "rejected"
+                                ? "destructive"
+                                : app.status === "submitted"
+                                  ? "secondary"
+                                  : "outline"
+                          }
+                        >
+                          {getStatusName(app.status as any, "zh")}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
@@ -1077,12 +1106,14 @@ export function AdminScholarshipDashboard({
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            setSelectedApplicationForDetail(app);
-                            setShowApplicationDetail(true);
-                          }}
+                          onClick={() => handleViewApplication(app)}
+                          disabled={loadingApplicationDetail}
                         >
-                          <Eye className="h-4 w-4" />
+                          {loadingApplicationDetail ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
                         </Button>
 
                         {/* 2️⃣ 核准/拒絕按鈕（中間） */}
@@ -1563,27 +1594,19 @@ export function AdminScholarshipDashboard({
         ))}
       </Tabs>
       {/* 申請詳情 Modal */}
-      {selectedApplicationForDetail && (
-        <ApplicationReviewDialog
-          application={
-            selectedApplicationForDetail
-              ? (selectedApplicationForDetail as unknown as Application)
-              : null
+      <ApplicationReviewDialog
+        application={selectedApplicationForDetail}
+        role="admin"
+        open={showApplicationDetail}
+        onOpenChange={(open) => {
+          setShowApplicationDetail(open);
+          if (!open) {
+            setSelectedApplicationForDetail(null);
           }
-          role="admin"
-          open={showApplicationDetail}
-          onOpenChange={(open) => {
-            setShowApplicationDetail(open);
-            if (!open) {
-              setSelectedApplicationForDetail(null);
-            }
-          }}
-          locale={locale}
-          user={user}
-          onAdminApprove={(id) => handleStatusUpdate(id, "approved")}
-          onAdminReject={(id) => handleStatusUpdate(id, "rejected")}
-        />
-      )}
+        }}
+        locale={locale}
+        user={user}
+      />
 
       {/* 操作紀錄 Modal */}
       <Dialog open={showAuditModal} onOpenChange={setShowAuditModal}>

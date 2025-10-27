@@ -22,6 +22,36 @@ export interface FetchResponse<T> {
 }
 
 /**
+ * Helper function to safely convert any value to a string message
+ */
+function safeStringify(value: any): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    // Handle Error objects
+    if (value.message && typeof value.message === 'string') {
+      return value.message;
+    }
+    // Handle arrays
+    if (Array.isArray(value)) {
+      return value.map(v => safeStringify(v)).join(', ');
+    }
+    // Handle objects with detail field
+    if (value.detail) {
+      return safeStringify(value.detail);
+    }
+    // Fallback: stringify the object
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value || 'Unknown error');
+}
+
+/**
  * Convert openapi-fetch response to ApiResponse format
  *
  * Handles:
@@ -48,8 +78,14 @@ export function toApiResponse<T>(
       errorMessage = response.error.detail
         .map((err: any) => `${err.loc?.join('.')}: ${err.msg}`)
         .join(', ');
+    } else if (response.error.detail) {
+      // Handle object detail - use safeStringify
+      errorMessage = safeStringify(response.error.detail);
+    } else if (response.error.message) {
+      // Handle message field - ensure it's a string
+      errorMessage = safeStringify(response.error.message);
     } else {
-      errorMessage = response.error.message || `Request failed with status ${response.response.status}`;
+      errorMessage = `Request failed with status ${response.response.status}`;
     }
 
     return {
@@ -66,9 +102,14 @@ export function toApiResponse<T>(
 
     // If backend returns ApiResponse format, use it directly
     if ('success' in data && 'data' in data) {
+      // Ensure message is always a string
+      const message = typeof data.message === 'string'
+        ? data.message
+        : safeStringify(data.message) || 'Request completed successfully';
+
       return {
         success: data.success,
-        message: data.message || 'Request completed successfully',
+        message: message,
         data: data.data as T,
       };
     }
@@ -98,8 +139,14 @@ export function extractErrorMessage(response: FetchResponse<any>): string {
       return response.error.detail
         .map((err: any) => `${err.loc?.join('.')}: ${err.msg}`)
         .join(', ');
+    } else if (response.error.detail) {
+      // Handle object detail - use safeStringify
+      return safeStringify(response.error.detail);
+    } else if (response.error.message) {
+      // Handle message field - ensure it's a string
+      return safeStringify(response.error.message);
     } else {
-      return response.error.message || `Request failed with status ${response.response.status}`;
+      return `Request failed with status ${response.response.status}`;
     }
   }
 

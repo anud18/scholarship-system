@@ -37,17 +37,6 @@ class ScholarshipStatus(enum.Enum):
     draft = "draft"
 
 
-class ScholarshipSubType(enum.Enum):
-    """Scholarship sub-type enum for combined scholarships"""
-
-    general = "general"  # 作為無子獎學金類型時的預設值
-
-    # For PhD scholarships
-    nstc = "nstc"  # 國科會 (National Science and Technology Council)
-    moe_1w = "moe_1w"  # 教育部 (Ministry of Education) + 指導教授配合款一萬
-    moe_2w = "moe_2w"  # 教育部 (Ministry of Education) + 指導教授配合款兩萬
-
-
 class ScholarshipType(Base):
     """
     Scholarship type configuration model
@@ -68,7 +57,8 @@ class ScholarshipType(Base):
 
     # 類別設定
     # category removed - no longer needed for classification
-    sub_type_list = Column(JSON, default=[ScholarshipSubType.general.value])  # ["nstc", "moe_1w", "moe_2w"]
+    # Sub-types are configuration-driven, default to "general"
+    sub_type_list = Column(JSON, default=["general"])  # ["nstc", "moe_1w", "moe_2w", "custom_type", ...]
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]),
         default=SubTypeSelectionMode.single,
@@ -219,16 +209,16 @@ class ScholarshipType(Base):
         return "GENERAL"
 
     def validate_sub_type_list(self) -> bool:
-        """Validate sub_type_list against ScholarshipSubType enum"""
+        """Validate sub_type_list format (configuration-driven, no enum check)"""
         if not self.sub_type_list:
             return True  # 空列表是有效的
-        valid_types = [e.value for e in ScholarshipSubType]
-        return all(sub_type in valid_types for sub_type in self.sub_type_list)
+        # Sub-types are configuration-driven, just check they're non-empty strings
+        return all(isinstance(st, str) and st.strip() for st in self.sub_type_list)
 
     def get_sub_type_config(self, sub_type_code: str) -> Optional["ScholarshipSubTypeConfig"]:
         """Get sub-type configuration by code"""
         # 如果是 general 且沒有配置，返回 None（使用預設值）
-        if sub_type_code == ScholarshipSubType.general.value:
+        if sub_type_code == "general":
             for config in self.sub_type_configs:
                 if config.sub_type_code == sub_type_code and config.is_active:
                     return config
@@ -493,12 +483,10 @@ class ScholarshipRule(Base):
         return f"<ScholarshipRule(id={self.id}, rule_name={self.rule_name}, rule_type={self.rule_type}, scholarship_type_id={self.scholarship_type_id}, sub_type={self.sub_type})>"
 
     def validate_sub_type(self) -> bool:
-        """Validate sub_type against ScholarshipSubType enum and the scholarship_type's sub_type_list"""
+        """Validate sub_type against the scholarship_type's sub_type_list (configuration-driven)"""
         if not self.sub_type:
             return False
-        valid_types = [e.value for e in ScholarshipSubType]
-        if self.sub_type not in valid_types:
-            return False
+        # No enum check - sub-types are configuration-driven
         if not self.scholarship_type or not self.scholarship_type.sub_type_list:
             return False
         return self.sub_type in self.scholarship_type.sub_type_list

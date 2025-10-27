@@ -1056,6 +1056,9 @@ export function CollegeDashboard({
         console.log(
           `Loaded ranking ${rankingId} with ${transformedApplications.length} applications`
         );
+        console.log('College Quota:', response.data.college_quota);
+        console.log('Raw College Quota Breakdown:', response.data.college_quota_breakdown);
+        console.log('Normalized College Quota Breakdown:', normalizedBreakdown);
       } else {
         console.error("Failed to load ranking details:", response.message);
         // Clear ranking data on failure
@@ -1778,11 +1781,44 @@ export function CollegeDashboard({
                             ? rankingData.totalQuota.toLocaleString()
                             : "-"}
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground mb-2">
                         {locale === "zh"
                           ? "本院可分配的名額"
                           : "Seats allocated to this college"}
                       </p>
+
+                      {/* Sub-type quota breakdown */}
+                      {rankingData?.collegeQuotaBreakdown &&
+                       Object.keys(rankingData.collegeQuotaBreakdown).length > 0 ? (
+                        <div className="mt-3 pt-3 border-t space-y-1.5">
+                          <p className="text-xs font-medium text-muted-foreground mb-2">
+                            {locale === "zh" ? "子項目配額" : "Sub-type Quotas"}
+                          </p>
+                          <div className="space-y-1">
+                            {Object.entries(rankingData.collegeQuotaBreakdown).map(([code, data]: [string, any]) => {
+                              const label = locale === "zh"
+                                ? (data?.label || code)
+                                : (data?.label_en || data?.label || code);
+                              const quota = data?.quota ?? 0;
+
+                              return (
+                                <div key={code} className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">• {label}</span>
+                                  <span className="font-semibold text-foreground">{quota.toLocaleString()}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : rankingData?.collegeQuota !== undefined && rankingData.collegeQuota > 0 ? (
+                        <div className="mt-3 pt-3 border-t">
+                          <p className="text-xs text-muted-foreground italic">
+                            {locale === "zh"
+                              ? "此獎學金類型無子項目配額劃分"
+                              : "No sub-type quota breakdown available"}
+                          </p>
+                        </div>
+                      ) : null}
                     </CardContent>
                   </Card>
 

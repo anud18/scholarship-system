@@ -1,589 +1,373 @@
 """
-Quota Management Dashboard API endpoints
-Provides real-time quota tracking, analytics, and management interface
+Quota dashboard endpoints - REFACTORED to use configuration-driven quotas
+
+Major changes from original:
+- Removed dependency on ScholarshipMainType enum
+- Using new QuotaService from app.services.quota_service
+- Using scholarship_type_id instead of main_type parameter
+- All quotas now come from ScholarshipConfiguration table
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+import io
+from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from sqlalchemy import and_, func
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin, require_staff
 from app.db.deps import get_db
-from app.models.application import Application, ApplicationStatus, ScholarshipMainType, ScholarshipSubType
+from app.models.application import Application, ApplicationStatus
+from app.models.scholarship import ScholarshipStatus, ScholarshipType
 from app.models.user import User
 from app.schemas.response import ApiResponse
-from app.services.scholarship_service import ScholarshipQuotaService
+from app.services.quota_service import QuotaService
 
 router = APIRouter()
 
 
 @router.get("/overview")
 async def get_quota_overview(
+    academic_year: int = Query(..., description="Academic year (e.g., 113)"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get comprehensive quota overview dashboard"""
-    from sqlalchemy.orm import sessionmaker
+    """
+    Get comprehensive quota overview dashboard
 
-    sync_session = sessionmaker(bind=db.bind)()
+    BREAKING CHANGE: Now requires academic_year parameter instead of using main_type
+    """
+    quota_service = QuotaService(db)
 
-    try:
-        quota_service = ScholarshipQuotaService(sync_session)
+    # Get all active scholarship types
+    scholarship_types_result = await db.execute(
+        select(ScholarshipType).where(ScholarshipType.status == ScholarshipStatus.active.value)
+    )
+    scholarship_types = scholarship_types_result.scalars().all()
 
-        # Get quota status for all type combinations
-        quota_overview = {}
+    quota_overview = {}
 
-        for main_type in ScholarshipMainType:
-            for sub_type in ScholarshipSubType:
-                # Get applications for this combination
-                query = sync_session.query(Application).filter(
-                    and_(
-                        Application.main_scholarship_type == main_type.value,
-                        Application.sub_scholarship_type == sub_type.value,
-                    )
+    for scholarship_type in scholarship_types:
+        # Get distinct sub-types for this scholarship type
+        distinct_sub_types_result = await db.execute(
+            select(Application.sub_scholarship_type)
+            .distinct()
+            .where(
+                and_(
+                    Application.scholarship_type_id == scholarship_type.id,
+                    Application.sub_scholarship_type.isnot(None),
                 )
-
-                if semester:
-                    query = query.filter(Application.semester == semester)
-
-                total_apps = query.count()
-
-                # Only include combinations that have applications
-                if total_apps > 0:
-                    quota_status = quota_service.get_quota_status_by_type(
-                        main_type.value, sub_type.value, semester or "all"
-                    )
-                    quota_overview[f"{main_type.value}_{sub_type.value}"] = quota_status
-
-        # Get overall statistics
-        base_query = sync_session.query(Application)
-        if semester:
-            base_query = base_query.filter(Application.semester == semester)
-
-        total_applications = base_query.count()
-        approved_applications = base_query.filter(Application.status == ApplicationStatus.approved.value).count()
-        pending_applications = base_query.filter(
-            Application.status.in_(
-                [
-                    ApplicationStatus.submitted.value,
-                    ApplicationStatus.under_review.value,
-                ]
             )
-        ).count()
-        renewal_applications = base_query.filter(Application.is_renewal.is_(True)).count()
-
-        return ApiResponse(
-            success=True,
-            message="Quota overview retrieved successfully",
-            data={
-                "overview": quota_overview,
-                "global_stats": {
-                    "total_applications": total_applications,
-                    "approved_applications": approved_applications,
-                    "pending_applications": pending_applications,
-                    "renewal_applications": renewal_applications,
-                    "approval_rate": (approved_applications / total_applications * 100)
-                    if total_applications > 0
-                    else 0,
-                },
-                "semester": semester,
-                "generated_at": sync_session.query(func.now()).scalar().isoformat(),
-            },
         )
+        sub_type_values = distinct_sub_types_result.scalars().all() or ["general"]
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get quota overview: {str(e)}")
-    finally:
-        sync_session.close()
+        for sub_type in sub_type_values:
+            # Get quota status from configuration
+            quota_status = await quota_service.get_quota_status(scholarship_type.id, sub_type, academic_year, semester)
+
+            key = f"{scholarship_type.code}_{sub_type}"
+            quota_overview[key] = quota_status
+
+    # Get overall statistics
+    conditions = [Application.academic_year == academic_year]
+    if semester:
+        conditions.append(Application.semester == semester)
+
+    total_apps_result = await db.execute(select(func.count(Application.id)).where(and_(*conditions)))
+    total_applications = total_apps_result.scalar() or 0
+
+    approved_result = await db.execute(
+        select(func.count(Application.id)).where(
+            and_(*conditions, Application.status == ApplicationStatus.approved.value)
+        )
+    )
+    approved_applications = approved_result.scalar() or 0
+
+    pending_result = await db.execute(
+        select(func.count(Application.id)).where(
+            and_(
+                *conditions,
+                Application.status.in_(
+                    [
+                        ApplicationStatus.submitted.value,
+                        ApplicationStatus.under_review.value,
+                    ]
+                ),
+            )
+        )
+    )
+    pending_applications = pending_result.scalar() or 0
+
+    renewal_result = await db.execute(
+        select(func.count(Application.id)).where(and_(*conditions, Application.is_renewal.is_(True)))
+    )
+    renewal_applications = renewal_result.scalar() or 0
+
+    return ApiResponse(
+        success=True,
+        message="Quota overview retrieved successfully",
+        data={
+            "overview": quota_overview,
+            "global_stats": {
+                "total_applications": total_applications,
+                "approved_applications": approved_applications,
+                "pending_applications": pending_applications,
+                "renewal_applications": renewal_applications,
+                "approval_rate": (approved_applications / total_applications * 100) if total_applications > 0 else 0,
+            },
+            "academic_year": academic_year,
+            "semester": semester,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
 
-@router.get("/detailed/{main_type}/{sub_type}")
+@router.get("/detailed/{scholarship_type_id}/{sub_type}")
 async def get_detailed_quota_status(
-    main_type: str,
+    scholarship_type_id: int,
     sub_type: str,
+    academic_year: int = Query(..., description="Academic year"),
     semester: Optional[str] = Query(None),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get detailed quota status for specific scholarship type"""
-    from sqlalchemy.orm import sessionmaker
+    """
+    Get detailed quota status for specific scholarship type and sub-type
 
-    # Validate enum values
-    try:
-        main_type_enum = ScholarshipMainType(main_type)
-        sub_type_enum = ScholarshipSubType(sub_type)
-        main_type_value = main_type_enum.value
-        sub_type_value = sub_type_enum.value
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid scholarship type: {str(e)}")
+    BREAKING CHANGE: Uses scholarship_type_id instead of main_type parameter
+    """
+    quota_service = QuotaService(db)
 
-    sync_session = sessionmaker(bind=db.bind)()
+    # Get scholarship type info
+    scholarship_type_result = await db.execute(select(ScholarshipType).where(ScholarshipType.id == scholarship_type_id))
+    scholarship_type = scholarship_type_result.scalar_one_or_none()
 
-    try:
-        # Get applications for this type combination
-        query = sync_session.query(Application).filter(
-            and_(
-                Application.main_scholarship_type == main_type_value,
-                Application.sub_scholarship_type == sub_type_value,
-            )
-        )
+    if not scholarship_type:
+        raise HTTPException(status_code=404, detail="Scholarship type not found")
 
-        if semester:
-            query = query.filter(Application.semester == semester)
+    # Get quota status
+    quota_status = await quota_service.get_quota_status(scholarship_type_id, sub_type, academic_year, semester)
 
-        applications = query.all()
+    # Get applications list
+    conditions = [
+        Application.scholarship_type_id == scholarship_type_id,
+        Application.sub_scholarship_type == sub_type,
+        Application.academic_year == academic_year,
+    ]
+    if semester:
+        conditions.append(Application.semester == semester)
 
-        # Group by status
-        status_breakdown = {}
-        for status in ApplicationStatus:
-            count = len([app for app in applications if app.status == status.value])
-            if count > 0:
-                status_breakdown[status.value] = count
+    applications_result = await db.execute(
+        select(Application).where(and_(*conditions)).order_by(Application.submitted_at.desc()).limit(100)
+    )
+    applications = applications_result.scalars().all()
 
-        # Priority distribution
-        priority_ranges = {
-            "high_priority": len([app for app in applications if (app.priority_score or 0) >= 100]),
-            "medium_priority": len([app for app in applications if 50 <= (app.priority_score or 0) < 100]),
-            "low_priority": len([app for app in applications if (app.priority_score or 0) < 50]),
-        }
-
-        # Renewal vs new applications
-        renewal_breakdown = {
-            "renewal_applications": len([app for app in applications if app.is_renewal]),
-            "new_applications": len([app for app in applications if not app.is_renewal]),
-        }
-
-        # Time-based analysis
-
-        now = datetime.now(timezone.utc)
-
-        # Applications by submission time
-        last_7_days = now - timedelta(days=7)
-        last_30_days = now - timedelta(days=30)
-
-        recent_submissions = {
-            "last_7_days": len([app for app in applications if app.submitted_at and app.submitted_at >= last_7_days]),
-            "last_30_days": len([app for app in applications if app.submitted_at and app.submitted_at >= last_30_days]),
-            "total": len([app for app in applications if app.submitted_at]),
-        }
-
-        # Overdue applications
-        overdue_applications = [
-            {
-                "app_id": app.app_id,
-                "student_id": app.student_id,
-                "days_overdue": (now - app.review_deadline).days if app.review_deadline else 0,
-                "status": app.status,
-            }
-            for app in applications
-            if app.review_deadline
-            and app.review_deadline < now
-            and app.status in [ApplicationStatus.submitted.value, ApplicationStatus.under_review.value]
-        ]
-
-        # Get quota information
-        quota_service = ScholarshipQuotaService(sync_session)
-        quota_status = quota_service.get_quota_status_by_type(main_type_value, sub_type_value, semester or "all")
-
-        return ApiResponse(
-            success=True,
-            message="Detailed quota status retrieved successfully",
-            data={
-                "quota_status": quota_status,
-                "status_breakdown": status_breakdown,
-                "priority_distribution": priority_ranges,
-                "renewal_breakdown": renewal_breakdown,
-                "submission_timeline": recent_submissions,
-                "overdue_applications": overdue_applications,
-                "total_applications": len(applications),
-                "filters": {
-                    "main_type": main_type_value,
-                    "sub_type": sub_type_value,
-                    "semester": semester,
-                },
+    return ApiResponse(
+        success=True,
+        message="Detailed quota status retrieved successfully",
+        data={
+            "scholarship_type": {
+                "id": scholarship_type.id,
+                "code": scholarship_type.code,
+                "name": scholarship_type.name,
             },
-        )
+            "quota_status": quota_status,
+            "recent_applications": [
+                {
+                    "id": app.id,
+                    "app_id": app.app_id,
+                    "status": app.status,
+                    "submitted_at": app.submitted_at.isoformat() if app.submitted_at else None,
+                }
+                for app in applications[:10]  # Return top 10
+            ],
+            "total_applications_shown": min(len(applications), 10),
+        },
+    )
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get detailed quota status: {str(e)}")
-    finally:
-        sync_session.close()
+
+# Note: Other endpoints (trends, adjust, alerts, export) need similar refactoring
+# For now, marking them as deprecated or requiring update
 
 
 @router.get("/trends")
 async def get_quota_trends(
-    main_type: Optional[str] = Query(None),
-    sub_type: Optional[str] = Query(None),
-    months_back: int = Query(6, description="Number of months to look back"),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get quota utilization trends over time"""
-
-    from sqlalchemy.orm import sessionmaker
-
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        # Calculate date range
-        end_date = datetime.now(timezone.utc)
-        start_date = end_date - timedelta(days=months_back * 30)
-
-        # Base query
-        query = sync_session.query(Application).filter(Application.created_at >= start_date)
-
-        if main_type:
-            query = query.filter(Application.main_scholarship_type == main_type)
-        if sub_type:
-            query = query.filter(Application.sub_scholarship_type == sub_type)
-
-        applications = query.all()
-
-        # Group by month
-        monthly_data = {}
-        for app in applications:
-            if app.created_at:
-                month_key = app.created_at.strftime("%Y-%m")
-                if month_key not in monthly_data:
-                    monthly_data[month_key] = {
-                        "total": 0,
-                        "approved": 0,
-                        "rejected": 0,
-                        "pending": 0,
-                        "renewal": 0,
-                    }
-
-                monthly_data[month_key]["total"] += 1
-
-                if app.status == ApplicationStatus.approved.value:
-                    monthly_data[month_key]["approved"] += 1
-                elif app.status == ApplicationStatus.rejected.value:
-                    monthly_data[month_key]["rejected"] += 1
-                elif app.status in [
-                    ApplicationStatus.submitted.value,
-                    ApplicationStatus.under_review.value,
-                ]:
-                    monthly_data[month_key]["pending"] += 1
-
-                if app.is_renewal:
-                    monthly_data[month_key]["renewal"] += 1
-
-        # Fill in missing months with zero data
-        current_month = start_date.replace(day=1)
-        trend_data = []
-
-        while current_month <= end_date:
-            month_key = current_month.strftime("%Y-%m")
-            data = monthly_data.get(
-                month_key,
-                {"total": 0, "approved": 0, "rejected": 0, "pending": 0, "renewal": 0},
-            )
-
-            trend_data.append(
-                {
-                    "month": month_key,
-                    "month_name": current_month.strftime("%B %Y"),
-                    **data,
-                    "approval_rate": (data["approved"] / data["total"] * 100) if data["total"] > 0 else 0,
-                }
-            )
-
-            # Move to next month
-            if current_month.month == 12:
-                current_month = current_month.replace(year=current_month.year + 1, month=1)
-            else:
-                current_month = current_month.replace(month=current_month.month + 1)
-
-        return ApiResponse(
-            success=True,
-            message="Quota trends retrieved successfully",
-            data={
-                "trends": trend_data,
-                "summary": {
-                    "date_range": {
-                        "start": start_date.strftime("%Y-%m-%d"),
-                        "end": end_date.strftime("%Y-%m-%d"),
-                    },
-                    "total_applications": len(applications),
-                    "months_analyzed": len(trend_data),
-                    "filters": {"main_type": main_type, "sub_type": sub_type},
-                },
-            },
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get quota trends: {str(e)}")
-    finally:
-        sync_session.close()
+    """
+    TODO: This endpoint needs to be refactored to use new QuotaService
+    """
+    raise HTTPException(
+        status_code=501,
+        detail="This endpoint is being refactored to use configuration-driven quotas. Please use /overview instead.",
+    )
 
 
-@router.post("/adjust-quota")
+@router.post("/adjust")
 async def adjust_quota_limits(
-    quota_adjustments: Dict[str, Any] = Body(...),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Adjust quota limits for scholarship types (admin only)"""
-    from sqlalchemy.orm import sessionmaker
-
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        # This would update quota configurations in a real system
-        # For now, we'll return the requested adjustments as confirmation
-
-        adjusted_quotas = []
-
-        for type_combination, new_quota in quota_adjustments.items():
-            # Validate the format: MAIN_TYPE_SUB_TYPE
-            try:
-                parts = type_combination.split("_")
-                if len(parts) < 2:
-                    continue
-
-                # Extract main and sub types
-                main_type = "_".join(parts[:-1])  # Handle multi-word types
-                sub_type = parts[-1]
-
-                # Validate enum values
-                main_type_enum = ScholarshipMainType(main_type)
-                sub_type_enum = ScholarshipSubType(sub_type)
-
-                adjusted_quotas.append(
-                    {
-                        "type_combination": type_combination,
-                        "main_type": main_type_enum.value,
-                        "sub_type": sub_type_enum.value,
-                        "new_quota": new_quota,
-                        "adjusted_by": current_user.username,
-                        "adjusted_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                )
-
-            except ValueError:
-                continue
-
-        return ApiResponse(
-            success=True,
-            message=f"Quota adjustments processed for {len(adjusted_quotas)} type combinations",
-            data={
-                "adjusted_quotas": adjusted_quotas,
-                "total_adjustments": len(adjusted_quotas),
-                "adjusted_by": current_user.username,
-            },
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to adjust quotas: {str(e)}")
-    finally:
-        sync_session.close()
+    """
+    TODO: Quota adjustment should be done through ScholarshipConfiguration management endpoints
+    """
+    raise HTTPException(
+        status_code=501,
+        detail="Quota adjustment is now done through /api/v1/admin/scholarship-configurations. This endpoint is deprecated.",
+    )
 
 
 @router.get("/alerts")
 async def get_quota_alerts(
-    severity: Optional[str] = Query(None, description="Filter by severity: low, medium, high, critical"),
-    current_user: User = Depends(require_staff),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get quota-related alerts and warnings"""
-
-    from sqlalchemy.orm import sessionmaker
-
-    sync_session = sessionmaker(bind=db.bind)()
-
-    try:
-        alerts = []
-        now = datetime.now(timezone.utc)
-
-        # Check for quota exhaustion
-        quota_service = ScholarshipQuotaService(sync_session)
-
-        for main_type in ScholarshipMainType:
-            for sub_type in ScholarshipSubType:
-                quota_status = quota_service.get_quota_status_by_type(main_type.value, sub_type.value, "current")
-
-                if quota_status.get("total_used", 0) > 0:  # Only check active combinations
-                    usage_percent = quota_status.get("usage_percent", 0)
-
-                    if usage_percent >= 100:
-                        alerts.append(
-                            {
-                                "id": f"quota_exhausted_{main_type.value}_{sub_type.value}",
-                                "type": "quota_exhausted",
-                                "severity": "critical",
-                                "title": f"Quota Exhausted: {main_type.value} - {sub_type.value}",
-                                "message": f"Quota fully utilized ({quota_status.get('total_used')}/{quota_status.get('total_quota')})",
-                                "data": quota_status,
-                                "created_at": now.isoformat(),
-                            }
-                        )
-                    elif usage_percent >= 90:
-                        alerts.append(
-                            {
-                                "id": f"quota_nearly_full_{main_type.value}_{sub_type.value}",
-                                "type": "quota_warning",
-                                "severity": "high",
-                                "title": f"Quota Nearly Full: {main_type.value} - {sub_type.value}",
-                                "message": f"Quota {usage_percent:.1f}% utilized ({quota_status.get('total_used')}/{quota_status.get('total_quota')})",
-                                "data": quota_status,
-                                "created_at": now.isoformat(),
-                            }
-                        )
-                    elif usage_percent >= 75:
-                        alerts.append(
-                            {
-                                "id": f"quota_high_usage_{main_type.value}_{sub_type.value}",
-                                "type": "quota_info",
-                                "severity": "medium",
-                                "title": f"High Quota Usage: {main_type.value} - {sub_type.value}",
-                                "message": f"Quota {usage_percent:.1f}% utilized ({quota_status.get('total_used')}/{quota_status.get('total_quota')})",
-                                "data": quota_status,
-                                "created_at": now.isoformat(),
-                            }
-                        )
-
-        # Check for overdue applications
-        overdue_count = (
-            sync_session.query(Application)
-            .filter(
-                and_(
-                    Application.review_deadline < now,
-                    Application.status.in_(
-                        [
-                            ApplicationStatus.submitted.value,
-                            ApplicationStatus.under_review.value,
-                        ]
-                    ),
-                )
-            )
-            .count()
-        )
-
-        if overdue_count > 0:
-            severity = "critical" if overdue_count > 50 else "high" if overdue_count > 20 else "medium"
-            alerts.append(
-                {
-                    "id": "overdue_applications",
-                    "type": "overdue_reviews",
-                    "severity": severity,
-                    "title": f"Overdue Applications: {overdue_count}",
-                    "message": f"{overdue_count} applications are past their review deadline",
-                    "data": {"count": overdue_count},
-                    "created_at": now.isoformat(),
-                }
-            )
-
-        # Filter by severity if requested
-        if severity:
-            alerts = [alert for alert in alerts if alert["severity"] == severity]
-
-        # Sort by severity (critical first)
-        severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-        alerts.sort(key=lambda x: severity_order.get(x["severity"], 4))
-
-        return ApiResponse(
-            success=True,
-            message=f"Retrieved {len(alerts)} quota alerts",
-            data={
-                "alerts": alerts,
-                "summary": {
-                    "total_alerts": len(alerts),
-                    "by_severity": {
-                        sev: len([a for a in alerts if a["severity"] == sev])
-                        for sev in ["critical", "high", "medium", "low"]
-                    },
-                },
-                "generated_at": now.isoformat(),
-            },
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get quota alerts: {str(e)}")
-    finally:
-        sync_session.close()
-
-
-@router.get("/export")
-async def export_quota_data(
-    format: str = Query("json", description="Export format: json, csv"),
+    academic_year: int = Query(..., description="Academic year"),
     semester: Optional[str] = Query(None),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db),
 ):
-    """Export quota data for reporting"""
-    import csv
-    import io
+    """Get quota-related alerts (near full, exhausted quotas)"""
+    quota_service = QuotaService(db)
 
-    from fastapi.responses import StreamingResponse
-    from sqlalchemy.orm import sessionmaker
+    # Get all active scholarship types
+    scholarship_types_result = await db.execute(
+        select(ScholarshipType).where(ScholarshipType.status == ScholarshipStatus.active.value)
+    )
+    scholarship_types = scholarship_types_result.scalars().all()
 
-    sync_session = sessionmaker(bind=db.bind)()
+    alerts = []
+    now = datetime.now(timezone.utc)
 
-    try:
-        # Get all quota data
-        quota_service = ScholarshipQuotaService(sync_session)
-        export_data = []
-
-        for main_type in ScholarshipMainType:
-            for sub_type in ScholarshipSubType:
-                quota_status = quota_service.get_quota_status_by_type(
-                    main_type.value, sub_type.value, semester or "all"
+    for scholarship_type in scholarship_types:
+        # Get distinct sub-types
+        distinct_sub_types_result = await db.execute(
+            select(Application.sub_scholarship_type)
+            .distinct()
+            .where(
+                and_(
+                    Application.scholarship_type_id == scholarship_type.id,
+                    Application.sub_scholarship_type.isnot(None),
                 )
-
-                if quota_status.get("total_used", 0) > 0:  # Only include active combinations
-                    export_record = {
-                        "main_type": main_type.value,
-                        "sub_type": sub_type.value,
-                        "semester": semester or "all",
-                        "total_quota": quota_status.get("total_quota", 0),
-                        "total_used": quota_status.get("total_used", 0),
-                        "total_available": quota_status.get("total_available", 0),
-                        "pending": quota_status.get("pending", 0),
-                        "usage_percent": quota_status.get("usage_percent", 0),
-                        "exported_at": datetime.now(timezone.utc).isoformat(),
-                        "exported_by": current_user.username,
-                    }
-                    export_data.append(export_record)
-
-        if format.lower() == "csv":
-            # Generate CSV
-            output = io.StringIO()
-            if export_data:
-                fieldnames = export_data[0].keys()
-                writer = csv.DictWriter(output, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(export_data)
-
-            output.seek(0)
-            filename = f"quota_data_{semester or 'all'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-
-            return StreamingResponse(
-                io.BytesIO(output.getvalue().encode()),
-                media_type="text/csv",
-                headers={"Content-Disposition": f"attachment; filename={filename}"},
             )
-        else:
-            # Return JSON
-            return ApiResponse(
-                success=True,
-                message=f"Quota data exported ({len(export_data)} records)",
-                data={
-                    "export_data": export_data,
-                    "metadata": {
-                        "format": format,
-                        "semester": semester,
-                        "record_count": len(export_data),
-                        "exported_at": datetime.now(timezone.utc).isoformat(),
-                        "exported_by": current_user.username,
-                    },
-                },
-            )
+        )
+        sub_type_values = distinct_sub_types_result.scalars().all() or ["general"]
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to export quota data: {str(e)}")
-    finally:
-        sync_session.close()
+        for sub_type in sub_type_values:
+            quota_status = await quota_service.get_quota_status(scholarship_type.id, sub_type, academic_year, semester)
+
+            if quota_status.get("total_used", 0) > 0:  # Only check active combinations
+                usage_percent = quota_status.get("usage_percent", 0)
+
+                if usage_percent >= 100:
+                    alerts.append(
+                        {
+                            "id": f"quota_exhausted_{scholarship_type.code}_{sub_type}",
+                            "type": "quota_exhausted",
+                            "severity": "critical",
+                            "title": f"Quota Exhausted: {scholarship_type.name} - {sub_type}",
+                            "message": f"Quota fully utilized ({quota_status.get('total_used')}/{quota_status.get('total_quota')})",
+                            "data": quota_status,
+                            "created_at": now.isoformat(),
+                        }
+                    )
+                elif usage_percent >= 90:
+                    alerts.append(
+                        {
+                            "id": f"quota_nearly_full_{scholarship_type.code}_{sub_type}",
+                            "type": "quota_warning",
+                            "severity": "high",
+                            "title": f"Quota Nearly Full: {scholarship_type.name} - {sub_type}",
+                            "message": f"Quota {usage_percent:.1f}% utilized ({quota_status.get('total_used')}/{quota_status.get('total_quota')})",
+                            "data": quota_status,
+                            "created_at": now.isoformat(),
+                        }
+                    )
+
+    return ApiResponse(
+        success=True,
+        message=f"Found {len(alerts)} quota alerts",
+        data={"alerts": alerts, "academic_year": academic_year, "semester": semester},
+    )
+
+
+@router.get("/export")
+async def export_quota_data(
+    academic_year: int = Query(..., description="Academic year"),
+    semester: Optional[str] = Query(None),
+    format: str = Query("json", regex="^(json|csv)$"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export quota data in JSON or CSV format"""
+    quota_service = QuotaService(db)
+
+    # Get all active scholarship types
+    scholarship_types_result = await db.execute(
+        select(ScholarshipType).where(ScholarshipType.status == ScholarshipStatus.active.value)
+    )
+    scholarship_types = scholarship_types_result.scalars().all()
+
+    export_data = []
+
+    for scholarship_type in scholarship_types:
+        # Get distinct sub-types
+        distinct_sub_types_result = await db.execute(
+            select(Application.sub_scholarship_type)
+            .distinct()
+            .where(
+                and_(
+                    Application.scholarship_type_id == scholarship_type.id,
+                    Application.sub_scholarship_type.isnot(None),
+                )
+            )
+        )
+        sub_type_values = distinct_sub_types_result.scalars().all() or ["general"]
+
+        for sub_type in sub_type_values:
+            quota_status = await quota_service.get_quota_status(scholarship_type.id, sub_type, academic_year, semester)
+
+            if quota_status.get("total_used", 0) > 0:  # Only include active combinations
+                export_record = {
+                    "scholarship_type_id": scholarship_type.id,
+                    "scholarship_code": scholarship_type.code,
+                    "scholarship_name": scholarship_type.name,
+                    "sub_type": sub_type,
+                    "academic_year": academic_year,
+                    "semester": semester or "all",
+                    "total_quota": quota_status.get("total_quota", 0),
+                    "total_used": quota_status.get("total_used", 0),
+                    "total_available": quota_status.get("total_available", 0),
+                    "pending": quota_status.get("pending", 0),
+                    "usage_percent": quota_status.get("usage_percent", 0),
+                    "exported_at": datetime.now(timezone.utc).isoformat(),
+                    "exported_by": current_user.username,
+                }
+                export_data.append(export_record)
+
+    if format.lower() == "csv":
+        # Generate CSV
+        output = io.StringIO()
+        if export_data:
+            import csv
+
+            writer = csv.DictWriter(output, fieldnames=export_data[0].keys())
+            writer.writeheader()
+            writer.writerows(export_data)
+
+        from fastapi.responses import Response
+
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=quota_export_{academic_year}_{semester or 'all'}.csv"
+            },
+        )
+    else:
+        # Return JSON
+        return ApiResponse(
+            success=True,
+            message=f"Exported {len(export_data)} quota records",
+            data={"records": export_data, "count": len(export_data)},
+        )

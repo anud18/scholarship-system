@@ -7,6 +7,8 @@ Create Date: 2025-10-23 10:02:44.400544
 """
 from typing import Sequence, Union
 
+from sqlalchemy import text
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -48,11 +50,24 @@ def upgrade() -> None:
         "application_sequences",
     ]
 
+    # Get database connection
+    connection = op.get_bind()
+
     for table in tables_to_truncate:
+        # Use savepoint to isolate each TRUNCATE operation
+        # This prevents transaction abort if a table doesn't exist
+        savepoint_name = f"truncate_{table}"
         try:
-            op.execute(f"TRUNCATE TABLE {table} CASCADE")
+            connection.execute(text(f"SAVEPOINT {savepoint_name}"))
+            connection.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
+            connection.execute(text(f"RELEASE SAVEPOINT {savepoint_name}"))
             print(f"  ✓ Truncated {table}")
         except Exception as e:
+            # Rollback to savepoint on error - keeps main transaction alive
+            try:
+                connection.execute(text(f"ROLLBACK TO SAVEPOINT {savepoint_name}"))
+            except Exception:
+                pass  # Savepoint might not exist if creation failed
             # 如果表不存在或其他錯誤，記錄但繼續
             print(f"  ⚠️  Could not truncate {table}: {e}")
 

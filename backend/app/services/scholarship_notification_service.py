@@ -63,9 +63,8 @@ class ScholarshipNotificationService:
                     <h3 style="margin-top: 0; color: #2d3748;">Application Details:</h3>
                     <ul style="margin: 10px 0;">
                         <li><strong>Application ID:</strong> {application.app_id}</li>
-                        <li><strong>Scholarship Type:</strong> {application.scholarship_type}</li>
-                        <li><strong>Main Type:</strong> {application.main_scholarship_type or 'N/A'}</li>
-                        <li><strong>Sub Type:</strong> {application.sub_scholarship_type or 'GENERAL'}</li>
+                        <li><strong>Scholarship Name:</strong> {application.scholarship_name or 'N/A'}</li>
+                        <li><strong>Sub Type:</strong> {application.sub_scholarship_type or 'general'}</li>
                         <li><strong>Semester:</strong> {application.semester}</li>
                         <li><strong>Academic Year:</strong> {application.academic_year}</li>
                         <li><strong>Submission Date:</strong> {application.submitted_at.strftime('%Y-%m-%d %H:%M:%S') if application.submitted_at else 'N/A'}</li>

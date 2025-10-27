@@ -726,10 +726,9 @@ class BatchImportService:
                     scholarship_type_id=scholarship_type_id,
                     scholarship_name=scholarship.name,
                     amount=None,  # Amount is now per sub-type in ScholarshipSubTypeConfig
-                    main_scholarship_type=scholarship.get_main_type_from_code(),
-                    sub_scholarship_type=row_data.get("sub_types", [None])[0]
+                    sub_scholarship_type=row_data.get("sub_types", [None])[0].lower()
                     if row_data.get("sub_types")
-                    else "GENERAL",
+                    else "general",  # Lowercase, configuration-driven
                     scholarship_subtype_list=row_data.get("sub_types", []),
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
                     academic_year=academic_year,

@@ -9,6 +9,7 @@ export type ApplicationStatus =
   | "pending_recommendation"
   | "recommended"
   | "approved"
+  | "partial_approve"
   | "rejected"
   | "returned"
   | "withdrawn"
@@ -294,6 +295,7 @@ export const getStatusColor = (status: ApplicationStatus): BadgeVariant => {
     pending_recommendation: "outline",
     recommended: "outline",
     approved: "default",
+    partial_approve: "outline",
     rejected: "destructive",
     returned: "secondary",
     withdrawn: "secondary",
@@ -313,6 +315,7 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       pending_recommendation: "待教授推薦",
       recommended: "已推薦",
       approved: "已核准",
+      partial_approve: "部分核准",
       rejected: "已拒絕",
       returned: "已退回",
       withdrawn: "已撤回",
@@ -326,6 +329,7 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       pending_recommendation: "Pending Recommendation",
       recommended: "Recommended",
       approved: "Approved",
+      partial_approve: "Partial Approval",
       rejected: "Rejected",
       returned: "Returned",
       withdrawn: "Withdrawn",

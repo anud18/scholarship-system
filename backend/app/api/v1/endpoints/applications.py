@@ -20,9 +20,9 @@ from app.schemas.application import (
     ApplicationStatusUpdate,
     ApplicationStatusUpdateResponse,
     ApplicationUpdate,
-    ProfessorReviewCreate,
     StudentDataSchema,
 )
+from app.schemas.review import ReviewCreate
 from app.services.application_audit_service import ApplicationAuditService
 from app.services.application_service import ApplicationService
 
@@ -190,7 +190,7 @@ async def create_application(
             application_id=result.id if hasattr(result, "id") else 0,
             app_id=result.app_id if hasattr(result, "app_id") else "UNKNOWN",
             user=current_user,
-            scholarship_type=result.main_scholarship_type if hasattr(result, "main_scholarship_type") else "UNKNOWN",
+            scholarship_type=str(result.scholarship_type_id) if hasattr(result, "scholarship_type_id") else "UNKNOWN",
             is_draft=is_draft,
             request=request,
         )
@@ -679,7 +679,7 @@ async def update_application_status(
 @router.post("/{id}/review")
 async def submit_professor_review(
     id: int = Path(..., description="Application ID"),
-    review_data: ProfessorReviewCreate = ...,
+    review_data: ReviewCreate = ...,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,

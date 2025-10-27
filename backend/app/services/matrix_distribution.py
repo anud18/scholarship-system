@@ -19,6 +19,7 @@ from sqlalchemy.orm import selectinload
 from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
+from app.services.review_service import ReviewService
 from app.utils.application_helpers import get_college_code_from_data, get_snapshot_student_name
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,17 @@ class MatrixDistributionService:
         # Sort ranking items by rank_position
         sorted_items = sorted(ranking.items, key=lambda x: x.rank_position)
 
+        # Batch load review statuses for all applications (performance optimization)
+        review_service = ReviewService(self.db)
+        review_status_cache = {}
+        for item in sorted_items:
+            if item.application_id and item.application_id not in review_status_cache:
+                review_status_cache[item.application_id] = await review_service.get_subtype_cumulative_status(
+                    item.application_id
+                )
+
+        logger.info(f"Loaded review status for {len(review_status_cache)} applications for distribution")
+
         # Distribution tracking
         distribution_summary = {}
         total_allocated = 0
@@ -207,6 +219,18 @@ class MatrixDistributionService:
 
                     # Check if application was rejected by review
                     if app.status == "rejected":
+                        continue
+
+                    # Check if THIS SPECIFIC sub-type was rejected in review
+                    subtype_status = review_status_cache.get(app.id, {})
+                    if subtype_status.get(sub_type_code, {}).get("status") == "rejected":
+                        rejected_by = subtype_status[sub_type_code].get("rejected_by", {})
+                        reviewer_name = rejected_by.get("name", "Unknown")
+                        reviewer_role = rejected_by.get("role", "Unknown")
+                        logger.info(
+                            f"Sub-type {sub_type_code} was rejected for application {app.id} "
+                            f"by {reviewer_role} ({reviewer_name}) - skipping distribution"
+                        )
                         continue
 
                     # Check if student applied for this sub-type

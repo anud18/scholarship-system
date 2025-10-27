@@ -88,6 +88,9 @@ class User(Base):
     notification_reads = relationship("NotificationRead", back_populates="user")
     audit_logs = relationship("AuditLog", back_populates="user")
     admin_scholarships = relationship("AdminScholarship", back_populates="admin")
+    verified_bank_accounts = relationship(
+        "StudentBankAccount", foreign_keys="[StudentBankAccount.user_id]", back_populates="user"
+    )
 
     # Professor-Student relationships
     professor_relationships = relationship(

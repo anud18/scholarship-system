@@ -331,13 +331,27 @@ export function useCollegeApplications() {
       try {
         setError(null);
 
-        // Use college review API which triggers auto-redistribution
-        const response = await apiClient.college.reviewApplication(
+        // Step 1: Get available sub-types for this application
+        const subTypesResponse = await apiClient.college.getSubTypes(applicationId);
+
+        if (!subTypesResponse.success || !subTypesResponse.data) {
+          throw new Error("Failed to fetch application sub-types");
+        }
+
+        const subTypes = subTypesResponse.data;
+
+        // Step 2: Create review items for all sub-types
+        const recommendation = status === 'approved' ? ('approve' as const) : ('reject' as const);
+        const items = subTypes.map((subType: string) => ({
+          sub_type_code: subType,
+          recommendation: recommendation,
+          comments: reviewNotes || (recommendation === 'approve' ? '同意' : '駁回'),
+        }));
+
+        // Step 3: Submit unified review using submitReview API
+        const response = await apiClient.college.submitReview(
           applicationId,
-          {
-            recommendation: status === 'approved' ? 'approve' : 'reject',
-            review_comments: reviewNotes,
-          }
+          { items }
         );
 
         if (response.success && response.data) {

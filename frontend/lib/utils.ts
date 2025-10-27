@@ -42,6 +42,11 @@ export function getStatusBadgeVariant(status: string): "default" | "secondary" |
     return "default";
   }
 
+  // Partial approval state
+  if (statusLower === "partial_approve") {
+    return "outline";
+  }
+
   // Warning/pending states
   if (["draft", "pending", "processing", "paused", "under_review"].includes(statusLower)) {
     return "secondary";

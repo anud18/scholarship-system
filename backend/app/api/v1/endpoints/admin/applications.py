@@ -14,13 +14,16 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.exceptions import AuthorizationError, NotFoundError
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application, ApplicationStatus
+from app.models.enums import Semester
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
 from app.schemas.application import (
@@ -33,8 +36,6 @@ from app.schemas.application import (
 from app.schemas.common import PaginatedResponse
 from app.services.application_service import ApplicationService
 from app.services.bulk_approval_service import BulkApprovalService
-
-from ._helpers import get_allowed_scholarship_ids
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +268,6 @@ async def get_historical_applications(
             scholarship_name=row.scholarship_name,
             scholarship_type_code=row.scholarship_type_code,
             amount=app.amount,
-            main_scholarship_type=app.main_scholarship_type,
             sub_scholarship_type=app.sub_scholarship_type,
             is_renewal=app.is_renewal,
             # Academic information
@@ -341,7 +341,6 @@ async def assign_professor_to_application(
             "updated_at": application.updated_at.isoformat(),
             "meta_data": application.meta_data,
             "reviews": [],  # Empty to avoid lazy loading
-            "professor_reviews": [],  # Empty to avoid lazy loading
         }
 
         return {

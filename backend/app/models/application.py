@@ -50,21 +50,7 @@ class ApplicationStatus(enum.Enum):
     deleted = "deleted"  # Soft delete status
 
 
-class ScholarshipMainType(enum.Enum):
-    """Main scholarship types for issue #10"""
-
-    undergraduate_freshman = "undergraduate_freshman"
-    phd = "phd"
-    direct_phd = "direct_phd"
-
-
-class ScholarshipSubType(enum.Enum):
-    """Sub scholarship types for issue #10"""
-
-    general = "general"
-    nstc = "nstc"
-    moe_1w = "moe_1w"
-    moe_2w = "moe_2w"
+# ScholarshipMainType enum removed - use scholarship_type_id instead
 
 
 class ReviewCycle(enum.Enum):
@@ -123,8 +109,14 @@ class Application(Base):
     )
 
     # New fields for comprehensive scholarship system (Issue #10)
-    main_scholarship_type = Column(String(50))  # UNDERGRADUATE_FRESHMAN, PHD, DIRECT_PHD
-    sub_scholarship_type = Column(String(50), default="GENERAL")  # GENERAL, NSTC, MOE_1W, MOE_2W
+    # Sub type is configuration-driven (dynamic), use String for flexibility
+    # Convention: lowercase with underscore (e.g., "nstc", "moe_1w")
+    # Defined in scholarship_configurations.quotas JSON field
+    sub_scholarship_type = Column(
+        String(50),
+        default="general",
+        nullable=False,
+    )
     is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
     previous_application_id = Column(Integer, ForeignKey("applications.id"))
     review_deadline = Column(DateTime(timezone=True))
@@ -155,6 +147,7 @@ class Application(Base):
     # 學院審查相關 (College Review)
     # Note: 評分欄位已移除 (review_score, college_ranking_score)
     # 審核意見和拒絕原因改從 ApplicationReview 表取得
+    decision_reason = Column(Text)  # 累積的拒絕原因（來自所有審查者的拒絕意見）
     final_ranking_position = Column(Integer)  # 最終排名位置
     quota_allocation_status = Column(String(20))  # 'allocated', 'rejected', 'waitlisted'
 
@@ -203,7 +196,6 @@ class Application(Base):
 
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
-    professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
     document_requests = relationship("DocumentRequest", back_populates="application", cascade="all, delete-orphan")
     college_review = relationship(
         "CollegeReview",
@@ -261,23 +253,10 @@ class Application(Base):
             return False
         return bool(datetime.now().replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
 
-    def get_main_type_enum(self) -> Optional["ScholarshipMainType"]:
-        """Get main scholarship type as enum"""
-        if self.main_scholarship_type:
-            try:
-                return ScholarshipMainType(self.main_scholarship_type)
-            except ValueError:
-                return None
-        return None
+    # get_main_type_enum() removed - main_scholarship_type field no longer exists
 
-    def get_sub_type_enum(self) -> Optional["ScholarshipSubType"]:
-        """Get sub scholarship type as enum"""
-        if self.sub_scholarship_type:
-            try:
-                return ScholarshipSubType(self.sub_scholarship_type)
-            except ValueError:
-                return ScholarshipSubType.general
-        return ScholarshipSubType.general
+    # get_sub_type_enum() removed - sub_scholarship_type is now a plain string
+    # Use self.sub_scholarship_type directly instead of converting to enum
 
     @property
     def academic_term_label(self) -> str:
@@ -377,89 +356,3 @@ class ApplicationFile(Base):
     def download_url(self, value: Optional[str]):
         """Set file download URL"""
         self._download_url = value
-
-
-class ApplicationReview(Base):
-    """Application review record model"""
-
-    __tablename__ = "application_reviews"
-
-    id = Column(Integer, primary_key=True, index=True)
-    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
-    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-
-    # 審核資訊
-    review_stage = Column(String(50))  # professor_recommendation, department_review, final_approval
-    review_status = Column(String(20), default=ReviewStatus.PENDING.value)
-
-    # 審核結果
-    # Note: 評分欄位已移除 (score, criteria_scores)
-    # 審核機制簡化為：推薦/意見/決定模式
-    comments = Column(Text)
-    recommendation = Column(Text)
-    decision_reason = Column(Text)  # 包含拒絕原因
-
-    # 時間資訊
-    assigned_at = Column(DateTime(timezone=True), server_default=func.now())
-    reviewed_at = Column(DateTime(timezone=True))
-    due_date = Column(DateTime(timezone=True))
-
-    # 關聯
-    application = relationship("Application", back_populates="reviews")
-    reviewer = relationship("User", back_populates="reviews")
-
-    def __repr__(self):
-        return (
-            f"<ApplicationReview(id={self.id}, application_id={self.application_id}, reviewer_id={self.reviewer_id})>"
-        )
-
-
-class ProfessorReview(Base):
-    """Professor review model for scholarship applications"""
-
-    __tablename__ = "professor_reviews"
-
-    id = Column(Integer, primary_key=True, index=True)
-    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
-    professor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-
-    # 整體推薦意見
-    recommendation = Column(Text)  # 對整體申請的意見（可留可不留）
-    review_status = Column(String(20), default="pending")
-    reviewed_at = Column(DateTime(timezone=True))
-
-    # 時間戳記
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # 關聯
-    application = relationship("Application", back_populates="professor_reviews")
-    professor = relationship("User")
-    items = relationship("ProfessorReviewItem", back_populates="review", cascade="all, delete-orphan")
-
-    def __repr__(self):
-        return (
-            f"<ProfessorReview(id={self.id}, application_id={self.application_id}, professor_id={self.professor_id})>"
-        )
-
-
-class ProfessorReviewItem(Base):
-    """Professor review item for individual scholarship sub-types"""
-
-    __tablename__ = "professor_review_items"
-
-    id = Column(Integer, primary_key=True, index=True)
-    review_id = Column(Integer, ForeignKey("professor_reviews.id"), nullable=False)
-    sub_type_code = Column(String(50), nullable=False)  # e.g., "moe_1w"
-
-    # 推薦結果
-    is_recommended = Column(Boolean, nullable=False, default=False)
-    comments = Column(Text)  # 教授針對該子項目的意見
-
-    # 時間戳記
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    # 關聯
-    review = relationship("ProfessorReview", back_populates="items")
-
-    def __repr__(self):
-        return f"<ProfessorReviewItem(id={self.id}, review_id={self.review_id}, sub_type_code={self.sub_type_code})>"

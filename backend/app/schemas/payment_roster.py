@@ -84,6 +84,11 @@ class PaymentRosterItemResponse(PaymentRosterItemBase):
     nationality_code: Optional[str] = None
     residence_days_over_183: Optional[str] = None
     excel_remarks: Optional[str] = None
+    # Bank account verification status (separate for account number and holder name)
+    bank_account_number_status: Optional[str] = None
+    bank_account_holder_status: Optional[str] = None
+    bank_verification_details: Optional[Dict[str, Any]] = None
+    bank_manual_review_notes: Optional[str] = None
     # Rule validation results
     rule_validation_result: Optional[Dict[str, Any]] = None
     failed_rules: Optional[List[str]] = None

@@ -1039,14 +1039,22 @@ export interface paths {
          * @description Get dashboard statistics for admin
          *
          *     Returns system overview data including:
+         *
+         *     Primary statistics (matching frontend DashboardStats interface):
+         *     - total_applications: Total non-draft applications
+         *     - pending_review: Applications pending review (submitted/under_review)
+         *     - approved: Approved applications
+         *     - rejected: Rejected applications
+         *     - avg_processing_time: Average processing time in days
+         *
+         *     Additional statistics (for backward compatibility):
          *     - totalUsers: Total registered users
-         *     - activeApplications: Applications in progress (submitted/under_review)
-         *     - completedReviews: Completed reviews (approved/rejected)
-         *     - pendingReviews: Pending reviews
+         *     - activeApplications: Active applications (same as pending_review)
+         *     - completedReviews: Completed reviews (approved + rejected)
+         *     - pendingReviews: Pending reviews (same as pending_review)
          *     - totalScholarships: Total scholarship types
-         *     - systemUptime: System uptime (percentage)
-         *     - avgResponseTime: Average application processing time
-         *     - storageUsed: Storage usage (calculated from uploads)
+         *     - systemUptime: System uptime percentage
+         *     - avgResponseTime: Average response time (same as avg_processing_time)
          */
         get: operations["get_dashboard_stats_api_v1_admin_dashboard_stats_get"];
         put?: never;
@@ -2090,6 +2098,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/bank-verification/manual-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manual Review Bank Info
+         * @description Process manual review of bank account information (admin only)
+         *
+         *     Allows administrators to:
+         *     - Approve or reject individual fields (account number and account holder)
+         *     - Provide corrected values if needed
+         *     - Add review notes
+         */
+        post: operations["manual_review_bank_info_api_v1_admin_bank_verification_manual_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scholarships": {
         parameters: {
             query?: never;
@@ -2365,7 +2398,9 @@ export interface paths {
         };
         /**
          * Get Quota Status
-         * @description Get quota status for a scholarship type combination
+         * @description DEPRECATED: Use /api/v1/quota-dashboard/overview or /detailed endpoints instead
+         *
+         *     This endpoint used removed ScholarshipMainType enum and ScholarshipQuotaService.
          */
         get: operations["get_quota_status_api_v1_scholarship_management_quota_status_get"];
         put?: never;
@@ -2387,7 +2422,9 @@ export interface paths {
         put?: never;
         /**
          * Process Applications By Priority
-         * @description Process applications by priority within quota limits
+         * @description DEPRECATED: Priority processing logic moved to college review workflow
+         *
+         *     This endpoint used removed ScholarshipQuotaService.
          */
         post: operations["process_applications_by_priority_api_v1_scholarship_management_quota_process_by_priority_post"];
         delete?: never;
@@ -2445,7 +2482,7 @@ export interface paths {
         };
         /**
          * Get Available Scholarship Types
-         * @description Get available scholarship main and sub types
+         * @description Get available scholarship types from configuration
          */
         get: operations["get_available_scholarship_types_api_v1_scholarship_management_types_available_get"];
         put?: never;
@@ -2486,6 +2523,8 @@ export interface paths {
         /**
          * Get Quota Overview
          * @description Get comprehensive quota overview dashboard
+         *
+         *     BREAKING CHANGE: Now requires academic_year parameter instead of using main_type
          */
         get: operations["get_quota_overview_api_v1_quota_dashboard_overview_get"];
         put?: never;
@@ -2496,7 +2535,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/quota-dashboard/detailed/{main_type}/{sub_type}": {
+    "/api/v1/quota-dashboard/detailed/{scholarship_type_id}/{sub_type}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2505,9 +2544,11 @@ export interface paths {
         };
         /**
          * Get Detailed Quota Status
-         * @description Get detailed quota status for specific scholarship type
+         * @description Get detailed quota status for specific scholarship type and sub-type
+         *
+         *     BREAKING CHANGE: Uses scholarship_type_id instead of main_type parameter
          */
-        get: operations["get_detailed_quota_status_api_v1_quota_dashboard_detailed__main_type___sub_type__get"];
+        get: operations["get_detailed_quota_status_api_v1_quota_dashboard_detailed__scholarship_type_id___sub_type__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2525,7 +2566,7 @@ export interface paths {
         };
         /**
          * Get Quota Trends
-         * @description Get quota utilization trends over time
+         * @description TODO: This endpoint needs to be refactored to use new QuotaService
          */
         get: operations["get_quota_trends_api_v1_quota_dashboard_trends_get"];
         put?: never;
@@ -2536,7 +2577,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/quota-dashboard/adjust-quota": {
+    "/api/v1/quota-dashboard/adjust": {
         parameters: {
             query?: never;
             header?: never;
@@ -2547,9 +2588,9 @@ export interface paths {
         put?: never;
         /**
          * Adjust Quota Limits
-         * @description Adjust quota limits for scholarship types (admin only)
+         * @description TODO: Quota adjustment should be done through ScholarshipConfiguration management endpoints
          */
-        post: operations["adjust_quota_limits_api_v1_quota_dashboard_adjust_quota_post"];
+        post: operations["adjust_quota_limits_api_v1_quota_dashboard_adjust_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2565,7 +2606,7 @@ export interface paths {
         };
         /**
          * Get Quota Alerts
-         * @description Get quota-related alerts and warnings
+         * @description Get quota-related alerts (near full, exhausted quotas)
          */
         get: operations["get_quota_alerts_api_v1_quota_dashboard_alerts_get"];
         put?: never;
@@ -2585,7 +2626,7 @@ export interface paths {
         };
         /**
          * Export Quota Data
-         * @description Export quota data for reporting
+         * @description Export quota data in JSON or CSV format
          */
         get: operations["export_quota_data_api_v1_quota_dashboard_export_get"];
         put?: never;
@@ -4071,13 +4112,13 @@ export interface paths {
         };
         /**
          * Get Professor Review
-         * @description Get existing professor review for an application
+         * @description Get existing professor review for an application using unified review system
          */
         get: operations["get_professor_review_api_v1_professor_applications__application_id__review_get"];
         put?: never;
         /**
          * Submit Professor Review
-         * @description Submit professor review for an application
+         * @description Submit professor review for an application using unified review system
          */
         post: operations["submit_professor_review_api_v1_professor_applications__application_id__review_post"];
         delete?: never;
@@ -4096,7 +4137,7 @@ export interface paths {
         get?: never;
         /**
          * Update Professor Review
-         * @description Update an existing professor review
+         * @description Update an existing professor review using unified review system
          */
         put: operations["update_professor_review_api_v1_professor_applications__application_id__review__review_id__put"];
         post?: never;
@@ -4217,26 +4258,6 @@ export interface paths {
         get: operations["get_applications_for_review_api_v1_college_review_applications_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/college-review/applications/{application_id}/review": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create College Review
-         * @description Create or update a college review for an application
-         */
-        post: operations["create_college_review_api_v1_college_review_applications__application_id__review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4615,6 +4636,185 @@ export interface paths {
          *     when college users are created or assigned to colleges.
          */
         get: operations["get_managed_college_api_v1_college_review_managed_college_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Review
+         * @description 創建新的審查記錄
+         *
+         *     - 驗證審查者權限
+         *     - 創建 ApplicationReview 和 ApplicationReviewItem
+         *     - 自動計算 recommendation 和 comments
+         *     - 更新 Application.decision_reason（如果有拒絕）
+         *     - 更新 Application.status（根據累積狀態）
+         */
+        post: operations["create_review_api_v1_reviews_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/reviews/{review_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Review
+         * @description 取得審查記錄詳情
+         */
+        get: operations["get_review_api_v1_reviews_reviews__review_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/applications/{application_id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Application Reviews
+         * @description 取得申請的所有審查記錄
+         */
+        get: operations["get_application_reviews_api_v1_reviews_applications__application_id__reviews_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/applications/{application_id}/review-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Application Review Status
+         * @description 取得申請的審查狀態
+         *
+         *     包含：
+         *     - 整體審查狀態（基於累積的子項目狀態）
+         *     - 每個子項目的累積狀態
+         *     - decision_reason
+         *     - 所有審查記錄
+         */
+        get: operations["get_application_review_status_api_v1_reviews_applications__application_id__review_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/applications/{application_id}/reviewable-subtypes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Reviewable Subtypes
+         * @description 取得當前用戶可審查的子項目列表
+         *
+         *     規則：
+         *     - 教授：可審查所有子項目
+         *     - 學院：只能審查「教授未拒絕」的子項目
+         *     - 管理員：只能審查「教授和學院都未拒絕」的子項目
+         */
+        get: operations["get_reviewable_subtypes_api_v1_reviews_applications__application_id__reviewable_subtypes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/applications/{application_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get User Application Review
+         * @description Get current user's review for an application (multi-role)
+         *
+         *     Returns the most recent review by this user for this application.
+         *     Used by professor, college, and admin to view their own submitted reviews.
+         */
+        get: operations["get_user_application_review_api_v1_reviews_applications__application_id__review_get"];
+        put?: never;
+        /**
+         * Submit Application Review
+         * @description Submit review for an application (professor, college, or admin)
+         *
+         *     Role-based permissions:
+         *     - Professor: can review all sub-types
+         *     - College: can review sub-types not rejected by professor
+         *     - Admin: can review sub-types not rejected by professor or college
+         *
+         *     Permission filtering handled by ReviewService.get_reviewable_subtypes()
+         */
+        post: operations["submit_application_review_api_v1_reviews_applications__application_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reviews/applications/{application_id}/sub-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Application Reviewable Sub Types
+         * @description Get reviewable sub-types for an application (multi-role)
+         *
+         *     Returns sub-types that the current user is authorized to review,
+         *     with localized labels (zh/en) from database configuration.
+         *
+         *     Role-based filtering:
+         *     - Professor: all sub-types
+         *     - College: sub-types not rejected by professor
+         *     - Admin: sub-types not rejected by professor or college
+         */
+        get: operations["get_application_reviewable_sub_types_api_v1_reviews_applications__application_id__sub_types_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6120,6 +6320,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/student-bank-accounts/my-verified-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Verified Account
+         * @description Get current user's verified bank account (student only)
+         *
+         *     Returns the student's currently active verified bank account if available.
+         *     This helps students see their verification status when filling out new applications.
+         */
+        get: operations["get_my_verified_account_api_v1_student_bank_accounts_my_verified_account_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6576,25 +6799,33 @@ export interface components {
         };
         /**
          * ApplicationReviewResponse
-         * @description Application review response schema
+         * @description Application review response schema (unified review system)
          */
         ApplicationReviewResponse: {
             /** Id */
             id: number;
+            /** Application Id */
+            application_id: number;
             /** Reviewer Id */
             reviewer_id: number;
-            /** Review Stage */
-            review_stage: string;
-            /** Review Status */
-            review_status: string;
-            /** Comments */
-            comments: string | null;
             /** Recommendation */
-            recommendation: string | null;
-            /** Decision Reason */
-            decision_reason: string | null;
-            /** Reviewed At */
-            reviewed_at: string | null;
+            recommendation: string;
+            /** Comments */
+            comments?: string | null;
+            /**
+             * Reviewed At
+             * Format: date-time
+             */
+            reviewed_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Reviewer Name */
+            reviewer_name?: string | null;
+            /** Reviewer Role */
+            reviewer_role?: string | null;
         };
         /**
          * ApplicationStatusUpdate
@@ -6708,11 +6939,6 @@ export interface components {
              * @default []
              */
             reviews: components["schemas"]["ApplicationReviewResponse"][];
-            /**
-             * Professor Reviews
-             * @default []
-             */
-            professor_reviews: components["schemas"]["ProfessorReviewResponse"][];
             /** Student Name */
             student_name?: string | null;
             /** Student No */
@@ -6999,10 +7225,12 @@ export interface components {
         };
         /** Body_simulate_priority_processing_api_v1_scholarship_management_dev_simulate_priority_processing_post */
         Body_simulate_priority_processing_api_v1_scholarship_management_dev_simulate_priority_processing_post: {
+            /** Academic Year */
+            academic_year: number;
             /** Semester */
             semester: string;
-            /** Main Type */
-            main_type: string;
+            /** Scholarship Type Id */
+            scholarship_type_id: number;
             /** Sub Type */
             sub_type: string;
         };
@@ -7136,51 +7364,6 @@ export interface components {
              * @default set
              */
             operation: string;
-        };
-        /**
-         * CollegeReviewCreate
-         * @description Schema for creating a college review.
-         *
-         *     Note: Scoring fields removed. Review is based on ranking position and comments only.
-         */
-        CollegeReviewCreate: {
-            /**
-             * Review Comments
-             * @description Detailed review comments
-             */
-            review_comments?: string | null;
-            /**
-             * Recommendation
-             * @description Review recommendation
-             */
-            recommendation: string;
-            /**
-             * Decision Reason
-             * @description Reason for the recommendation
-             */
-            decision_reason?: string | null;
-            /**
-             * Is Priority
-             * @description Mark as priority application
-             * @default false
-             */
-            is_priority: boolean | null;
-            /**
-             * Needs Special Attention
-             * @description Flag for special review
-             * @default false
-             */
-            needs_special_attention: boolean | null;
-            /**
-             * Preliminary Rank
-             * @description Initial ranking position within sub-type
-             */
-            preliminary_rank?: number | null;
-            /**
-             * Final Rank
-             * @description Final ranking position after adjustments
-             */
-            final_rank?: number | null;
         };
         /**
          * CollegeReviewUpdate
@@ -7634,6 +7817,42 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * ManualBankReviewRequestSchema
+         * @description Schema for manual bank information review
+         */
+        ManualBankReviewRequestSchema: {
+            /**
+             * Application Id
+             * @description Application ID
+             */
+            application_id: number;
+            /**
+             * Account Number Approved
+             * @description Whether account number is approved
+             */
+            account_number_approved?: boolean | null;
+            /**
+             * Account Number Corrected
+             * @description Corrected account number if needed
+             */
+            account_number_corrected?: string | null;
+            /**
+             * Account Holder Approved
+             * @description Whether account holder is approved
+             */
+            account_holder_approved?: boolean | null;
+            /**
+             * Account Holder Corrected
+             * @description Corrected account holder name if needed
+             */
+            account_holder_corrected?: string | null;
+            /**
+             * Review Notes
+             * @description Notes from manual review
+             */
+            review_notes?: string | null;
+        };
+        /**
          * NotificationCreate
          * @description Schema for creating system announcements
          */
@@ -7741,85 +7960,6 @@ export interface components {
              * @description Professor NYCU ID to assign
              */
             professor_nycu_id: string;
-        };
-        /** ProfessorReviewCreate */
-        ProfessorReviewCreate: {
-            /** Recommendation */
-            recommendation?: string | null;
-            /**
-             * Items
-             * @description Individual sub-type recommendations
-             * @default []
-             */
-            items: components["schemas"]["ProfessorReviewItemCreate"][];
-        };
-        /**
-         * ProfessorReviewItemCreate
-         * @description Professor review item creation schema
-         */
-        ProfessorReviewItemCreate: {
-            /**
-             * Sub Type Code
-             * @description Scholarship sub-type code (e.g., 'moe_1w')
-             */
-            sub_type_code: string;
-            /**
-             * Is Recommended
-             * @description Whether to recommend this sub-type
-             */
-            is_recommended: boolean;
-            /**
-             * Comments
-             * @description Comments for this specific sub-type
-             */
-            comments?: string | null;
-        };
-        /**
-         * ProfessorReviewItemResponse
-         * @description Professor review item response schema
-         */
-        ProfessorReviewItemResponse: {
-            /** Id */
-            id: number;
-            /** Review Id */
-            review_id: number;
-            /** Sub Type Code */
-            sub_type_code: string;
-            /** Is Recommended */
-            is_recommended: boolean;
-            /** Comments */
-            comments?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-        };
-        /**
-         * ProfessorReviewResponse
-         * @description Professor review response schema
-         */
-        ProfessorReviewResponse: {
-            /** Id */
-            id: number;
-            /** Application Id */
-            application_id: number;
-            /** Professor Id */
-            professor_id: number;
-            /** Recommendation */
-            recommendation?: string | null;
-            /** Review Status */
-            review_status?: string | null;
-            /** Reviewed At */
-            reviewed_at?: string | null;
-            /** Created At */
-            created_at?: string | null;
-            /**
-             * Items
-             * @description Individual sub-type recommendations
-             * @default []
-             */
-            items: components["schemas"]["ProfessorReviewItemResponse"][];
         };
         /**
          * QuotaDistributionRequest
@@ -7952,6 +8092,54 @@ export interface components {
              * @description Roster code (if roster exists)
              */
             roster_code?: string | null;
+        };
+        /**
+         * ReviewCreate
+         * @description 審查創建 schema（完整版本，用於內部服務調用）
+         */
+        ReviewCreate: {
+            /**
+             * Application Id
+             * @description 申請 ID
+             */
+            application_id: number;
+            /**
+             * Items
+             * @description 子項目審查列表
+             */
+            items: components["schemas"]["ReviewItemCreate"][];
+        };
+        /**
+         * ReviewItemCreate
+         * @description 子項目審查創建 schema
+         */
+        ReviewItemCreate: {
+            /**
+             * Sub Type Code
+             * @description 子項目代碼（例如 'nstc', 'moe_1w', 'default'）
+             */
+            sub_type_code: string;
+            /**
+             * Recommendation
+             * @description 審查建議：'approve' 或 'reject'
+             */
+            recommendation: string;
+            /**
+             * Comments
+             * @description 評論（拒絕時建議必填，同意時可空）
+             */
+            comments?: string | null;
+        };
+        /**
+         * ReviewSubmitRequest
+         * @description 審查提交請求 schema（用於 professor endpoints，application_id 來自路徑參數）
+         */
+        ReviewSubmitRequest: {
+            /**
+             * Items
+             * @description 子項目審查列表
+             */
+            items: components["schemas"]["ReviewItemCreate"][];
         };
         /**
          * RosterCreateRequest
@@ -10435,7 +10623,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProfessorReviewCreate"];
+                "application/json": components["schemas"]["ReviewCreate"];
             };
         };
         responses: {
@@ -12853,6 +13041,39 @@ export interface operations {
             };
         };
     };
+    manual_review_bank_info_api_v1_admin_bank_verification_manual_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualBankReviewRequestSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_all_scholarships_api_v1_scholarships_get: {
         parameters: {
             query?: {
@@ -13329,7 +13550,9 @@ export interface operations {
     };
     get_scholarship_dashboard_api_v1_scholarship_management_analytics_dashboard_get: {
         parameters: {
-            query?: {
+            query: {
+                /** @description Academic year */
+                academic_year: number;
                 semester?: string | null;
             };
             header?: never;
@@ -13413,7 +13636,9 @@ export interface operations {
     };
     get_quota_overview_api_v1_quota_dashboard_overview_get: {
         parameters: {
-            query?: {
+            query: {
+                /** @description Academic year (e.g., 113) */
+                academic_year: number;
                 /** @description Filter by semester */
                 semester?: string | null;
             };
@@ -13443,14 +13668,16 @@ export interface operations {
             };
         };
     };
-    get_detailed_quota_status_api_v1_quota_dashboard_detailed__main_type___sub_type__get: {
+    get_detailed_quota_status_api_v1_quota_dashboard_detailed__scholarship_type_id___sub_type__get: {
         parameters: {
-            query?: {
+            query: {
+                /** @description Academic year */
+                academic_year: number;
                 semester?: string | null;
             };
             header?: never;
             path: {
-                main_type: string;
+                scholarship_type_id: number;
                 sub_type: string;
             };
             cookie?: never;
@@ -13479,12 +13706,7 @@ export interface operations {
     };
     get_quota_trends_api_v1_quota_dashboard_trends_get: {
         parameters: {
-            query?: {
-                main_type?: string | null;
-                sub_type?: string | null;
-                /** @description Number of months to look back */
-                months_back?: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -13500,31 +13722,16 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
         };
     };
-    adjust_quota_limits_api_v1_quota_dashboard_adjust_quota_post: {
+    adjust_quota_limits_api_v1_quota_dashboard_adjust_post: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -13535,22 +13742,14 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
         };
     };
     get_quota_alerts_api_v1_quota_dashboard_alerts_get: {
         parameters: {
-            query?: {
-                /** @description Filter by severity: low, medium, high, critical */
-                severity?: string | null;
+            query: {
+                /** @description Academic year */
+                academic_year: number;
+                semester?: string | null;
             };
             header?: never;
             path?: never;
@@ -13580,10 +13779,11 @@ export interface operations {
     };
     export_quota_data_api_v1_quota_dashboard_export_get: {
         parameters: {
-            query?: {
-                /** @description Export format: json, csv */
-                format?: string;
+            query: {
+                /** @description Academic year */
+                academic_year: number;
                 semester?: string | null;
+                format?: string;
             };
             header?: never;
             path?: never;
@@ -16240,7 +16440,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProfessorReviewCreate"];
+                "application/json": components["schemas"]["ReviewSubmitRequest"];
             };
         };
         responses: {
@@ -16278,7 +16478,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProfessorReviewCreate"];
+                "application/json": components["schemas"]["ReviewSubmitRequest"];
             };
         };
         responses: {
@@ -16520,41 +16720,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_college_review_api_v1_college_review_applications__application_id__review_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                application_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CollegeReviewCreate"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -17195,6 +17360,270 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_review_api_v1_reviews_reviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_api_v1_reviews_reviews__review_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_reviews_api_v1_reviews_applications__application_id__reviews_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_review_status_api_v1_reviews_applications__application_id__review_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_reviewable_subtypes_api_v1_reviews_applications__application_id__reviewable_subtypes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_application_review_api_v1_reviews_applications__application_id__review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_application_review_api_v1_reviews_applications__application_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_reviewable_sub_types_api_v1_reviews_applications__application_id__sub_types_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -19468,6 +19897,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_verified_account_api_v1_student_bank_accounts_my_verified_account_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

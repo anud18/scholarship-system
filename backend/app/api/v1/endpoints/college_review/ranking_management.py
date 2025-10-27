@@ -17,7 +17,6 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.rate_limiting import professor_rate_limit
 from app.core.security import require_college
 from app.db.deps import get_db
 from app.models.college_review import CollegeRanking, CollegeRankingItem
@@ -33,6 +32,7 @@ from app.services.college_review_service import (
     RankingModificationError,
     RankingNotFoundError,
 )
+from app.services.review_service import ReviewService
 
 from ._helpers import normalize_semester_value
 
@@ -232,7 +232,6 @@ async def create_ranking(
 
 
 @router.get("/rankings/{ranking_id}")
-@professor_rate_limit(requests=200, window_seconds=600)  # 200 requests per 10 minutes
 async def get_ranking(
     request: Request, ranking_id: int, current_user: User = Depends(require_college), db: AsyncSession = Depends(get_db)
 ):
@@ -387,6 +386,17 @@ async def get_ranking(
                 for dept in departments
             }
 
+        # Batch load review status for all applications (performance optimization)
+        review_service = ReviewService(db)
+        review_status_cache = {}
+        for item in ranking.items:
+            if item.application_id and item.application_id not in review_status_cache:
+                review_status_cache[item.application_id] = await review_service.get_subtype_cumulative_status(
+                    item.application_id
+                )
+
+        logger.info(f"Loaded review status for {len(review_status_cache)} applications in ranking {ranking_id}")
+
         # Format ranking items
         items = []
         for item in sorted(ranking.items, key=lambda x: x.rank_position):
@@ -439,13 +449,26 @@ async def get_ranking(
                         "id": item.application.id,
                         "app_id": item.application.app_id,
                         "status": item.application.status,
-                        "scholarship_type": item.application.main_scholarship_type,
+                        "scholarship_type_id": item.application.scholarship_type_id,
                         "sub_type": item.application.sub_scholarship_type,
-                        # Eligible sub-types that student applied for
+                        # Eligible sub-types that student applied for, with review status
                         "eligible_subtypes": (
-                            item.application.scholarship_subtype_list
-                            if item.application.scholarship_subtype_list
-                            else []
+                            [
+                                {
+                                    "code": subtype,
+                                    "is_rejected": review_status_cache.get(item.application.id, {})
+                                    .get(subtype, {})
+                                    .get("status")
+                                    == "rejected",
+                                    "rejected_by": review_status_cache.get(item.application.id, {})
+                                    .get(subtype, {})
+                                    .get("rejected_by"),
+                                    "rejection_reason": review_status_cache.get(item.application.id, {})
+                                    .get(subtype, {})
+                                    .get("comments"),
+                                }
+                                for subtype in (item.application.scholarship_subtype_list or [])
+                            ]
                         ),
                         # Minimal student info - only what's needed for ranking display
                         "student_info": {

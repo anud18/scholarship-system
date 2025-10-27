@@ -389,5 +389,51 @@ export function createCollegeApi() {
       });
       return toApiResponse<any>(response);
     },
+
+    /**
+     * Get available sub-types for an application (unified review system)
+     * Uses multi-role review API endpoint
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    getSubTypes: async (applicationId: number): Promise<ApiResponse<any[]>> => {
+      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/sub-types' as any, {
+        params: { path: { application_id: applicationId } },
+      });
+      return toApiResponse<any[]>(response);
+    },
+
+    /**
+     * Get existing review for an application (unified review system)
+     * Uses multi-role review API endpoint
+     * Type-safe: Path parameter validated against OpenAPI
+     */
+    getReview: async (applicationId: number): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.GET('/api/v1/reviews/applications/{application_id}/review' as any, {
+        params: { path: { application_id: applicationId } },
+      });
+      return toApiResponse<any>(response);
+    },
+
+    /**
+     * Submit review for an application (unified review system with sub-type items)
+     * Uses multi-role review API endpoint
+     * Type-safe: Path parameter and request body validated against OpenAPI
+     */
+    submitReview: async (
+      applicationId: number,
+      reviewData: {
+        items: Array<{
+          sub_type_code: string;
+          recommendation: 'approve' | 'reject';
+          comments?: string;
+        }>;
+      }
+    ): Promise<ApiResponse<any>> => {
+      const response = await typedClient.raw.POST('/api/v1/reviews/applications/{application_id}/review' as any, {
+        params: { path: { application_id: applicationId } },
+        body: reviewData,
+      });
+      return toApiResponse<any>(response);
+    },
   };
 }

@@ -76,14 +76,14 @@ export function createProfessorApi() {
     /**
      * Submit professor review for an application
      * Type-safe: Path parameter and request body validated against OpenAPI
+     * NEW FORMAT: Uses recommendation ('approve' | 'reject') instead of is_recommended (boolean)
      */
     submitReview: async (
       applicationId: number,
       reviewData: {
-        recommendation?: string;
         items: Array<{
           sub_type_code: string;
-          is_recommended: boolean;
+          recommendation: 'approve' | 'reject';
           comments?: string;
         }>;
       }
@@ -98,15 +98,15 @@ export function createProfessorApi() {
     /**
      * Update existing professor review
      * Type-safe: Path parameters and request body validated against OpenAPI
+     * NEW FORMAT: Uses recommendation ('approve' | 'reject') instead of is_recommended (boolean)
      */
     updateReview: async (
       applicationId: number,
       reviewId: number,
       reviewData: {
-        recommendation?: string;
         items: Array<{
           sub_type_code: string;
-          is_recommended: boolean;
+          recommendation: 'approve' | 'reject';
           comments?: string;
         }>;
       }

@@ -7,6 +7,8 @@ Create Date: 2025-09-27 22:44:14.794452
 """
 from typing import Sequence, Union
 
+from sqlalchemy import text
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -27,63 +29,81 @@ def upgrade() -> None:
     try:
         # 1. Fix Semester enum (most important for scholarship data)
         print("📅 Updating Semester enum...")
-        op.execute("CREATE TYPE semester_new AS ENUM ('first', 'second', 'summer', 'yearly')")
 
         # Check if tables exist before updating them
         connection = op.get_bind()
 
-        # Update applications table if it exists
+        # Check if semester enum values are already lowercase
         result = connection.execute(
-            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'applications')"
-        )
-        if result.scalar():
-            op.execute(
+            text(
                 """
-                ALTER TABLE applications ADD COLUMN semester_new semester_new;
-                UPDATE applications SET semester_new = CASE
-                    WHEN semester = 'FIRST' THEN 'first'::semester_new
-                    WHEN semester = 'SECOND' THEN 'second'::semester_new
-                    WHEN semester = 'SUMMER' THEN 'summer'::semester_new
-                    WHEN semester = 'YEARLY' THEN 'yearly'::semester_new
-                    ELSE NULL
-                END;
+                SELECT enumlabel FROM pg_enum
+                WHERE enumtypid = (SELECT oid FROM pg_type WHERE typname = 'semester')
+                AND enumlabel ~ '[A-Z]'
             """
             )
-            # Only drop and rename if column exists
-            try:
-                op.execute("ALTER TABLE applications DROP COLUMN semester")
-                op.execute("ALTER TABLE applications RENAME COLUMN semester_new TO semester")
-            except Exception as exc:
-                print(f"⚠️  Semester column update in applications table skipped: {exc}")
-
-        # Update scholarship_configurations table if it exists
-        result = connection.execute(
-            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'scholarship_configurations')"
         )
-        if result.scalar():
-            try:
+        has_uppercase = result.fetchone() is not None
+
+        if not has_uppercase:
+            print("  ✓ Semester enum values are already lowercase, skipping conversion")
+        else:
+            op.execute("CREATE TYPE semester_new AS ENUM ('first', 'second', 'summer', 'yearly')")
+
+            # Update applications table if it exists
+            result = connection.execute(
+                text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'applications')")
+            )
+            if result.scalar():
                 op.execute(
                     """
-                    ALTER TABLE scholarship_configurations ADD COLUMN semester_new semester_new;
-                    UPDATE scholarship_configurations SET semester_new = CASE
+                    ALTER TABLE applications ADD COLUMN semester_new semester_new;
+                    UPDATE applications SET semester_new = CASE
                         WHEN semester = 'FIRST' THEN 'first'::semester_new
                         WHEN semester = 'SECOND' THEN 'second'::semester_new
                         WHEN semester = 'SUMMER' THEN 'summer'::semester_new
                         WHEN semester = 'YEARLY' THEN 'yearly'::semester_new
                         ELSE NULL
                     END;
-                    ALTER TABLE scholarship_configurations DROP COLUMN semester;
-                    ALTER TABLE scholarship_configurations RENAME COLUMN semester_new TO semester;
                 """
                 )
-            except Exception as exc:
-                print(f"⚠️  Semester column update in scholarship_configurations table skipped: {exc}")
+                # Only drop and rename if column exists
+                try:
+                    op.execute("ALTER TABLE applications DROP COLUMN semester")
+                    op.execute("ALTER TABLE applications RENAME COLUMN semester_new TO semester")
+                except Exception as exc:
+                    print(f"⚠️  Semester column update in applications table skipped: {exc}")
 
-        # Drop old enum and rename new one
-        op.execute("DROP TYPE semester CASCADE")
-        op.execute("ALTER TYPE semester_new RENAME TO semester")
+            # Update scholarship_configurations table if it exists
+            result = connection.execute(
+                text(
+                    "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'scholarship_configurations')"
+                )
+            )
+            if result.scalar():
+                try:
+                    op.execute(
+                        """
+                        ALTER TABLE scholarship_configurations ADD COLUMN semester_new semester_new;
+                        UPDATE scholarship_configurations SET semester_new = CASE
+                            WHEN semester = 'FIRST' THEN 'first'::semester_new
+                            WHEN semester = 'SECOND' THEN 'second'::semester_new
+                            WHEN semester = 'SUMMER' THEN 'summer'::semester_new
+                            WHEN semester = 'YEARLY' THEN 'yearly'::semester_new
+                            ELSE NULL
+                        END;
+                        ALTER TABLE scholarship_configurations DROP COLUMN semester;
+                        ALTER TABLE scholarship_configurations RENAME COLUMN semester_new TO semester;
+                    """
+                    )
+                except Exception as exc:
+                    print(f"⚠️  Semester column update in scholarship_configurations table skipped: {exc}")
 
-        print("✅ Semester enum updated successfully")
+            # Drop old enum and rename new one
+            op.execute("DROP TYPE semester CASCADE")
+            op.execute("ALTER TYPE semester_new RENAME TO semester")
+
+            print("✅ Semester enum updated successfully")
 
     except Exception as e:
         print(f"⚠️  Semester enum update failed: {e}")
@@ -91,56 +111,72 @@ def upgrade() -> None:
     try:
         # 2. Fix SubTypeSelectionMode enum
         print("🔀 Updating SubTypeSelectionMode enum...")
-        op.execute("CREATE TYPE subtypeselectionmode_new AS ENUM ('single', 'multiple', 'hierarchical')")
 
-        # Update applications table if it exists
+        # Check if subtypeselectionmode enum values are already lowercase
         result = connection.execute(
-            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'applications')"
-        )
-        if result.scalar():
-            try:
-                op.execute(
-                    """
-                    ALTER TABLE applications ADD COLUMN sub_type_selection_mode_new subtypeselectionmode_new;
-                    UPDATE applications SET sub_type_selection_mode_new = CASE
-                        WHEN sub_type_selection_mode = 'SINGLE' THEN 'single'::subtypeselectionmode_new
-                        WHEN sub_type_selection_mode = 'MULTIPLE' THEN 'multiple'::subtypeselectionmode_new
-                        WHEN sub_type_selection_mode = 'HIERARCHICAL' THEN 'hierarchical'::subtypeselectionmode_new
-                        ELSE NULL
-                    END;
-                    ALTER TABLE applications DROP COLUMN sub_type_selection_mode;
-                    ALTER TABLE applications RENAME COLUMN sub_type_selection_mode_new TO sub_type_selection_mode;
+            text(
                 """
-                )
-            except Exception as exc:
-                print(f"⚠️  SubTypeSelectionMode column update in applications table skipped: {exc}")
-
-        # Update scholarship_types table if it exists
-        result = connection.execute(
-            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'scholarship_types')"
+                SELECT enumlabel FROM pg_enum
+                WHERE enumtypid = (SELECT oid FROM pg_type WHERE typname = 'subtypeselectionmode')
+                AND enumlabel ~ '[A-Z]'
+            """
+            )
         )
-        if result.scalar():
-            try:
-                op.execute(
+        has_uppercase = result.fetchone() is not None
+
+        if not has_uppercase:
+            print("  ✓ SubTypeSelectionMode enum values are already lowercase, skipping conversion")
+        else:
+            op.execute("CREATE TYPE subtypeselectionmode_new AS ENUM ('single', 'multiple', 'hierarchical')")
+
+            # Update applications table if it exists
+            result = connection.execute(
+                text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'applications')")
+            )
+            if result.scalar():
+                try:
+                    op.execute(
+                        """
+                        ALTER TABLE applications ADD COLUMN sub_type_selection_mode_new subtypeselectionmode_new;
+                        UPDATE applications SET sub_type_selection_mode_new = CASE
+                            WHEN sub_type_selection_mode = 'SINGLE' THEN 'single'::subtypeselectionmode_new
+                            WHEN sub_type_selection_mode = 'MULTIPLE' THEN 'multiple'::subtypeselectionmode_new
+                            WHEN sub_type_selection_mode = 'HIERARCHICAL' THEN 'hierarchical'::subtypeselectionmode_new
+                            ELSE NULL
+                        END;
+                        ALTER TABLE applications DROP COLUMN sub_type_selection_mode;
+                        ALTER TABLE applications RENAME COLUMN sub_type_selection_mode_new TO sub_type_selection_mode;
                     """
-                    ALTER TABLE scholarship_types ADD COLUMN sub_type_selection_mode_new subtypeselectionmode_new;
-                    UPDATE scholarship_types SET sub_type_selection_mode_new = CASE
-                        WHEN sub_type_selection_mode = 'SINGLE' THEN 'single'::subtypeselectionmode_new
-                        WHEN sub_type_selection_mode = 'MULTIPLE' THEN 'multiple'::subtypeselectionmode_new
-                        WHEN sub_type_selection_mode = 'HIERARCHICAL' THEN 'hierarchical'::subtypeselectionmode_new
-                        ELSE NULL
-                    END;
-                    ALTER TABLE scholarship_types DROP COLUMN sub_type_selection_mode;
-                    ALTER TABLE scholarship_types RENAME COLUMN sub_type_selection_mode_new TO sub_type_selection_mode;
-                """
-                )
-            except Exception as exc:
-                print(f"⚠️  SubTypeSelectionMode column update in scholarship_types table skipped: {exc}")
+                    )
+                except Exception as exc:
+                    print(f"⚠️  SubTypeSelectionMode column update in applications table skipped: {exc}")
 
-        op.execute("DROP TYPE subtypeselectionmode CASCADE")
-        op.execute("ALTER TYPE subtypeselectionmode_new RENAME TO subtypeselectionmode")
+            # Update scholarship_types table if it exists
+            result = connection.execute(
+                text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'scholarship_types')")
+            )
+            if result.scalar():
+                try:
+                    op.execute(
+                        """
+                        ALTER TABLE scholarship_types ADD COLUMN sub_type_selection_mode_new subtypeselectionmode_new;
+                        UPDATE scholarship_types SET sub_type_selection_mode_new = CASE
+                            WHEN sub_type_selection_mode = 'SINGLE' THEN 'single'::subtypeselectionmode_new
+                            WHEN sub_type_selection_mode = 'MULTIPLE' THEN 'multiple'::subtypeselectionmode_new
+                            WHEN sub_type_selection_mode = 'HIERARCHICAL' THEN 'hierarchical'::subtypeselectionmode_new
+                            ELSE NULL
+                        END;
+                        ALTER TABLE scholarship_types DROP COLUMN sub_type_selection_mode;
+                        ALTER TABLE scholarship_types RENAME COLUMN sub_type_selection_mode_new TO sub_type_selection_mode;
+                    """
+                    )
+                except Exception as exc:
+                    print(f"⚠️  SubTypeSelectionMode column update in scholarship_types table skipped: {exc}")
 
-        print("✅ SubTypeSelectionMode enum updated successfully")
+            op.execute("DROP TYPE subtypeselectionmode CASCADE")
+            op.execute("ALTER TYPE subtypeselectionmode_new RENAME TO subtypeselectionmode")
+
+            print("✅ SubTypeSelectionMode enum updated successfully")
 
     except Exception as e:
         print(f"⚠️  SubTypeSelectionMode enum update failed: {e}")
@@ -148,33 +184,51 @@ def upgrade() -> None:
     try:
         # 3. Fix UserRole enum (critical for super_admin access)
         print("👤 Updating UserRole enum...")
-        op.execute("CREATE TYPE userrole_new AS ENUM ('student', 'professor', 'college', 'admin', 'super_admin')")
 
-        result = connection.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users')")
-        if result.scalar():
-            try:
-                op.execute(
-                    """
-                    ALTER TABLE users ADD COLUMN role_new userrole_new;
-                    UPDATE users SET role_new = CASE
-                        WHEN role = 'STUDENT' THEN 'student'::userrole_new
-                        WHEN role = 'PROFESSOR' THEN 'professor'::userrole_new
-                        WHEN role = 'COLLEGE' THEN 'college'::userrole_new
-                        WHEN role = 'ADMIN' THEN 'admin'::userrole_new
-                        WHEN role = 'SUPER_ADMIN' THEN 'super_admin'::userrole_new
-                        ELSE NULL
-                    END;
-                    ALTER TABLE users DROP COLUMN role;
-                    ALTER TABLE users RENAME COLUMN role_new TO role;
+        # Check if userrole enum values are already lowercase
+        result = connection.execute(
+            text(
                 """
-                )
-            except Exception as exc:
-                print(f"⚠️  UserRole column update skipped: {exc}")
+                SELECT enumlabel FROM pg_enum
+                WHERE enumtypid = (SELECT oid FROM pg_type WHERE typname = 'userrole')
+                AND enumlabel ~ '[A-Z]'
+            """
+            )
+        )
+        has_uppercase = result.fetchone() is not None
 
-        op.execute("DROP TYPE userrole CASCADE")
-        op.execute("ALTER TYPE userrole_new RENAME TO userrole")
+        if not has_uppercase:
+            print("  ✓ UserRole enum values are already lowercase, skipping conversion")
+        else:
+            op.execute("CREATE TYPE userrole_new AS ENUM ('student', 'professor', 'college', 'admin', 'super_admin')")
 
-        print("✅ UserRole enum updated successfully")
+            result = connection.execute(
+                text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'users')")
+            )
+            if result.scalar():
+                try:
+                    op.execute(
+                        """
+                        ALTER TABLE users ADD COLUMN role_new userrole_new;
+                        UPDATE users SET role_new = CASE
+                            WHEN role = 'STUDENT' THEN 'student'::userrole_new
+                            WHEN role = 'PROFESSOR' THEN 'professor'::userrole_new
+                            WHEN role = 'COLLEGE' THEN 'college'::userrole_new
+                            WHEN role = 'ADMIN' THEN 'admin'::userrole_new
+                            WHEN role = 'SUPER_ADMIN' THEN 'super_admin'::userrole_new
+                            ELSE NULL
+                        END;
+                        ALTER TABLE users DROP COLUMN role;
+                        ALTER TABLE users RENAME COLUMN role_new TO role;
+                    """
+                    )
+                except Exception as exc:
+                    print(f"⚠️  UserRole column update skipped: {exc}")
+
+            op.execute("DROP TYPE userrole CASCADE")
+            op.execute("ALTER TYPE userrole_new RENAME TO userrole")
+
+            print("✅ UserRole enum updated successfully")
 
     except Exception as e:
         print(f"⚠️  UserRole enum update failed: {e}")

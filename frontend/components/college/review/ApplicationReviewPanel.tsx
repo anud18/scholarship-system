@@ -21,6 +21,12 @@ import {
 } from "@/components/ui/select";
 import { ConfigSelector } from "../shared/ConfigSelector";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Table,
   TableBody,
   TableCell,
@@ -46,9 +52,11 @@ import {
   School,
   Award,
   Building,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useReferenceData, getStudyingStatusName, getAcademyName, getDepartmentName } from "@/hooks/use-reference-data";
+import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import * as XLSX from "xlsx";
 import { apiClient } from "@/lib/api";
 
@@ -80,6 +88,7 @@ export function ApplicationReviewPanel({
     updateApplicationStatus,
     fetchCollegeApplications,
     activeScholarshipTab,
+    activeTab,
     collegeQuotaInfo,
     setCollegeQuotaInfo,
     showDeleteDialog,
@@ -90,10 +99,15 @@ export function ApplicationReviewPanel({
     setShowDocumentRequestDialog,
     applicationToRequestDocs,
     setApplicationToRequestDocs,
+    dataVersion,
+    incrementDataVersion,
   } = useCollegeManagement();
 
   // Fetch reference data (studying statuses, academies, departments, etc.)
   const { studyingStatuses, academies, departments } = useReferenceData();
+
+  // Fetch scholarship data for sub-type translations
+  const { getSubTypeName } = useScholarshipData();
 
   // Local state for status filter
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -156,6 +170,19 @@ export function ApplicationReviewPanel({
     fetchCollegeQuota();
   }, [fetchCollegeQuota]);
 
+  // Auto-refresh applications when switching to review tab or when data version changes
+  useEffect(() => {
+    // Only refresh when:
+    // 1. Current tab is "review"
+    // 2. Data version has changed (indicating updates from other tabs)
+    if (activeTab === "review") {
+      console.log(`[ApplicationReviewPanel] Auto-refreshing applications (dataVersion: ${dataVersion})`);
+      fetchCollegeApplications(selectedAcademicYear, selectedSemester, activeScholarshipTab);
+    }
+    // Note: fetchCollegeApplications is stable from hook, no need in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, dataVersion, selectedAcademicYear, selectedSemester, activeScholarshipTab]);
+
   // Filter applications based on status and search query
   const filteredApplications = applications.filter(app => {
     // Status filter
@@ -217,6 +244,9 @@ export function ApplicationReviewPanel({
         selectedSemester,
         activeScholarshipTab
       );
+
+      // 觸發 dataVersion 更新，通知其他 tab 重新載入數據
+      incrementDataVersion();
     } catch (error) {
       console.error("Failed to approve application:", error);
       toast.error(
@@ -263,6 +293,9 @@ export function ApplicationReviewPanel({
         selectedSemester,
         activeScholarshipTab
       );
+
+      // 觸發 dataVersion 更新，通知其他 tab 重新載入數據
+      incrementDataVersion();
     } catch (error) {
       console.error("Failed to reject application:", error);
       toast.error(
@@ -498,10 +531,45 @@ export function ApplicationReviewPanel({
             <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {collegeQuotaInfo?.collegeQuota !== null && collegeQuotaInfo?.collegeQuota !== undefined
-                ? collegeQuotaInfo.collegeQuota.toLocaleString()
-                : "-"}
+            <div className="flex items-center gap-2">
+              <div className="text-2xl font-bold">
+                {collegeQuotaInfo?.collegeQuota !== null && collegeQuotaInfo?.collegeQuota !== undefined
+                  ? collegeQuotaInfo.collegeQuota.toLocaleString()
+                  : "-"}
+              </div>
+              {collegeQuotaInfo?.breakdown && Object.keys(collegeQuotaInfo.breakdown).length > 0 && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-4 w-4 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-sm bg-white border-slate-200 shadow-xl">
+                      <div className="p-2">
+                        <p className="font-semibold text-sm mb-3 text-slate-700">
+                          {locale === "zh" ? "配額細項" : "Quota Breakdown"}
+                        </p>
+                        <div className="space-y-2">
+                          {Object.entries(collegeQuotaInfo.breakdown).map(([subType, quota]) => (
+                            <div
+                              key={subType}
+                              className="bg-slate-50 border border-slate-200 rounded-md p-3"
+                            >
+                              <div className="flex items-center justify-between space-x-5">
+                                <p className="text-xs font-medium text-slate-700">
+                                  {getSubTypeName(subType, locale)}
+                                </p>
+                                <p className="text-base font-semibold text-slate-800">
+                                  {quota}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               {locale === "zh"
@@ -578,6 +646,9 @@ export function ApplicationReviewPanel({
                 </SelectItem>
                 <SelectItem value="approved">
                   {locale === "zh" ? "已核准" : "Approved"}
+                </SelectItem>
+                <SelectItem value="partial_approve">
+                  {locale === "zh" ? "部分核准" : "Partial Approval"}
                 </SelectItem>
                 <SelectItem value="rejected">
                   {locale === "zh" ? "已駁回" : "Rejected"}
@@ -734,6 +805,10 @@ export function ApplicationReviewPanel({
         onDelete={(app) => {
           setApplicationToDelete(app);
           setShowDeleteDialog(true);
+        }}
+        onReviewSubmitted={() => {
+          // Trigger data refresh by incrementing version
+          incrementDataVersion();
         }}
       />
 
