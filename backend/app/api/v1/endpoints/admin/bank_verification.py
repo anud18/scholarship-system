@@ -191,6 +191,9 @@ async def get_bank_verification_init_data(
     Used for direct manual review mode
     """
     try:
+        from app.core.config import settings
+        from app.core.security import create_access_token
+
         verification_service = BankVerificationService(db)
 
         # Get application
@@ -207,6 +210,27 @@ async def get_bank_verification_init_data(
         # Get passbook document
         passbook_doc = await verification_service.get_bank_passbook_document(application)
 
+        # Generate file access token and URL
+        passbook_document_data = None
+        if passbook_doc:
+            token_data = {"sub": str(current_user.id)}
+            access_token = create_access_token(token_data)
+            base_url = f"{settings.base_url}{settings.api_v1_str}"
+            file_path = f"{base_url}/files/applications/{application_id}/files/{passbook_doc.id}?token={access_token}"
+            download_url = (
+                f"{base_url}/files/applications/{application_id}/files/{passbook_doc.id}/download?token={access_token}"
+            )
+
+            passbook_document_data = {
+                "file_path": file_path,
+                "original_filename": passbook_doc.original_filename,
+                "upload_time": passbook_doc.uploaded_at.isoformat() if passbook_doc.uploaded_at else None,
+                "file_id": passbook_doc.id,
+                "object_name": passbook_doc.object_name,
+                "file_type": passbook_doc.file_type,
+                "download_url": download_url,
+            }
+
         return {
             "success": True,
             "message": "已載入銀行資料",
@@ -214,17 +238,7 @@ async def get_bank_verification_init_data(
                 "application_id": application_id,
                 "verification_status": "manual_review_init",
                 "form_data": form_bank_fields,
-                "passbook_document": {
-                    "file_path": passbook_doc.filename if passbook_doc else None,
-                    "original_filename": passbook_doc.original_filename if passbook_doc else None,
-                    "upload_time": passbook_doc.uploaded_at.isoformat()
-                    if passbook_doc and passbook_doc.uploaded_at
-                    else None,
-                    "file_id": passbook_doc.id if passbook_doc else None,
-                    "object_name": passbook_doc.object_name if passbook_doc else None,
-                }
-                if passbook_doc
-                else None,
+                "passbook_document": passbook_document_data,
             },
         }
 

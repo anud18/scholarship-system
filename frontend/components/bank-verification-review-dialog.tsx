@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle2, XCircle, AlertTriangle, FileText, Eye } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { CheckCircle2, XCircle, AlertTriangle, FileText } from "lucide-react"
 import { apiClient } from "@/lib/api"
 
 interface VerificationFieldData {
@@ -46,6 +47,8 @@ interface BankVerificationData {
     original_filename: string
     file_id?: number
     object_name?: string
+    file_type?: string
+    download_url?: string
   }
   recommendations?: string[]
 }
@@ -71,6 +74,38 @@ export function BankVerificationReviewDialog({
   const [reviewNotes, setReviewNotes] = useState<string>("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [imageLoading, setImageLoading] = useState(true)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+
+  // 構建預覽 URL - 從 file_path 提取 token
+  useEffect(() => {
+    if (!verificationData) return
+    const doc = verificationData.passbook_document
+    if (doc?.file_id && doc?.original_filename && doc?.file_path) {
+      // 從 file_path URL 參數中提取 token（參考 ApplicationReviewDialog 的做法）
+      const urlParts = doc.file_path.split("?")
+      if (urlParts.length < 2) {
+        console.error("Invalid file URL format")
+        return
+      }
+
+      const urlParams = new URLSearchParams(urlParts[1])
+      const token = urlParams.get("token")
+
+      if (!token) {
+        console.error("No token found in file URL")
+        return
+      }
+
+      const url = `/api/v1/preview?fileId=${doc.file_id}&filename=${encodeURIComponent(
+        doc.original_filename
+      )}&type=${encodeURIComponent(doc.file_type || "存摺封面")}&applicationId=${
+        verificationData.application_id
+      }&token=${token}`
+      setPreviewUrl(url)
+      setImageLoading(true)
+    }
+  }, [verificationData])
 
   if (!verificationData) return null
 
@@ -180,55 +215,68 @@ export function BankVerificationReviewDialog({
     }
   }
 
-  const handleViewDocument = () => {
-    if (verificationData.passbook_document?.object_name) {
-      // Open document in new tab using Next.js proxy
-      const token = localStorage.getItem("access_token")
-      window.open(
-        `/api/proxy/files/${verificationData.passbook_document.object_name}?token=${token}`,
-        "_blank"
-      )
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-7xl max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>銀行帳號人工檢閱</DialogTitle>
           <DialogDescription>
-            請檢閱 OCR 辨識結果與表單資料是否一致，並決定是否核准或修正
+            請檢閱存摺封面與表單資料是否一致，並決定是否核准或修正
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* Error Alert */}
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          {/* Document Preview */}
-          {verificationData.passbook_document && (
-            <div className="border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-blue-500" />
-                  <span className="font-medium">存摺封面</span>
-                </div>
-                <Button variant="outline" size="sm" onClick={handleViewDocument}>
-                  <Eye className="w-4 h-4 mr-1" />
-                  查看檔案
-                </Button>
+        {/* 左右分割主要內容 */}
+        <div className="grid grid-cols-2 gap-6 py-4">
+          {/* 左側：圖片預覽 */}
+          <div className="border rounded-lg overflow-hidden bg-muted">
+            <div className="p-3 bg-background border-b">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-blue-500" />
+                <span className="font-medium text-sm">存摺封面</span>
               </div>
-              <p className="text-sm text-gray-600">
-                {verificationData.passbook_document.original_filename}
+              <p className="text-xs text-gray-600 mt-1">
+                {verificationData.passbook_document?.original_filename || "無檔案"}
               </p>
             </div>
-          )}
 
-          {/* Account Number Verification */}
+            <div className="relative h-[calc(90vh-16rem)] flex items-center justify-center p-4">
+              {previewUrl ? (
+                <>
+                  {imageLoading && (
+                    <Skeleton className="absolute inset-4 rounded" />
+                  )}
+                  <img
+                    src={previewUrl}
+                    alt="存摺封面"
+                    className={`max-w-full max-h-full object-contain transition-opacity ${
+                      imageLoading ? "opacity-0" : "opacity-100"
+                    }`}
+                    onLoad={() => setImageLoading(false)}
+                    onError={() => {
+                      setImageLoading(false)
+                      setError("圖片載入失敗")
+                    }}
+                  />
+                </>
+              ) : (
+                <div className="text-center text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">無可預覽的檔案</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 右側：檢核欄位 */}
+          <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-16rem)]">
+            {/* Account Number Verification */}
           <div className="border rounded-lg p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-lg">郵局帳號</h3>
@@ -453,6 +501,7 @@ export function BankVerificationReviewDialog({
               placeholder="輸入審核備註 (選填)"
               rows={3}
             />
+          </div>
           </div>
         </div>
 

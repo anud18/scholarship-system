@@ -1309,7 +1309,7 @@ export function ApplicationReviewDialog({
             </div>
           ) : detailedApplication ? (
             <Tabs defaultValue="basic" className="flex-1 overflow-hidden flex flex-col">
-              <TabsList className={role === "college" ? "grid w-full grid-cols-6" : "grid w-full grid-cols-6"}>
+              <TabsList className={role === "college" ? "grid w-full grid-cols-6" : "grid w-full grid-cols-7"}>
                 <TabsTrigger value="basic">
                   <Info className="h-4 w-4 mr-1" />
                   {locale === "zh" ? "基本資訊" : "Basic"}
