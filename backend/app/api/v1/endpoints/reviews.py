@@ -487,7 +487,9 @@ async def submit_application_review(
             "admin": AuditAction.admin_review,
             "super_admin": AuditAction.admin_review,
         }
-        audit_action = action_map.get(current_user.role, AuditAction.college_review)
+        # Normalize role to string value for dictionary lookup
+        role_str = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role).lower()
+        audit_action = action_map.get(role_str, AuditAction.college_review)
 
         await audit_service.log_application_operation(
             application_id=application_id,

@@ -27,6 +27,10 @@ class AuditAction(enum.Enum):
     import_ = "import"  # Use import_ to avoid Python keyword conflict
     request_documents = "request_documents"  # Request missing documents from student
 
+    # Review operations for different roles
+    professor_review = "professor_review"  # Professor review
+    admin_review = "admin_review"  # Admin/super admin review
+
     # College-side operations
     college_review = "college_review"  # College initial review (approve/reject/conditional)
     college_review_update = "college_review_update"  # Update existing review
