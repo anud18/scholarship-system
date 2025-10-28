@@ -23,31 +23,11 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
-from app.models.enums import Semester
+from app.models.enums import ApplicationStatus, ReviewStage, Semester
 from app.models.scholarship import SubTypeSelectionMode
 
 if TYPE_CHECKING:
     pass
-
-
-class ApplicationStatus(enum.Enum):
-    """Application status enum"""
-
-    draft = "draft"
-    submitted = "submitted"
-    under_review = "under_review"
-    pending_recommendation = "pending_recommendation"
-    recommended = "recommended"
-    approved = "approved"
-    rejected = "rejected"
-    returned = "returned"
-    cancelled = "cancelled"
-    renewal_pending = "renewal_pending"
-    renewal_reviewed = "renewal_reviewed"
-    manual_excluded = "manual_excluded"
-    professor_review = "professor_review"
-    withdrawn = "withdrawn"
-    deleted = "deleted"  # Soft delete status
 
 
 # ScholarshipMainType enum removed - use scholarship_type_id instead
@@ -122,9 +102,20 @@ class Application(Base):
     review_deadline = Column(DateTime(timezone=True))
     decision_date = Column(DateTime(timezone=True))
 
-    # 申請狀態
-    status = Column(String(50), default=ApplicationStatus.draft.value)
+    # 申請狀態（用戶可見）
+    status = Column(
+        Enum(ApplicationStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=ApplicationStatus.draft.value,
+        nullable=False,
+    )
     status_name = Column(String(100))
+
+    # 審核階段（內部流程）
+    review_stage = Column(
+        Enum(ReviewStage, values_callable=lambda obj: [e.value for e in obj]),
+        default=ReviewStage.student_draft.value,
+        nullable=False,
+    )
 
     # 學期資訊 (申請當時的學期)
     academic_year = Column(Integer, nullable=False)  # 民國年，例如 113

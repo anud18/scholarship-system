@@ -27,19 +27,41 @@ export enum QuotaManagementMode {
   MATRIX_BASED = "matrix_based", // 矩陣配額管理 (子類型×學院)
 }
 
-// Additional enums that might be used in the frontend
+// Application Status - User-facing outcome
 export enum ApplicationStatus {
   DRAFT = "draft",
   SUBMITTED = "submitted",
   UNDER_REVIEW = "under_review",
-  PENDING_RECOMMENDATION = "pending_recommendation",
-  RECOMMENDED = "recommended",
+  PENDING_DOCUMENTS = "pending_documents",
   APPROVED = "approved",
+  PARTIAL_APPROVED = "partial_approved",
   REJECTED = "rejected",
   RETURNED = "returned",
   WITHDRAWN = "withdrawn",
   CANCELLED = "cancelled",
+  MANUAL_EXCLUDED = "manual_excluded",
   DELETED = "deleted",
+}
+
+// Review Stage - Internal workflow position
+export enum ReviewStage {
+  STUDENT_DRAFT = "student_draft",
+  STUDENT_SUBMITTED = "student_submitted",
+  PROFESSOR_REVIEW = "professor_review",
+  PROFESSOR_REVIEWED = "professor_reviewed",
+  COLLEGE_REVIEW = "college_review",
+  COLLEGE_REVIEWED = "college_reviewed",
+  COLLEGE_RANKING = "college_ranking",
+  COLLEGE_RANKED = "college_ranked",
+  ADMIN_REVIEW = "admin_review",
+  ADMIN_REVIEWED = "admin_reviewed",
+  QUOTA_DISTRIBUTION = "quota_distribution",
+  QUOTA_DISTRIBUTED = "quota_distributed",
+  ROSTER_PREPARATION = "roster_preparation",
+  ROSTER_PREPARED = "roster_prepared",
+  ROSTER_SUBMITTED = "roster_submitted",
+  COMPLETED = "completed",
+  ARCHIVED = "archived",
 }
 
 export enum UserRole {
@@ -138,32 +160,81 @@ export const getApplicationStatusLabel = (
   const labels = {
     zh: {
       [ApplicationStatus.DRAFT]: "草稿",
-      [ApplicationStatus.SUBMITTED]: "已提交",
-      [ApplicationStatus.UNDER_REVIEW]: "審核中",
-      [ApplicationStatus.PENDING_RECOMMENDATION]: "待教授推薦",
-      [ApplicationStatus.RECOMMENDED]: "已推薦",
+      [ApplicationStatus.SUBMITTED]: "已送出",
+      [ApplicationStatus.UNDER_REVIEW]: "審批中",
+      [ApplicationStatus.PENDING_DOCUMENTS]: "補件中",
       [ApplicationStatus.APPROVED]: "已核准",
-      [ApplicationStatus.REJECTED]: "已拒絕",
+      [ApplicationStatus.PARTIAL_APPROVED]: "部分核准",
+      [ApplicationStatus.REJECTED]: "已駁回",
       [ApplicationStatus.RETURNED]: "已退回",
       [ApplicationStatus.WITHDRAWN]: "已撤回",
       [ApplicationStatus.CANCELLED]: "已取消",
+      [ApplicationStatus.MANUAL_EXCLUDED]: "手動排除",
       [ApplicationStatus.DELETED]: "已刪除",
     },
     en: {
       [ApplicationStatus.DRAFT]: "Draft",
       [ApplicationStatus.SUBMITTED]: "Submitted",
       [ApplicationStatus.UNDER_REVIEW]: "Under Review",
-      [ApplicationStatus.PENDING_RECOMMENDATION]: "Pending Recommendation",
-      [ApplicationStatus.RECOMMENDED]: "Recommended",
+      [ApplicationStatus.PENDING_DOCUMENTS]: "Pending Documents",
       [ApplicationStatus.APPROVED]: "Approved",
+      [ApplicationStatus.PARTIAL_APPROVED]: "Partially Approved",
       [ApplicationStatus.REJECTED]: "Rejected",
       [ApplicationStatus.RETURNED]: "Returned",
       [ApplicationStatus.WITHDRAWN]: "Withdrawn",
       [ApplicationStatus.CANCELLED]: "Cancelled",
+      [ApplicationStatus.MANUAL_EXCLUDED]: "Manually Excluded",
       [ApplicationStatus.DELETED]: "Deleted",
     },
   };
   return labels[locale][status];
+};
+
+export const getReviewStageLabel = (
+  stage: ReviewStage,
+  locale: "zh" | "en" = "zh"
+): string => {
+  const labels = {
+    zh: {
+      [ReviewStage.STUDENT_DRAFT]: "學生編輯中",
+      [ReviewStage.STUDENT_SUBMITTED]: "學生已送出",
+      [ReviewStage.PROFESSOR_REVIEW]: "教授審核中",
+      [ReviewStage.PROFESSOR_REVIEWED]: "教授已審核",
+      [ReviewStage.COLLEGE_REVIEW]: "學院審核中",
+      [ReviewStage.COLLEGE_REVIEWED]: "學院已審核",
+      [ReviewStage.COLLEGE_RANKING]: "學院排名中",
+      [ReviewStage.COLLEGE_RANKED]: "學院已排名",
+      [ReviewStage.ADMIN_REVIEW]: "管理員審核中",
+      [ReviewStage.ADMIN_REVIEWED]: "管理員已審核",
+      [ReviewStage.QUOTA_DISTRIBUTION]: "配額分發中",
+      [ReviewStage.QUOTA_DISTRIBUTED]: "配額已分發",
+      [ReviewStage.ROSTER_PREPARATION]: "造冊準備中",
+      [ReviewStage.ROSTER_PREPARED]: "造冊已完成",
+      [ReviewStage.ROSTER_SUBMITTED]: "造冊已送出",
+      [ReviewStage.COMPLETED]: "流程完成",
+      [ReviewStage.ARCHIVED]: "已歸檔",
+    },
+    en: {
+      [ReviewStage.STUDENT_DRAFT]: "Student Drafting",
+      [ReviewStage.STUDENT_SUBMITTED]: "Student Submitted",
+      [ReviewStage.PROFESSOR_REVIEW]: "Professor Reviewing",
+      [ReviewStage.PROFESSOR_REVIEWED]: "Professor Reviewed",
+      [ReviewStage.COLLEGE_REVIEW]: "College Reviewing",
+      [ReviewStage.COLLEGE_REVIEWED]: "College Reviewed",
+      [ReviewStage.COLLEGE_RANKING]: "College Ranking",
+      [ReviewStage.COLLEGE_RANKED]: "College Ranked",
+      [ReviewStage.ADMIN_REVIEW]: "Admin Reviewing",
+      [ReviewStage.ADMIN_REVIEWED]: "Admin Reviewed",
+      [ReviewStage.QUOTA_DISTRIBUTION]: "Quota Distributing",
+      [ReviewStage.QUOTA_DISTRIBUTED]: "Quota Distributed",
+      [ReviewStage.ROSTER_PREPARATION]: "Roster Preparing",
+      [ReviewStage.ROSTER_PREPARED]: "Roster Prepared",
+      [ReviewStage.ROSTER_SUBMITTED]: "Roster Submitted",
+      [ReviewStage.COMPLETED]: "Completed",
+      [ReviewStage.ARCHIVED]: "Archived",
+    },
+  };
+  return labels[locale][stage];
 };
 
 export const getUserRoleLabel = (

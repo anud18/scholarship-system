@@ -349,9 +349,24 @@ class ReviewService:
         else:
             application.decision_reason = new_reason
 
+    async def update_review_stage(self, application_id: int, new_stage: str) -> None:
+        """
+        更新審核階段
+
+        Args:
+            application_id: 申請 ID
+            new_stage: 新的審核階段 (ReviewStage enum value)
+        """
+        application = await self.db.get(Application, application_id)
+        if not application:
+            return
+
+        application.review_stage = new_stage
+        await self.db.flush()
+
     async def update_application_status(self, application_id: int) -> str:
         """
-        根據子項目累積狀態更新 Application 狀態
+        根據子項目累積狀態更新 Application 狀態和階段
 
         Args:
             application_id: 申請 ID
@@ -359,6 +374,8 @@ class ReviewService:
         Returns:
             更新後的狀態
         """
+        from app.models.enums import ApplicationStatus, ReviewStage
+
         application = await self.db.get(Application, application_id)
         if not application:
             return ""
@@ -369,17 +386,42 @@ class ReviewService:
         if not subtype_status:
             return application.status
 
-        # 計算整體狀態
+        # 計算整體狀態（用戶可見）
         all_approved = all(status["status"] == "approved" for status in subtype_status.values())
         all_rejected = all(status["status"] == "rejected" for status in subtype_status.values())
 
         if all_approved:
-            application.status = "approved"
+            application.status = ApplicationStatus.approved.value
         elif all_rejected:
-            application.status = "rejected"
+            application.status = ApplicationStatus.rejected.value
         else:
             # 部分核准
-            application.status = "partial_approve"
+            application.status = ApplicationStatus.partial_approved.value
+
+        # 更新審核階段（基於最新審查者角色）
+        stmt = (
+            select(ApplicationReview)
+            .where(ApplicationReview.application_id == application_id)
+            .order_by(ApplicationReview.reviewed_at.desc())
+            .limit(1)
+        )
+        result = await self.db.execute(stmt)
+        latest_review = result.scalar_one_or_none()
+
+        if latest_review and latest_review.reviewer:
+            reviewer_role = (
+                latest_review.reviewer.role.value
+                if hasattr(latest_review.reviewer.role, "value")
+                else str(latest_review.reviewer.role).lower()
+            )
+
+            # 根據審查者角色更新階段
+            if reviewer_role == "professor":
+                application.review_stage = ReviewStage.professor_reviewed.value
+            elif reviewer_role == "college":
+                application.review_stage = ReviewStage.college_reviewed.value
+            elif reviewer_role in ["admin", "super_admin"]:
+                application.review_stage = ReviewStage.admin_reviewed.value
 
         return application.status
 
