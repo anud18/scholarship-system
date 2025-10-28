@@ -521,22 +521,26 @@ export function AdminScholarshipDashboard({
     }
   };
 
-  // 直接手動檢閱（不執行 OCR）
+  // 直接開啟人工檢閱 dialog（執行 OCR 辨識）
   const handleDirectManualReview = async (applicationId: number) => {
     setBankVerificationLoading(prev => ({ ...prev, [applicationId]: true }));
     try {
-      // 只獲取表單資料和文件，不執行 OCR
-      const response = await apiClient.bankVerification.getBankVerificationInitData(applicationId);
+      // 執行 OCR 驗證（與自動驗證使用相同 API）
+      const response = await apiClient.bankVerification.verifyBankAccount(applicationId);
 
       if (response.success && response.data) {
+        // 不管驗證結果如何，都開啟人工檢閱 dialog
         setCurrentBankVerification(response.data);
         setBankReviewDialogOpen(true);
+
+        // 提示用戶已執行 OCR
+        toast.info("已執行 OCR 辨識，請進行人工檢閱");
       } else {
-        toast.error(response.message || "無法載入銀行資料");
+        toast.error(response.message || "無法執行銀行帳號驗證");
       }
     } catch (error) {
-      console.error("Failed to load bank data:", error);
-      toast.error("載入銀行資料時發生錯誤");
+      console.error("Failed to verify bank account:", error);
+      toast.error("執行驗證時發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
     }
