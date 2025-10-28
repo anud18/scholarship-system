@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BusinessLogicError, NotFoundError
 from app.models.application import Application, ApplicationStatus
-from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview, QuotaDistribution
+from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
 from app.models.enums import Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
@@ -325,182 +325,9 @@ class CollegeReviewService:
 
         return lower in {"yearly"}
 
-    async def create_or_update_review(
-        self, application_id: int, reviewer_id: int, review_data: Dict[str, Any]
-    ) -> CollegeReview:
-        """Create or update a college review for an application"""
-
-        # Check if review already exists with eager loading
-        stmt = (
-            select(CollegeReview)
-            .options(
-                selectinload(CollegeReview.application),
-                selectinload(CollegeReview.reviewer),
-            )
-            .where(CollegeReview.application_id == application_id)
-        )
-        result = await self.db.execute(stmt)
-        existing_review = result.scalar_one_or_none()
-
-        # Verify application exists and is in reviewable state with eager loading
-        app_stmt = (
-            select(Application)
-            .options(
-                selectinload(Application.scholarship_type_ref),
-                selectinload(Application.reviews),  # Unified review system
-                selectinload(Application.files),
-            )
-            .where(Application.id == application_id)
-        )
-        app_result = await self.db.execute(app_stmt)
-        application = app_result.scalar_one_or_none()
-
-        if not application:
-            raise NotFoundError("Application", str(application_id))
-
-        # Allow reviewing applications in these states:
-        # - recommended: initial state after professor review
-        # - under_review: currently being reviewed
-        # - approved: allow re-review of approved applications
-        # - rejected: allow re-review of rejected applications
-        # - college_reviewed: backward compatibility
-        reviewable_states = [
-            ApplicationStatus.recommended.value,
-            ApplicationStatus.under_review.value,
-            ApplicationStatus.approved.value,
-            ApplicationStatus.rejected.value,
-            "college_reviewed",
-        ]
-
-        if application.status not in reviewable_states:
-            raise BusinessLogicError(
-                f"Application {application_id} is not in reviewable state (current status: {application.status})"
-            )
-
-        # Note: Scoring fields removed. Review is based on ranking position and comments only.
-
-        if existing_review:
-            # Update existing review
-            for key, value in review_data.items():
-                if hasattr(existing_review, key):
-                    setattr(existing_review, key, value)
-
-            existing_review.updated_at = datetime.now(timezone.utc)
-            existing_review.reviewed_at = datetime.now(timezone.utc)
-            existing_review.review_status = "completed"
-
-            college_review = existing_review
-        else:
-            # Create new review
-            college_review = CollegeReview(
-                application_id=application_id,
-                reviewer_id=reviewer_id,
-                review_started_at=datetime.now(timezone.utc),
-                reviewed_at=datetime.now(timezone.utc),
-                review_status="completed",
-                **review_data,
-            )
-            self.db.add(college_review)
-
-        # Note: college_ranking_score field removed from Application model
-
-        # Set application status based on review recommendation
-        recommendation = review_data.get("recommendation", "")
-        if recommendation == "approve":
-            application.status = ApplicationStatus.approved.value
-        elif recommendation == "reject":
-            application.status = ApplicationStatus.rejected.value
-        elif recommendation == "conditional":
-            application.status = ApplicationStatus.under_review.value  # 條件核准仍在審核中
-        else:
-            application.status = "college_reviewed"  # 預設狀態
-
-        # Note: commit handled by transaction context manager
-        await self.db.flush()  # Ensure changes are written to DB within transaction
-        await self.db.refresh(college_review)
-
-        # Update associated ranking items to reflect review status
-        ranking_items_stmt = select(CollegeRankingItem).where(CollegeRankingItem.application_id == application_id)
-        ranking_items_result = await self.db.execute(ranking_items_stmt)
-        ranking_items = ranking_items_result.scalars().all()
-
-        # Update ranking item status based on recommendation (use the same value from above)
-        for ranking_item in ranking_items:
-            if recommendation == "approve":
-                ranking_item.status = "ranked"  # 核准的保持 ranked 狀態
-                # Reset allocation fields to allow re-distribution
-                ranking_item.allocated_sub_type = None
-                ranking_item.is_allocated = False
-                ranking_item.allocation_reason = None
-                ranking_item.backup_position = None
-            elif recommendation == "reject":
-                ranking_item.status = "rejected"  # 駁回的標記為 rejected
-                # Also reset allocation fields for rejected items
-                ranking_item.allocated_sub_type = None
-                ranking_item.is_allocated = False
-                ranking_item.allocation_reason = "申請已被駁回"  # 明確原因
-                ranking_item.backup_position = None
-                ranking_item.backup_allocations = None  # 清除備取分配記錄
-            elif recommendation == "conditional":
-                ranking_item.status = "ranked"  # 條件核准也保持 ranked
-                # Reset allocation fields for conditional approval too
-                ranking_item.allocated_sub_type = None
-                ranking_item.is_allocated = False
-                ranking_item.allocation_reason = None
-                ranking_item.backup_position = None
-
-        await self.db.flush()  # Flush ranking item updates
-
-        # ============ 檢查是否需要自動重新執行分發 ============
-        # Use the reusable auto-redistribution method
-        redistribution_info = await self.auto_redistribute_after_status_change(
-            application_id=application_id, executor_id=reviewer_id
-        )
-
-        # Store redistribution info for return to frontend
-        college_review._redistribution_info = redistribution_info
-        # ============ 結束自動重新分發邏輯 ============
-
-        # 觸發學院審查提交事件（會觸發自動化郵件規則）
-        try:
-            from app.models.user import User
-
-            # Fetch reviewer and student info for email context
-            stmt_reviewer = select(User).where(User.id == reviewer_id)
-            result_reviewer = await self.db.execute(stmt_reviewer)
-            reviewer = result_reviewer.scalar_one_or_none()
-
-            stmt_student = select(User).where(User.id == application.user_id)
-            result_student = await self.db.execute(stmt_student)
-            student = result_student.scalar_one_or_none()
-
-            await email_automation_service.trigger_college_review_submitted(
-                db=self.db,
-                application_id=application.id,
-                review_data={
-                    "app_id": application.app_id,
-                    "student_name": student.name if student else "Unknown",
-                    "student_email": student.email if student else "",
-                    "college_name": reviewer.college if reviewer and hasattr(reviewer, "college") else "",
-                    "recommendation": review_data.get("recommendation", ""),
-                    "comments": review_data.get("comments", ""),
-                    "reviewer_name": reviewer.name if reviewer else "Unknown",
-                    "scholarship_type": application.scholarship_type_ref.name
-                    if application.scholarship_type_ref
-                    else "Unknown",
-                    "scholarship_type_id": application.scholarship_type_id,
-                    "review_date": college_review.reviewed_at.strftime("%Y-%m-%d")
-                    if college_review.reviewed_at
-                    else datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                },
-            )
-        except Exception as e:
-            logger.error(f"Failed to trigger college review automation: {e}")
-
-        return college_review
-
-    # Note: _calculate_ranking_score() method removed
-    # Review system no longer uses scoring - uses ranking positions instead
+    # create_or_update_review() method removed - replaced by unified ApplicationReview system
+    # Use ReviewService.create_review() instead for all review operations
+    # Ranking functionality now handled by create_ranking() method
 
     async def get_applications_for_review(
         self,
@@ -593,24 +420,12 @@ class CollegeReviewService:
                 f"  App {app.id}: status={app.status}, type_id={app.scholarship_type_id}, year={app.academic_year}, semester={app.semester}"
             )
 
-        # Get college review data for all applications in a single batch query
-        application_ids = [app.id for app in applications]
-        if application_ids:
-            college_reviews_stmt = select(CollegeReview).where(CollegeReview.application_id.in_(application_ids))
-            college_reviews_result = await self.db.execute(college_reviews_stmt)
-            college_reviews = college_reviews_result.scalars().all()
-
-            # Create lookup dictionary for college reviews
-            college_review_lookup = {review.application_id: review for review in college_reviews}
-        else:
-            college_review_lookup = {}
+        # Note: CollegeReview removed - use Application.final_ranking_position instead
+        # college_review_lookup logic removed - data now in Application model
 
         # Format response with additional review information
         formatted_applications = []
         for app in applications:
-            # Get college review if exists
-            college_review = college_review_lookup.get(app.id)
-
             student_payload = app.student_data if isinstance(app.student_data, dict) else {}
             student_id = (
                 student_payload.get("std_stdcode")
@@ -641,9 +456,14 @@ class CollegeReviewService:
                 "professor_review_completed": any(
                     review.reviewer.role == "professor" for review in app.reviews if hasattr(review, "reviewer")
                 ),
-                "college_review_completed": college_review is not None,
-                # Note: college_review_score removed - use final_rank instead
-                "college_review_rank": college_review.final_rank if college_review else None,
+                # college_review_completed replaced by checking ApplicationReview with college role
+                "college_review_completed": any(
+                    review.reviewer.role in ["college", "admin", "super_admin"]
+                    for review in app.reviews
+                    if hasattr(review, "reviewer")
+                ),
+                # Use Application.final_ranking_position instead of college_review.final_rank
+                "final_ranking_position": app.final_ranking_position,
             }
             formatted_applications.append(app_data)
 
@@ -800,93 +620,13 @@ class CollegeReviewService:
             apps_stmt = select(Application).where(and_(*conditions))
             logger.debug("Query built successfully for specific sub_type")
 
-        # Get college reviews for the scholarship type
-        if sub_type_code == "default":
-            # Include college reviews for all applications of this scholarship type
-            review_conditions = [
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.academic_year == academic_year,
-                Application.is_renewal.is_(False),  # Exclude renewal applications
-                Application.deleted_at.is_(None),  # Exclude soft-deleted applications
-                Application.status.in_(  # Whitelist valid statuses
-                    [
-                        ApplicationStatus.recommended.value,
-                        ApplicationStatus.under_review.value,
-                        ApplicationStatus.approved.value,
-                        ApplicationStatus.rejected.value,
-                        "college_reviewed",
-                    ]
-                ),
-            ]
-            # Add semester filter only if it's an actual SQL expression
-            if semester_filter is not True:
-                review_conditions.append(semester_filter)
-            # Filter by creator's college if available
-            if creator_college:
-                # Use std_academyno which is the actual field name in student_data JSON from API
-                review_conditions.append(
-                    sa_func.json_extract_path_text(Application.student_data, "std_academyno") == creator_college
-                )
-
-            college_reviews_stmt = select(CollegeReview).join(Application).where(and_(*review_conditions))
-        else:
-            # Only include college reviews for the specific sub-type
-            review_conditions = [
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.sub_scholarship_type == sub_type_code,
-                Application.academic_year == academic_year,
-                Application.is_renewal.is_(False),  # Exclude renewal applications
-                Application.deleted_at.is_(None),  # Exclude soft-deleted applications
-                Application.status.in_(  # Whitelist valid statuses
-                    [
-                        ApplicationStatus.recommended.value,
-                        ApplicationStatus.under_review.value,
-                        ApplicationStatus.approved.value,
-                        ApplicationStatus.rejected.value,
-                        "college_reviewed",
-                    ]
-                ),
-            ]
-            # Add semester filter only if it's an actual SQL expression
-            if semester_filter is not True:
-                review_conditions.append(semester_filter)
-            # Filter by creator's college if available
-            if creator_college:
-                # Use std_academyno which is the actual field name in student_data JSON from API
-                review_conditions.append(
-                    sa_func.json_extract_path_text(Application.student_data, "std_academyno") == creator_college
-                )
-
-            college_reviews_stmt = select(CollegeReview).join(Application).where(and_(*review_conditions))
+        # Note: CollegeReview table removed - ranking data now stored in Application.final_ranking_position
+        # Execute query to get applications
         apps_result = await self.db.execute(apps_stmt)
         applications = apps_result.scalars().all()
 
-        # Get college reviews for these applications
-        college_reviews_result = await self.db.execute(college_reviews_stmt)
-        college_reviews = college_reviews_result.scalars().all()
-
-        # Ensure all applications have college reviews (create default ones if needed)
-        college_review_lookup = {review.application_id: review for review in college_reviews}
-
-        # Create default college reviews for applications that don't have them
-        applications_with_reviews = []
-        for app in applications:
-            college_review = college_review_lookup.get(app.id)
-            if not college_review:
-                # Create a default college review for applications without one
-                default_review = CollegeReview(
-                    application_id=app.id,
-                    reviewer_id=creator_id,  # Use the ranking creator as default reviewer
-                    review_status="pending",
-                    # Note: ranking_score field removed - use preliminary_rank/final_rank instead
-                    review_comments="Auto-created for ranking purposes",
-                )
-                self.db.add(default_review)
-                await self.db.flush()  # Flush to get the ID
-                await self.db.refresh(default_review)
-                college_review = default_review
-
-            applications_with_reviews.append((app, college_review))
+        # No need to create separate college reviews - ranking data stored in Application model
+        # Applications will be sorted by final_ranking_position or other criteria
 
         # Get quota information from configuration
         config_stmt = select(ScholarshipConfiguration).where(
@@ -928,7 +668,7 @@ class CollegeReviewService:
             academic_year=academic_year,
             semester=normalized_semester,
             ranking_name=ranking_name or f"{sub_type_code} Ranking AY{academic_year}",
-            total_applications=len(applications_with_reviews),
+            total_applications=len(applications),
             total_quota=total_quota,
             created_by=creator_id,
         )
@@ -937,12 +677,11 @@ class CollegeReviewService:
         await self.db.flush()  # Flush within transaction context
         await self.db.refresh(ranking)
 
-        # Create ranking items - sort by final_rank (if available), then by submission date
-        def sort_key(item):
-            app, college_review = item
-            # If college review exists and has final_rank, use it; otherwise use a large number (lowest priority)
+        # Create ranking items - sort by final_ranking_position (if available), then by submission date
+        def sort_key(app):
+            # If application has final_ranking_position, use it; otherwise use a large number (lowest priority)
             # Lower rank number = higher priority (rank 1 is best)
-            rank = college_review.final_rank if college_review and college_review.final_rank else 999999
+            rank = app.final_ranking_position if app.final_ranking_position else 999999
             # Use submitted_at as secondary sort (earlier submissions get higher priority if same rank)
             submitted_at = app.submitted_at or app.created_at
             return (
@@ -950,13 +689,12 @@ class CollegeReviewService:
                 submitted_at.timestamp(),  # Ascending: earlier submission comes first
             )
 
-        applications_with_reviews.sort(key=sort_key, reverse=False)  # Ascending order
+        applications.sort(key=sort_key, reverse=False)  # Ascending order
 
-        for rank_position, (app, college_review) in enumerate(applications_with_reviews, 1):
+        for rank_position, app in enumerate(applications, 1):
             ranking_item = CollegeRankingItem(
                 ranking_id=ranking.id,
                 application_id=app.id,
-                college_review_id=college_review.id,  # Now guaranteed to exist
                 rank_position=rank_position,
             )
             self.db.add(ranking_item)

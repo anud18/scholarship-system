@@ -47,68 +47,9 @@ def get_inet_type():
         return String  # Fallback to String
 
 
-class CollegeReview(Base):
-    """
-    College review model for scholarship applications
-
-    Stores college-level review data including ranking scores,
-    review comments, and final recommendations for each application.
-    """
-
-    __tablename__ = "college_reviews"
-
-    id = Column(Integer, primary_key=True, index=True)
-    application_id = Column(Integer, ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, unique=True)
-    reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-
-    # Note: 評分欄位已全部移除 (ranking_score, academic_score, professor_review_score, etc.)
-    # 審核機制簡化為：排名位置 + 審核意見
-
-    # Review details
-    review_comments = Column(Text)  # Detailed review comments
-    recommendation = Column(String(20))  # 'approve', 'reject', 'conditional'
-    decision_reason = Column(Text)  # Reason for the recommendation
-
-    # Ranking information (positions, not scores)
-    preliminary_rank = Column(Integer)  # Initial ranking within sub-type
-    final_rank = Column(Integer)  # Final ranking after adjustments
-    sub_type_group = Column(String(50))  # Sub-type group for ranking
-
-    # Review metadata
-    review_status = Column(String(20), default="pending")  # 'pending', 'completed', 'revised'
-    is_priority = Column(Boolean, default=False)  # Priority application flag
-    needs_special_attention = Column(Boolean, default=False)  # Flag for special review
-
-    # Time tracking
-    review_started_at = Column(DateTime(timezone=True))
-    reviewed_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-    # Database-level constraints for data integrity
-    # Note: Score-related constraints removed (評分相關約束已移除)
-
-    # Relationships using string references to avoid circular dependencies
-    application = relationship(
-        "Application",
-        lazy="select",
-        foreign_keys=[application_id],
-        back_populates="college_review",
-    )
-    reviewer = relationship("User", lazy="select", foreign_keys=[reviewer_id], back_populates="college_reviews")
-
-    def __repr__(self):
-        return f"<CollegeReview(id={self.id}, application_id={self.application_id}, final_rank={self.final_rank})>"
-
-    @property
-    def is_completed(self) -> bool:
-        """Check if the review is completed"""
-        return self.review_status == "completed"
-
-    @property
-    def is_recommended(self) -> bool:
-        """Check if the application is recommended for approval"""
-        return self.recommendation == "approve"
+# CollegeReview class removed - replaced by unified ApplicationReview system
+# All review functionality now handled by ApplicationReview + ApplicationReviewItem
+# Ranking data stored in Application.final_ranking_position
 
 
 class CollegeRanking(Base):
@@ -190,11 +131,6 @@ class CollegeRankingItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     ranking_id = Column(Integer, ForeignKey("college_rankings.id"), nullable=False)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
-    college_review_id = Column(
-        Integer,
-        ForeignKey("college_reviews.id", ondelete="CASCADE"),
-        nullable=False,
-    )
 
     # Ranking position
     rank_position = Column(Integer, nullable=False)  # 1-based ranking position
@@ -222,12 +158,6 @@ class CollegeRankingItem(Base):
     # Relationships using string references to avoid circular imports
     ranking = relationship("CollegeRanking", back_populates="items")
     application = relationship("Application", lazy="select", foreign_keys=[application_id])
-    college_review = relationship(
-        "CollegeReview",
-        lazy="select",
-        foreign_keys=[college_review_id],
-        passive_deletes=True,
-    )
 
     def __repr__(self):
         return f"<CollegeRankingItem(id={self.id}, rank={self.rank_position}, allocated={self.is_allocated})>"
@@ -297,27 +227,8 @@ class QuotaDistribution(Base):
         return self.distribution_summary.get(sub_type)
 
 
-# PostgreSQL-optimized indexes for college review tables
+# PostgreSQL-optimized indexes for college ranking tables
 # These indexes will be automatically created when using PostgreSQL
-
-# Index for efficient college review lookups
-Index(
-    "ix_college_reviews_application_reviewer",
-    CollegeReview.application_id,
-    CollegeReview.reviewer_id,
-)
-# Note: ranking_score index removed (評分索引已移除)
-# Use final_rank for ranking queries instead
-Index(
-    "ix_college_reviews_recommendation_status",
-    CollegeReview.recommendation,
-    CollegeReview.review_status,
-)
-Index(
-    "ix_college_reviews_priority_attention",
-    CollegeReview.is_priority,
-    CollegeReview.needs_special_attention,
-)
 
 # Index for ranking queries
 Index(
