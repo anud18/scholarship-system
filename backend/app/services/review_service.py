@@ -164,7 +164,10 @@ class ReviewService:
             return all_subtypes
 
         elif role_str == "college":
-            # 學院只能審查「教授未拒絕」的子項目
+            # 學院可以審查：
+            # 1. 尚未被拒絕的項目
+            # 2. 被自己（college）拒絕的項目（可覆蓋修改）
+            # 3. 但不能審查被 professor 拒絕的項目
             reviewable = []
             for code in all_subtypes:
                 status = subtype_status.get(code, {}).get("status")
@@ -181,13 +184,19 @@ class ReviewService:
                 else:
                     rejected_by_role = None
 
-                is_not_rejected = status != "rejected"
-                is_not_rejected_by_professor = rejected_by_role != "professor"
-                is_reviewable = is_not_rejected or is_not_rejected_by_professor
+                # 新邏輯：
+                # 如果未被拒絕 → 可審查
+                # 如果被 professor 拒絕 → 不可審查
+                # 如果被其他角色拒絕（college/admin） → 可以覆蓋修改
+                if status != "rejected":
+                    is_reviewable = True  # 未被拒絕
+                elif rejected_by_role == "professor":
+                    is_reviewable = False  # 被 professor 拒絕 → 不可審查
+                else:
+                    is_reviewable = True  # 被其他角色拒絕 → 可以覆蓋修改
 
                 logger.info(
                     f"[Auth Debug] Code '{code}': status={status}, rejected_by={rejected_by_role}, "
-                    f"is_not_rejected={is_not_rejected}, is_not_rejected_by_prof={is_not_rejected_by_professor}, "
                     f"is_reviewable={is_reviewable}"
                 )
 
@@ -198,7 +207,10 @@ class ReviewService:
             return reviewable
 
         elif role_str in ["admin", "super_admin"]:
-            # 管理員只能審查「教授和學院都未拒絕」的子項目
+            # 管理員可以審查：
+            # 1. 尚未被拒絕的項目
+            # 2. 被自己（admin）拒絕的項目（可覆蓋修改）
+            # 3. 但不能審查被 professor 或 college 拒絕的項目
             reviewable = []
             for code in all_subtypes:
                 status = subtype_status.get(code, {}).get("status")
@@ -215,9 +227,16 @@ class ReviewService:
                 else:
                     rejected_by_role = None
 
-                is_not_rejected = status != "rejected"
-                is_not_rejected_by_prof_or_college = rejected_by_role not in ["professor", "college"]
-                is_reviewable = is_not_rejected or is_not_rejected_by_prof_or_college
+                # 新邏輯：
+                # 如果未被拒絕 → 可審查
+                # 如果被 professor 或 college 拒絕 → 不可審查
+                # 如果被 admin 拒絕 → 可以覆蓋修改
+                if status != "rejected":
+                    is_reviewable = True  # 未被拒絕
+                elif rejected_by_role in ["professor", "college"]:
+                    is_reviewable = False  # 被 professor/college 拒絕 → 不可審查
+                else:
+                    is_reviewable = True  # 被 admin 拒絕 → 可以覆蓋修改
 
                 logger.info(
                     f"[Auth Debug] Code '{code}': status={status}, rejected_by={rejected_by_role}, "
