@@ -78,10 +78,17 @@ class ReviewService:
 
                 # 如果本次是 reject，且之前未被 reject 過
                 if item.recommendation == "reject" and subtype_status[code]["status"] != "rejected":
+                    # 正規化 role 為字符串值
+                    reviewer_role = review.reviewer.role
+                    if hasattr(reviewer_role, "value"):
+                        role_str = reviewer_role.value
+                    else:
+                        role_str = str(reviewer_role).lower()
+
                     subtype_status[code] = {
                         "status": "rejected",
                         "rejected_by": {
-                            "role": review.reviewer.role,
+                            "role": role_str,
                             "name": review.reviewer.name,
                             "reviewed_at": review.reviewed_at.strftime("%Y-%m-%d %H:%M:%S"),
                         },
@@ -161,7 +168,18 @@ class ReviewService:
             reviewable = []
             for code in all_subtypes:
                 status = subtype_status.get(code, {}).get("status")
-                rejected_by_role = subtype_status.get(code, {}).get("rejected_by", {}).get("role")
+
+                # 安全地獲取 rejected_by_role
+                rejected_by = subtype_status.get(code, {}).get("rejected_by")
+                if rejected_by and isinstance(rejected_by, dict):
+                    rejected_by_role = rejected_by.get("role")
+                    # 正規化 role（處理可能的 enum 對象或字符串）
+                    if hasattr(rejected_by_role, "value"):
+                        rejected_by_role = rejected_by_role.value
+                    elif rejected_by_role:
+                        rejected_by_role = str(rejected_by_role).lower()
+                else:
+                    rejected_by_role = None
 
                 is_not_rejected = status != "rejected"
                 is_not_rejected_by_professor = rejected_by_role != "professor"
@@ -184,7 +202,18 @@ class ReviewService:
             reviewable = []
             for code in all_subtypes:
                 status = subtype_status.get(code, {}).get("status")
-                rejected_by_role = subtype_status.get(code, {}).get("rejected_by", {}).get("role")
+
+                # 安全地獲取 rejected_by_role
+                rejected_by = subtype_status.get(code, {}).get("rejected_by")
+                if rejected_by and isinstance(rejected_by, dict):
+                    rejected_by_role = rejected_by.get("role")
+                    # 正規化 role（處理可能的 enum 對象或字符串）
+                    if hasattr(rejected_by_role, "value"):
+                        rejected_by_role = rejected_by_role.value
+                    elif rejected_by_role:
+                        rejected_by_role = str(rejected_by_role).lower()
+                else:
+                    rejected_by_role = None
 
                 is_not_rejected = status != "rejected"
                 is_not_rejected_by_prof_or_college = rejected_by_role not in ["professor", "college"]
