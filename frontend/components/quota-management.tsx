@@ -29,9 +29,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuotaData } from "@/hooks/use-quota-data";
 import apiClient from "@/lib/api";
-import { calculateUsagePercentage, quotaApi } from "@/services/api/quotaApi";
+import { calculateUsagePercentage } from "@/lib/quota-utils";
 import {
-  AvailablePeriod,
   getWarningLevel,
   MatrixQuotaData,
 } from "@/types/quota";
@@ -49,7 +48,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 export function QuotaManagement() {  const { user } = useAuth();
   // State management
-  const [availablePeriods, setAvailablePeriods] = useState<AvailablePeriod[]>(
+  const [availablePeriods, setAvailablePeriods] = useState<string[]>(
     []
   );
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
@@ -156,7 +155,7 @@ export function QuotaManagement() {  const { user } = useAuth();
 
   const fetchAvailablePeriods = async () => {
     try {
-      const response = await quotaApi.getAvailableSemesters("matrix_based");
+      const response = await apiClient.quota.getAvailableSemesters("matrix_based");
       if (response.success && response.data) {
         setAvailablePeriods(response.data);
         // Select the most recent period by default
@@ -188,7 +187,7 @@ export function QuotaManagement() {  const { user } = useAuth();
     if (!selectedPeriod) return;
 
     try {
-      const blob = await quotaApi.exportQuotaData(selectedPeriod, "csv");
+      const blob = await apiClient.quota.exportQuotaData(selectedPeriod, "csv");
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

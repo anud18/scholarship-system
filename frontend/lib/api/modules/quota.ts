@@ -13,14 +13,11 @@
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../../api.legacy';
-
-type MatrixQuotaData = {
-  academic_year: string;
-  quota_management_mode: string;
-  phd_quotas: Record<string, Record<string, any>>;
-  college_configs: any[];
-  sub_type_configs: any[];
-};
+import type {
+  MatrixQuotaData,
+  UpdateQuotaResponse,
+  CollegeConfig,
+} from '@/types/quota';
 
 type ScholarshipQuotaOverview = {
   scholarship_type: string;
@@ -32,31 +29,10 @@ type ScholarshipQuotaOverview = {
 };
 
 type UpdateMatrixQuotaRequest = {
-  academic_year: string;
+  academic_year?: number;
   sub_type: string;
   college: string;
-  total_quota: number;
-};
-
-type UpdateQuotaResponse = {
-  academic_year: string;
-  sub_type: string;
-  college: string;
-  total_quota: number;
-  used_quota: number;
-  remaining_quota: number;
-};
-
-type CollegeConfig = {
-  college_code: string;
-  college_name: string;
-  college_name_en: string;
-};
-
-type AvailablePeriod = {
-  period: string;
-  display_name: string;
-  quota_management_mode: string;
+  new_quota: number;
 };
 
 export function createQuotaApi() {
@@ -64,14 +40,15 @@ export function createQuotaApi() {
     /**
      * Get available semesters/academic years
      * Type-safe: Query parameters validated against OpenAPI
+     * Returns array of period strings (e.g., ["114-1", "114-2", "113"])
      */
     getAvailableSemesters: async (
       quotaManagementMode?: string
-    ): Promise<ApiResponse<AvailablePeriod[]>> => {
+    ): Promise<ApiResponse<string[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/available-semesters', {
         params: { query: { quota_management_mode: quotaManagementMode } },
       });
-      return toApiResponse<AvailablePeriod[]>(response);
+      return toApiResponse<string[]>(response);
     },
 
     /**

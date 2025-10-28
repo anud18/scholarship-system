@@ -28,7 +28,7 @@ import {
   getAcademyName,
   getSubTypeName,
 } from "@/hooks/use-reference-data";
-import { quotaApi } from "@/services/api/quotaApi";
+import { apiClient } from "@/lib/api";
 
 interface MatrixQuotaTableProps {
   data: MatrixQuotaData | null;
@@ -113,7 +113,7 @@ export function MatrixQuotaTable({
         ? parseInt(currentPeriod.split("-")[0])
         : undefined;
 
-      const response = await quotaApi.updateMatrixQuota({
+      const response = await apiClient.quota.updateMatrixQuota({
         sub_type: editingCell.subType,
         college: editingCell.college,
         new_quota: newValue,

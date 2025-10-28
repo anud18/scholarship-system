@@ -65,7 +65,8 @@ class ReviewService:
 
         for review in reviews:
             for item in review.items:
-                code = item.sub_type_code
+                # 正規化子項目代碼（小寫並去除空白）
+                code = item.sub_type_code.lower().strip() if item.sub_type_code else item.sub_type_code
 
                 # 初始化
                 if code not in subtype_status:
@@ -108,6 +109,10 @@ class ReviewService:
         Returns:
             可審查的子項目代碼列表
         """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         # 取得申請的獎學金配置
         stmt = (
             select(Application)
@@ -118,39 +123,75 @@ class ReviewService:
         application = result.scalar_one_or_none()
 
         if not application:
+            logger.warning(f"Application {application_id} not found")
             return []
 
-        # 取得所有子項目
-        all_subtypes = application.scholarship_subtype_list or []
+        # 取得所有子項目（正規化為小寫並去除空白）
+        raw_subtypes = application.scholarship_subtype_list or []
+        all_subtypes = [code.lower().strip() if isinstance(code, str) else code for code in raw_subtypes]
         if not all_subtypes:
             all_subtypes = ["default"]
 
+        logger.info(f"[Auth Debug] Application {application_id} - Role: {current_user_role}")
+        logger.info(f"[Auth Debug] Raw sub-types from DB: {raw_subtypes}")
+        logger.info(f"[Auth Debug] Normalized all_subtypes: {all_subtypes}")
+
         # 取得子項目累積狀態
         subtype_status = await self.get_subtype_cumulative_status(application_id)
+        logger.info(f"[Auth Debug] Subtype status: {subtype_status}")
 
         # 根據角色過濾
         if current_user_role == "professor":
             # 教授可以審查所有子項目
+            logger.info(f"[Auth Debug] Professor role - returning all subtypes: {all_subtypes}")
             return all_subtypes
 
         elif current_user_role == "college":
             # 學院只能審查「教授未拒絕」的子項目
-            return [
-                code
-                for code in all_subtypes
-                if subtype_status.get(code, {}).get("status") != "rejected"
-                or subtype_status.get(code, {}).get("rejected_by", {}).get("role") != "professor"
-            ]
+            reviewable = []
+            for code in all_subtypes:
+                status = subtype_status.get(code, {}).get("status")
+                rejected_by_role = subtype_status.get(code, {}).get("rejected_by", {}).get("role")
+
+                is_not_rejected = status != "rejected"
+                is_not_rejected_by_professor = rejected_by_role != "professor"
+                is_reviewable = is_not_rejected or is_not_rejected_by_professor
+
+                logger.info(
+                    f"[Auth Debug] Code '{code}': status={status}, rejected_by={rejected_by_role}, "
+                    f"is_not_rejected={is_not_rejected}, is_not_rejected_by_prof={is_not_rejected_by_professor}, "
+                    f"is_reviewable={is_reviewable}"
+                )
+
+                if is_reviewable:
+                    reviewable.append(code)
+
+            logger.info(f"[Auth Debug] College role - reviewable subtypes: {reviewable}")
+            return reviewable
 
         elif current_user_role in ["admin", "super_admin"]:
             # 管理員只能審查「教授和學院都未拒絕」的子項目
-            return [
-                code
-                for code in all_subtypes
-                if subtype_status.get(code, {}).get("status") != "rejected"
-                or subtype_status.get(code, {}).get("rejected_by", {}).get("role") not in ["professor", "college"]
-            ]
+            reviewable = []
+            for code in all_subtypes:
+                status = subtype_status.get(code, {}).get("status")
+                rejected_by_role = subtype_status.get(code, {}).get("rejected_by", {}).get("role")
 
+                is_not_rejected = status != "rejected"
+                is_not_rejected_by_prof_or_college = rejected_by_role not in ["professor", "college"]
+                is_reviewable = is_not_rejected or is_not_rejected_by_prof_or_college
+
+                logger.info(
+                    f"[Auth Debug] Code '{code}': status={status}, rejected_by={rejected_by_role}, "
+                    f"is_reviewable={is_reviewable}"
+                )
+
+                if is_reviewable:
+                    reviewable.append(code)
+
+            logger.info(f"[Auth Debug] Admin role - reviewable subtypes: {reviewable}")
+            return reviewable
+
+        logger.warning(f"[Auth Debug] Unknown role '{current_user_role}' - returning empty list")
         return []
 
     async def calculate_overall_recommendation(self, items: List[Dict[str, Any]]) -> str:
@@ -349,9 +390,14 @@ class ReviewService:
 
         # 建立新的子項目審查記錄
         for item in items:
+            # 正規化 sub_type_code
+            sub_code = item["sub_type_code"]
+            if isinstance(sub_code, str):
+                sub_code = sub_code.lower().strip()
+
             review_item = ApplicationReviewItem(
                 review_id=review.id,
-                sub_type_code=item["sub_type_code"],
+                sub_type_code=sub_code,
                 recommendation=item["recommendation"],
                 comments=item.get("comments"),
             )
@@ -425,9 +471,14 @@ class ReviewService:
 
         # 建立新的子項目
         for item in items:
+            # 正規化 sub_type_code
+            sub_code = item["sub_type_code"]
+            if isinstance(sub_code, str):
+                sub_code = sub_code.lower().strip()
+
             review_item = ApplicationReviewItem(
                 review_id=review.id,
-                sub_type_code=item["sub_type_code"],
+                sub_type_code=sub_code,
                 recommendation=item["recommendation"],
                 comments=item.get("comments"),
             )

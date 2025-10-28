@@ -9,7 +9,7 @@
  */
 
 import useSWR from 'swr';
-import { quotaApi } from '@/services/api/quotaApi';
+import { apiClient } from '@/lib/api';
 import type { MatrixQuotaData } from '@/types/quota';
 import type { ApiResponse } from '@/lib/api';
 
@@ -17,7 +17,7 @@ import type { ApiResponse } from '@/lib/api';
  * Fetcher function for SWR
  */
 const fetchQuotaData = async (period: string): Promise<ApiResponse<MatrixQuotaData>> => {
-  return quotaApi.getMatrixQuotaStatus(period);
+  return apiClient.quota.getMatrixQuotaStatus(period);
 };
 
 /**
