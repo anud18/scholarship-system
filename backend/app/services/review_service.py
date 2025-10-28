@@ -140,13 +140,23 @@ class ReviewService:
         subtype_status = await self.get_subtype_cumulative_status(application_id)
         logger.info(f"[Auth Debug] Subtype status: {subtype_status}")
 
+        # 正規化角色（處理可能傳入 enum 或 string 的情況）
+        if hasattr(current_user_role, "value"):
+            # 如果是 enum，取其 value
+            role_str = current_user_role.value
+        else:
+            # 如果已經是字符串
+            role_str = str(current_user_role).lower()
+
+        logger.info(f"[Auth Debug] Normalized role: '{role_str}' (original: {current_user_role})")
+
         # 根據角色過濾
-        if current_user_role == "professor":
+        if role_str == "professor":
             # 教授可以審查所有子項目
             logger.info(f"[Auth Debug] Professor role - returning all subtypes: {all_subtypes}")
             return all_subtypes
 
-        elif current_user_role == "college":
+        elif role_str == "college":
             # 學院只能審查「教授未拒絕」的子項目
             reviewable = []
             for code in all_subtypes:
@@ -169,7 +179,7 @@ class ReviewService:
             logger.info(f"[Auth Debug] College role - reviewable subtypes: {reviewable}")
             return reviewable
 
-        elif current_user_role in ["admin", "super_admin"]:
+        elif role_str in ["admin", "super_admin"]:
             # 管理員只能審查「教授和學院都未拒絕」的子項目
             reviewable = []
             for code in all_subtypes:
@@ -191,7 +201,7 @@ class ReviewService:
             logger.info(f"[Auth Debug] Admin role - reviewable subtypes: {reviewable}")
             return reviewable
 
-        logger.warning(f"[Auth Debug] Unknown role '{current_user_role}' - returning empty list")
+        logger.warning(f"[Auth Debug] Unknown role '{role_str}' (original: {current_user_role}) - returning empty list")
         return []
 
     async def calculate_overall_recommendation(self, items: List[Dict[str, Any]]) -> str:
