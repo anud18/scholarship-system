@@ -188,13 +188,7 @@ class Application(Base):
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
     document_requests = relationship("DocumentRequest", back_populates="application", cascade="all, delete-orphan")
-    college_review = relationship(
-        "CollegeReview",
-        back_populates="application",
-        uselist=False,
-        cascade="all, delete-orphan",
-        single_parent=True,
-    )
+    # Note: college_review relationship removed - replaced by unified ApplicationReview system
 
     # Batch import relationships
     imported_by = relationship("User", foreign_keys=[imported_by_id])

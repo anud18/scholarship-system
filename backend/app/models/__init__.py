@@ -7,7 +7,7 @@ from app.models.application_field import ApplicationDocument, ApplicationField, 
 from app.models.application_sequence import ApplicationSequence
 from app.models.audit_log import AuditAction, AuditLog
 from app.models.batch_import import BatchImport
-from app.models.college_review import CollegeRanking, CollegeRankingItem, CollegeReview, QuotaDistribution
+from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
 from app.models.document_request import DocumentRequest, DocumentRequestStatus
 from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail, ScheduleStatus
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester, SubTypeSelectionMode
@@ -87,8 +87,7 @@ __all__ = [
     # User profile models
     "UserProfile",
     "UserProfileHistory",
-    # College review models
-    "CollegeReview",
+    # College review models (CollegeReview removed - replaced by unified ApplicationReview)
     "CollegeRanking",
     "CollegeRankingItem",
     "QuotaDistribution",

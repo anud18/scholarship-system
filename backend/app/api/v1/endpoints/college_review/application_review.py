@@ -11,18 +11,17 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
-from sqlalchemy.exc import DatabaseError, IntegrityError
+from sqlalchemy.exc import DatabaseError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_college, require_roles
 from app.db.deps import get_db
-from app.models.audit_log import AuditAction
-from app.models.college_review import CollegeReview
+
+# Note: CollegeReview model removed - replaced by unified ApplicationReview system
+# from app.models.college_review import CollegeReview
 from app.models.user import User, UserRole
-from app.schemas.college_review import CollegeReviewResponse, CollegeReviewUpdate, StudentTermData
+from app.schemas.college_review import StudentTermData
 from app.schemas.response import ApiResponse
-from app.services.application_audit_service import ApplicationAuditService
 from app.services.college_review_service import CollegeReviewService, ReviewPermissionError
 from app.services.student_service import StudentService
 
@@ -111,106 +110,10 @@ async def get_applications_for_review(
 # - GET /api/v1/reviews/applications/{id}/sub-types (get reviewable sub-types)
 
 
-@router.put("/reviews/{review_id}")
-async def update_college_review(
-    review_id: int,
-    review_data: CollegeReviewUpdate,
-    current_user: User = Depends(require_college),
-    db: AsyncSession = Depends(get_db),
-):
-    """Update an existing college review"""
-
-    try:
-        # Get existing review
-        stmt = select(CollegeReview).where(CollegeReview.id == review_id)
-        result = await db.execute(stmt)
-        college_review = result.scalar_one_or_none()
-
-        if not college_review:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="College review not found")
-
-        # Check permissions
-        if college_review.reviewer_id != current_user.id and current_user.role not in [
-            UserRole.admin,
-            UserRole.super_admin,
-        ]:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this review")
-
-        # Capture old values for audit log
-        old_values = {
-            "recommendation": college_review.recommendation,
-            "academic_score": college_review.academic_score,
-            "professor_review_score": college_review.professor_review_score,
-            "college_criteria_score": college_review.college_criteria_score,
-            "special_circumstances_score": college_review.special_circumstances_score,
-            "decision_reason": college_review.decision_reason,
-            "is_priority": college_review.is_priority,
-        }
-
-        # Update review
-        service = CollegeReviewService(db)
-        updated_review = await service.create_or_update_review(
-            application_id=college_review.application_id,
-            reviewer_id=college_review.reviewer_id,
-            review_data=review_data.dict(exclude_unset=True),
-        )
-
-        # Log the college review update operation
-        audit_service = ApplicationAuditService(db)
-        new_values = {
-            "recommendation": updated_review.recommendation,
-            "academic_score": updated_review.academic_score,
-            "professor_review_score": updated_review.professor_review_score,
-            "college_criteria_score": updated_review.college_criteria_score,
-            "special_circumstances_score": updated_review.special_circumstances_score,
-            "decision_reason": updated_review.decision_reason,
-            "is_priority": updated_review.is_priority,
-        }
-
-        # Build description highlighting the key changes
-        description_parts = ["College review updated"]
-        if old_values["recommendation"] != new_values["recommendation"]:
-            description_parts.append(f"recommendation: {old_values['recommendation']} → {new_values['recommendation']}")
-
-        await audit_service.log_application_operation(
-            application_id=college_review.application_id,
-            action=AuditAction.college_review_update,
-            user=current_user,
-            request=None,
-            description="; ".join(description_parts),
-            old_values=old_values,
-            new_values=new_values,
-            status="success",
-        )
-
-        return ApiResponse(
-            success=True,
-            message="College review updated successfully",
-            data=CollegeReviewResponse.from_orm(updated_review),
-        )
-
-    except HTTPException:
-        raise
-    except ValueError as e:
-        logger.warning(f"Invalid review data for review {review_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}")
-    except PermissionError as e:
-        logger.warning(f"Permission denied for review update by user {current_user.id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this review")
-    except IntegrityError as e:
-        logger.error(f"Database integrity error updating review {review_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Review update conflicts with existing data")
-    except DatabaseError as e:
-        logger.error(f"Database error updating review {review_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error updating college review {review_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while updating the review",
-        )
+# REMOVED: PUT /reviews/{review_id} endpoint
+# This endpoint was removed as part of CollegeReview table removal (Phase 3).
+# The CollegeReview model and create_or_update_review() service method no longer exist.
+# Use the unified review system at /api/v1/reviews/* instead for all review operations.
 
 
 @router.get("/students/{student_id}/preview")

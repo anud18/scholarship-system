@@ -9,98 +9,32 @@ Handles:
 """
 
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.security import require_college
 from app.db.deps import get_db
-from app.models.application import Application
-from app.models.college_review import CollegeReview
+
+# Note: CollegeReview model removed - replaced by unified ApplicationReview system
+# from app.models.college_review import CollegeReview
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipStatus, ScholarshipType
 from app.models.student import Academy
-from app.models.user import AdminScholarship, User, UserRole
+from app.models.user import AdminScholarship, User
 from app.schemas.response import ApiResponse
-from app.services.college_review_service import CollegeReviewError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-@router.get("/statistics")
-async def get_college_review_statistics(
-    academic_year: Optional[int] = Query(None, description="Filter by academic year"),
-    semester: Optional[str] = Query(None, description="Filter by semester"),
-    current_user: User = Depends(require_college),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get college review statistics"""
-
-    try:
-        # Build statistics query
-        base_query = select(CollegeReview)
-
-        if current_user.role not in [UserRole.admin, UserRole.super_admin]:
-            # Non-admin users can only see their own reviews
-            base_query = base_query.where(CollegeReview.reviewer_id == current_user.id)
-
-        # Apply filters
-        if academic_year or semester:
-            from sqlalchemy.orm import join
-
-            base_query = base_query.select_from(
-                join(CollegeReview, Application, CollegeReview.application_id == Application.id)
-            )
-
-            if academic_year:
-                base_query = base_query.where(Application.academic_year == academic_year)
-            if semester:
-                base_query = base_query.where(Application.semester == semester)
-
-        # Execute query and calculate statistics
-        result = await db.execute(base_query)
-        reviews = result.scalars().all()
-
-        total_reviews = len(reviews)
-        approved_count = len([r for r in reviews if r.recommendation == "approve"])
-        rejected_count = len([r for r in reviews if r.recommendation == "reject"])
-        conditional_count = len([r for r in reviews if r.recommendation == "conditional"])
-
-        avg_ranking_score = (
-            sum(r.ranking_score for r in reviews if r.ranking_score) / len([r for r in reviews if r.ranking_score])
-            if reviews
-            else 0
-        )
-
-        statistics = {
-            "total_reviews": total_reviews,
-            "approved_count": approved_count,
-            "rejected_count": rejected_count,
-            "conditional_count": conditional_count,
-            "approval_rate": (approved_count / total_reviews * 100) if total_reviews > 0 else 0,
-            "average_ranking_score": round(avg_ranking_score, 2),
-            "breakdown_by_recommendation": {
-                "approve": approved_count,
-                "reject": rejected_count,
-                "conditional": conditional_count,
-            },
-        }
-
-        return ApiResponse(success=True, message="College review statistics retrieved successfully", data=statistics)
-
-    except ValueError as e:
-        logger.warning(f"Invalid statistics parameters: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid parameters: {str(e)}")
-    except CollegeReviewError as e:
-        logger.error(f"College review error retrieving statistics: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    except Exception as e:
-        logger.error(f"Unexpected error retrieving statistics: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve statistics")
+# REMOVED: GET /statistics endpoint
+# This endpoint was removed as part of CollegeReview table removal (Phase 3).
+# The CollegeReview model no longer exists. Statistics should be calculated from
+# the unified ApplicationReview system instead.
+# TODO: Implement new statistics endpoint using ApplicationReview + ApplicationReviewItem
 
 
 @router.get("/available-combinations")
