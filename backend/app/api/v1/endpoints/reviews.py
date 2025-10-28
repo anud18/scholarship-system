@@ -496,7 +496,7 @@ async def submit_application_review(
             action=audit_action,
             user=current_user,
             request=request,
-            description=f"{current_user.role.title()} review created with recommendation: {review.recommendation}",
+            description=f"{role_str.replace('_', ' ').title()} review created with recommendation: {review.recommendation}",
             new_values={
                 "recommendation": review.recommendation,
                 "items_count": len(review.items),

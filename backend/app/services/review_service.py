@@ -302,13 +302,14 @@ class ReviewService:
         if not rejected_items:
             return
 
-        # 角色名稱對應
+        # 角色名稱對應 - 先提取 role 字符串值
+        role_value = reviewer.role.value if hasattr(reviewer.role, "value") else str(reviewer.role).lower()
         role_name = {
             "professor": "教授",
             "college": "學院",
             "admin": "管理員",
             "super_admin": "系統管理員",
-        }.get(reviewer.role, reviewer.role)
+        }.get(role_value, role_value)
 
         # 組合被拒絕的子項目評論
         rejected_comments = "\n".join(
