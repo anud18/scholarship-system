@@ -73,7 +73,7 @@ import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
 
 interface ApplicationReviewDialogProps {
   application: Application | HistoricalApplication | null;
-  role: "college" | "admin";
+  role: "college" | "admin" | "super_admin";
   open: boolean;
   onOpenChange: (open: boolean) => void;
   locale?: "zh" | "en";
@@ -753,7 +753,7 @@ export function ApplicationReviewDialog({
   const loadSubTypesAndReview = async (applicationId: number) => {
     try {
       // Get available sub-types (route based on role)
-      const subTypesResponse = role === "admin"
+      const subTypesResponse = (role === "admin" || role === "super_admin")
         ? await api.admin.getReviewableSubTypes(applicationId)
         : await api.college.getSubTypes(applicationId);
       if (subTypesResponse.success && subTypesResponse.data) {
@@ -769,7 +769,7 @@ export function ApplicationReviewDialog({
 
         // Try to get existing review (route based on role)
         try {
-          const reviewResponse = role === "admin"
+          const reviewResponse = (role === "admin" || role === "super_admin")
             ? await api.admin.getApplicationReview(applicationId)
             : await api.college.getReview(applicationId);
           if (reviewResponse.success && reviewResponse.data && reviewResponse.data.id > 0) {
@@ -832,8 +832,8 @@ export function ApplicationReviewDialog({
       setReviewComment("");
       setAdminComments("");
 
-      // Load sub-types and existing review for college and admin users
-      if (role === "college" || role === "admin") {
+      // Load sub-types and existing review for college, admin, and super_admin users
+      if (["college", "admin", "super_admin"].includes(role)) {
         loadSubTypesAndReview(application.id);
       }
     } else {
@@ -1115,7 +1115,7 @@ export function ApplicationReviewDialog({
       };
 
       // Route submission based on role
-      const response = role === "admin"
+      const response = (role === "admin" || role === "super_admin")
         ? await api.admin.submitApplicationReview(detailedApplication.id, submissionData)
         : await api.college.submitReview(detailedApplication.id, submissionData);
 
@@ -1326,13 +1326,13 @@ export function ApplicationReviewDialog({
                   <GraduationCap className="h-4 w-4 mr-1" />
                   {locale === "zh" ? "學生資訊" : "Student"}
                 </TabsTrigger>
-                {role === "college" && (
+                {["college", "admin", "super_admin"].includes(role) && (
                   <TabsTrigger value="review">
                     <CheckCircle className="h-4 w-4 mr-1" />
                     {locale === "zh" ? "審核操作" : "Review"}
                   </TabsTrigger>
                 )}
-                {role === "admin" && (
+                {["admin", "super_admin"].includes(role) && (
                   <TabsTrigger value="management">
                     <Settings className="h-4 w-4 mr-1" />
                     {locale === "zh" ? "管理" : "Management"}
@@ -1680,8 +1680,8 @@ export function ApplicationReviewDialog({
                   </Card>
                 </TabsContent>
 
-                {/* Review Actions Tab (College only) */}
-                {role === "college" && (
+                {/* Review Actions Tab (College, Admin, Super Admin) */}
+                {["college", "admin", "super_admin"].includes(role) && (
                   <TabsContent value="review" className="space-y-6 mt-4">
                     {existingReview && (
                       <Alert className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20">
@@ -1913,8 +1913,8 @@ export function ApplicationReviewDialog({
                   </TabsContent>
                 )}
 
-                {/* Management Tab (Admin only) */}
-                {role === "admin" && (
+                {/* Management Tab (Admin and Super Admin) */}
+                {["admin", "super_admin"].includes(role) && (
                   <TabsContent value="management" className="space-y-4 mt-4">
                     {/* Bank Verification Section */}
                     <Card>

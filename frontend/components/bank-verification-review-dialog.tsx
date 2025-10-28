@@ -229,113 +229,205 @@ export function BankVerificationReviewDialog({
           )}
 
           {/* Account Number Verification */}
-          {accountNumberComp && (
-            <div className="border rounded-lg p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-lg">郵局帳號</h3>
-                {getStatusBadge(verificationData.account_number_status)}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm text-gray-600">表單填寫</Label>
-                  <p className="font-mono text-lg">{accountNumberComp.form_value || "-"}</p>
-                </div>
-                <div>
-                  <Label className="text-sm text-gray-600">OCR 辨識</Label>
-                  <p className="font-mono text-lg">{accountNumberComp.ocr_value || "-"}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 text-sm">
-                <span>相似度: {(accountNumberComp.similarity_score * 100).toFixed(1)}%</span>
-                <span>信心度: {accountNumberComp.confidence}</span>
-              </div>
-
-              {accountNumberComp.needs_manual_review && (
-                <div className="space-y-3 pt-3 border-t">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="account-number-approved"
-                      checked={accountNumberApproved === true}
-                      onCheckedChange={(checked) => setAccountNumberApproved(typeof checked === 'boolean' ? checked : undefined)}
-                    />
-                    <label
-                      htmlFor="account-number-approved"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      核准帳號 (確認資料正確)
-                    </label>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="account-number-corrected">修正帳號 (如需修正)</Label>
-                    <Input
-                      id="account-number-corrected"
-                      value={accountNumberCorrected}
-                      onChange={(e) => setAccountNumberCorrected(e.target.value)}
-                      placeholder="輸入正確的帳號"
-                      className="font-mono"
-                    />
-                  </div>
-                </div>
-              )}
+          <div className="border rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-lg">郵局帳號</h3>
+              {getStatusBadge(verificationData.account_number_status || "not_reviewed")}
             </div>
-          )}
+
+            {/* 如果有 OCR 結果，顯示比對 */}
+            {accountNumberComp ? (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-600">表單填寫</Label>
+                    <p className="font-mono text-lg">{accountNumberComp.form_value || "-"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">OCR 辨識</Label>
+                    <p className="font-mono text-lg">{accountNumberComp.ocr_value || "-"}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 text-sm">
+                  <span>相似度: {(accountNumberComp.similarity_score * 100).toFixed(1)}%</span>
+                  <span>信心度: {accountNumberComp.confidence}</span>
+                </div>
+              </>
+            ) : (
+              /* 純手動模式：只顯示表單資料 */
+              <div>
+                <Label className="text-sm text-gray-600">表單填寫的帳號</Label>
+                <p className="font-mono text-lg bg-gray-50 p-2 rounded border">
+                  {verificationData.form_data?.account_number || "未填寫"}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">請查看存摺封面，確認帳號是否正確</p>
+              </div>
+            )}
+
+            {/* 人工審核欄位 */}
+            <div className="space-y-3 pt-3 border-t">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="account-number-approved"
+                  checked={accountNumberApproved === true}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAccountNumberApproved(true);
+                      setAccountNumberCorrected(""); // 核准時清除修正值
+                    } else {
+                      setAccountNumberApproved(undefined);
+                    }
+                  }}
+                />
+                <label
+                  htmlFor="account-number-approved"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  ✅ 核准帳號（確認與存摺一致）
+                </label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="account-number-rejected"
+                  checked={accountNumberApproved === false}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAccountNumberApproved(false);
+                      setAccountNumberCorrected(""); // 拒絕時清除修正值
+                    } else {
+                      setAccountNumberApproved(undefined);
+                    }
+                  }}
+                />
+                <label
+                  htmlFor="account-number-rejected"
+                  className="text-sm font-medium text-red-600 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  ❌ 拒絕帳號（明確錯誤）
+                </label>
+              </div>
+
+              <div>
+                <Label htmlFor="account-number-corrected">✏️ 修正帳號（輸入正確值）</Label>
+                <Input
+                  id="account-number-corrected"
+                  value={accountNumberCorrected}
+                  onChange={(e) => {
+                    setAccountNumberCorrected(e.target.value);
+                    // 輸入修正值時，自動取消核准/拒絕
+                    if (e.target.value.trim()) {
+                      setAccountNumberApproved(undefined);
+                    }
+                  }}
+                  placeholder="輸入正確的 14 位帳號"
+                  className="font-mono"
+                />
+                <p className="text-xs text-gray-500 mt-1">若帳號錯誤，請輸入正確的帳號</p>
+              </div>
+            </div>
+          </div>
 
           {/* Account Holder Verification */}
-          {accountHolderComp && (
-            <div className="border rounded-lg p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-lg">戶名</h3>
-                {getStatusBadge(verificationData.account_holder_status)}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm text-gray-600">表單填寫</Label>
-                  <p className="font-mono text-lg">{accountHolderComp.form_value || "-"}</p>
-                </div>
-                <div>
-                  <Label className="text-sm text-gray-600">OCR 辨識</Label>
-                  <p className="font-mono text-lg">{accountHolderComp.ocr_value || "-"}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 text-sm">
-                <span>相似度: {(accountHolderComp.similarity_score * 100).toFixed(1)}%</span>
-                <span>信心度: {accountHolderComp.confidence}</span>
-              </div>
-
-              {accountHolderComp.needs_manual_review && (
-                <div className="space-y-3 pt-3 border-t">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="account-holder-approved"
-                      checked={accountHolderApproved === true}
-                      onCheckedChange={(checked) => setAccountHolderApproved(typeof checked === 'boolean' ? checked : undefined)}
-                    />
-                    <label
-                      htmlFor="account-holder-approved"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      核准戶名 (確認資料正確)
-                    </label>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="account-holder-corrected">修正戶名 (如需修正)</Label>
-                    <Input
-                      id="account-holder-corrected"
-                      value={accountHolderCorrected}
-                      onChange={(e) => setAccountHolderCorrected(e.target.value)}
-                      placeholder="輸入正確的戶名"
-                    />
-                  </div>
-                </div>
-              )}
+          <div className="border rounded-lg p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-lg">戶名</h3>
+              {getStatusBadge(verificationData.account_holder_status || "not_reviewed")}
             </div>
-          )}
+
+            {/* 如果有 OCR 結果，顯示比對 */}
+            {accountHolderComp ? (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-600">表單填寫</Label>
+                    <p className="font-mono text-lg">{accountHolderComp.form_value || "-"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-600">OCR 辨識</Label>
+                    <p className="font-mono text-lg">{accountHolderComp.ocr_value || "-"}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 text-sm">
+                  <span>相似度: {(accountHolderComp.similarity_score * 100).toFixed(1)}%</span>
+                  <span>信心度: {accountHolderComp.confidence}</span>
+                </div>
+              </>
+            ) : (
+              /* 純手動模式：只顯示表單資料 */
+              <div>
+                <Label className="text-sm text-gray-600">表單填寫的戶名</Label>
+                <p className="font-mono text-lg bg-gray-50 p-2 rounded border">
+                  {verificationData.form_data?.account_holder || "未填寫"}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">請查看存摺封面，確認戶名是否正確</p>
+              </div>
+            )}
+
+            {/* 人工審核欄位 */}
+            <div className="space-y-3 pt-3 border-t">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="account-holder-approved"
+                  checked={accountHolderApproved === true}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAccountHolderApproved(true);
+                      setAccountHolderCorrected(""); // 核准時清除修正值
+                    } else {
+                      setAccountHolderApproved(undefined);
+                    }
+                  }}
+                />
+                <label
+                  htmlFor="account-holder-approved"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  ✅ 核准戶名（確認與存摺一致）
+                </label>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="account-holder-rejected"
+                  checked={accountHolderApproved === false}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setAccountHolderApproved(false);
+                      setAccountHolderCorrected(""); // 拒絕時清除修正值
+                    } else {
+                      setAccountHolderApproved(undefined);
+                    }
+                  }}
+                />
+                <label
+                  htmlFor="account-holder-rejected"
+                  className="text-sm font-medium text-red-600 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  ❌ 拒絕戶名（明確錯誤）
+                </label>
+              </div>
+
+              <div>
+                <Label htmlFor="account-holder-corrected">✏️ 修正戶名（輸入正確值）</Label>
+                <Input
+                  id="account-holder-corrected"
+                  value={accountHolderCorrected}
+                  onChange={(e) => {
+                    setAccountHolderCorrected(e.target.value);
+                    // 輸入修正值時，自動取消核准/拒絕
+                    if (e.target.value.trim()) {
+                      setAccountHolderApproved(undefined);
+                    }
+                  }}
+                  placeholder="輸入正確的戶名"
+                />
+                <p className="text-xs text-gray-500 mt-1">若戶名錯誤，請輸入正確的戶名</p>
+              </div>
+            </div>
+          </div>
 
           {/* Recommendations */}
           {verificationData.recommendations && verificationData.recommendations.length > 0 && (

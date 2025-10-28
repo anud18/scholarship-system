@@ -305,6 +305,20 @@ class BankVerificationService:
         else:
             verification_status = "verification_failed"
 
+        # Update application meta_data with separate statuses
+        from datetime import datetime, timezone
+
+        application.meta_data = application.meta_data or {}
+        application.meta_data["bank_verification"] = {
+            "overall_status": verification_status,
+            "account_number_status": account_number_status,
+            "account_holder_status": account_holder_status,
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+            "requires_manual_review": requires_manual_review,
+        }
+        await self.db.commit()
+        await self.db.refresh(application)
+
         return {
             "success": True,
             "application_id": application_id,
@@ -549,6 +563,28 @@ class BankVerificationService:
                 account_holder_status = "failed"  # Explicitly rejected
             else:
                 account_holder_status = "not_reviewed"  # Not touched
+
+            # Determine overall status based on individual field statuses
+            if account_number_status == "verified" and account_holder_status == "verified":
+                overall_status = "verified"
+            elif account_number_status == "failed" or account_holder_status == "failed":
+                overall_status = "verification_failed"
+            elif account_number_status == "not_reviewed" and account_holder_status == "not_reviewed":
+                overall_status = "not_reviewed"
+            else:
+                overall_status = "needs_review"  # Partial verification
+
+            # Update application meta_data with separate statuses
+            application.meta_data = application.meta_data or {}
+            application.meta_data["bank_verification"] = {
+                "overall_status": overall_status,
+                "account_number_status": account_number_status,
+                "account_holder_status": account_holder_status,
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+                "requires_manual_review": False,  # Manual review completed
+                "reviewed_by": reviewer_username,
+                "review_notes": review_notes,
+            }
 
             # Query related payment roster items to update their status
             roster_items_stmt = select(PaymentRosterItem).where(PaymentRosterItem.application_id == application_id)

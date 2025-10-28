@@ -69,6 +69,19 @@ type ManualBankReviewResult = {
 export function createBankVerificationApi() {
   return {
     /**
+     * Get bank verification initial data without performing OCR
+     * Used for direct manual review mode
+     */
+    getBankVerificationInitData: async (
+      applicationId: number
+    ): Promise<ApiResponse<BankVerificationResult>> => {
+      const response = await typedClient.raw.GET('/api/v1/admin/bank-verification/{application_id}/init', {
+        params: { path: { application_id: applicationId } },
+      });
+      return toApiResponse<BankVerificationResult>(response);
+    },
+
+    /**
      * Verify bank account for a single application
      * Type-safe: Request body validated against OpenAPI
      */

@@ -180,6 +180,64 @@ async def batch_verify_bank_accounts(
         )
 
 
+@router.get("/bank-verification/{application_id}/init")
+async def get_bank_verification_init_data(
+    application_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get bank verification initial data without performing OCR
+    Used for direct manual review mode
+    """
+    try:
+        verification_service = BankVerificationService(db)
+
+        # Get application
+        stmt = select(Application).where(Application.id == application_id)
+        result = await db.execute(stmt)
+        application = result.scalar_one_or_none()
+
+        if not application:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在")
+
+        # Extract bank fields from form
+        form_bank_fields = verification_service.extract_bank_fields_from_application(application)
+
+        # Get passbook document
+        passbook_doc = await verification_service.get_bank_passbook_document(application)
+
+        return {
+            "success": True,
+            "message": "已載入銀行資料",
+            "data": {
+                "application_id": application_id,
+                "verification_status": "manual_review_init",
+                "form_data": form_bank_fields,
+                "passbook_document": {
+                    "file_path": passbook_doc.filename if passbook_doc else None,
+                    "original_filename": passbook_doc.original_filename if passbook_doc else None,
+                    "upload_time": passbook_doc.uploaded_at.isoformat()
+                    if passbook_doc and passbook_doc.uploaded_at
+                    else None,
+                    "file_id": passbook_doc.id if passbook_doc else None,
+                    "object_name": passbook_doc.object_name if passbook_doc else None,
+                }
+                if passbook_doc
+                else None,
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get bank verification init data: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="無法載入銀行資料",
+        )
+
+
 @router.post("/bank-verification/manual-review")
 async def manual_review_bank_info(
     request: ManualBankReviewRequestSchema,
@@ -218,23 +276,18 @@ async def manual_review_bank_info(
 
         if application:
             audit_service = ApplicationAuditService(db)
-            await audit_service.log_action(
+            # Use log_bank_verification with manual review result
+            await audit_service.log_bank_verification(
                 application_id=request.application_id,
                 app_id=application.app_id,
-                action="manual_bank_review",
-                level="info",
-                title="人工審核銀行帳號資訊",
-                description=f"管理員 {current_user.nycu_id} 完成人工審核",
                 user=current_user,
-                meta_data={
-                    "account_number_approved": request.account_number_approved,
-                    "account_number_corrected": request.account_number_corrected,
-                    "account_holder_approved": request.account_holder_approved,
-                    "account_holder_corrected": request.account_holder_corrected,
+                verification_result={
+                    "verification_status": "manual_review_completed",
+                    "account_number_status": result["account_number_status"],
+                    "account_holder_status": result["account_holder_status"],
                     "review_notes": request.review_notes,
-                    "result": result,
+                    "reviewed_by": current_user.nycu_id,
                 },
-                status="success",
                 request=http_request,
             )
 

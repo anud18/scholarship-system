@@ -175,7 +175,7 @@ class BankVerificationResultSchema(BaseModel):
     comparisons: Dict[str, BankFieldComparisonSchema] = Field({}, description="Detailed field comparisons")
     form_data: Dict[str, str] = Field({}, description="Bank data from form")
     ocr_data: Dict[str, Any] = Field({}, description="Bank data from OCR")
-    passbook_document: Optional[Dict[str, str]] = Field(None, description="Information about passbook document")
+    passbook_document: Optional[Dict[str, Any]] = Field(None, description="Information about passbook document")
     recommendations: List[str] = Field([], description="Verification recommendations")
     error: Optional[str] = Field(None, description="Error message if failed")
     requires_manual_review: bool = Field(False, description="Whether any field requires manual review")

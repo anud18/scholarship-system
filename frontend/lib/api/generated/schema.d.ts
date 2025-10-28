@@ -2098,6 +2098,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/bank-verification/{application_id}/init": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Bank Verification Init Data
+         * @description Get bank verification initial data without performing OCR
+         *     Used for direct manual review mode
+         */
+        get: operations["get_bank_verification_init_data_api_v1_admin_bank_verification__application_id__init_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/bank-verification/manual-review": {
         parameters: {
             query?: never;
@@ -13020,6 +13041,37 @@ export interface operations {
                 "application/json": components["schemas"]["BankVerificationBatchRequestSchema"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_bank_verification_init_data_api_v1_admin_bank_verification__application_id__init_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
