@@ -154,6 +154,126 @@ Trigger a sync manually from GitHub UI:
    - Force push: ☐ (usually not needed)
 5. Click **"Run workflow"**
 
+## 💾 Squash Commits 機制
+
+### 概述
+
+Mirror workflow 會將所有開發倉庫的 commits **squash 成單一乾淨的 commit** 再推送到生產倉庫。
+
+**優勢**：
+- ✅ PR 只顯示一個 commit（不是上百條）
+- ✅ 生產倉庫歷史簡潔（每個版本一個 commit）
+- ✅ Review 更容易（專注在檔案變更，而非 commit 歷史）
+- ✅ Rollback 簡單（回退任何版本都是回退一個 commit）
+- ✅ Tag 對應清楚（每個 tag 指向一個乾淨的 release commit）
+
+### Squash 流程
+
+```
+開發倉庫 (100+ commits)
+  └─ Commit 1: feat: add feature A
+  └─ Commit 2: fix: typo
+  └─ Commit 3: refactor: cleanup
+  └─ ... (97 more commits)
+  └─ Commit 100: docs: update README
+       ↓
+  [Mirror Workflow - Squash 步驟]
+       ↓
+生產倉庫 (1 commit)
+  └─ Commit: Release v1.2.3
+       ├─ 包含所有 100+ commits 的變更
+       ├─ Commit 訊息包含完整 release notes
+       └─ 父 commit 是上一個 release (v1.2.2)
+```
+
+### Commit 訊息格式
+
+Squashed commit 包含完整的 release 資訊：
+
+```
+Release v1.2.3
+
+<!-- AUTO_TAG_METADATA
+Version: v1.2.3
+-->
+
+# 🚀 Production Sync v1.2.3
+
+## 📋 Summary
+[完整的 release notes...]
+
+## 🔄 Changes Synced from Production Repository
+[變更列表...]
+
+## ✨ Changes Merged from Main Branch
+[變更列表...]
+
+## 📝 Notes
+- This is a production-ready snapshot with development files removed
+- Production workflows have been preserved
+- All changes squashed into a single clean commit for production
+
+---
+📦 This commit squashes all development changes into a single release
+🔗 Full development history available in source repository
+```
+
+### 生產倉庫歷史範例
+
+```bash
+# git log --oneline (生產倉庫)
+abc123 Release v1.2.3 (2025-10-30)
+def456 Release v1.2.2 (2025-10-25)
+789ghi Release v1.2.1 (2025-10-20)
+```
+
+**清晰簡潔**！每個版本一個 commit，每個 commit 都有完整的 release notes。
+
+### 與開發倉庫的關係
+
+**開發倉庫**：保留完整的開發歷史
+```bash
+# git log --oneline (開發倉庫 main branch)
+e01b1d0 docs: update README
+c1f0ceb fix: code scanning alert
+d737fbb refactor: eliminate false positives
+... (完整歷史)
+```
+
+**生產倉庫**：只保留 release commits
+```bash
+# git log --oneline (生產倉庫 main branch)
+abc123 Release v1.2.3
+def456 Release v1.2.2
+```
+
+**好處**：
+- 開發團隊可以查看完整歷史（在開發倉庫）
+- 生產環境保持簡潔（在生產倉庫）
+- 兩者透過 release notes 連接
+
+### Production Branch 處理
+
+開發倉庫的 `production` branch 也會被 force push（因為 squash 重寫了歷史）。
+
+**注意事項**：
+- ⚠️ 不要在本地 checkout production branch 並基於它開發
+- ⚠️ Production branch 僅供 workflow 使用
+- ✅ 所有開發工作都在 main branch 進行
+- ✅ Production branch 會被 workflow 自動管理
+
+### Squash 與 Squash Merge 的差別
+
+**Mirror Workflow Squash**（開發倉庫 → 生產倉庫 PR）：
+- 在推送到生產倉庫之前 squash
+- PR 中只顯示 1 個 commit ✅
+
+**GitHub Squash Merge**（生產倉庫 PR → main）：
+- PR merge 時 GitHub 進行 squash
+- 最終生產倉庫歷史也是每個版本 1 個 commit ✅
+
+**結果**：雙重 squash，確保極致簡潔！
+
 ## 🔧 Production Repository Management
 
 ### Maintaining Independent Workflows
@@ -577,6 +697,168 @@ gh secret list
 
 # Manual test
 gh workflow run mirror-to-production.yml
+```
+
+## 📦 自動建立 GitHub Release
+
+### 概述
+
+Auto-tag workflow（在生產倉庫）不僅會自動建立 tag，還會同時創建 GitHub Release。
+
+### Release 內容
+
+**自動包含**：
+- ✅ **Release Title**: `Production Release v1.2.3`
+- ✅ **Release Notes**: 從 PR body 提取的完整變更說明
+- ✅ **Source Code**: 自動附加 source code archives (.zip, .tar.gz)
+- ✅ **Target Commit**: 指向正確的 squash merge commit
+- ✅ **Pre-release Detection**: 自動偵測 beta/rc 版本並標記為 pre-release
+
+### Release Notes 結構
+
+自動生成的 release notes 包含：
+
+```markdown
+# 🚀 Production Sync v1.2.3
+
+## 📋 Summary
+Production release v1.2.3 synced from development repository
+
+## 🔄 Changes Synced from Production Repository
+- [變更列表]
+
+## ✨ Changes Merged from Main Branch
+- [變更列表]
+
+## 🚫 Removed Development Files
+- [移除的檔案列表]
+
+---
+📦 Auto-generated Release
+🔗 Generated from PR #123
+🤖 Created by Auto-Tag Workflow
+```
+
+### 查看 Release
+
+**方法 1: GitHub Web UI**
+```
+https://github.com/your-org/production-repo/releases
+```
+
+**方法 2: GitHub CLI**
+```bash
+# 列出所有 releases
+gh release list
+
+# 查看特定 release
+gh release view v1.2.3
+
+# 下載 release assets
+gh release download v1.2.3
+```
+
+### 手動編輯 Release
+
+如需修改自動生成的 release notes：
+
+**Web UI 方式**：
+1. 前往生產倉庫的 Releases 頁面
+2. 找到對應版本，點擊 "Edit" 按鈕
+3. 修改 release notes
+4. 點擊 "Update release" 儲存
+
+**CLI 方式**：
+```bash
+# 更新 release notes
+gh release edit v1.2.3 --notes "新的 release notes"
+
+# 從檔案更新
+gh release edit v1.2.3 --notes-file new-notes.md
+
+# 標記為 pre-release
+gh release edit v1.2.3 --prerelease
+
+# 取消 pre-release 標記
+gh release edit v1.2.3 --latest
+```
+
+### Pre-release 自動偵測
+
+Auto-tag workflow 會自動偵測版本號中的 pre-release 標記：
+
+**偵測規則**：
+- `v1.2.3-alpha.1` → Pre-release ✅
+- `v1.2.3-beta.2` → Pre-release ✅
+- `v1.2.3-rc.1` → Pre-release ✅
+- `v1.2.3-pre` → Pre-release ✅
+- `v1.2.3` → Latest Release ✅
+
+**Pre-release 特性**：
+- 在 Releases 頁面標記為 "Pre-release"
+- 不會被標記為 "Latest"
+- 不會觸發某些自動部署 workflow（取決於你的配置）
+
+### 觸發基於 Release 的部署
+
+你可以在生產倉庫設置 workflow，當 release 發布時自動觸發：
+
+```yaml
+# production-repo/.github/workflows/deploy-on-release.yml
+name: Deploy on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    # 排除 pre-release
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying release ${{ github.event.release.tag_name }}"
+          # 你的部署命令
+```
+
+### 完整流程範例
+
+```
+1. 開發倉庫執行 Mirror Workflow
+   ├─ 版本號: v1.2.3
+   ├─ Squash commits 成單一 commit
+   └─ 推送到生產倉庫，創建 PR
+
+2. 生產倉庫 PR Review
+   ├─ 檢視變更（只有 1 個 commit！）
+   ├─ 審核 release notes
+   └─ Squash merge PR
+
+3. Auto-tag Workflow 自動執行
+   ├─ 從 PR 標題提取版本號: v1.2.3
+   ├─ 建立 annotated tag: v1.2.3
+   ├─ 推送 tag 到遠端
+   ├─ 提取 PR body 作為 release notes
+   └─ 創建 GitHub Release ✅
+
+4. Release 已發布
+   ├─ URL: https://github.com/org/prod-repo/releases/tag/v1.2.3
+   ├─ Title: Production Release v1.2.3
+   ├─ Notes: 完整的變更說明
+   ├─ Assets: Source code archives
+   └─ 可能觸發自動部署
+
+5. 結果
+   ├─ Tag: v1.2.3 ✅
+   ├─ Release: v1.2.3 ✅
+   ├─ Commit: 1 個乾淨的 squashed commit ✅
+   └─ 歷史: 清晰簡潔 ✅
 ```
 
 ## 📄 License
