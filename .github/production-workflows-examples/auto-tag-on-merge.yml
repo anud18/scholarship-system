@@ -1,0 +1,199 @@
+name: Auto Tag on Production Sync Merge
+
+# 此 workflow 用於生產倉庫
+# 當來自開發倉庫的 mirror PR 被 merge 後，自動建立對應的版本 tag
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main  # 根據生產倉庫的主分支調整
+
+permissions:
+  contents: write  # 需要寫入權限以建立 tag
+
+jobs:
+  auto-tag:
+    name: Create Version Tag
+    runs-on: ubuntu-latest
+    # 只在 PR 被 merge 時執行（不是單純 close）
+    if: github.event.pull_request.merged == true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 取得完整歷史以檢查現有 tags
+          ref: ${{ github.event.pull_request.merge_commit_sha }}  # checkout 到 merge commit
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Extract version from PR
+        id: extract-version
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          echo "::group::Extract version information"
+
+          VERSION=""
+
+          # 方法 1: 從 PR 標題提取版本號 (格式: "Release v1.2.3")
+          if [[ "$PR_TITLE" =~ ^Release[[:space:]]+v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            echo "::notice::Version extracted from PR title: v$VERSION"
+          # 方法 2: 從 PR body 的元數據註解提取
+          elif [[ "$PR_BODY" =~ Version:[[:space:]]*v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            echo "::notice::Version extracted from PR body metadata: v$VERSION"
+          else
+            echo "::warning::This PR does not appear to be a production sync release"
+            echo "::warning::PR title format should be: 'Release v1.2.3'"
+            echo "::warning::Skipping auto-tagging"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 驗證版本號格式
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version format: $VERSION"
+            echo "::error::Expected format: X.Y.Z (e.g., 1.2.3)"
+            exit 1
+          fi
+
+          # 儲存版本號（含 v 前綴）
+          TAG_NAME="v$VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "skip=false" >> $GITHUB_OUTPUT
+
+          echo "::notice::✅ Version validated: $TAG_NAME"
+          echo "::endgroup::"
+
+      - name: Check if tag already exists
+        id: check-tag
+        if: steps.extract-version.outputs.skip != 'true'
+        env:
+          TAG_NAME: ${{ steps.extract-version.outputs.tag_name }}
+        run: |
+          echo "::group::Check for existing tag"
+
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "::warning::Tag $TAG_NAME already exists"
+            echo "::warning::Skipping tag creation to avoid conflicts"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "::notice::Tag $TAG_NAME does not exist, proceeding with creation"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "::endgroup::"
+
+      - name: Create and push tag
+        if: steps.extract-version.outputs.skip != 'true' && steps.check-tag.outputs.exists != 'true'
+        env:
+          TAG_NAME: ${{ steps.extract-version.outputs.tag_name }}
+          VERSION: ${{ steps.extract-version.outputs.version }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          MERGE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          echo "::group::Create version tag"
+
+          # 建立帶有訊息的 annotated tag
+          git tag -a "$TAG_NAME" -m "Release $TAG_NAME
+
+          Merged from PR #$PR_NUMBER: $PR_TITLE
+          Merge commit: $MERGE_COMMIT
+          Tagged by: GitHub Actions
+          Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          "
+
+          echo "::notice::Tag created: $TAG_NAME"
+
+          # 推送 tag 到遠端
+          git push origin "$TAG_NAME"
+
+          echo "::notice::✅ Tag pushed to origin: $TAG_NAME"
+          echo "::endgroup::"
+
+      - name: Create GitHub summary
+        if: steps.extract-version.outputs.skip != 'true'
+        env:
+          TAG_NAME: ${{ steps.extract-version.outputs.tag_name }}
+          TAG_EXISTS: ${{ steps.check-tag.outputs.exists }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # 🏷️ Auto-Tag Result
+
+          ## Tag Information
+
+          - **Version**: \`$TAG_NAME\`
+          - **PR Number**: #$PR_NUMBER
+          - **Merge Commit**: \`${{ github.event.pull_request.merge_commit_sha }}\`
+
+          EOF
+
+          if [ "$TAG_EXISTS" = "true" ]; then
+            cat >> $GITHUB_STEP_SUMMARY <<EOF
+          ## ⚠️ Tag Already Exists
+
+          The tag \`$TAG_NAME\` already exists in the repository. Skipped tag creation.
+
+          - [View Tag](https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME)
+          EOF
+          else
+            cat >> $GITHUB_STEP_SUMMARY <<EOF
+          ## ✅ Tag Created Successfully
+
+          The tag \`$TAG_NAME\` has been created and pushed to the repository.
+
+          ## Next Steps
+
+          You may want to:
+          1. [Create a GitHub Release](https://github.com/${{ github.repository }}/releases/new?tag=$TAG_NAME)
+          2. Trigger deployment workflows (if configured to run on tag push)
+          3. Update changelog or release notes
+
+          ## Quick Links
+
+          - [View Tag](https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME)
+          - [View Commits](https://github.com/${{ github.repository }}/commits/$TAG_NAME)
+          - [View Pull Request](https://github.com/${{ github.repository }}/pull/$PR_NUMBER)
+          EOF
+          fi
+
+      - name: Handle skip case
+        if: steps.extract-version.outputs.skip == 'true'
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # ℹ️ Auto-Tag Skipped
+
+          This PR was not identified as a production sync release.
+
+          ## Expected PR Format
+
+          For auto-tagging to work, the PR title must be:
+          \`\`\`
+          Release v1.2.3
+          \`\`\`
+
+          Or the PR body must contain metadata:
+          \`\`\`html
+          <!-- AUTO_TAG_METADATA
+          Version: v1.2.3
+          -->
+          \`\`\`
+
+          ## Manual Tagging
+
+          If you want to create a tag manually:
+          \`\`\`bash
+          git tag -a v1.2.3 -m "Release v1.2.3"
+          git push origin v1.2.3
+          \`\`\`
+          EOF
