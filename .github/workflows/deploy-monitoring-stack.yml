@@ -9,6 +9,10 @@ on:
       - '.github/workflows/deploy-monitoring-stack.yml'
   workflow_dispatch:
 
+# SECURITY: Limit GITHUB_TOKEN permissions to minimum required
+permissions:
+  contents: read
+
 jobs:
   deploy-monitoring-server:
     name: Deploy Monitoring Server (Staging AP-VM)

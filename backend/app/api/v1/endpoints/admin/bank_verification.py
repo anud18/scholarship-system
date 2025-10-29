@@ -7,14 +7,16 @@ Handles bank account verification operations including:
 """
 
 import logging
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.application import Application
+from app.models.bank_verification_task import BankVerificationTaskStatus
 from app.models.user import User
 from app.schemas.config_management import (
     BankVerificationBatchRequestSchema,
@@ -25,6 +27,7 @@ from app.schemas.config_management import (
     ManualBankReviewResultSchema,
 )
 from app.services.bank_verification_service import BankVerificationService
+from app.services.bank_verification_task_service import BankVerificationTaskService
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +104,12 @@ async def verify_bank_account(
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        # SECURITY: Log full exception but return sanitized message
+        logger.warning(f"ValueError in bank verification: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的資源或資料不正確")
     except Exception as e:
-        logger.error(f"Unexpected error in bank verification: {str(e)}")
+        # SECURITY: Log full exception but return sanitized message
+        logger.error(f"Unexpected error in bank verification: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="銀行帳戶驗證發生未預期的錯誤",
@@ -318,4 +324,182 @@ async def manual_review_bank_info(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="人工審核發生未預期的錯誤",
+        )
+
+
+@router.post("/bank-verification/batch-async")
+async def start_batch_verification_async(
+    request: BankVerificationBatchRequestSchema,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Start async batch bank verification task (admin only)
+
+    Creates a background task to verify multiple applications without blocking.
+    Returns immediately with a task_id for progress tracking.
+    """
+    try:
+        task_service = BankVerificationTaskService(db)
+
+        # Create task
+        task = await task_service.create_task(
+            application_ids=request.application_ids,
+            created_by_user_id=current_user.id,
+        )
+
+        # Schedule background processing
+        background_tasks.add_task(
+            task_service.process_batch_verification_task,
+            task.task_id,
+        )
+
+        return {
+            "success": True,
+            "message": f"批次驗證任務已啟動，共 {len(request.application_ids)} 個申請",
+            "data": {
+                "task_id": task.task_id,
+                "total_count": task.total_count,
+                "status": task.status.value,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to start async batch verification: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"啟動批次驗證失敗：{str(e)}",
+        )
+
+
+@router.get("/bank-verification/tasks/{task_id}")
+async def get_verification_task_status(
+    task_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get bank verification task status and progress (admin only)
+
+    Returns task details including progress counters and current results.
+    """
+    try:
+        task_service = BankVerificationTaskService(db)
+        task = await task_service.get_task(task_id)
+
+        if not task:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到該驗證任務")
+
+        return {
+            "success": True,
+            "message": "任務狀態查詢成功",
+            "data": {
+                "task_id": task.task_id,
+                "status": task.status.value,
+                "progress": {
+                    "total": task.total_count,
+                    "processed": task.processed_count,
+                    "verified": task.verified_count,
+                    "needs_review": task.needs_review_count,
+                    "failed": task.failed_count,
+                    "skipped": task.skipped_count,
+                    "percentage": task.progress_percentage,
+                },
+                "timestamps": {
+                    "created_at": task.created_at.isoformat() if task.created_at else None,
+                    "started_at": task.started_at.isoformat() if task.started_at else None,
+                    "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                },
+                "is_completed": task.is_completed,
+                "is_running": task.is_running,
+                "error_message": task.error_message,
+                "results": task.results,  # Detailed results for each application
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting task status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="查詢任務狀態失敗",
+        )
+
+
+@router.get("/bank-verification/tasks")
+async def list_verification_tasks(
+    status: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    List bank verification tasks (admin only)
+
+    Supports filtering by status and pagination.
+    """
+    try:
+        task_service = BankVerificationTaskService(db)
+
+        # Parse status filter
+        status_filter = None
+        if status:
+            try:
+                status_filter = BankVerificationTaskStatus(status)
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"無效的狀態值: {status}",
+                )
+
+        tasks = await task_service.list_tasks(
+            status=status_filter,
+            created_by_user_id=None,  # Show all tasks (admin can see all)
+            limit=limit,
+            offset=offset,
+        )
+
+        task_list = []
+        for task in tasks:
+            task_list.append(
+                {
+                    "task_id": task.task_id,
+                    "status": task.status.value,
+                    "total_count": task.total_count,
+                    "processed_count": task.processed_count,
+                    "verified_count": task.verified_count,
+                    "needs_review_count": task.needs_review_count,
+                    "failed_count": task.failed_count,
+                    "progress_percentage": task.progress_percentage,
+                    "created_at": task.created_at.isoformat() if task.created_at else None,
+                    "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                    "is_completed": task.is_completed,
+                    "is_running": task.is_running,
+                }
+            )
+
+        return {
+            "success": True,
+            "message": f"查詢到 {len(task_list)} 個任務",
+            "data": {
+                "tasks": task_list,
+                "pagination": {
+                    "limit": limit,
+                    "offset": offset,
+                    "count": len(task_list),
+                },
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing tasks: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="查詢任務列表失敗",
         )

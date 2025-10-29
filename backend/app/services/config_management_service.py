@@ -4,7 +4,6 @@ Handles system configuration with encryption for sensitive values
 """
 
 import json
-import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -13,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.regex_validator import RegexValidationError, safe_regex_match
 from app.models.system_setting import ConfigCategory, ConfigDataType, ConfigurationAuditLog, SystemSetting
 
 
@@ -128,8 +128,13 @@ class ConfigurationService:
             # For empty values, skip validation and type conversion
         else:
             # Validate if regex provided (only for non-empty values)
-            if validation_regex and not re.match(validation_regex, string_value):
-                raise ValueError(f"Value does not match validation pattern: {validation_regex}")
+            if validation_regex:
+                try:
+                    match = safe_regex_match(validation_regex, string_value, timeout_seconds=1)
+                    if not match:
+                        raise ValueError(f"Value does not match validation pattern: {validation_regex}")
+                except RegexValidationError as e:
+                    raise ValueError(f"Invalid validation pattern: {str(e)}")
 
         # Encrypt if sensitive (but NOT if empty when allow_empty=True)
         stored_value = string_value

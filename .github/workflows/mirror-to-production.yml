@@ -12,6 +12,10 @@ on:
         type: boolean
         default: false
 
+# SECURITY: Limit GITHUB_TOKEN permissions to minimum required
+permissions:
+  contents: read
+
 jobs:
   mirror-to-production:
     name: Create Production Mirror & Sync
@@ -374,6 +378,8 @@ jobs:
     runs-on: ubuntu-latest
     if: success() && github.event_name == 'push'
     continue-on-error: true
+    # SECURITY: No GitHub permissions needed for this verification job
+    permissions: {}
 
     steps:
       - name: Check production repository

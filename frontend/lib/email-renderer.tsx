@@ -90,23 +90,47 @@ export async function renderEmailTemplate(
 /**
  * Get plain text version of rendered email
  *
+ * SECURITY: Uses DOMParser for safe HTML entity decoding to avoid
+ * order-dependent escaping issues and incomplete sanitization.
+ *
  * @param html Rendered HTML email
  * @returns Plain text version
  */
 export function emailToPlainText(html: string): string {
-  // Remove script/style blocks
-  let text = html.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '');
+  // Remove script/style blocks separately
+  // Use separate replacements to avoid backreference issues
+  let text = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
 
-  // Strip HTML tags
-  text = text.replace(/<[^>]+>/g, ' ');
-
-  // Decode HTML entities
-  text = text.replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+  // Use DOMParser for safe HTML parsing and text extraction
+  // This properly handles HTML entities without order-dependent issues
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, 'text/html');
+      text = doc.body.textContent || '';
+    } catch (error) {
+      // Fallback to regex-based approach if DOMParser fails
+      console.warn('DOMParser failed, using fallback text extraction:', error);
+      text = text.replace(/<[^>]+>/g, ' ');
+      // Use textarea element trick for HTML entity decoding
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = text;
+      text = textarea.value;
+    }
+  } else {
+    // Server-side fallback (when DOMParser is not available)
+    text = text.replace(/<[^>]+>/g, ' ');
+    // Basic entity decoding (in safe order: specific entities before &amp;)
+    text = text
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&'); // Last to avoid double-decoding
+  }
 
   // Normalize whitespace
   text = text.replace(/\s+/g, ' ').trim();

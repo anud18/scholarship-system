@@ -9,14 +9,13 @@ Handles system configuration operations including:
 """
 
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.system_setting import ConfigCategory
 from app.models.user import User
@@ -308,13 +307,16 @@ async def validate_configuration(
 
         # Additional regex validation if provided
         if is_valid and validation_request.validation_regex:
-            import re
+            from app.core.regex_validator import RegexValidationError, safe_regex_match
 
             try:
-                if not re.match(validation_request.validation_regex, str(validation_request.value)):
+                match = safe_regex_match(
+                    validation_request.validation_regex, str(validation_request.value), timeout_seconds=1
+                )
+                if not match:
                     is_valid = False
                     message = f"Value does not match pattern: {validation_request.validation_regex}"
-            except re.error as e:
+            except RegexValidationError as e:
                 is_valid = False
                 message = f"Invalid regex pattern: {str(e)}"
 

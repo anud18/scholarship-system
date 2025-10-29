@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import formataddr
-from html import unescape
+from html.parser import HTMLParser
 from typing import List, Optional
 
 import aiosmtplib
@@ -60,13 +60,45 @@ class EmailService:
 
     @staticmethod
     def _html_to_text(html_content: str) -> str:
-        """Convert HTML content into a simple plain-text representation"""
-        # Remove script/style blocks first to avoid leaking JS/CSS into the body
-        sanitized = re.sub(r"<(script|style)[^>]*>.*?</\\1>", "", html_content, flags=re.IGNORECASE | re.DOTALL)
-        # Strip remaining tags and collapse whitespace
-        sanitized = re.sub(r"<[^>]+>", " ", sanitized)
-        sanitized = re.sub(r"\s+", " ", sanitized)
-        return unescape(sanitized).strip()
+        """
+        Convert HTML content into a simple plain-text representation.
+
+        Uses HTMLParser to safely extract text without ReDoS vulnerabilities.
+        """
+
+        class TextExtractor(HTMLParser):
+            """Extract text from HTML while ignoring script/style tags"""
+
+            def __init__(self):
+                super().__init__()
+                self.text_parts = []
+                self.skip_tags = set()
+
+            def handle_starttag(self, tag, attrs):
+                # Skip script and style tags
+                if tag.lower() in ("script", "style"):
+                    self.skip_tags.add(tag.lower())
+
+            def handle_endtag(self, tag):
+                # Resume processing after script/style tags
+                if tag.lower() in self.skip_tags:
+                    self.skip_tags.discard(tag.lower())
+
+            def handle_data(self, data):
+                # Only collect text data if not inside skip tags
+                if not self.skip_tags:
+                    self.text_parts.append(data)
+
+        try:
+            parser = TextExtractor()
+            parser.feed(html_content)
+            # Join text parts and collapse whitespace
+            text = " ".join(parser.text_parts)
+            text = re.sub(r"\s+", " ", text)
+            return text.strip()
+        except Exception:
+            # Fallback to simple text extraction if parsing fails
+            return html_content.strip()
 
     async def _check_test_mode(self) -> tuple[bool, dict]:
         """

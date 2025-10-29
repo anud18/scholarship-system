@@ -17,6 +17,10 @@ on:
       - 'frontend/lib/api/**/*.ts'
   workflow_dispatch:
 
+# SECURITY: Limit GITHUB_TOKEN permissions to minimum required
+permissions:
+  contents: read
+
 env:
   NODE_VERSION: '22'
   PYTHON_VERSION: '3.11'

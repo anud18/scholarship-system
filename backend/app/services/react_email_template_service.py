@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from app.core.path_security import validate_filename
+
 logger = logging.getLogger(__name__)
 
 
@@ -115,7 +117,25 @@ class ReactEmailTemplateService:
         Returns:
             Template metadata or None if not found
         """
+        # SECURITY: Validate template name to prevent path traversal
+        try:
+            validate_filename(f"{template_name}.tsx")
+        except Exception as e:
+            logger.warning(f"Invalid template name '{template_name}': {e}")
+            return None
+
         file_path = cls.TEMPLATE_DIR / f"{template_name}.tsx"
+
+        # SECURITY: Ensure resolved path is within TEMPLATE_DIR
+        try:
+            resolved_path = file_path.resolve(strict=False)
+            template_dir = cls.TEMPLATE_DIR.resolve()
+            if not str(resolved_path).startswith(str(template_dir)):
+                logger.warning(f"Template path outside allowed directory: {resolved_path}")
+                return None
+        except Exception as e:
+            logger.warning(f"Failed to resolve template path: {e}")
+            return None
 
         if not file_path.exists():
             return None
@@ -238,7 +258,25 @@ class ReactEmailTemplateService:
         Returns:
             Template source code or None
         """
+        # SECURITY: Validate template name to prevent path traversal
+        try:
+            validate_filename(f"{template_name}.tsx")
+        except Exception as e:
+            logger.warning(f"Invalid template name '{template_name}': {e}")
+            return None
+
         file_path = cls.TEMPLATE_DIR / f"{template_name}.tsx"
+
+        # SECURITY: Ensure resolved path is within TEMPLATE_DIR
+        try:
+            resolved_path = file_path.resolve(strict=False)
+            template_dir = cls.TEMPLATE_DIR.resolve()
+            if not str(resolved_path).startswith(str(template_dir)):
+                logger.warning(f"Template path outside allowed directory: {resolved_path}")
+                return None
+        except Exception as e:
+            logger.warning(f"Failed to resolve template path: {e}")
+            return None
 
         if not file_path.exists():
             return None

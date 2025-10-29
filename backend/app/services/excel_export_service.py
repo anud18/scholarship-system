@@ -17,6 +17,7 @@ from openpyxl.utils import get_column_letter
 
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
+from app.core.path_security import validate_filename
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem
 
 logger = logging.getLogger(__name__)
@@ -244,12 +245,35 @@ class ExcelExportService:
         return sorted(items, key=lambda x: x.student_name)
 
     def _resolve_template_path(self, template_name: Optional[str]) -> str:
-        """Resolve Excel template path based on optional template name"""
+        """
+        Resolve Excel template path based on optional template name.
+
+        SECURITY: Validates template filename to prevent path traversal attacks.
+        """
         if not template_name:
             return self.template_path
 
         candidate = template_name if template_name.lower().endswith(".xlsx") else f"{template_name}.xlsx"
+
+        # SECURITY: Validate filename to prevent path traversal
+        try:
+            validate_filename(candidate)
+        except Exception as e:
+            logger.warning(f"Invalid template name '{template_name}': {e}. Using default template.")
+            return self.template_path
+
         candidate_path = os.path.join(self.template_dir, candidate)
+
+        # SECURITY: Ensure resolved path is within template directory
+        try:
+            resolved_path = os.path.abspath(candidate_path)
+            template_dir = os.path.abspath(self.template_dir)
+            if not resolved_path.startswith(template_dir):
+                logger.warning(f"Template path outside allowed directory: {resolved_path}. Using default template.")
+                return self.template_path
+        except Exception as e:
+            logger.warning(f"Failed to resolve template path: {e}. Using default template.")
+            return self.template_path
 
         if os.path.exists(candidate_path):
             return candidate_path

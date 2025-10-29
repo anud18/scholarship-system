@@ -263,10 +263,10 @@ function EditDialog({ template, open, onClose, onSave }: EditDialogProps) {
               </div>
               <div>
                 <span className="text-xs font-semibold text-gray-600">內容：</span>
-                <div
-                  className="text-sm whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{ __html: editedTemplate.body_template || "" }}
-                />
+                {/* SECURITY: Render as text to prevent XSS, not HTML */}
+                <p className="text-sm whitespace-pre-wrap">
+                  {editedTemplate.body_template || ""}
+                </p>
               </div>
             </div>
           </div>
