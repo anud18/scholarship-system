@@ -17,7 +17,6 @@ from openpyxl.utils import get_column_letter
 
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
-from app.core.path_security import validate_filename
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem
 
 logger = logging.getLogger(__name__)
@@ -41,6 +40,14 @@ class ExcelExportService:
         self.default_template_name = default_template
         self.ensure_export_directory()
         self._load_template_structure()
+
+    def _get_template_paths(self) -> Dict[str, str]:
+        """Get hardcoded template path mapping (CodeQL requirement)"""
+        return {
+            "STD_UP_MIXLISTA.xlsx": os.path.join(self.template_dir, "STD_UP_MIXLISTA.xlsx"),
+            "payment_roster_template.xlsx": os.path.join(self.template_dir, "payment_roster_template.xlsx"),
+            "scholarship_roster.xlsx": os.path.join(self.template_dir, "scholarship_roster.xlsx"),
+        }
 
     def _load_template_structure(self):
         """Load template structure from STD_UP_MIXLISTA.xlsx"""
@@ -268,20 +275,14 @@ class ExcelExportService:
             logger.warning(f"Template '{candidate}' not in allowlist. Using default template.")
             return self.template_path
 
-        # SECURITY: Validate filename format
-        try:
-            validate_filename(candidate)
-        except Exception as e:
-            logger.warning(f"Invalid template filename '{candidate}': {e}. Using default template.")
-            return self.template_path
+        # SECURITY: Use hardcoded path mapping instead of string interpolation (CodeQL requirement)
+        template_paths = self._get_template_paths()
+        candidate_path = template_paths.get(candidate)
 
-        # Safe to construct path - candidate is validated against allowlist
-        candidate_path = os.path.join(self.template_dir, candidate)
-
-        if os.path.exists(candidate_path):
+        if candidate_path and os.path.exists(candidate_path):
             return candidate_path
 
-        logger.warning("Template %s not found. Falling back to default template.", candidate_path)
+        logger.warning("Template %s not found. Falling back to default template.", candidate)
         return self.template_path
 
     def _get_filtered_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
@@ -298,7 +299,8 @@ class ExcelExportService:
             # 驗證必填欄位
             if not item.student_id_number or not item.student_name:
                 logger.warning(
-                    f"Skipping item {idx} due to missing required fields: ID={item.student_id_number}, Name={item.student_name}"
+                    f"Skipping item {idx} due to missing required fields: "
+                    f"ID={item.student_id_number}, Name={item.student_name}"
                 )
                 continue
 

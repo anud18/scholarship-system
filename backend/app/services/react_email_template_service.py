@@ -13,8 +13,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from app.core.path_security import validate_filename
-
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +39,22 @@ class ReactEmailTemplateService:
         "roster-notification",
         "whitelist-notification",
     }
+
+    # SECURITY: Hardcoded path mapping to prevent path injection (CodeQL requirement)
+    @classmethod
+    def _get_template_paths(cls) -> Dict[str, Path]:
+        """Get hardcoded template path mapping"""
+        base_dir = cls.TEMPLATE_DIR
+        return {
+            "application-submitted": base_dir / "application-submitted.tsx",
+            "professor-review-request": base_dir / "professor-review-request.tsx",
+            "college-review-request": base_dir / "college-review-request.tsx",
+            "result-notification": base_dir / "result-notification.tsx",
+            "deadline-reminder": base_dir / "deadline-reminder.tsx",
+            "document-request": base_dir / "document-request.tsx",
+            "roster-notification": base_dir / "roster-notification.tsx",
+            "whitelist-notification": base_dir / "whitelist-notification.tsx",
+        }
 
     # Template display names and descriptions (can be moved to database later)
     TEMPLATE_METADATA = {
@@ -134,17 +148,11 @@ class ReactEmailTemplateService:
             logger.warning(f"Template '{template_name}' not in allowlist")
             return None
 
-        # SECURITY: Validate filename format
-        try:
-            validate_filename(f"{template_name}.tsx")
-        except Exception as e:
-            logger.warning(f"Invalid template name '{template_name}': {e}")
-            return None
+        # SECURITY: Use hardcoded path mapping instead of string interpolation (CodeQL requirement)
+        template_paths = cls._get_template_paths()
+        file_path = template_paths.get(template_name)
 
-        # Safe to construct path - template_name is validated against allowlist
-        file_path = cls.TEMPLATE_DIR / f"{template_name}.tsx"
-
-        if not file_path.exists():
+        if file_path is None or not file_path.exists():
             return None
 
         try:
@@ -270,17 +278,11 @@ class ReactEmailTemplateService:
             logger.warning(f"Template '{template_name}' not in allowlist")
             return None
 
-        # SECURITY: Validate filename format
-        try:
-            validate_filename(f"{template_name}.tsx")
-        except Exception as e:
-            logger.warning(f"Invalid template name '{template_name}': {e}")
-            return None
+        # SECURITY: Use hardcoded path mapping instead of string interpolation (CodeQL requirement)
+        template_paths = cls._get_template_paths()
+        file_path = template_paths.get(template_name)
 
-        # Safe to construct path - template_name is validated against allowlist
-        file_path = cls.TEMPLATE_DIR / f"{template_name}.tsx"
-
-        if not file_path.exists():
+        if file_path is None or not file_path.exists():
             return None
 
         try:

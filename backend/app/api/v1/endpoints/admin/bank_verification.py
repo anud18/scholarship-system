@@ -100,10 +100,25 @@ async def verify_bank_account(
             message = "銀行帳戶驗證完成"
             success = result.get("success", True)
 
+        # SECURITY: Explicitly whitelist safe fields before passing to schema
+        safe_result = {
+            "success": result.get("success", False),
+            "application_id": result.get("application_id"),
+            "verification_status": result.get("verification_status"),
+            "account_number_status": result.get("account_number_status"),
+            "account_holder_status": result.get("account_holder_status"),
+            "overall_match": result.get("overall_match"),
+            "average_confidence": result.get("average_confidence"),
+            "form_data": result.get("form_data"),
+            "ocr_data": result.get("ocr_data"),
+            "comparison_details": result.get("comparison_details"),
+            "timestamp": result.get("timestamp"),
+        }
+
         return {
             "success": success,
             "message": message,
-            "data": BankVerificationResultSchema(**result),
+            "data": BankVerificationResultSchema(**safe_result),
         }
 
     except HTTPException:
@@ -227,9 +242,12 @@ async def get_bank_verification_init_data(
             token_data = {"sub": str(current_user.id)}
             access_token = create_access_token(token_data)
             base_url = f"{settings.base_url}{settings.api_v1_str}"
-            file_path = f"{base_url}/files/applications/{application_id}/files/{passbook_doc.id}?token={access_token}"
+            file_path = (
+                f"{base_url}/files/applications/{application_id}/files/" f"{passbook_doc.id}?token={access_token}"
+            )
             download_url = (
-                f"{base_url}/files/applications/{application_id}/files/{passbook_doc.id}/download?token={access_token}"
+                f"{base_url}/files/applications/{application_id}/files/"
+                f"{passbook_doc.id}/download?token={access_token}"
             )
 
             passbook_document_data = {

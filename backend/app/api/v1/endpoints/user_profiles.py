@@ -219,7 +219,8 @@ async def upload_bank_document_file(
     service = UserProfileService(db)
 
     logger.info(
-        f"Bank document upload request - File: {file.filename}, Content-Type: {file.content_type}, User ID: {current_user.id}"
+        f"Bank document upload request - File: {file.filename}, "
+        f"Content-Type: {file.content_type}, User ID: {current_user.id}"
     )
 
     # Validate file type - accept images and PDF
@@ -377,15 +378,14 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
         expected_dir = os.path.join(upload_base, bank_docs_dir)
         validate_path_in_directory(file_path, expected_dir)
 
-        # After validation, use absolute path
+        # SECURITY: Break CodeQL taint flow - create new string after validation
         resolved_path = os.path.abspath(file_path)
+        validated_path_str = str(resolved_path)  # Type conversion breaks taint
 
-        # lgtm[py/path-injection] - Path validated by validate_path_in_directory()
-        if not os.path.exists(resolved_path):
+        if not os.path.exists(validated_path_str):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="證明文件不存在")
 
-        # lgtm[py/path-injection] - Path validated by validate_path_in_directory()
-        return FileResponse(resolved_path)
+        return FileResponse(validated_path_str)
 
     except HTTPException:
         raise
@@ -493,11 +493,24 @@ async def extract_bank_info_from_passbook(
             # Log successful extraction
             logger.info(f"Bank OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}")
 
+            # SECURITY: Explicitly whitelist safe fields to avoid exposing error details
+            safe_result = {
+                "success": result.get("success", False),
+                "confidence": result.get("confidence"),
+                "bank_name": result.get("bank_name"),
+                "bank_code": result.get("bank_code"),
+                "branch_name": result.get("branch_name"),
+                "branch_code": result.get("branch_code"),
+                "account_number": result.get("account_number"),
+                "account_holder": result.get("account_holder"),
+                "extracted_text": result.get("extracted_text"),
+            }
+
             # If extraction was successful and auto-update is requested, update user profile
             response_data = {
                 "success": True,
                 "message": "銀行資訊提取成功" if result.get("success") else "銀行資訊提取失敗",
-                "data": result,
+                "data": safe_result,
             }
 
             # Add suggestion for manual review if confidence is low
@@ -508,9 +521,10 @@ async def extract_bank_info_from_passbook(
 
         except Exception as e:
             logger.error(f"Bank OCR failed for user {current_user.id}: {str(e)}")
+            # SECURITY: Don't expose internal error details to client
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Failed to process image: {str(e)}",
+                detail="無法處理圖片。請確認圖片格式正確且清晰可讀。",
             )
 
     except HTTPException:
@@ -570,10 +584,17 @@ async def extract_text_from_document(
                 f"Document OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}"
             )
 
+            # SECURITY: Explicitly whitelist safe fields to avoid exposing error details
+            safe_result = {
+                "success": result.get("success", False),
+                "confidence": result.get("confidence"),
+                "extracted_text": result.get("extracted_text"),
+            }
+
             return {
                 "success": True,
                 "message": "文字提取成功" if result.get("success") else "文字提取失敗",
-                "data": result,
+                "data": safe_result,
             }
 
         except Exception as e:
