@@ -510,7 +510,9 @@ async def extract_bank_info_from_passbook(
             result = await ocr_service.extract_bank_info_from_image(file_content)
 
             # Log successful extraction or failure
-            logger.info(f"Bank OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}; Success: {result.get('success', False)}")
+            logger.info(
+                f"Bank OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}; Success: {result.get('success', False)}"
+            )
 
             # SECURITY: Explicitly whitelist safe fields to avoid exposing error details
             safe_result = {
