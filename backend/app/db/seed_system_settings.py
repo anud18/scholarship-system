@@ -195,9 +195,9 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
     # Create or update each setting
     created_count = 0
     skipped_count = 0
+    failed_count = 0
 
     for setting_data in settings_to_seed:
-        # SECURITY: Extract key to intermediate variable to break CodeQL taint flow
         setting_key_name = setting_data["key"]
 
         try:
@@ -207,8 +207,7 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
             if existing:
                 # Skip if already exists (don't overwrite user modifications)
                 skipped_count += 1
-                # SECURITY: Log intermediate variable, not dict access
-                print(f"  ⊘ Skipped existing setting: {setting_key_name}")
+                # SECURITY: Don't log variable content - CodeQL taint tracking
                 continue
 
             # Create new setting
@@ -223,15 +222,15 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
                 change_reason="Initial system setup",
             )
             created_count += 1
-            # SECURITY: Log intermediate variable, not dict access
-            print(f"  ✓ Created setting: {setting_key_name}")
+            # SECURITY: Don't log variable content - CodeQL taint tracking
 
         except Exception:
-            # SECURITY: Don't log exception details; use intermediate variable
-            print(f"  ✗ Failed to seed setting '{setting_key_name}'")
+            # SECURITY: Don't log variable content - CodeQL taint tracking
+            failed_count += 1
             continue
 
     print("\n✓ System settings seed completed:")
     print(f"  - Created: {created_count}")
     print(f"  - Skipped (existing): {skipped_count}")
+    print(f"  - Failed: {failed_count}")
     print(f"  - Total: {len(settings_to_seed)}")

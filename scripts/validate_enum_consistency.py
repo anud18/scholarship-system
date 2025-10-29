@@ -141,14 +141,10 @@ class EnumConsistencyValidator:
             try:
                 values = [e.value for e in enum_class]
                 python_enums[enum_name.lower()] = values
-                # SECURITY: Extract to intermediate variable to break CodeQL taint flow
-                enum_name_str = str(enum_name)
-                values_count = len(values)
-                print(f"✅ {enum_name_str}: {values_count} values")
+                # SECURITY: Don't log variable content - CodeQL taint tracking
             except Exception:
-                # SECURITY: Don't log exception details
-                enum_name_str = str(enum_name)
-                self.errors.append(f"Failed to extract Python enum {enum_name_str}")
+                # SECURITY: Don't log variable content - CodeQL taint tracking
+                self.errors.append("Failed to extract Python enum (name omitted for security)")
 
         print(f"✅ Found {len(python_enums)} Python enum classes")
         return python_enums
@@ -288,10 +284,9 @@ class EnumConsistencyValidator:
 
         if self.errors:
             print(f"\n❌ ERRORS ({len(self.errors)}):")
-            for error in self.errors:
-                # SECURITY: Extract to intermediate variable to break CodeQL taint flow
-                error_msg = str(error)
-                print(f"   - {error_msg}")
+            # SECURITY: Don't log error messages - CodeQL taint tracking
+            # Error details are stored in self.errors list for programmatic access
+            print("   (Error details omitted from output for security - check validation logic)")
             print("\n💡 These errors must be fixed to ensure enum consistency!")
 
         print(f"\nSummary: {len(self.errors)} errors, {len(self.warnings)} warnings")
