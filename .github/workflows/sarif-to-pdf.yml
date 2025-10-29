@@ -66,6 +66,14 @@ jobs:
           from collections import defaultdict
           from jinja2 import Template
 
+          # Map CodeQL language identifiers to friendly display names
+          LANGUAGE_MAP = {
+              'actions': 'GitHub Actions',
+              'javascript-typescript': 'JavaScript/TypeScript',
+              'javascript': 'JavaScript/TypeScript',  # SARIF file uses 'javascript'
+              'python': 'Python'
+          }
+
           # Find all SARIF files
           sarif_dir = pathlib.Path("sarif-artifacts")
           sarif_files = list(sarif_dir.rglob("*.sarif"))
@@ -87,7 +95,16 @@ jobs:
 
               for run in sarif_data.get("runs", []):
                   tool_name = run.get("tool", {}).get("driver", {}).get("name", "Unknown")
-                  language = sarif_file.parent.name.replace("codeql-sarif-", "")
+
+                  # Extract language from artifact directory or SARIF filename
+                  artifact_dir = sarif_file.parent.name.replace("codeql-sarif-", "")
+                  sarif_name = sarif_file.stem  # e.g., 'javascript' from 'javascript.sarif'
+
+                  # Try artifact directory name first, fall back to SARIF filename
+                  language_key = artifact_dir if artifact_dir in LANGUAGE_MAP else sarif_name
+                  language = LANGUAGE_MAP.get(language_key, language_key)
+
+                  print(f"  Artifact: {artifact_dir}, SARIF: {sarif_name}, Display: {language}")
                   languages.add(language)
 
                   # Build rules lookup
