@@ -1,0 +1,97 @@
+// Grafana Alloy Configuration for Production Database VM
+// Environment: production
+// Host: db-vm
+// Components: PostgreSQL, MinIO, Redis
+
+// =============================================================================
+// LOGGING PIPELINE
+// =============================================================================
+
+// Discover Docker containers
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Relabel rules for container metadata
+loki.relabel "container_labels" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+}
+
+// Collect Docker container logs
+loki.source.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.docker.containers.targets
+  forward_to       = [loki.process.add_labels.receiver]
+  relabel_rules    = loki.relabel.container_labels.rules
+}
+
+// Add environment and host labels to logs
+loki.process "add_labels" {
+  forward_to = [loki.write.default.receiver]
+
+  // Add static labels
+  stage.static_labels {
+    values = {
+      environment = "prod",
+      vm          = "db-vm",
+    }
+  }
+
+  // Parse PostgreSQL logs
+  stage.regex {
+    expression = "^(?P<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}) (?P<level>\\w+):\\s+(?P<message>.*)"
+  }
+
+  // Label PostgreSQL log levels
+  // Empty string ("") means use the value from the named capture group 'level'
+  // This extracts log levels (INFO, WARNING, ERROR, etc.) as Loki labels
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+}
+
+// Write logs to Loki with multi-tenant header
+// Uses environment variable MONITORING_SERVER_URL to connect to AP-VM
+loki.write "default" {
+  endpoint {
+    url = env("MONITORING_SERVER_URL") + ":3100/loki/api/v1/push"
+
+    // Multi-tenant identification for production
+    headers = {
+      "X-Scope-OrgID" = "prod",
+    }
+  }
+}
+
+// =============================================================================
+// METRICS PIPELINE - PULL MODE
+// =============================================================================
+// Metrics are exposed via exporters and scraped directly by Prometheus on AP-VM:
+// - Node Exporter: exposed on port 9100
+// - PostgreSQL Exporter: exposed on port 9187
+// - Alloy Self-Monitoring: exposed on port 12345
+//
+// Prometheus on AP-VM will add environment/vm labels during scrape using
+// relabel_configs in its prometheus.yml configuration.
+//
+// Note: Redis is on AP-VM, not DB-VM
+
+// =============================================================================
+// SELF-MONITORING
+// =============================================================================
+
+// Expose Alloy's own metrics for Prometheus to scrape
+// Metrics available at http://alloy:12345/metrics
+prometheus.exporter.self "alloy" { }

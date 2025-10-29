@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: scholarship_postgres
+    environment:
+      POSTGRES_DB: scholarship_db
+      POSTGRES_USER: scholarship_user
+      POSTGRES_PASSWORD: scholarship_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - scholarship_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: scholarship_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - scholarship_network
+
+  # FastAPI Application
+  api:
+    build: .
+    container_name: scholarship_api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: your-secret-key-for-development-only
+      DEBUG: "true"
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      - ./uploads:/app/uploads
+      - .:/app
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - scholarship_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  scholarship_network:
+    driver: bridge

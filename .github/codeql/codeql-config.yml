@@ -1,0 +1,42 @@
+# CodeQL Configuration for Scholarship System
+# This file configures CodeQL scanning to include additional query packs
+# Note: File-specific suppressions must be handled via GitHub UI dismissal
+
+name: "scholarship-system-codeql-config"
+
+# Disable default queries - set to false to use standard security queries
+disable-default-queries: false
+
+# Path filtering - exclude test directories from security scans
+paths-ignore:
+  - "**/*test*.py"
+  - "**/*_test.py"
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/node_modules/**"
+
+# Query packs to include
+packs:
+  - codeql/python-queries
+  - codeql/javascript-queries
+
+# Note on False Positives:
+# The following issues have been manually reviewed and are false positives:
+#
+# 1. py/path-injection in react_email_template_service.py, excel_export_service.py, user_profiles.py
+#    - Reason: Hardcoded ALLOWED_TEMPLATES allowlists prevent path traversal
+#    - Validation occurs BEFORE any path operations
+#
+# 2. py/regex-injection in regex_validator.py
+#    - Reason: Patterns validated for length, dangerous constructs, and timeout BEFORE compilation
+#    - This is a security utility specifically designed to prevent regex injection
+#
+# 3. py/clear-text-logging-sensitive-data in seed_system_settings.py, validate_enum_consistency.py
+#    - Reason: Only logging key names and counts, NOT sensitive values
+#    - Actual configuration values are never logged
+#
+# 4. py/stack-trace-exposure in user_profiles.py, bank_verification.py
+#    - Reason: Error messages sanitized before returning to clients
+#    - Full stack traces preserved in server logs only
+#
+# These alerts should be manually dismissed in the GitHub Security tab with appropriate justifications.

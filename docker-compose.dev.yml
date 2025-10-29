@@ -1,0 +1,182 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: scholarship_postgres_dev
+    environment:
+      POSTGRES_DB: scholarship_db
+      POSTGRES_USER: scholarship_user
+      POSTGRES_PASSWORD: scholarship_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - scholarship_dev_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scholarship_user -d scholarship_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: scholarship_redis_dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - scholarship_dev_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: scholarship_minio_dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+      - minio_dev_data:/data
+    networks:
+      - scholarship_dev_network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # FastAPI Backend with Hot Reload
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ghcr.io/jotpalch/scholarship-system-backend:${TAG:-latest}
+    container_name: scholarship_backend_dev
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: dev-secret-key-for-development-only
+      DEBUG: "true"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:8000"
+      ENVIRONMENT: development
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_BUCKET_NAME: scholarship-documents
+      MINIO_SECURE: "false"
+      # Mock SSO Configuration
+      ENABLE_MOCK_SSO: "true"
+      MOCK_SSO_DOMAIN: dev.university.edu
+      # Student API Configuration (Mock)
+      STUDENT_API_ENABLED: "true"
+      STUDENT_API_BASE_URL: "http://mock-student-api:8080"
+      STUDENT_API_ACCOUNT: "scholarship"
+      STUDENT_API_HMAC_KEY: "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
+      STUDENT_API_TIMEOUT: "10.0"
+      STUDENT_API_ENCODE_TYPE: "UTF-8"
+      # Portal SSO - disabled in dev
+      PORTAL_SSO_ENABLED: "false"
+      # Frontend URLs
+      FRONTEND_URL: http://localhost:3000  # External URL (for user redirects)
+      FRONTEND_INTERNAL_URL: http://frontend:3000  # Internal Docker network URL (for API calls)
+      # React Email Templates Directory (Docker mount point)
+      REACT_EMAIL_TEMPLATES_DIR: /react-email-templates
+    volumes:
+      - ./backend:/app
+      - ./frontend/emails:/react-email-templates:ro  # Mount React Email templates (read-only)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mock-student-api:
+        condition: service_started
+    networks:
+      - scholarship_dev_network
+    restart: unless-stopped
+
+  # Next.js Frontend with Hot Reload
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: builder
+    image: ghcr.io/jotpalch/scholarship-system-frontend:${TAG:-latest}
+    container_name: scholarship_frontend_dev
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NODE_ENV: development
+      # Override for Docker internal requests if needed
+      INTERNAL_API_URL: http://backend:8000
+      # Mock Student API URL for development
+      MOCK_STUDENT_API_URL: http://mock-student-api:8080
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+      - mock-student-api
+    networks:
+      - scholarship_dev_network
+    restart: unless-stopped
+
+  # Mock Student Database API - DEV ONLY
+  mock-student-api:
+    build:
+      context: ./mock-student-api
+      dockerfile: Dockerfile
+    container_name: scholarship_mock_student_api_dev
+    command: uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      MOCK_HMAC_KEY_HEX: 4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a
+      STRICT_TIME_CHECK: "false"
+      STRICT_ENCODE_CHECK: "false"
+      TIME_TOLERANCE_MINUTES: "30"
+    volumes:
+      - ./mock-student-api:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - scholarship_dev_network
+    restart: unless-stopped
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+  minio_dev_data:
+    driver: local
+
+networks:
+  scholarship_dev_network:
+    driver: bridge

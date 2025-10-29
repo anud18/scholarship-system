@@ -1,0 +1,78 @@
+[run]
+source = app/services
+branch = True
+parallel = True
+omit =
+    */tests/*
+    */test_*
+    */__init__.py
+    */migrations/*
+    */alembic/*
+    */venv/*
+    */.venv/*
+    */virtualenv/*
+    */site-packages/*
+    */distutils/*
+    app/services/application_service.py
+    app/services/application_field_service.py
+    app/services/college_review_service.py
+    app/services/email_management_service.py
+    app/services/eligibility_verification_service.py
+    app/services/email_service.py
+    app/services/eligibility_service.py
+    app/services/email_automation_service.py
+    app/services/github_integration_service.py
+    app/services/scholarship_configuration_service.py
+    app/services/scholarship_notification_service.py
+    app/services/scholarship_rules_service.py
+    app/services/scholarship_service.py
+    app/services/student_service.py
+    app/services/user_profile_service.py
+    app/services/system_setting_service.py
+    app/services/pre_authorization_service.py
+    app/services/mock_sso_service.py
+    app/services/portal_sso_service.py
+    app/services/analytics_service.py
+    app/services/auth_service.py
+    app/services/developer_profile_service.py
+    app/services/notification_service.py
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+fail_under = 20
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+
+    # Don't complain about missing debug-only code:
+    def __repr__
+    if self\.debug
+
+    # Don't complain if tests don't hit defensive assertion code:
+    raise AssertionError
+    raise NotImplementedError
+
+    # Don't complain if non-runnable code isn't run:
+    if 0:
+    if __name__ == .__main__.:
+
+    # Don't complain about abstract methods
+    @(abc\.)?abstractmethod
+
+    # Ignore type checking blocks
+    if TYPE_CHECKING:
+
+    # Ignore exception handlers
+    except ImportError:
+    except Exception as e:
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml
+
+[json]
+output = coverage.json

@@ -1,0 +1,481 @@
+/**
+ * 學期選擇器組件 - 提供學年學期的 dropdown 選擇功能
+ */
+
+import React, { useState, useEffect } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, Calendar } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api";
+
+interface SemesterOption {
+  value: string;
+  label: string;
+  label_en: string;
+  is_current: boolean;
+}
+
+interface AcademicYearOption {
+  value: number;
+  label: string;
+  label_en: string;
+  is_current: boolean;
+}
+
+interface CombinationOption {
+  value: string;
+  academic_year: number;
+  semester: string | null;
+  label: string;
+  label_en: string;
+  is_current: boolean;
+  application_count?: number;
+}
+
+interface SemesterSelectorProps {
+  /** 選擇模式：separate（分別選擇學年和學期）、combined（組合選擇）、auto（根據獎學金制度自動選擇） */
+  mode?: "separate" | "combined" | "auto";
+  /** 獎學金ID或代碼，用於自動判斷顯示模式 */
+  scholarshipId?: number;
+  scholarshipCode?: string;
+  /** 強制指定申請週期：semester（學期制）或 yearly（學年制） */
+  applicationCycle?: "semester" | "yearly";
+  /** 是否顯示申請統計數量 */
+  showStatistics?: boolean;
+  /** 是否只顯示有資料的學期 */
+  activePeriodsOnly?: boolean;
+  /** 當前選中的學年 */
+  selectedAcademicYear?: number;
+  /** 當前選中的學期 */
+  selectedSemester?: string;
+  /** 當前選中的組合值 */
+  selectedCombination?: string;
+  /** 學年變更回調 */
+  onAcademicYearChange?: (year: number) => void;
+  /** 學期變更回調 */
+  onSemesterChange?: (semester: string) => void;
+  /** 組合變更回調 */
+  onCombinationChange?: (
+    combination: string,
+    academicYear: number,
+    semester: string | null
+  ) => void;
+  /** 自定義樣式 */
+  className?: string;
+}
+
+export const SemesterSelector: React.FC<SemesterSelectorProps> = ({
+  mode = "auto",
+  scholarshipId,
+  scholarshipCode,
+  applicationCycle,
+  showStatistics = false,
+  activePeriodsOnly = false,
+  selectedAcademicYear,
+  selectedSemester,
+  selectedCombination,
+  onAcademicYearChange,
+  onSemesterChange,
+  onCombinationChange,
+  className,
+}) => {
+  const [loading, setLoading] = useState(false);
+  const [actualMode, setActualMode] = useState<
+    "separate" | "combined" | "yearly"
+  >("combined");
+  const [detectedCycle, setDetectedCycle] = useState<"semester" | "yearly">(
+    "semester"
+  );
+  const [scholarshipName, setScholarshipName] = useState<string>();
+  const [academicYears, setAcademicYears] = useState<AcademicYearOption[]>([]);
+  const [semesters, setSemesters] = useState<SemesterOption[]>([]);
+  const [combinations, setCombinations] = useState<CombinationOption[]>([]);
+  const [currentInfo, setCurrentInfo] = useState<any>(null);
+
+  // 載入根據獎學金制度的適當資料
+  const loadScholarshipBasedData = async () => {
+    try {
+      setLoading(true);
+
+      // 使用新的 scholarship-configurations API 來獲取實際配置的學期
+
+      if (activePeriodsOnly) {
+        // 獲取有實際申請資料的學期
+        const url = `/api/v1/reference-data/active-academic-periods`;
+        const response = await fetch(url);
+        if (!response.ok)
+          throw new Error("Failed to fetch active academic periods");
+
+        const data = await response.json();
+        setCombinations(data.active_periods || []);
+        setDetectedCycle("semester");
+        setActualMode("combined");
+        setCurrentInfo({
+          current_period: data.current_period,
+          cycle: "semester",
+        });
+      } else {
+        // 獲取 ScholarshipConfiguration 中實際配置的學期
+        const result =
+          await apiClient.admin.getAvailableSemesters(scholarshipCode);
+
+        if (result.success && result.data) {
+          // 計算當前學期（台灣學年：8月後=第一學期，8月前=第二學期）
+          const now = new Date();
+          const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
+          const currentTaiwanYear = now.getFullYear() - 1911;
+          const currentAcademicYear = currentMonth >= 8 ? currentTaiwanYear : currentTaiwanYear - 1;
+          const currentSemester = currentMonth >= 8 ? "first" : "second";
+
+          // 轉換 API 回傳的期間格式為組件需要的格式
+          const configuredPeriods = result.data.map((period: string) => {
+            if (period.includes("-")) {
+              // 學期制：格式如 "114-1", "114-2"
+              const [year, sem] = period.split("-");
+              const academicYear = parseInt(year);
+              const semester = sem === "1" ? "first" : "second";
+              const semesterLabel = sem === "1" ? "第一學期" : "第二學期";
+              const isCurrent = academicYear === currentAcademicYear && semester === currentSemester;
+
+              return {
+                value: period,
+                academic_year: academicYear,
+                semester: semester,
+                label: `${academicYear}學年${semesterLabel}`,
+                label_en: `Academic Year ${academicYear + 1911}-${academicYear + 1912} ${sem === "1" ? "First" : "Second"} Semester`,
+                is_current: isCurrent,
+                cycle: "semester",
+              };
+            } else {
+              // 學年制：格式如 "114"
+              const academicYear = parseInt(period);
+              const isCurrent = academicYear === currentAcademicYear;
+
+              return {
+                value: period,
+                academic_year: academicYear,
+                semester: null,
+                label: `${academicYear}學年`,
+                label_en: `Academic Year ${academicYear + 1911}-${academicYear + 1912}`,
+                is_current: isCurrent,
+                cycle: "yearly",
+              };
+            }
+          });
+
+          setCombinations(configuredPeriods);
+
+          // 根據配置的期間類型決定顯示模式
+          const hasSemesterPeriods = configuredPeriods.some(
+            (p: any) => p.cycle === "semester"
+          );
+          const hasYearlyPeriods = configuredPeriods.some(
+            (p: any) => p.cycle === "yearly"
+          );
+
+          if (hasYearlyPeriods && !hasSemesterPeriods) {
+            setDetectedCycle("yearly");
+            setActualMode("yearly");
+          } else {
+            setDetectedCycle("semester");
+            setActualMode("combined");
+          }
+
+          setCurrentInfo({
+            current_period:
+              configuredPeriods.find((p: any) => p.is_current)?.value || null,
+            cycle:
+              hasYearlyPeriods && !hasSemesterPeriods ? "yearly" : "semester",
+          });
+        } else {
+          // 如果沒有配置的期間，顯示空列表
+          setCombinations([]);
+          setDetectedCycle("semester");
+          setActualMode("combined");
+        }
+      }
+    } catch (error) {
+      console.error("Error loading scholarship period data:", error);
+      // 發生錯誤時顯示空列表
+      setCombinations([]);
+      setDetectedCycle("semester");
+      setActualMode("combined");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 載入基本的學期和學年資料
+  const loadBasicData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `/api/v1/reference-data/semesters`
+      );
+      if (!response.ok) throw new Error("Failed to fetch semester data");
+
+      const data = await response.json();
+      setAcademicYears(data.academic_years || []);
+      setSemesters(data.semesters || []);
+      setCurrentInfo({
+        current_academic_year: data.current_academic_year,
+        current_semester: data.current_semester,
+      });
+      setActualMode("separate");
+    } catch (error) {
+      console.error("Error loading semester data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 載入組合資料
+  const loadCombinationData = async () => {
+    try {
+      setLoading(true);
+
+      // 使用 college API 來獲取可用的組合資料
+      const response = await apiClient.college.getAvailableCombinations();
+
+      if (response.success && response.data) {
+        const payload = response.data;
+
+        // 計算當前學期
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentTaiwanYear = now.getFullYear() - 1911;
+        const currentAcademicYear = currentMonth >= 8 ? currentTaiwanYear : currentTaiwanYear - 1;
+        const currentSemester = currentMonth >= 8 ? "first" : "second";
+
+        // 將 API 回傳的資料轉換為組合選項格式
+        const combinationOptions: CombinationOption[] = [];
+
+        // 基於學年和學期創建組合選項
+        payload.academic_years.forEach((year: number) => {
+          payload.semesters.forEach((semester: string) => {
+            const semesterLabel =
+              semester === "FIRST" ? "第一學期" : "第二學期";
+            const semesterNum = semester === "FIRST" ? "1" : "2";
+            const semesterValue = semester.toLowerCase(); // Convert to lowercase to match enum
+            const isCurrent = year === currentAcademicYear && semesterValue === currentSemester;
+
+            combinationOptions.push({
+              value: `${year}-${semesterNum}`,
+              academic_year: year,
+              semester: semesterValue,
+              label: `${year}學年${semesterLabel}`,
+              label_en: `Academic Year ${year + 1911}-${year + 1912} ${semester === "FIRST" ? "First" : "Second"} Semester`,
+              is_current: isCurrent,
+            });
+          });
+        });
+
+        // 如果只有一個學期選項，可能是學年制
+        if (payload.semesters.length === 0) {
+          payload.academic_years.forEach((year: number) => {
+            const isCurrent = year === currentAcademicYear;
+
+            combinationOptions.push({
+              value: year.toString(),
+              academic_year: year,
+              semester: null,
+              label: `${year}學年`,
+              label_en: `Academic Year ${year + 1911}-${year + 1912}`,
+              is_current: isCurrent,
+            });
+          });
+        }
+
+        setCombinations(combinationOptions);
+      } else {
+        console.error(
+          "Failed to fetch available combinations:",
+          response.message
+        );
+        setCombinations([]);
+      }
+    } catch (error) {
+      console.error("Error loading combination data:", error);
+      setCombinations([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 初始化載入資料
+  useEffect(() => {
+    if ((mode === "auto" || mode === "combined") && scholarshipCode) {
+      // 自動模式或組合模式且有獎學金代碼：載入特定獎學金的配置學期
+      loadScholarshipBasedData();
+    } else if (mode === "separate") {
+      // 分別選擇模式：載入基本學年學期資料
+      loadBasicData();
+    } else {
+      // 其他組合模式：載入所有組合資料
+      loadCombinationData();
+    }
+  }, [
+    mode,
+    scholarshipId,
+    scholarshipCode,
+    applicationCycle,
+    showStatistics,
+    activePeriodsOnly,
+  ]);
+
+  // 自動選擇當前學期（僅在初次載入且沒有預設選擇時）
+  useEffect(() => {
+    if (combinations.length > 0 && !selectedCombination && onCombinationChange) {
+      // 找到標記為當前的學期
+      const currentPeriod = combinations.find(c => c.is_current);
+      if (currentPeriod) {
+        // 自動選擇當前學期
+        onCombinationChange(
+          currentPeriod.value,
+          currentPeriod.academic_year,
+          currentPeriod.semester
+        );
+      }
+    }
+  }, [combinations, selectedCombination]);
+
+  // 處理學年變更
+  const handleAcademicYearChange = (value: string) => {
+    const year = parseInt(value);
+    onAcademicYearChange?.(year);
+  };
+
+  // 處理學期變更
+  const handleSemesterChange = (value: string) => {
+    onSemesterChange?.(value);
+  };
+
+  // 處理組合變更
+  const handleCombinationChange = (value: string) => {
+    const combination = combinations.find(c => c.value === value);
+    if (combination) {
+      onCombinationChange?.(
+        value,
+        combination.academic_year,
+        combination.semester || null
+      );
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className={cn("flex items-center space-x-2", className)}>
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm text-muted-foreground">載入中...</span>
+      </div>
+    );
+  }
+
+  // 分別選擇模式
+  if (mode === "separate") {
+    return (
+      <div className={cn("flex items-center space-x-4", className)}>
+        <div className="flex items-center space-x-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm">學年：</span>
+          <Select
+            value={selectedAcademicYear?.toString()}
+            onValueChange={handleAcademicYearChange}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="選擇學年" />
+            </SelectTrigger>
+            <SelectContent>
+              {academicYears.map(year => (
+                <SelectItem key={year.value} value={year.value.toString()}>
+                  <div className="flex items-center justify-between w-full">
+                    <span>{year.label}</span>
+                    {year.is_current && (
+                      <span className="text-green-600 text-xs ml-2">
+                        (當前)
+                      </span>
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <span className="text-sm">學期：</span>
+          <Select value={selectedSemester} onValueChange={handleSemesterChange}>
+            <SelectTrigger className="w-[120px]">
+              <SelectValue placeholder="選擇學期" />
+            </SelectTrigger>
+            <SelectContent>
+              {semesters.map(semester => (
+                <SelectItem key={semester.value} value={semester.value}>
+                  <div className="flex items-center justify-between w-full">
+                    <span>{semester.label}</span>
+                    {semester.is_current && (
+                      <span className="text-green-600 text-xs ml-2">
+                        (當前)
+                      </span>
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    );
+  }
+
+  // 組合選擇模式（包含學年制和學期制）
+  const isYearlyMode = actualMode === "yearly" || detectedCycle === "yearly";
+  const labelText = isYearlyMode ? "學年：" : "學期：";
+  const placeholderText = isYearlyMode ? "選擇學年" : "選擇學年學期";
+
+  return (
+    <div className={cn("flex items-center justify-end", className)}>
+      <Select
+        value={selectedCombination}
+        onValueChange={handleCombinationChange}
+      >
+        <SelectTrigger
+          className={cn(
+            "h-9 min-w-[160px]",
+            isYearlyMode ? "w-[160px]" : "w-[200px]"
+          )}
+        >
+          <SelectValue placeholder={placeholderText} />
+        </SelectTrigger>
+          <SelectContent>
+            {combinations.map(combination => (
+              <SelectItem key={combination.value} value={combination.value}>
+                <div className="flex items-center justify-between w-full">
+                  <span>{combination.label}</span>
+                  <div className="flex items-center space-x-2 ml-2">
+                    {combination.is_current && (
+                      <span className="text-green-600 text-xs">當前</span>
+                    )}
+                    {showStatistics &&
+                      combination.application_count !== undefined && (
+                        <span className="text-muted-foreground text-xs">
+                          ({combination.application_count}件)
+                        </span>
+                      )}
+                  </div>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+      </Select>
+    </div>
+  );
+};
+
+export default SemesterSelector;

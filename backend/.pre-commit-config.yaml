@@ -1,0 +1,57 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Basic code quality
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  # Python code formatting
+  - repo: https://github.com/psf/black
+    rev: 23.3.0
+    hooks:
+      - id: black
+        language_version: python3.10
+        args: [--line-length=120]
+
+  # Import sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+        args: ["--profile", "black", "--line-length=120"]
+
+  # Type checking with mypy (relaxed for development)
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.3.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [pydantic, sqlalchemy, fastapi]
+        args: [--ignore-missing-imports, --no-strict-optional, --allow-redefinition, --allow-untyped-defs, --no-error-summary, --show-error-codes]
+        files: ^app/services/minio_service\.py$|^app/tests/test_minio_service_unit\.py$
+
+  # Linting with flake8
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+
+  # Custom validation hooks (disabled for easier development)
+  # Uncomment these when you need stricter validation
+  # - repo: local
+  #   hooks:
+  #     - id: api-schema-validation
+  #       name: API Schema Validation
+  #       entry: python scripts/pre_commit_schema_check.py
+  #       language: python
+  #       files: ^app/api/.*\.py$
+  #       pass_filenames: true

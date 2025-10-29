@@ -1,0 +1,167 @@
+# Scholarship System .gitignore
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging-db-monitoring
+.env.prod-db-monitoring
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+yarn.lock
+pnpm-lock.yaml
+
+# Next.js
+.next/
+out/
+.swc/
+
+# Production
+/build
+
+# Testing
+coverage/
+*.lcov
+.nyc_output
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+temp_autogen.db
+
+# File uploads
+uploads/
+temp_uploads/
+
+# CI-generated email templates (for Docker build)
+backend/emails/
+
+# Docker
+.dockerignore
+
+# Alembic
+alembic/versions/
+
+# Redis dump
+dump.rdb
+
+# Certificates
+*.pem
+*.key
+*.crt
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.temp
+*.tmp
+*~
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.json
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Local configuration overrides
+docker-compose.override.yml
+docker-compose.local.yml
+
+# MinIO data
+minio_data/
+
+# Test results
+test-results/
+playwright-report/

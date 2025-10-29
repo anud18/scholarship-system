@@ -1,0 +1,33 @@
+/**
+ * Allocation Matrix Pill Styling
+ * Unified gray inset shadow for all themes
+ */
+
+.alloc-matrix-pill {
+  transition: all 200ms ease-out;
+  background: var(--pill-bg);
+  border: none;
+  border-radius: var(--pill-radius);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.15),
+    inset 0 -1px 2px rgba(255, 255, 255, 0.5);
+}
+
+.alloc-matrix-pill:hover {
+  opacity: 0.95;
+}
+
+/* Blue tone - Allocated students */
+.alloc-matrix-pill[data-tone="blue"] {
+  --pill-bg: rgb(219, 234, 254); /* blue-100 */
+}
+
+/* Warm tone - Backup students */
+.alloc-matrix-pill[data-tone="warm"] {
+  --pill-bg: rgb(254, 215, 170); /* orange-200 */
+}
+
+/* Muted tone - Unallocated students */
+.alloc-matrix-pill[data-tone="muted"] {
+  --pill-bg: rgb(226, 232, 240); /* slate-200 */
+}

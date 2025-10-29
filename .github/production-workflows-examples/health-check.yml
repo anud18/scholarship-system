@@ -1,0 +1,221 @@
+# Example Production Health Check Workflow
+# Copy this file to your production repository at: .github/workflows/health-check.yml
+
+name: Production Health Check
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    name: Check Application Health
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check backend API
+        id: api-check
+        continue-on-error: true
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 10 \
+            https://api.production.example.com/health)
+
+          echo "status=$RESPONSE" >> $GITHUB_OUTPUT
+
+          if [ "$RESPONSE" == "200" ]; then
+            echo "✅ Backend API is healthy (HTTP $RESPONSE)"
+            exit 0
+          else
+            echo "::error::Backend API health check failed (HTTP $RESPONSE)"
+            exit 1
+          fi
+
+      - name: Check frontend
+        id: frontend-check
+        continue-on-error: true
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 10 \
+            https://production.example.com)
+
+          echo "status=$RESPONSE" >> $GITHUB_OUTPUT
+
+          if [ "$RESPONSE" == "200" ]; then
+            echo "✅ Frontend is healthy (HTTP $RESPONSE)"
+            exit 0
+          else
+            echo "::error::Frontend health check failed (HTTP $RESPONSE)"
+            exit 1
+          fi
+
+      - name: Check database connectivity
+        id: db-check
+        continue-on-error: true
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
+          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << 'ENDSSH'
+            cd /opt/scholarship-system
+            docker compose exec -T postgres pg_isready -U scholarship_user
+          ENDSSH
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Database is healthy"
+          else
+            echo "::error::Database health check failed"
+            exit 1
+          fi
+
+      - name: Check Redis cache
+        id: redis-check
+        continue-on-error: true
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          SERVER_HOST: ${{ secrets.PRODUCTION_SERVER }}
+          SERVER_USER: ${{ secrets.PRODUCTION_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SERVER_USER@$SERVER_HOST" << 'ENDSSH'
+            cd /opt/scholarship-system
+            docker compose exec -T redis redis-cli ping
+          ENDSSH
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Redis is healthy"
+          else
+            echo "::error::Redis health check failed"
+            exit 1
+          fi
+
+      - name: Generate health report
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # 🏥 Production Health Check Report
+
+          | Service | Status |
+          |---------|--------|
+          | Backend API | ${{ steps.api-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} (HTTP ${{ steps.api-check.outputs.status || 'N/A' }}) |
+          | Frontend | ${{ steps.frontend-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} (HTTP ${{ steps.frontend-check.outputs.status || 'N/A' }}) |
+          | Database | ${{ steps.db-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} |
+          | Redis | ${{ steps.redis-check.outcome == 'success' && '✅ Healthy' || '❌ Unhealthy' }} |
+
+          **Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          EOF
+
+      - name: Create incident issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const components = [];
+            if ('${{ steps.api-check.outcome }}' !== 'success') components.push('Backend API');
+            if ('${{ steps.frontend-check.outcome }}' !== 'success') components.push('Frontend');
+            if ('${{ steps.db-check.outcome }}' !== 'success') components.push('Database');
+            if ('${{ steps.redis-check.outcome }}' !== 'success') components.push('Redis');
+
+            const title = `🚨 Production Health Check Failed: ${components.join(', ')}`;
+            const body = `
+            ## Health Check Failure
+
+            **Failed Components**: ${components.join(', ')}
+
+            **Timestamp**: ${new Date().toISOString()}
+
+            ### Check Results
+
+            - Backend API: ${{ steps.api-check.outcome }} (HTTP ${{ steps.api-check.outputs.status || 'N/A' }})
+            - Frontend: ${{ steps.frontend-check.outcome }} (HTTP ${{ steps.frontend-check.outputs.status || 'N/A' }})
+            - Database: ${{ steps.db-check.outcome }}
+            - Redis: ${{ steps.redis-check.outcome }}
+
+            ### Actions Required
+
+            1. Check application logs
+            2. Verify server resources
+            3. Test database connectivity
+            4. Review recent deployments
+
+            ### Quick Commands
+
+            \`\`\`bash
+            # SSH to server
+            ssh production-server
+
+            # Check container status
+            cd /opt/scholarship-system
+            docker compose ps
+            docker compose logs --tail=100
+
+            # Check system resources
+            df -h
+            free -h
+            top -n 1
+            \`\`\`
+
+            ---
+            [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+
+            // Check if similar issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'production,incident',
+              per_page: 5
+            });
+
+            const recentIssue = issues.data.find(issue =>
+              issue.title.includes('Production Health Check Failed') &&
+              (Date.now() - new Date(issue.created_at).getTime()) < 3600000 // Within last hour
+            );
+
+            if (recentIssue) {
+              // Add comment to existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: recentIssue.number,
+                body: `Health check failed again at ${new Date().toISOString()}\n\n${body}`
+              });
+              console.log(`Updated existing issue #${recentIssue.number}`);
+            } else {
+              // Create new issue
+              const issue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['production', 'incident', 'urgent']
+              });
+              console.log(`Created new issue #${issue.data.number}`);
+            }
+
+      - name: Send notification (optional)
+        if: failure()
+        run: |
+          # Uncomment and configure your notification method:
+
+          # Slack
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"🚨 Production health check failed!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
+
+          # Discord
+          # curl -X POST -H 'Content-Type: application/json' \
+          #   --data '{"content":"🚨 Production health check failed!"}' \
+          #   ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+          # Email (using a service)
+          # ...
+
+          echo "Health check failed - notifications would be sent here"

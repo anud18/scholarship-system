@@ -1,0 +1,304 @@
+"""
+Custom exceptions for scholarship management system
+"""
+
+from typing import Any, Dict, List, Optional
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+
+class ScholarshipException(Exception):
+    """Base exception for scholarship system"""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int = 400,
+        error_code: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        self.message = message
+        self.status_code = status_code
+        self.error_code = error_code
+        self.details = details or {}
+        super().__init__(message)
+
+
+class ValidationError(ScholarshipException):
+    """Validation error exception"""
+
+    def __init__(self, message: str, field: Optional[str] = None, details: Optional[Dict] = None):
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="VALIDATION_ERROR",
+            details=details or {},
+        )
+        self.field = field
+
+
+class AuthenticationError(ScholarshipException):
+    """Authentication error exception"""
+
+    def __init__(self, message: str = "Authentication failed"):
+        super().__init__(message=message, status_code=401, error_code="AUTHENTICATION_ERROR")
+
+
+class AuthorizationError(ScholarshipException):
+    """Authorization error exception"""
+
+    def __init__(self, message: str = "Access denied"):
+        super().__init__(message=message, status_code=403, error_code="AUTHORIZATION_ERROR")
+
+
+class NotFoundError(ScholarshipException):
+    """Resource not found exception"""
+
+    def __init__(self, resource: str, identifier: str = ""):
+        message = f"{resource} not found"
+        if identifier:
+            message += f": {identifier}"
+        super().__init__(message=message, status_code=404, error_code="NOT_FOUND")
+
+
+class ConflictError(ScholarshipException):
+    """Resource conflict exception"""
+
+    def __init__(self, message: str):
+        super().__init__(message=message, status_code=409, error_code="CONFLICT")
+
+
+class BusinessLogicError(ScholarshipException):
+    """Business logic error exception"""
+
+    def __init__(self, message: str, details: Optional[Dict] = None):
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="BUSINESS_LOGIC_ERROR",
+            details=details,
+        )
+
+
+class FileUploadError(ScholarshipException):
+    """File upload error exception"""
+
+    def __init__(self, message: str):
+        super().__init__(message=message, status_code=400, error_code="FILE_UPLOAD_ERROR")
+
+
+class FileStorageError(ScholarshipException):
+    """Raised when interacting with persistent storage backends fails."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        file_name: Optional[str] = None,
+        storage_path: Optional[str] = None,
+    ) -> None:
+        details: Dict[str, Any] = {}
+        if file_name is not None:
+            details["file_name"] = file_name
+        if storage_path is not None:
+            details["storage_path"] = storage_path
+        super().__init__(message=message, status_code=500, error_code="FILE_STORAGE_ERROR", details=details)
+
+
+class OCRError(ScholarshipException):
+    """OCR processing error exception"""
+
+    def __init__(self, message: str):
+        super().__init__(message=message, status_code=500, error_code="OCR_ERROR")
+
+
+class EmailError(ScholarshipException):
+    """Email sending error exception"""
+
+    def __init__(self, message: str):
+        super().__init__(message=message, status_code=500, error_code="EMAIL_ERROR")
+
+
+class ServiceUnavailableError(ScholarshipException):
+    """Service unavailable error exception"""
+
+    def __init__(self, message: str = "Service temporarily unavailable"):
+        super().__init__(message=message, status_code=503, error_code="SERVICE_UNAVAILABLE")
+
+
+# Exception handler for custom exceptions
+async def scholarship_exception_handler(request: Request, exc: ScholarshipException) -> JSONResponse:
+    """Handle custom scholarship exceptions"""
+    content = {
+        "success": False,
+        "message": exc.message,
+        "error_code": exc.error_code,
+        "details": exc.details,
+        "trace_id": getattr(request.state, "trace_id", None),
+    }
+
+    return JSONResponse(status_code=exc.status_code, content=content)
+
+
+# Specific business logic exceptions for scholarship system
+class InsufficientGpaError(BusinessLogicError):
+    """Raised when student's GPA doesn't meet scholarship requirements"""
+
+    def __init__(self, current_gpa: float, required_gpa: float, scholarship_type: str):
+        message = f"GPA {current_gpa} does not meet requirement of {required_gpa} for {scholarship_type} scholarship"
+        super().__init__(message)
+
+
+class ApplicationDeadlineError(BusinessLogicError):
+    """Raised when trying to submit application after deadline"""
+
+    def __init__(self, scholarship_name: str, deadline: str):
+        message = f"Application deadline for {scholarship_name} has passed (deadline: {deadline})"
+        super().__init__(message)
+
+
+class DuplicateApplicationError(ConflictError):
+    """Raised when student tries to apply for same scholarship twice"""
+
+    def __init__(self, scholarship_name: str):
+        message = f"Student has already applied for {scholarship_name} scholarship"
+        super().__init__(message)
+
+
+class InvalidApplicationStatusError(BusinessLogicError):
+    """Raised when trying to perform invalid status transition"""
+
+    def __init__(self, current_status: str, target_status: str):
+        message = f"Cannot change application status from {current_status} to {target_status}"
+        super().__init__(message)
+
+
+class MaxFilesExceededError(FileUploadError):
+    """Raised when file upload limit is exceeded"""
+
+    def __init__(self, max_files: int):
+        message = f"Maximum number of files ({max_files}) exceeded for application"
+        super().__init__(message)
+
+
+class InvalidFileTypeError(FileUploadError):
+    """Raised when uploaded file type is not allowed"""
+
+    def __init__(self, file_type: str, allowed_types: List[str]):
+        message = f"File type '{file_type}' not allowed. Allowed types: {', '.join(allowed_types)}"
+        super().__init__(message)
+
+
+class FileSizeExceededError(FileUploadError):
+    """Raised when uploaded file size exceeds limit"""
+
+    def __init__(self, file_size: int, max_size: int):
+        message = f"File size {file_size} bytes exceeds maximum size of {max_size} bytes"
+        super().__init__(message)
+
+
+# Roster-specific exceptions
+class RosterGenerationError(ScholarshipException):
+    """Raised when roster generation fails"""
+
+    def __init__(self, message: str):
+        super().__init__(message=message, status_code=500, error_code="ROSTER_GENERATION_ERROR")
+
+
+class RosterNotFoundError(NotFoundError):
+    """Raised when roster is not found"""
+
+    def __init__(self, roster_identifier: str):
+        super().__init__(resource="Roster", identifier=roster_identifier)
+
+
+class RosterAlreadyExistsError(ConflictError):
+    """Raised when trying to create roster that already exists"""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class RosterLockedError(BusinessLogicError):
+    """Raised when trying to modify locked roster"""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class StudentVerificationError(ScholarshipException):
+    """Raised when student verification fails"""
+
+    def __init__(self, message: str, student_id: Optional[str] = None):
+        details = {"student_id": student_id} if student_id else {}
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="STUDENT_VERIFICATION_ERROR",
+            details=details,
+        )
+
+
+# FileStorageError is already defined above at line 91
+
+
+# Batch Import specific exceptions
+class BatchImportError(ScholarshipException):
+    """Base exception for batch import operations"""
+
+    def __init__(self, message: str, batch_id: Optional[int] = None, details: Optional[Dict] = None):
+        error_details = details or {}
+        if batch_id:
+            error_details["batch_id"] = batch_id
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="BATCH_IMPORT_ERROR",
+            details=error_details,
+        )
+
+
+class BatchImportParseError(BatchImportError):
+    """Raised when batch import file parsing fails"""
+
+    def __init__(self, message: str, file_name: Optional[str] = None):
+        details = {"file_name": file_name} if file_name else {}
+        super().__init__(message, details=details)
+
+
+class BatchImportValidationError(BatchImportError):
+    """Raised when batch import data validation fails"""
+
+    def __init__(
+        self,
+        message: str,
+        row_number: Optional[int] = None,
+        student_id: Optional[str] = None,
+        field: Optional[str] = None,
+    ):
+        details = {}
+        if row_number:
+            details["row_number"] = row_number
+        if student_id:
+            details["student_id"] = student_id
+        if field:
+            details["field"] = field
+        super().__init__(message, details=details)
+
+
+class BatchImportPermissionError(AuthorizationError):
+    """Raised when user lacks permission for batch import operation"""
+
+    def __init__(self, message: str, college_code: Optional[str] = None):
+        super().__init__(message)
+        if college_code:
+            self.details["college_code"] = college_code
+
+
+class BatchImportStatusError(BusinessLogicError):
+    """Raised when batch import status is invalid for the operation"""
+
+    def __init__(self, current_status: str, operation: str):
+        message = f"Cannot perform {operation} on batch import with status {current_status}"
+        super().__init__(message)

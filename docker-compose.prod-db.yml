@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for Production
+  postgres:
+    image: postgres:15-alpine
+    container_name: scholarship_postgres_prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-scholarship_db}
+      POSTGRES_USER: ${POSTGRES_USER:-scholarship_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - postgres_backups:/backups
+      - ./database-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - scholarship_prod_db_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-scholarship_user} -d ${POSTGRES_DB:-scholarship_db}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  # MinIO Object Storage for Production
+  minio:
+    image: minio/minio:latest
+    container_name: scholarship_minio_prod
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_SERVER_URL: ${MINIO_SERVER_URL}
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_CONSOLE_URL}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_prod_data:/data
+      - minio_config:/root/.minio
+    networks:
+      - scholarship_prod_db_network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  # Note: Redis moved to AP-VM to maintain consistent architecture with staging
+
+  # Database Backup Service
+  postgres-backup:
+    image: postgres:15-alpine
+    container_name: scholarship_postgres_backup
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-scholarship_db}
+      POSTGRES_USER: ${POSTGRES_USER:-scholarship_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 2 * * *}  # Daily at 2 AM
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - postgres_backups:/backups
+      - ./scripts/backup.sh:/backup.sh:ro
+    networks:
+      - scholarship_prod_db_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: |
+      sh -c '
+        apk add --no-cache dcron
+        echo "$BACKUP_SCHEDULE /backup.sh" | crontab -
+        crond -f
+      '
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # =========================================================================
+  # MONITORING SERVICES - Moved to docker-compose.prod-db-monitoring.yml
+  # =========================================================================
+  # Run monitoring services separately with:
+  # docker-compose -f docker-compose.prod-db-monitoring.yml up -d
+
+volumes:
+  postgres_prod_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/scholarship/postgres/data
+  postgres_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/scholarship/postgres/backups
+  minio_prod_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/scholarship/minio/data
+  minio_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/scholarship/minio/config
+
+networks:
+  scholarship_prod_db_network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.0.0/16
