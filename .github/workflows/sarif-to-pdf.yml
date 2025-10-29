@@ -52,16 +52,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wkhtmltopdf
           python -m pip install --upgrade pip
-          python -m pip install jinja2 markdown2
+          python -m pip install jinja2 weasyprint
 
       - name: Parse SARIF and generate report
+        shell: python
         run: |
-          python - << 'PYTHON_SCRIPT'
           import json
           import pathlib
           from datetime import datetime
@@ -363,21 +361,31 @@ jobs:
           pathlib.Path("codeql-report.html").write_text(html_content, encoding="utf-8")
           print(f"Generated HTML report with {len(all_results)} findings")
 
-          PYTHON_SCRIPT
-
       - name: Convert HTML to PDF
+        shell: python
         run: |
-          wkhtmltopdf \
-            --enable-local-file-access \
-            --page-size A4 \
-            --margin-top 15mm \
-            --margin-bottom 15mm \
-            --margin-left 15mm \
-            --margin-right 15mm \
-            codeql-report.html \
-            codeql-security-report.pdf
-          echo "PDF generated successfully"
-          ls -lh codeql-security-report.pdf
+          from weasyprint import HTML, CSS
+          from weasyprint.text.fonts import FontConfiguration
+
+          font_config = FontConfiguration()
+
+          # Add CSS for page margins
+          css = CSS(string='''
+              @page {
+                  size: A4;
+                  margin: 15mm;
+              }
+          ''', font_config=font_config)
+
+          HTML('codeql-report.html').write_pdf(
+              'codeql-security-report.pdf',
+              stylesheets=[css],
+              font_config=font_config
+          )
+          print("PDF generated successfully")
+
+      - name: Verify PDF output
+        run: ls -lh codeql-security-report.pdf
 
       - name: Upload PDF Report
         uses: actions/upload-artifact@v4
