@@ -268,15 +268,17 @@ class OCRService:
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse Gemini response as JSON: {response_text}")
+            # SECURITY: Do not expose internal or parsing details to client
             return {
                 "success": False,
-                "error": f"Invalid response format: {str(e)}",
+                "error": "Invalid response format.",
                 "confidence": 0.0,
-                "raw_response": response_text,
+                # "raw_response": response_text,  # Do not pass raw response to client
             }
         except Exception as e:
             logger.error(f"Error processing Gemini response: {str(e)}")
-            return {"success": False, "error": f"Response processing error: {str(e)}", "confidence": 0.0}
+            # SECURITY: Do not expose internal or exception details to client
+            return {"success": False, "error": "Response processing error.", "confidence": 0.0}
 
     async def is_enabled(self, db: Optional[AsyncSession] = None) -> bool:
         """

@@ -509,8 +509,8 @@ async def extract_bank_info_from_passbook(
         try:
             result = await ocr_service.extract_bank_info_from_image(file_content)
 
-            # Log successful extraction
-            logger.info(f"Bank OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}")
+            # Log successful extraction or failure
+            logger.info(f"Bank OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}; Success: {result.get('success', False)}")
 
             # SECURITY: Explicitly whitelist safe fields to avoid exposing error details
             safe_result = {
@@ -525,18 +525,23 @@ async def extract_bank_info_from_passbook(
                 "extracted_text": result.get("extracted_text"),
             }
 
-            # If extraction was successful and auto-update is requested, update user profile
-            response_data = {
-                "success": True,
-                "message": "銀行資訊提取成功" if result.get("success") else "銀行資訊提取失敗",
-                "data": safe_result,
-            }
-
-            # Add suggestion for manual review if confidence is low
-            if result.get("success") and result.get("confidence", 0) < 0.8:
-                response_data["warning"] = "提取結果信心度較低，建議人工檢查提取的資訊是否正確"
-
-            return response_data
+            # Only return data if extraction was successful
+            if result.get("success", False):
+                response_data = {
+                    "success": True,
+                    "message": "銀行資訊提取成功",
+                    "data": safe_result,
+                }
+                # Add suggestion for manual review if confidence is low
+                if result.get("confidence", 0) < 0.8:
+                    response_data["warning"] = "提取結果信心度較低，建議人工檢查提取的資訊是否正確"
+                return response_data
+            else:
+                # Do not expose any internal error information, show generic message
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="無法辨識銀行資訊。請確認圖片格式正確且清晰可讀。",
+                )
 
         except Exception as e:
             # SECURITY: Log exception type only (prevent stack trace exposure)
