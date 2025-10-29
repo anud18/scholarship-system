@@ -120,15 +120,78 @@ jobs:
           echo "::notice::✅ Tag pushed to origin: $TAG_NAME"
           echo "::endgroup::"
 
+      - name: Extract release notes from PR body
+        id: extract-notes
+        if: steps.extract-version.outputs.skip != 'true' && steps.check-tag.outputs.exists != 'true'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          echo "::group::Extract release notes"
+
+          # 提取 PR body，移除元數據註解
+          echo "$PR_BODY" | sed '/<!-- AUTO_TAG_METADATA/,/-->/d' > /tmp/release-notes-raw.md
+
+          # 移除過於詳細的部分（可選）
+          # sed -i '/## 📊 File Changes/,/```$/d' /tmp/release-notes-raw.md
+
+          # 添加 footer
+          cat >> /tmp/release-notes-raw.md <<'FOOTER_EOF'
+
+---
+📦 **Auto-generated Release**
+🔗 Generated from PR #${{ github.event.pull_request.number }}
+🤖 Created by Auto-Tag Workflow
+FOOTER_EOF
+
+          # 展開環境變量
+          envsubst < /tmp/release-notes-raw.md > /tmp/release-notes.md
+
+          echo "::notice::Release notes extracted and processed"
+          echo "::group::Release Notes Preview"
+          cat /tmp/release-notes.md
+          echo "::endgroup::"
+
+          echo "::endgroup::"
+
+      - name: Create GitHub Release
+        id: create-release
+        if: steps.extract-version.outputs.skip != 'true' && steps.check-tag.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.extract-version.outputs.tag_name }}
+          VERSION: ${{ steps.extract-version.outputs.version }}
+        run: |
+          echo "::group::Create GitHub Release"
+
+          # 檢測是否為 pre-release
+          PRERELEASE_FLAG=""
+          if [[ "$VERSION" =~ (alpha|beta|rc|pre) ]]; then
+            PRERELEASE_FLAG="--prerelease"
+            echo "::notice::Detected pre-release version"
+          fi
+
+          # 創建 release
+          RELEASE_URL=$(gh release create "$TAG_NAME" \
+            --title "Production Release $TAG_NAME" \
+            --notes-file /tmp/release-notes.md \
+            --target "${{ github.event.pull_request.merge_commit_sha }}" \
+            $PRERELEASE_FLAG)
+
+          echo "::notice::✅ GitHub Release created: $RELEASE_URL"
+          echo "release_url=$RELEASE_URL" >> $GITHUB_OUTPUT
+
+          echo "::endgroup::"
+
       - name: Create GitHub summary
         if: steps.extract-version.outputs.skip != 'true'
         env:
           TAG_NAME: ${{ steps.extract-version.outputs.tag_name }}
           TAG_EXISTS: ${{ steps.check-tag.outputs.exists }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          RELEASE_URL: ${{ steps.create-release.outputs.release_url }}
         run: |
           cat >> $GITHUB_STEP_SUMMARY <<EOF
-          # 🏷️ Auto-Tag Result
+          # 🏷️ Auto-Tag & Release Result
 
           ## Tag Information
 
@@ -142,26 +205,34 @@ jobs:
             cat >> $GITHUB_STEP_SUMMARY <<EOF
           ## ⚠️ Tag Already Exists
 
-          The tag \`$TAG_NAME\` already exists in the repository. Skipped tag creation.
+          The tag \`$TAG_NAME\` already exists in the repository. Skipped tag and release creation.
 
-          - [View Tag](https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME)
+          - [View Existing Release](https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME)
           EOF
           else
             cat >> $GITHUB_STEP_SUMMARY <<EOF
-          ## ✅ Tag Created Successfully
+          ## ✅ Tag & Release Created Successfully
 
           The tag \`$TAG_NAME\` has been created and pushed to the repository.
+          A GitHub Release has also been automatically created.
+
+          ## 📦 Release Information
+
+          - **Release URL**: $RELEASE_URL
+          - **Target Commit**: \`${{ github.event.pull_request.merge_commit_sha }}\`
+          - **Source**: Auto-generated from PR #$PR_NUMBER
 
           ## Next Steps
 
-          You may want to:
-          1. [Create a GitHub Release](https://github.com/${{ github.repository }}/releases/new?tag=$TAG_NAME)
-          2. Trigger deployment workflows (if configured to run on tag push)
-          3. Update changelog or release notes
+          1. ✅ Tag created and pushed
+          2. ✅ GitHub Release published
+          3. 🚀 Deployment workflows may be triggered automatically
+          4. 📝 Review release notes if needed
 
           ## Quick Links
 
-          - [View Tag](https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME)
+          - [View Release](https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME)
+          - [View Tag](https://github.com/${{ github.repository }}/tree/$TAG_NAME)
           - [View Commits](https://github.com/${{ github.repository }}/commits/$TAG_NAME)
           - [View Pull Request](https://github.com/${{ github.repository }}/pull/$PR_NUMBER)
           EOF
