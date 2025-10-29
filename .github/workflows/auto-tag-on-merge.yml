@@ -135,9 +135,10 @@ jobs:
           # sed -i '/## 📊 File Changes/,/```$/d' /tmp/release-notes-raw.md
 
           # 添加 footer
-          cat >> /tmp/release-notes-raw.md <<'FOOTER_EOF'
+          cat >> /tmp/release-notes-raw.md <<FOOTER_EOF
 
----
+___
+
 📦 **Auto-generated Release**
 🔗 Generated from PR #${{ github.event.pull_request.number }}
 🤖 Created by Auto-Tag Workflow
