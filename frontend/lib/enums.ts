@@ -190,6 +190,42 @@ export const getApplicationStatusLabel = (
   return labels[locale][status];
 };
 
+export const getApplicationStatusBadgeVariant = (
+  status: ApplicationStatus
+): "default" | "secondary" | "outline" | "destructive" => {
+  switch (status) {
+    // 草稿狀態 - secondary (灰色)
+    case ApplicationStatus.DRAFT:
+      return "secondary";
+
+    // 已提交/審核中 - default (藍色)
+    case ApplicationStatus.SUBMITTED:
+    case ApplicationStatus.APPROVED:
+      return "default";
+
+    // 審核中/部分核准 - outline (淺色邊框)
+    case ApplicationStatus.UNDER_REVIEW:
+    case ApplicationStatus.PENDING_DOCUMENTS:
+    case ApplicationStatus.PARTIAL_APPROVED:
+      return "outline";
+
+    // 拒絕/刪除 - destructive (紅色)
+    case ApplicationStatus.REJECTED:
+    case ApplicationStatus.DELETED:
+      return "destructive";
+
+    // 退回/撤回/取消/排除 - secondary (灰色)
+    case ApplicationStatus.RETURNED:
+    case ApplicationStatus.WITHDRAWN:
+    case ApplicationStatus.CANCELLED:
+    case ApplicationStatus.MANUAL_EXCLUDED:
+      return "secondary";
+
+    default:
+      return "secondary";
+  }
+};
+
 export const getReviewStageLabel = (
   stage: ReviewStage,
   locale: "zh" | "en" = "zh"
@@ -235,6 +271,47 @@ export const getReviewStageLabel = (
     },
   };
   return labels[locale][stage];
+};
+
+export const getReviewStageBadgeVariant = (
+  stage: ReviewStage
+): "default" | "secondary" | "outline" | "destructive" => {
+  switch (stage) {
+    // 學生階段 - secondary (灰色)
+    case ReviewStage.STUDENT_DRAFT:
+    case ReviewStage.STUDENT_SUBMITTED:
+      return "secondary";
+
+    // 進行中階段 - default (藍色)
+    case ReviewStage.PROFESSOR_REVIEW:
+    case ReviewStage.COLLEGE_REVIEW:
+    case ReviewStage.COLLEGE_RANKING:
+    case ReviewStage.ADMIN_REVIEW:
+    case ReviewStage.QUOTA_DISTRIBUTION:
+    case ReviewStage.ROSTER_PREPARATION:
+      return "default";
+
+    // 已完成階段 - outline (淺色邊框)
+    case ReviewStage.PROFESSOR_REVIEWED:
+    case ReviewStage.COLLEGE_REVIEWED:
+    case ReviewStage.COLLEGE_RANKED:
+    case ReviewStage.ADMIN_REVIEWED:
+    case ReviewStage.QUOTA_DISTRIBUTED:
+      return "outline";
+
+    // 造冊完成階段 - default (強調)
+    case ReviewStage.ROSTER_PREPARED:
+    case ReviewStage.ROSTER_SUBMITTED:
+      return "default";
+
+    // 完成階段 - outline
+    case ReviewStage.COMPLETED:
+    case ReviewStage.ARCHIVED:
+      return "outline";
+
+    default:
+      return "secondary";
+  }
 };
 
 export const getUserRoleLabel = (

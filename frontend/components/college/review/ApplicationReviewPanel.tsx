@@ -38,10 +38,10 @@ import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDi
 import { DeleteApplicationDialog } from "@/components/delete-application-dialog";
 import { DocumentRequestForm } from "@/components/document-request-form";
 import {
-  getStatusColor,
-  getStatusName,
   ApplicationStatus,
-} from "@/lib/utils/application-helpers";
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
 import {
   Search,
   Eye,
@@ -188,7 +188,7 @@ export function ApplicationReviewPanel({
     // Status filter
     if (statusFilter !== "all") {
       if (statusFilter === "pending") {
-        if (app.status !== "recommended" && app.status !== "submitted") {
+        if (app.status !== "submitted") {
           return false;
         }
       } else if (app.status !== statusFilter) {
@@ -322,7 +322,7 @@ export function ApplicationReviewPanel({
       // Prepare export data
       const exportData = applications.map((app) => {
         // Format status
-        const statusText = app.status_zh || getStatusName(app.status as ApplicationStatus, locale);
+        const statusText = app.status_zh || getApplicationStatusLabel(app.status as ApplicationStatus, locale);
 
         // Format application type
         const applicationType = app.is_renewal
@@ -486,7 +486,6 @@ export function ApplicationReviewPanel({
               {
                 applications.filter(
                   app =>
-                    app.status === "recommended" ||
                     app.status === "submitted"
                 ).length
               }
@@ -511,9 +510,7 @@ export function ApplicationReviewPanel({
               {
                 applications.filter(
                   app =>
-                    app.status === "under_review" ||
-                    (app.status === "recommended" &&
-                      app.college_review_completed)
+                    app.status === "under_review"
                 ).length
               }
             </div>
@@ -647,7 +644,7 @@ export function ApplicationReviewPanel({
                 <SelectItem value="approved">
                   {locale === "zh" ? "已核准" : "Approved"}
                 </SelectItem>
-                <SelectItem value="partial_approve">
+                <SelectItem value="partial_approved">
                   {locale === "zh" ? "部分核准" : "Partial Approval"}
                 </SelectItem>
                 <SelectItem value="rejected">
@@ -751,9 +748,9 @@ export function ApplicationReviewPanel({
                       {/* 7. 狀態 */}
                       <TableCell>
                         <Badge
-                          variant={getStatusColor(app.status as ApplicationStatus)}
+                          variant={getApplicationStatusBadgeVariant(app.status as ApplicationStatus)}
                         >
-                          {app.status_zh || getStatusName(app.status as ApplicationStatus, locale)}
+                          {app.status_zh || getApplicationStatusLabel(app.status as ApplicationStatus, locale)}
                         </Badge>
                       </TableCell>
 

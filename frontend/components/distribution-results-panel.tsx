@@ -135,7 +135,7 @@ const VERIFIED_STATUSES = new Set([
 ]);
 
 const PARTIAL_APPROVED_STATUSES = new Set([
-  "partial_approve",  // Backend actual status value
+  "partial_approved",  // Backend actual status value
 ]);
 
 const REJECTED_STATUSES = new Set([

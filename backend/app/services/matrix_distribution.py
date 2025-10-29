@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.application import Application
 from app.models.college_review import CollegeRanking, CollegeRankingItem
+from app.models.enums import ApplicationStatus
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipRule
 from app.services.review_service import ReviewService
 from app.utils.application_helpers import get_college_code_from_data, get_snapshot_student_name
@@ -218,7 +219,7 @@ class MatrixDistributionService:
                         continue
 
                     # Check if application was rejected by review
-                    if app.status == "rejected":
+                    if app.status == ApplicationStatus.rejected.value:
                         continue
 
                     # Check if THIS SPECIFIC sub-type was rejected in review
@@ -324,7 +325,9 @@ class MatrixDistributionService:
 
         if allocated_application_ids:
             update_stmt = (
-                update(Application).where(Application.id.in_(allocated_application_ids)).values(status="approved")
+                update(Application)
+                .where(Application.id.in_(allocated_application_ids))
+                .values(status=ApplicationStatus.approved.value)
             )
             await self.db.execute(update_stmt)
             logger.info(f"Updated {len(allocated_application_ids)} applications to 'approved' status")
@@ -414,7 +417,7 @@ class MatrixDistributionService:
         4. 所有申請的子類別配額已滿 - All applied sub-types are full
         """
         # Check if application was rejected by review
-        if app.status == "rejected":
+        if app.status == ApplicationStatus.rejected.value:
             return "申請已被駁回"
 
         # Check if student applied for any sub-types

@@ -252,23 +252,10 @@ export function createCollegeApi() {
     },
 
     /**
-     * Get college review statistics
-     * Type-safe: Query parameters validated against OpenAPI
+     * NOTE: Statistics endpoint was removed from backend
+     * TODO: Reimplement using ApplicationReview + ApplicationReviewItem
+     * See backend/app/api/v1/endpoints/college_review/utilities.py
      */
-    getStatistics: async (
-      academicYear?: number,
-      semester?: string
-    ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.GET('/api/v1/college-review/statistics', {
-        params: {
-          query: {
-            academic_year: academicYear,
-            semester,
-          },
-        },
-      });
-      return toApiResponse<any>(response);
-    },
 
     /**
      * Get available combinations of scholarship types, years, and semesters

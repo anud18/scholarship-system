@@ -4,7 +4,7 @@ Supports Traditional Chinese (zh-TW) and English (en) as specified in issue #10
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 
 class Language(Enum):
@@ -202,12 +202,16 @@ class ScholarshipI18n:
     @classmethod
     def get_text(
         cls,
-        key: str,
+        key: Union[str, Enum],
         category: str = "messages",
         language: str = Language.TRADITIONAL_CHINESE.value,
         fallback_language: str = Language.ENGLISH.value,
     ) -> str:
         """Get translated text for a given key"""
+
+        # Convert enum to string value if needed
+        if hasattr(key, "value"):
+            key = key.value
 
         try:
             # Try primary language
@@ -229,16 +233,23 @@ class ScholarshipI18n:
             return key.replace("_", " ").title()
 
     @classmethod
-    def get_application_status_text(cls, status: str, language: str = Language.TRADITIONAL_CHINESE.value) -> str:
+    def get_application_status_text(
+        cls, status: Union[str, Enum], language: str = Language.TRADITIONAL_CHINESE.value
+    ) -> str:
         """Get translated application status text"""
         return cls.get_text(status, "application_status", language)
 
     @classmethod
-    def get_scholarship_type_text(cls, type_value: str, language: str = Language.TRADITIONAL_CHINESE.value) -> str:
+    def get_scholarship_type_text(
+        cls, type_value: Union[str, Enum], language: str = Language.TRADITIONAL_CHINESE.value
+    ) -> str:
         """Get translated scholarship type text"""
+        # Convert enum to string value if needed for comparison
+        type_value_str = type_value.value if hasattr(type_value, "value") else type_value
+
         # Try main types first
         text = cls.get_text(type_value, "scholarship_main_types", language)
-        if text == type_value.replace("_", " ").title():
+        if text == type_value_str.replace("_", " ").title():
             # Try sub types
             text = cls.get_text(type_value, "scholarship_sub_types", language)
         return text

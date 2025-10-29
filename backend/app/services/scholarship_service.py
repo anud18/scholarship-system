@@ -543,12 +543,12 @@ class ScholarshipApplicationService:
         for app in renewal_apps:
             # Auto-approve if meets renewal criteria
             if self._meets_renewal_criteria(app):
-                app.status = ApplicationStatus.approved
+                app.status = ApplicationStatus.approved.value
                 app.decision_date = datetime.now(timezone.utc)
                 approved_count += 1
             else:
                 # Move to regular review process
-                app.status = ApplicationStatus.under_review
+                app.status = ApplicationStatus.under_review.value
 
             processed_count += 1
 

@@ -1,20 +1,14 @@
 import { Locale } from "@/lib/validators";
 import { api } from "@/lib/api";
+import {
+  ApplicationStatus,
+  ReviewStage,
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+  getReviewStageLabel,
+  getReviewStageBadgeVariant,
+} from "@/lib/enums";
 
-// 申請狀態類型
-export type ApplicationStatus =
-  | "draft"
-  | "submitted"
-  | "under_review"
-  | "pending_recommendation"
-  | "recommended"
-  | "approved"
-  | "partial_approve"
-  | "rejected"
-  | "returned"
-  | "withdrawn"
-  | "cancelled"
-  | "deleted";
 export type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
 // 時間軸步驟類型
@@ -35,127 +29,42 @@ export const formatDate = (
   return date.toLocaleDateString(locale === "zh" ? "zh-TW" : "en-US");
 };
 
-// Workflow status groupings for timeline rendering
-const WAIT_PROFESSOR_CURRENT_STATUSES = new Set<string>([
-  "submitted",
-  "pending_review",
-]);
+// ReviewStage progression order for timeline
+const REVIEW_STAGE_ORDER: { [key: string]: number } = {
+  student_draft: 0,
+  student_submitted: 1,
+  professor_review: 2,
+  professor_reviewed: 3,
+  college_review: 4,
+  college_reviewed: 5,
+  college_ranking: 6,
+  college_ranked: 7,
+  admin_review: 8,
+  admin_reviewed: 9,
+  quota_distribution: 10,
+  quota_distributed: 11,
+  roster_preparation: 12,
+  roster_prepared: 13,
+  roster_submitted: 14,
+  completed: 15,
+  archived: 16,
+};
 
-const WAIT_PROFESSOR_COMPLETED_STATUSES = new Set<string>([
-  "pending_recommendation",
-  "professor_review_pending",
-  "professor_reviewed",
-  "recommended",
-  "college_review_pending",
-  "college_reviewed",
-  "under_review",
-  "approved",
-  "rejected",
-  "returned",
-  "withdrawn",
-  "cancelled",
-  "pending",
-  "completed",
-]);
-
-const PROFESSOR_REVIEW_CURRENT_STATUSES = new Set<string>([
-  "pending_recommendation",
-  "professor_review_pending",
-]);
-
-const PROFESSOR_REVIEW_COMPLETED_STATUSES = new Set<string>([
-  "professor_reviewed",
-  "recommended",
-  "college_review_pending",
-  "college_reviewed",
-  "under_review",
-  "approved",
-  "rejected",
-  "returned",
-  "withdrawn",
-  "cancelled",
-  "pending",
-  "completed",
-]);
-
-const PROFESSOR_REVIEW_SUBMITTED_STATUSES = new Set<string>([
-  "professor_reviewed",
-  "recommended",
-  "college_review_pending",
-  "college_reviewed",
-  "under_review",
-  "approved",
-  "rejected",
-  "returned",
-  "withdrawn",
-  "cancelled",
-  "pending",
-  "completed",
-]);
-
-const WAIT_COLLEGE_CURRENT_STATUSES = new Set<string>([
-  "professor_reviewed",
-  "recommended",
-  "college_review_pending",
-]);
-
-const WAIT_COLLEGE_COMPLETED_STATUSES = new Set<string>([
-  "college_reviewed",
-  "under_review",
-  "approved",
-  "rejected",
-  "returned",
-  "withdrawn",
-  "cancelled",
-  "pending",
-  "completed",
-]);
-
-const COLLEGE_REVIEW_CURRENT_STATUSES = new Set<string>([
-  "college_review_pending",
-  "under_review",
-]);
-
-const COLLEGE_REVIEW_COMPLETED_STATUSES = new Set<string>([
-  "college_reviewed",
-  "approved",
-  "rejected",
-  "returned",
-  "withdrawn",
-  "cancelled",
-  "pending",
-  "completed",
-]);
-
-const COLLEGE_SUBMITTED_COMPLETED_STATUSES = new Set<string>([
-  "college_reviewed",
-  "approved",
-  "rejected",
-  "returned",
-  "withdrawn",
-  "cancelled",
-  "pending",
-  "completed",
-]);
-
-const FINAL_DECISION_COMPLETED_STATUSES = new Set<string>([
-  "approved",
-  "completed",
-]);
-
-const FINAL_DECISION_REJECTED_STATUSES = new Set<string>([
-  "rejected",
-  "returned",
-  "withdrawn",
-  "cancelled",
-]);
+// Helper to check if review_stage has progressed past a certain point
+const hasReachedStage = (currentStage: string | undefined, targetStage: string): boolean => {
+  if (!currentStage) return false;
+  const currentOrder = REVIEW_STAGE_ORDER[currentStage] ?? -1;
+  const targetOrder = REVIEW_STAGE_ORDER[targetStage] ?? -1;
+  return currentOrder >= targetOrder;
+};
 
 // 獲取申請時間軸
 export const getApplicationTimeline = (
   application: any,
   locale: Locale
 ): TimelineStep[] => {
-  const status = application.status as string;
+  const status = application.status as ApplicationStatus;
+  const reviewStage = application.review_stage as string | undefined;
 
   // 獲取教授審核資訊
   const professorReview = application.professor_reviews?.[0];
@@ -170,36 +79,54 @@ export const getApplicationTimeline = (
   // 教授姓名
   const professorName = application.professor?.name || application.professor?.nycu_id;
 
+  // 判斷步驟狀態的輔助函數
+  const getStepStatus = (
+    targetStage: string,
+    nextStage: string,
+    hasCompletedEvidence?: boolean
+  ): "completed" | "current" | "pending" | "rejected" => {
+    // 如果被拒絕,且已達到該階段,標記為 rejected
+    if (status === "rejected" && hasReachedStage(reviewStage, targetStage)) {
+      return "rejected";
+    }
+
+    // 如果有明確的完成證據 (如審核記錄)
+    if (hasCompletedEvidence) {
+      return "completed";
+    }
+
+    // 如果已達到下一階段,則此階段已完成
+    if (hasReachedStage(reviewStage, nextStage)) {
+      return "completed";
+    }
+
+    // 如果正好在此階段
+    if (reviewStage === targetStage) {
+      return "current";
+    }
+
+    // 尚未達到
+    return "pending";
+  };
+
   const steps: TimelineStep[] = [
     // 1. 提交申請
     {
       id: "submit",
       title: locale === "zh" ? "提交申請" : "Submit Application",
-      status: status === "draft" ? "current" : "completed",
-      date:
-        status === "draft"
-          ? ""
-          : formatDate(
-              application.submitted_at || application.created_at,
-              locale
-            ),
+      status: reviewStage === "student_draft" ? "current" : "completed",
+      date: reviewStage === "student_draft"
+        ? ""
+        : formatDate(application.submitted_at || application.created_at, locale),
     },
 
     // 2. 等待教授審核
     {
       id: "wait_professor",
-      title:
-        locale === "zh"
-          ? `等待教授審核${professorName ? ` (${professorName})` : ""}`
-          : `Waiting for Professor Review${professorName ? ` (${professorName})` : ""}`,
-      status:
-        status === "draft"
-          ? "pending"
-          : WAIT_PROFESSOR_CURRENT_STATUSES.has(status)
-            ? "current"
-            : WAIT_PROFESSOR_COMPLETED_STATUSES.has(status)
-              ? "completed"
-              : "pending",
+      title: locale === "zh"
+        ? `等待教授審核${professorName ? ` (${professorName})` : ""}`
+        : `Waiting for Professor Review${professorName ? ` (${professorName})` : ""}`,
+      status: getStepStatus("student_submitted", "professor_review"),
       date: "",
     },
 
@@ -207,12 +134,7 @@ export const getApplicationTimeline = (
     {
       id: "professor_reviewing",
       title: locale === "zh" ? "教授審核中" : "Professor Reviewing",
-      status:
-        PROFESSOR_REVIEW_CURRENT_STATUSES.has(status)
-          ? "current"
-          : hasProfessorReview || PROFESSOR_REVIEW_COMPLETED_STATUSES.has(status)
-            ? "completed"
-            : "pending",
+      status: getStepStatus("professor_review", "professor_reviewed", hasProfessorReview),
       date: "",
     },
 
@@ -220,10 +142,7 @@ export const getApplicationTimeline = (
     {
       id: "professor_submitted",
       title: locale === "zh" ? "教授已送出審核" : "Professor Review Submitted",
-      status:
-        hasProfessorReview || PROFESSOR_REVIEW_SUBMITTED_STATUSES.has(status)
-          ? "completed"
-          : "pending",
+      status: getStepStatus("professor_reviewed", "college_review", hasProfessorReview),
       date: hasProfessorReview ? formatDate(professorReview.reviewed_at, locale) : "",
     },
 
@@ -231,12 +150,7 @@ export const getApplicationTimeline = (
     {
       id: "wait_college",
       title: locale === "zh" ? "等待學院審核" : "Waiting for College Review",
-      status:
-        WAIT_COLLEGE_CURRENT_STATUSES.has(status)
-          ? "current"
-          : WAIT_COLLEGE_COMPLETED_STATUSES.has(status)
-            ? "completed"
-            : "pending",
+      status: getStepStatus("professor_reviewed", "college_review"),
       date: "",
     },
 
@@ -244,12 +158,7 @@ export const getApplicationTimeline = (
     {
       id: "college_reviewing",
       title: locale === "zh" ? "學院審核中" : "College Reviewing",
-      status:
-        COLLEGE_REVIEW_CURRENT_STATUSES.has(status)
-          ? "current"
-          : hasCollegeReview || COLLEGE_REVIEW_COMPLETED_STATUSES.has(status)
-            ? "completed"
-            : "pending",
+      status: getStepStatus("college_review", "college_reviewed", hasCollegeReview),
       date: "",
     },
 
@@ -257,10 +166,7 @@ export const getApplicationTimeline = (
     {
       id: "college_submitted",
       title: locale === "zh" ? "學院已送出審核" : "College Review Submitted",
-      status:
-        hasCollegeReview || COLLEGE_SUBMITTED_COMPLETED_STATUSES.has(status)
-          ? "completed"
-          : "pending",
+      status: getStepStatus("college_reviewed", "admin_review", hasCollegeReview),
       date: hasCollegeReview ? formatDate(collegeReview.reviewed_at, locale) : "",
     },
 
@@ -269,15 +175,15 @@ export const getApplicationTimeline = (
       id: "final_decision",
       title: locale === "zh" ? "最終核定" : "Final Decision",
       status:
-        FINAL_DECISION_COMPLETED_STATUSES.has(status)
+        status === "approved"
           ? "completed"
-          : FINAL_DECISION_REJECTED_STATUSES.has(status)
+          : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
             ? "rejected"
             : "pending",
       date:
-        FINAL_DECISION_COMPLETED_STATUSES.has(status)
+        status === "approved"
           ? formatDate(application.approved_at, locale)
-          : FINAL_DECISION_REJECTED_STATUSES.has(status)
+          : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
             ? formatDate(application.reviewed_at, locale)
             : "",
     },
@@ -286,59 +192,69 @@ export const getApplicationTimeline = (
   return steps;
 };
 
-// 獲取狀態顏色
-export const getStatusColor = (status: ApplicationStatus): BadgeVariant => {
-  const statusMap: Record<ApplicationStatus, BadgeVariant> = {
-    draft: "secondary",
-    submitted: "default",
-    under_review: "outline",
-    pending_recommendation: "outline",
-    recommended: "outline",
-    approved: "default",
-    partial_approve: "outline",
-    rejected: "destructive",
-    returned: "secondary",
-    withdrawn: "secondary",
-    cancelled: "secondary",
-    deleted: "destructive",
-  };
-  return statusMap[status];
+
+// 判斷是否應該顯示階段狀態 (ReviewStage)
+export const shouldShowReviewStage = (
+  status: string,
+  reviewStage?: string
+): boolean => {
+  // 如果沒有 review_stage,不顯示
+  if (!reviewStage) return false;
+
+  // 草稿狀態不顯示階段
+  if (status === "draft") return false;
+
+  // 最終狀態(已核准/已拒絕等)可以選擇不顯示詳細階段
+  const finalStatuses = ["approved", "rejected", "withdrawn", "cancelled", "deleted"];
+
+  // 可根據需求調整:最終狀態是否仍顯示階段
+  // return !finalStatuses.includes(status);
+
+  // 目前策略:所有非草稿狀態都顯示階段
+  return true;
 };
 
-// 獲取狀態名稱
-export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
-  const statusNames = {
-    zh: {
-      draft: "草稿",
-      submitted: "已提交",
-      under_review: "審核中",
-      pending_recommendation: "待教授推薦",
-      recommended: "已推薦",
-      approved: "已核准",
-      partial_approve: "部分核准",
-      rejected: "已拒絕",
-      returned: "已退回",
-      withdrawn: "已撤回",
-      cancelled: "已取消",
-      deleted: "已刪除",
-    },
-    en: {
-      draft: "Draft",
-      submitted: "Submitted",
-      under_review: "Under Review",
-      pending_recommendation: "Pending Recommendation",
-      recommended: "Recommended",
-      approved: "Approved",
-      partial_approve: "Partial Approval",
-      rejected: "Rejected",
-      returned: "Returned",
-      withdrawn: "Withdrawn",
-      cancelled: "Cancelled",
-      deleted: "Deleted",
-    },
-  } as const;
-  return statusNames[locale][status];
+// 獲取顯示狀態 - 返回狀態和階段的組合資訊
+export const getDisplayStatusInfo = (
+  application: any,
+  locale: Locale
+): {
+  showStatus: boolean;
+  showStage: boolean;
+  statusLabel: string;
+  stageLabel: string;
+  statusVariant: BadgeVariant;
+  stageVariant: BadgeVariant;
+} => {
+  const status = application.status as ApplicationStatus;
+  const reviewStage = application.review_stage;
+
+  // 獲取階段標籤和 variant
+  let stageLabel = "";
+  let stageVariant: BadgeVariant = "outline";
+
+  if (reviewStage) {
+    try {
+      // 將 string 轉換為 ReviewStage enum
+      const stageEnum = reviewStage as ReviewStage;
+      stageLabel = getReviewStageLabel(stageEnum, locale);
+      stageVariant = getReviewStageBadgeVariant(stageEnum);
+    } catch (error) {
+      // 如果轉換失敗,使用原始值
+      stageLabel = reviewStage;
+    }
+  }
+
+  return {
+    showStatus: true, // 狀態永遠顯示
+    showStage: shouldShowReviewStage(application.status, reviewStage),
+    statusLabel: getApplicationStatusLabel(status, locale),
+    stageLabel,
+    statusVariant: getApplicationStatusBadgeVariant(status),
+    stageVariant,
+  };
 };
+
 
 // 格式化欄位名稱
 export const formatFieldName = (fieldName: string, locale: Locale) => {

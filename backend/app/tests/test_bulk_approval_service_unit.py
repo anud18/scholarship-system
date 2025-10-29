@@ -156,7 +156,7 @@ async def test_bulk_approve_handles_missing_ids_and_no_notifications():
 
 @pytest.mark.asyncio
 async def test_bulk_approve_records_notification_error(monkeypatch):
-    app = DummyApplication("APP-4", ApplicationStatus.recommended.value)
+    app = DummyApplication("APP-4", ApplicationStatus.under_review.value)
     session = StubSession([StubResult([app])])
     notification_stub = StubNotificationService(responses=[RuntimeError("boom")])
     service = make_service(session, notification_stub)

@@ -21,28 +21,53 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     connection = op.get_bind()
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
 
-    # 1. 遷移舊值到新值
-    connection.execute(
+    # Check if applications table exists
+    existing_tables = inspector.get_table_names()
+    if "applications" not in existing_tables:
+        print("⊘ Skipping: applications table does not exist")
+        return
+
+    # 1. 先改變欄位類型為 String (讓資料遷移能正常執行)
+    op.alter_column("applications", "status", type_=sa.String(50))
+
+    # 2. 遷移舊值到新值 (現在是 String 類型，可以安全地比對任何值)
+    result = connection.execute(
         sa.text(
             """
-        UPDATE applications
-        SET status = CASE
-            WHEN status = 'professor_review' THEN 'under_review'
-            WHEN status = 'recommended' THEN 'under_review'
-            WHEN status = 'college_reviewed' THEN 'under_review'
-            WHEN status = 'renewal_pending' THEN 'submitted'
-            WHEN status = 'renewal_reviewed' THEN 'under_review'
-            WHEN status = 'pending_recommendation' THEN 'under_review'
-            WHEN status = 'partial_approve' THEN 'partial_approved'
-            ELSE status
-        END
+        SELECT COUNT(*) FROM applications
+        WHERE status IN ('professor_review', 'recommended', 'college_reviewed',
+                       'renewal_pending', 'renewal_reviewed', 'pending_recommendation',
+                       'partial_approve')
     """
         )
     )
+    count = result.scalar()
 
-    # 2. 改變欄位類型為 String (暫時)
-    op.alter_column("applications", "status", type_=sa.String(50))
+    # 只有當有資料需要遷移時才執行 UPDATE
+    if count and count > 0:
+        connection.execute(
+            sa.text(
+                """
+            UPDATE applications
+            SET status = CASE
+                WHEN status = 'professor_review' THEN 'under_review'
+                WHEN status = 'recommended' THEN 'under_review'
+                WHEN status = 'college_reviewed' THEN 'under_review'
+                WHEN status = 'renewal_pending' THEN 'submitted'
+                WHEN status = 'renewal_reviewed' THEN 'under_review'
+                WHEN status = 'pending_recommendation' THEN 'under_review'
+                WHEN status = 'partial_approve' THEN 'partial_approved'
+                ELSE status
+            END
+        """
+            )
+        )
+        print(f"✓ Migrated {count} applications with old status values")
+    else:
+        print("⊘ No applications with old status values to migrate")
 
     # 3. 刪除舊 enum (如果存在)
     # Note: 使用 checkfirst 來避免 enum 不存在時報錯

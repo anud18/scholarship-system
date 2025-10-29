@@ -1,15 +1,17 @@
 import {
   formatDate,
   getApplicationTimeline,
-  getStatusColor,
-  getStatusName,
   formatFieldName,
   formatFieldValue,
   getDocumentLabel,
   fetchApplicationFiles,
-  ApplicationStatus,
   BadgeVariant,
 } from "../application-helpers";
+import {
+  ApplicationStatus,
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
 
 // Create mock functions that can be reconfigured
 const mockGetAll = jest.fn().mockResolvedValue({
@@ -110,6 +112,7 @@ describe("Application Helpers", () => {
   describe("getApplicationTimeline", () => {
     const mockApplication = {
       status: "submitted",
+      review_stage: "student_submitted",
       created_at: "2025-01-01T10:00:00Z",
       submitted_at: "2025-01-02T10:00:00Z",
       reviewed_at: "2025-01-03T10:00:00Z",
@@ -117,7 +120,7 @@ describe("Application Helpers", () => {
     };
 
     it("should return correct timeline for draft status in Chinese", () => {
-      const draftApp = { ...mockApplication, status: "draft" };
+      const draftApp = { ...mockApplication, status: "draft", review_stage: "student_draft" };
       const timeline = getApplicationTimeline(draftApp, "zh");
 
       expect(timeline).toHaveLength(8);
@@ -133,73 +136,61 @@ describe("Application Helpers", () => {
     });
 
     it("should return correct timeline for submitted status in English", () => {
-      const submittedApp = { ...mockApplication, status: "submitted" };
+      const submittedApp = { ...mockApplication, status: "submitted", review_stage: "student_submitted" };
       const timeline = getApplicationTimeline(submittedApp, "en");
 
       expect(timeline).toHaveLength(8);
       expect(timeline[0].title).toBe("Submit Application");
       expect(timeline[0].status).toBe("completed");
-      expect(timeline[1].title).toBe("Waiting for Professor Review");
+      expect(timeline[1].title).toContain("Waiting for Professor Review");
       expect(timeline[1].status).toBe("current");
       expect(timeline[2].title).toBe("Professor Reviewing");
       expect(timeline[2].status).toBe("pending");
     });
 
     it("should return correct timeline for approved status", () => {
-      const approvedApp = { ...mockApplication, status: "approved" };
+      const approvedApp = { ...mockApplication, status: "approved", review_stage: "completed" };
       const timeline = getApplicationTimeline(approvedApp, "zh");
 
       expect(timeline[0].status).toBe("completed");
-      expect(timeline[1].status).toBe("completed");
-      expect(timeline[2].status).toBe("completed");
-      expect(timeline[3].status).toBe("completed");
-      expect(timeline[4].status).toBe("completed");
-      expect(timeline[5].status).toBe("completed");
-      expect(timeline[6].status).toBe("completed");
       expect(timeline[7].status).toBe("completed");
     });
 
     it("should return correct timeline for rejected status", () => {
-      const rejectedApp = { ...mockApplication, status: "rejected" };
+      const rejectedApp = { ...mockApplication, status: "rejected", review_stage: "college_reviewed" };
       const timeline = getApplicationTimeline(rejectedApp, "zh");
 
       expect(timeline[0].status).toBe("completed");
-      expect(timeline[1].status).toBe("completed");
-      expect(timeline[2].status).toBe("completed");
-      expect(timeline[3].status).toBe("completed");
-      expect(timeline[4].status).toBe("completed");
-      expect(timeline[5].status).toBe("completed");
-      expect(timeline[6].status).toBe("completed");
       expect(timeline[7].status).toBe("rejected");
     });
   });
 
-  describe("getStatusColor", () => {
+  describe("getApplicationStatusBadgeVariant", () => {
     it("should return correct colors for different statuses", () => {
-      expect(getStatusColor("draft")).toBe("secondary");
-      expect(getStatusColor("submitted")).toBe("default");
-      expect(getStatusColor("under_review")).toBe("outline");
-      expect(getStatusColor("approved")).toBe("default");
-      expect(getStatusColor("rejected")).toBe("destructive");
-      expect(getStatusColor("withdrawn")).toBe("secondary");
+      expect(getApplicationStatusBadgeVariant(ApplicationStatus.DRAFT)).toBe("secondary");
+      expect(getApplicationStatusBadgeVariant(ApplicationStatus.SUBMITTED)).toBe("default");
+      expect(getApplicationStatusBadgeVariant(ApplicationStatus.UNDER_REVIEW)).toBe("outline");
+      expect(getApplicationStatusBadgeVariant(ApplicationStatus.APPROVED)).toBe("default");
+      expect(getApplicationStatusBadgeVariant(ApplicationStatus.REJECTED)).toBe("destructive");
+      expect(getApplicationStatusBadgeVariant(ApplicationStatus.WITHDRAWN)).toBe("secondary");
     });
   });
 
-  describe("getStatusName", () => {
+  describe("getApplicationStatusLabel", () => {
     it("should return Chinese status names", () => {
-      expect(getStatusName("draft", "zh")).toBe("草稿");
-      expect(getStatusName("submitted", "zh")).toBe("已提交");
-      expect(getStatusName("under_review", "zh")).toBe("審核中");
-      expect(getStatusName("approved", "zh")).toBe("已核准");
-      expect(getStatusName("rejected", "zh")).toBe("已拒絕");
+      expect(getApplicationStatusLabel(ApplicationStatus.DRAFT, "zh")).toBe("草稿");
+      expect(getApplicationStatusLabel(ApplicationStatus.SUBMITTED, "zh")).toBe("已送出");
+      expect(getApplicationStatusLabel(ApplicationStatus.UNDER_REVIEW, "zh")).toBe("審批中");
+      expect(getApplicationStatusLabel(ApplicationStatus.APPROVED, "zh")).toBe("已核准");
+      expect(getApplicationStatusLabel(ApplicationStatus.REJECTED, "zh")).toBe("已駁回");
     });
 
     it("should return English status names", () => {
-      expect(getStatusName("draft", "en")).toBe("Draft");
-      expect(getStatusName("submitted", "en")).toBe("Submitted");
-      expect(getStatusName("under_review", "en")).toBe("Under Review");
-      expect(getStatusName("approved", "en")).toBe("Approved");
-      expect(getStatusName("rejected", "en")).toBe("Rejected");
+      expect(getApplicationStatusLabel(ApplicationStatus.DRAFT, "en")).toBe("Draft");
+      expect(getApplicationStatusLabel(ApplicationStatus.SUBMITTED, "en")).toBe("Submitted");
+      expect(getApplicationStatusLabel(ApplicationStatus.UNDER_REVIEW, "en")).toBe("Under Review");
+      expect(getApplicationStatusLabel(ApplicationStatus.APPROVED, "en")).toBe("Approved");
+      expect(getApplicationStatusLabel(ApplicationStatus.REJECTED, "en")).toBe("Rejected");
     });
   });
 

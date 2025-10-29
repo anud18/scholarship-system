@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import SemesterSelector from "./semester-selector";
+import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 
 interface EnhancedAdminDashboardProps {
   stats: any;
@@ -324,17 +325,23 @@ export function EnhancedAdminDashboard({
                         )}
                       </div>
                     </div>
-                    <Badge
-                      variant={
-                        application.status === "approved"
-                          ? "default"
-                          : application.status === "rejected"
-                            ? "destructive"
-                            : "secondary"
-                      }
-                    >
-                      {application.status_name || application.status}
-                    </Badge>
+                    <div className="flex gap-2 flex-wrap">
+                      {(() => {
+                        const statusInfo = getDisplayStatusInfo(application, "zh");
+                        return (
+                          <>
+                            <Badge variant={statusInfo.statusVariant}>
+                              {statusInfo.statusLabel}
+                            </Badge>
+                            {statusInfo.showStage && statusInfo.stageLabel && (
+                              <Badge variant={statusInfo.stageVariant}>
+                                {statusInfo.stageLabel}
+                              </Badge>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
                   </div>
                 ))}
               </div>

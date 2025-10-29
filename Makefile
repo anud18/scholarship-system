@@ -207,7 +207,13 @@ docker-clean: ## Docker - Clean up Docker resources
 # Database Commands
 db-migrate: ## Run database migrations
 	@echo "$(GREEN)Running database migrations...$(NC)"
-	cd backend && alembic upgrade head
+	@if docker ps --filter name=scholarship_backend_dev --format "{{.Names}}" | grep -q scholarship_backend_dev; then \
+		echo "$(CYAN)Running migrations in Docker container...$(NC)"; \
+		docker exec scholarship_backend_dev alembic upgrade head; \
+	else \
+		echo "$(CYAN)Running migrations locally...$(NC)"; \
+		cd backend && alembic upgrade head; \
+	fi
 	@echo "$(GREEN)✅ Migrations completed!$(NC)"
 
 db-reset: ## Reset database (WARNING: This will delete all data)
@@ -225,7 +231,13 @@ db-reset: ## Reset database (WARNING: This will delete all data)
 
 db-seed: ## Seed database with sample data
 	@echo "$(GREEN)Seeding database with sample data...$(NC)"
-	cd backend && python -c "from app.core.init_db import init_db; init_db()"
+	@if docker ps --filter name=scholarship_backend_dev --format "{{.Names}}" | grep -q scholarship_backend_dev; then \
+		echo "$(CYAN)Running seed in Docker container...$(NC)"; \
+		docker exec scholarship_backend_dev python -m app.seed; \
+	else \
+		echo "$(CYAN)Running seed locally...$(NC)"; \
+		cd backend && python -m app.seed; \
+	fi
 	@echo "$(GREEN)✅ Database seeded!$(NC)"
 
 init-lookup: ## Initialize lookup tables (reference data)
@@ -252,7 +264,7 @@ init-lookup: ## Initialize lookup tables (reference data)
 		echo "$(GREEN)✅ Backend service is already running$(NC)"; \
 	fi
 	@echo "$(CYAN)🚀 Running lookup tables initialization...$(NC)"
-	@docker exec scholarship_backend_dev python -m app.core.init_lookup_tables
+	@docker exec scholarship_backend_dev python -m app.seed
 	@echo "$(GREEN)✅ Lookup tables initialization completed successfully!$(NC)"
 	@echo ""
 	@echo "$(CYAN)📊 Reference Data Initialized:$(NC)"
@@ -279,19 +291,7 @@ init-testdata: ## Initialize test data (users, scholarships, etc.)
 		echo "$(GREEN)✅ Lookup tables found ($$DEGREE_COUNT degrees)$(NC)"; \
 	fi
 	@echo "$(CYAN)🚀 Running test data initialization...$(NC)"
-	@docker exec scholarship_backend_dev python -c "\
-import asyncio; \
-from app.core.init_db import createTestUsers, createTestStudents, createTestScholarships, createApplicationFields, createSystemAnnouncements; \
-from app.db.session import AsyncSessionLocal; \
-async def init_test_data(): \
-    async with AsyncSessionLocal() as session: \
-        users = await createTestUsers(session); \
-        await createTestStudents(session, users); \
-        await createTestScholarships(session); \
-        await createApplicationFields(session); \
-        await createSystemAnnouncements(session); \
-    print('✅ Test data initialization completed!'); \
-asyncio.run(init_test_data())"
+	@docker exec scholarship_backend_dev python -m app.seed
 	@echo "$(GREEN)✅ Test data initialization completed successfully!$(NC)"
 	@echo ""
 	@echo "$(CYAN)📋 Test User Accounts:$(NC)"
@@ -305,7 +305,9 @@ asyncio.run(init_test_data())"
 	@echo "  - Student (碩士): stu_master / stumaster123"
 	@echo "  - Student (陸生): stu_china / stuchina123"
 
-init-all: docker-up init-lookup init-testdata ## Initialize complete development environment (Docker + DB + Test Data)
+init-all: docker-up ## Initialize complete development environment (Docker + DB + Test Data)
+	@echo "$(CYAN)🚀 Running database seed...$(NC)"
+	@docker exec scholarship_backend_dev python -m app.seed
 	@echo ""
 	@echo "$(GREEN)🎉 Development environment fully initialized!$(NC)"
 	@echo "$(CYAN)Ready to start developing!$(NC)"

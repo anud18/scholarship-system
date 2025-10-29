@@ -1,35 +1,39 @@
 name: Mirror to Production Repo
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
-      force_push:
-        description: 'Force push to production repo'
+      version_bump:
+        description: '版本遞增類型（用於 Release Notes）'
         required: false
-        type: boolean
-        default: false
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+      pr_title:
+        description: 'Pull Request 標題（選填，預設會自動生成）'
+        required: false
+        type: string
 
 # SECURITY: Limit GITHUB_TOKEN permissions to minimum required
 permissions:
-  contents: read
+  contents: write  # Need write for creating/updating production branch
 
 jobs:
-  mirror-to-production:
-    name: Create Production Mirror & Sync
+  sync-to-production:
+    name: Sync to Production Repository
     runs-on: ubuntu-latest
     # Only run if secrets are configured
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.repository == 'jotpalch/scholarship-system')
+    if: github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1  # Shallow clone (will squash to single commit)
+          fetch-depth: 0  # Full history for proper merging
           token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Configure Git
@@ -41,10 +45,9 @@ jobs:
         id: check-secrets
         run: |
           if [ -z "${{ secrets.GH_PAT }}" ]; then
-            echo "::warning::GH_PAT not configured"
-            echo "configured=false" >> $GITHUB_OUTPUT
-          else
-            echo "configured=true" >> $GITHUB_OUTPUT
+            echo "::error::GH_PAT secret not configured"
+            echo "::error::Please configure GH_PAT with write access to production repo"
+            exit 1
           fi
 
           if [ -z "${{ secrets.PRODUCTION_REPO }}" ]; then
@@ -53,15 +56,136 @@ jobs:
             exit 1
           fi
 
-      - name: Create production mirror branch
-        id: mirror
+          echo "configured=true" >> $GITHUB_OUTPUT
+
+      - name: Initialize or switch to production branch
         run: |
-          echo "::group::Creating production-mirror branch"
+          echo "::group::Initialize production branch"
 
-          # Create or reset production-mirror branch from current commit
-          git checkout -B production-mirror
+          # Fetch all branches
+          git fetch origin
 
-          echo "::notice::Created production-mirror branch from ${{ github.sha }}"
+          # Check if production branch exists locally or remotely
+          if git show-ref --verify --quiet refs/heads/production; then
+            echo "::notice::Production branch exists locally, checking out"
+            git checkout production
+          elif git show-ref --verify --quiet refs/remotes/origin/production; then
+            echo "::notice::Production branch exists remotely, checking out"
+            git checkout -b production origin/production
+          else
+            echo "::notice::Creating new production branch from main"
+            git checkout -b production
+          fi
+
+          echo "::endgroup::"
+
+      - name: Sync from production repository
+        env:
+          PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
+          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
+        run: |
+          echo "::group::Syncing from production repository"
+
+          # Add production repo as remote
+          echo "::notice::Adding production repository as remote"
+          git remote add prod-repo "https://x-access-token:${{ secrets.GH_PAT }}@github.com/${PRODUCTION_REPO}.git" 2>/dev/null || true
+
+          # Fetch production repository
+          echo "::notice::Fetching production repository: ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}"
+          if git fetch prod-repo "${PRODUCTION_BRANCH}" 2>/dev/null; then
+            echo "::notice::Production repository fetched successfully"
+
+            # Get current HEAD commit before merge
+            BEFORE_MERGE=$(git rev-parse HEAD)
+
+            # Merge production changes (prioritize production repo changes)
+            echo "::notice::Merging production changes (using -X theirs strategy)"
+            if git merge prod-repo/"${PRODUCTION_BRANCH}" -X theirs \
+              --allow-unrelated-histories \
+              -m "chore: sync from production repository
+
+            Synced from ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}
+            Strategy: theirs (prioritize production changes)
+            Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            " 2>&1 | tee /tmp/merge-output.txt; then
+
+              # Check if there were actual changes
+              AFTER_MERGE=$(git rev-parse HEAD)
+              if [ "$BEFORE_MERGE" != "$AFTER_MERGE" ]; then
+                echo "::notice::✅ Synced changes from production repository"
+
+                # Show what was synced
+                echo "::notice::Changes synced:"
+                git log --oneline "${BEFORE_MERGE}..${AFTER_MERGE}" | head -10 || true
+
+                # Save for release notes
+                echo "PROD_SYNC_COMMITS<<EOF" >> $GITHUB_ENV
+                git log --format="- %s (%an, %ar)" "${BEFORE_MERGE}..prod-repo/${PRODUCTION_BRANCH}" | head -20 || echo "No new commits"
+                echo "EOF" >> $GITHUB_ENV
+              else
+                echo "::notice::No changes to sync from production repository"
+                echo "PROD_SYNC_COMMITS=No changes from production repository" >> $GITHUB_ENV
+              fi
+            else
+              echo "::warning::Merge encountered conflicts, resolving with theirs strategy"
+              # Accept all their changes
+              git checkout --theirs .
+              git add -A
+              git commit -m "chore: sync from production repository (auto-resolved conflicts)
+
+              Synced from ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}
+              Conflicts auto-resolved using theirs strategy
+              Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+              " || echo "::notice::No conflicts to resolve"
+
+              echo "PROD_SYNC_COMMITS=Synced with conflict resolution (theirs strategy)" >> $GITHUB_ENV
+            fi
+          else
+            echo "::notice::Production repository not found or first sync"
+            echo "::notice::This is expected for first-time setup"
+            echo "PROD_SYNC_COMMITS=First sync - no previous production repository" >> $GITHUB_ENV
+          fi
+
+          echo "::endgroup::"
+
+      - name: Merge latest from main branch
+        run: |
+          echo "::group::Merging latest from main"
+
+          # Get current HEAD before merge
+          BEFORE_MERGE=$(git rev-parse HEAD)
+
+          # Fetch and merge main
+          git fetch origin main
+          echo "::notice::Merging latest changes from main branch"
+
+          if git merge origin/main -m "chore: merge latest from main
+
+          Merged latest development changes from main branch
+          Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          "; then
+            # Check if there were actual changes
+            AFTER_MERGE=$(git rev-parse HEAD)
+            if [ "$BEFORE_MERGE" != "$AFTER_MERGE" ]; then
+              echo "::notice::✅ Merged changes from main"
+
+              # Show what was merged
+              echo "::notice::Changes from main:"
+              git log --oneline "${BEFORE_MERGE}..${AFTER_MERGE}" | head -10 || true
+
+              # Save for release notes
+              echo "MAIN_MERGE_COMMITS<<EOF" >> $GITHUB_ENV
+              git log --format="- %s (%an, %ar)" "${BEFORE_MERGE}..origin/main" | head -20
+              echo "EOF" >> $GITHUB_ENV
+            else
+              echo "::notice::No new changes from main branch"
+              echo "MAIN_MERGE_COMMITS=No new changes from main" >> $GITHUB_ENV
+            fi
+          else
+            echo "::error::Failed to merge from main - manual intervention required"
+            exit 1
+          fi
+
           echo "::endgroup::"
 
       - name: Remove development workflows
@@ -71,13 +195,26 @@ jobs:
           # Remove .github/workflows directory
           if [ -d ".github/workflows" ]; then
             echo "::notice::Removing .github/workflows/ directory"
+
+            # List files being removed
+            echo "::notice::Files to be removed:"
+            find .github/workflows -type f -name "*.yml" -o -name "*.yaml" | tee /tmp/removed-workflows.txt
+
             git rm -rf .github/workflows/
 
             # Count removed files
-            REMOVED_COUNT=$(git diff --cached --name-only --diff-filter=D | grep -c "\.github/workflows/" || echo "0")
+            REMOVED_COUNT=$(wc -l < /tmp/removed-workflows.txt || echo "0")
             echo "::notice::Removed $REMOVED_COUNT workflow file(s)"
+            echo "REMOVED_WORKFLOWS_COUNT=$REMOVED_COUNT" >> $GITHUB_ENV
+
+            # Save list for release notes
+            echo "REMOVED_WORKFLOWS<<EOF" >> $GITHUB_ENV
+            cat /tmp/removed-workflows.txt || echo "None"
+            echo "EOF" >> $GITHUB_ENV
           else
             echo "::notice::No .github/workflows/ directory found"
+            echo "REMOVED_WORKFLOWS_COUNT=0" >> $GITHUB_ENV
+            echo "REMOVED_WORKFLOWS=No workflows to remove" >> $GITHUB_ENV
           fi
 
           # If .github directory is now empty, remove it
@@ -95,9 +232,7 @@ jobs:
             Development workflows are not needed in production repository.
             Production repo will maintain its own deployment and monitoring workflows.
 
-            Source: ${{ github.repository }}
-            Commit: ${{ github.sha }}
-            Triggered by: ${{ github.event_name }}
+            Removed workflows: ${REMOVED_WORKFLOWS_COUNT} files
             Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
             "
             echo "::notice::✅ Committed workflow removal"
@@ -109,16 +244,29 @@ jobs:
         run: |
           echo "::group::Removing development-only directories"
 
+          REMOVED_DIRS=""
+
           # Remove mock-student-api (development only)
           if [ -d "mock-student-api" ]; then
             echo "::notice::Removing mock-student-api/ directory"
             git rm -rf mock-student-api/
+            REMOVED_DIRS="${REMOVED_DIRS}- mock-student-api/ (Mock Student API)\n"
           fi
 
           # Remove .claude directory (Claude Code project configuration)
           if [ -d ".claude" ]; then
             echo "::notice::Removing .claude/ directory"
             git rm -rf .claude/
+            REMOVED_DIRS="${REMOVED_DIRS}- .claude/ (Claude Code configuration)\n"
+          fi
+
+          # Save for release notes
+          if [ -n "$REMOVED_DIRS" ]; then
+            echo "REMOVED_DIRS<<EOF" >> $GITHUB_ENV
+            echo -e "$REMOVED_DIRS" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          else
+            echo "REMOVED_DIRS=No development directories to remove" >> $GITHUB_ENV
           fi
 
           # Commit the removal
@@ -128,11 +276,8 @@ jobs:
             git commit -m "chore: remove development-only directories for production
 
             Development directories are not needed in production:
-            - mock-student-api/: Mock Student API for local development
-            - .claude/: Claude Code project configuration
+            $(echo -e "$REMOVED_DIRS")
 
-            Source: ${{ github.repository }}
-            Commit: ${{ github.sha }}
             Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
             "
             echo "::notice::✅ Committed development directories removal"
@@ -140,48 +285,8 @@ jobs:
 
           echo "::endgroup::"
 
-      - name: Squash commits into single production commit
-        run: |
-          echo "::group::Creating squashed production commit"
-
-          # Get current state
-          CURRENT_COMMIT=$(git rev-parse HEAD)
-          echo "::notice::Current commit: $CURRENT_COMMIT"
-
-          # Create a new orphan branch (no history)
-          git checkout --orphan production-squashed
-
-          # Add all current files
-          git add -A
-
-          # Create single commit with production code
-          git commit -m "chore: production release from ${{ github.repository }}
-
-          This is a production-ready snapshot of the scholarship system.
-
-          Source Repository: ${{ github.repository }}
-          Source Commit: ${{ github.sha }}
-          Source Branch: ${{ github.ref_name }}
-          Build Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          Triggered By: ${{ github.event_name }}
-
-          Production Changes:
-          - Removed development workflows (.github/workflows/)
-          - Removed mock-student-api (development testing tool)
-          - Removed .claude directory (development configuration)
-
-          This commit contains only production-ready code with no development history."
-
-          # Replace production-mirror branch with squashed version
-          git branch -D production-mirror
-          git branch -m production-squashed production-mirror
-
-          echo "::notice::✅ Created single squashed commit for production"
-          echo "::endgroup::"
-
       - name: Preserve production workflows
         id: preserve-workflows
-        if: steps.check-secrets.outputs.configured == 'true'
         continue-on-error: true
         env:
           PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
@@ -189,52 +294,49 @@ jobs:
         run: |
           echo "::group::Preserving production workflows"
 
-          # Add production repo as remote (if not exists)
-          git remote add production-preserve "https://x-access-token:${{ secrets.GH_PAT }}@github.com/${PRODUCTION_REPO}.git" 2>/dev/null || true
-
           # Try to fetch production workflows
           echo "::notice::Fetching production workflows..."
-          if git fetch production-preserve "${PRODUCTION_BRANCH}" 2>/dev/null; then
-            # Check if production has .github/workflows
-            if git ls-tree -r production-preserve/${PRODUCTION_BRANCH} --name-only | grep -q "^.github/workflows/"; then
-              echo "::notice::Production has workflows, preserving them..."
+          if git ls-tree -r prod-repo/${PRODUCTION_BRANCH} --name-only 2>/dev/null | grep -q "^.github/workflows/"; then
+            echo "::notice::Production has workflows, preserving them..."
 
-              # Create temp directory
-              mkdir -p /tmp/production-workflows
+            # Create temp directory
+            mkdir -p /tmp/production-workflows
 
-              # Extract production workflows to temp
-              git archive production-preserve/${PRODUCTION_BRANCH} .github/workflows | tar -x -C /tmp/production-workflows 2>/dev/null || true
+            # Extract production workflows to temp
+            git archive prod-repo/${PRODUCTION_BRANCH} .github/workflows | tar -x -C /tmp/production-workflows 2>/dev/null || true
 
-              # Copy production workflows back
-              if [ -d "/tmp/production-workflows/.github/workflows" ]; then
-                mkdir -p .github/workflows
-                cp -r /tmp/production-workflows/.github/workflows/* .github/workflows/ 2>/dev/null || true
+            # Copy production workflows back
+            if [ -d "/tmp/production-workflows/.github/workflows" ]; then
+              mkdir -p .github/workflows
+              cp -r /tmp/production-workflows/.github/workflows/* .github/workflows/ 2>/dev/null || true
 
-                WORKFLOW_COUNT=$(find .github/workflows -type f \( -name "*.yml" -o -name "*.yaml" \) | wc -l)
-                echo "::notice::✅ Preserved $WORKFLOW_COUNT production workflow(s)"
+              WORKFLOW_COUNT=$(find .github/workflows -type f \( -name "*.yml" -o -name "*.yaml" \) 2>/dev/null | wc -l)
+              echo "::notice::✅ Preserved $WORKFLOW_COUNT production workflow(s)"
 
-                # List preserved workflows
-                echo "::notice::Preserved workflows:"
-                find .github/workflows -type f \( -name "*.yml" -o -name "*.yaml" \) -exec basename {} \; || true
+              # List preserved workflows
+              echo "::notice::Preserved workflows:"
+              find .github/workflows -type f \( -name "*.yml" -o -name "*.yaml" \) -exec basename {} \; || true
 
-                # Add to git
-                git add .github/workflows/
+              # Add to git
+              git add .github/workflows/
 
-                # Amend the squashed commit to include production workflows
-                git commit --amend --no-edit
+              # Commit preservation
+              if ! git diff --cached --quiet; then
+                git commit -m "chore: preserve production workflows
 
-                echo "::notice::✅ Production workflows preserved and included in squashed commit"
-                echo "preserved_count=$WORKFLOW_COUNT" >> $GITHUB_OUTPUT
-              else
-                echo "::notice::No production workflows found to preserve"
-                echo "preserved_count=0" >> $GITHUB_OUTPUT
+                Preserved ${WORKFLOW_COUNT} workflow(s) from production repository
+                Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+                "
+                echo "::notice::✅ Production workflows preserved and committed"
               fi
+
+              echo "preserved_count=$WORKFLOW_COUNT" >> $GITHUB_OUTPUT
             else
-              echo "::notice::Production repo has no .github/workflows/ directory"
+              echo "::notice::No production workflows found to preserve"
               echo "preserved_count=0" >> $GITHUB_OUTPUT
             fi
           else
-            echo "::notice::Could not fetch production repo (may be first sync)"
+            echo "::notice::Production repo has no .github/workflows/ directory"
             echo "preserved_count=0" >> $GITHUB_OUTPUT
           fi
 
@@ -243,172 +345,221 @@ jobs:
 
           echo "::endgroup::"
 
-      - name: Show mirror contents
-        run: |
-          echo "::group::Production mirror contents"
-          echo "Directory structure:"
-          tree -L 2 -a || ls -la
-
-          echo ""
-          echo "Git status:"
-          git status
-
-          echo ""
-          echo "Recent commits:"
-          git log --oneline -5
-          echo "::endgroup::"
-
-      - name: Push mirror to source repository (optional)
-        if: success()
-        continue-on-error: true
-        run: |
-          echo "::group::Pushing production-mirror branch to source repo"
-
-          # Push to source repo's production-mirror branch for review
-          git push origin production-mirror --force
-
-          echo "::notice::✅ Pushed to origin/production-mirror"
-          echo "::notice::Review at: ${{ github.server_url }}/${{ github.repository }}/tree/production-mirror"
-          echo "::endgroup::"
-
-      - name: Push to production repository
-        if: steps.check-secrets.outputs.configured == 'true'
+      - name: Calculate next version
+        id: version
         env:
-          PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
-          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
-          FORCE_PUSH: ${{ github.event.inputs.force_push || 'false' }}
+          VERSION_BUMP: ${{ github.event.inputs.version_bump || 'patch' }}
         run: |
-          echo "::group::Pushing to production repository"
+          echo "::group::Calculate next version"
 
-          echo "Target: ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}"
+          # Fetch tags from production repo
+          git fetch prod-repo --tags 2>/dev/null || true
 
-          # Add production repo as remote
-          git remote add production "https://x-access-token:${{ secrets.GH_PAT }}@github.com/${PRODUCTION_REPO}.git"
+          # Get latest semantic version tag
+          LATEST_TAG=$(git tag -l "v*.*.*" --sort=-v:refname | head -1 || echo "")
 
-          # Fetch production branch to check status
-          echo "::notice::Fetching production repository..."
-          if git fetch production "${PRODUCTION_BRANCH}" 2>/dev/null; then
-            echo "::notice::Production branch exists"
-
-            # Check if we're ahead
-            AHEAD=$(git rev-list --count production/${PRODUCTION_BRANCH}..production-mirror 2>/dev/null || echo "0")
-            BEHIND=$(git rev-list --count production-mirror..production/${PRODUCTION_BRANCH} 2>/dev/null || echo "0")
-
-            echo "::notice::Mirror is $AHEAD commit(s) ahead, $BEHIND commit(s) behind production"
+          if [ -z "$LATEST_TAG" ]; then
+            echo "::notice::No previous version found, starting with v1.0.0"
+            NEXT_VERSION="v1.0.0"
           else
-            echo "::notice::Production branch does not exist yet (first sync)"
+            echo "::notice::Latest version: $LATEST_TAG"
+
+            # Parse version (remove 'v' prefix)
+            VERSION=${LATEST_TAG#v}
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+            # Increment based on bump type
+            case "$VERSION_BUMP" in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+            esac
+
+            NEXT_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           fi
 
-          # Push to production (always force since we're squashing to single commit)
-          # Note: Using --force because this is a squashed commit with no shared history
-          PUSH_FLAGS="--force"
-
-          echo "::notice::Pushing squashed commit with: $PUSH_FLAGS"
-          echo "::notice::Production will have single commit with no development history"
-
-          if git push production "production-mirror:${PRODUCTION_BRANCH}" $PUSH_FLAGS; then
-            echo "::notice::✅ Successfully synced to ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}"
-            echo "success=true" >> $GITHUB_OUTPUT
-          else
-            echo "::error::Failed to push to production repository"
-            echo "::error::Check if:"
-            echo "::error::1. GH_PAT has write permissions"
-            echo "::error::2. PRODUCTION_REPO is correct (format: owner/repo)"
-            echo "::error::3. Branch protection rules allow force push"
-            exit 1
-          fi
+          echo "::notice::Next version: $NEXT_VERSION"
+          echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "NEXT_VERSION=$NEXT_VERSION" >> $GITHUB_ENV
 
           echo "::endgroup::"
 
-      - name: Create sync summary
-        if: success()
+      - name: Generate release notes
+        id: release-notes
         run: |
-          cat >> $GITHUB_STEP_SUMMARY <<EOF
-          # 🚀 Production Mirror Sync Complete
+          echo "::group::Generate release notes"
 
-          ## Summary
+          # Create release notes file
+          cat > /tmp/release-notes.md <<'RELEASE_NOTES_EOF'
+          # 🚀 Production Sync ${{ env.NEXT_VERSION }}
+
+          ## 📋 Summary
+
+          This release syncs the latest changes from the development repository to production.
 
           | Property | Value |
           |----------|-------|
-          | **Production Repo** | [\`${{ secrets.PRODUCTION_REPO }}\`](https://github.com/${{ secrets.PRODUCTION_REPO }}) |
-          | **Production Branch** | \`${{ secrets.PRODUCTION_BRANCH || 'main' }}\` |
-          | **Source Commit** | [\`${{ github.sha }}\`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}) |
-          | **Mirror Branch** | [\`production-mirror\`](${{ github.server_url }}/${{ github.repository }}/tree/production-mirror) |
-          | **Triggered By** | ${{ github.event_name }} |
-          | **Timestamp** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |
+          | **Version** | ${{ env.NEXT_VERSION }} |
+          | **Source Repo** | [${{ github.repository }}](https://github.com/${{ github.repository }}) |
+          | **Source Commit** | [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |
+          | **Sync Date** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |
+          | **Triggered By** | @${{ github.actor }} |
 
-          ## Actions Performed
+          ## 🔄 Changes Synced from Production Repository
 
-          - ✅ Created production mirror branch
-          - ✅ Removed development workflows (.github/workflows/)
-          - ✅ Removed development directories (mock-student-api/, .claude/)
-          - ✅ Squashed all commits into single production commit
-          - ✅ Preserved production workflows (${{ steps.preserve-workflows.outputs.preserved_count || '0' }} workflow(s))
-          - ✅ Pushed to source repo (production-mirror branch)
-          - ✅ Synced to production repository
+          ${{ env.PROD_SYNC_COMMITS }}
 
-          ## Production Repository
+          ## ✨ Changes Merged from Main Branch
 
-          The production repository now contains:
-          - 📦 All application code (latest from main)
-          - 📜 Single squashed commit (no development history)
-          - 🚫 No development workflows (removed)
-          - 🚫 No development tools (mock-student-api, .claude removed)
-          - ✅ Production workflows preserved (${{ steps.preserve-workflows.outputs.preserved_count || '0' }} workflow(s))
+          ${{ env.MAIN_MERGE_COMMITS }}
 
-          View production repo: https://github.com/${{ secrets.PRODUCTION_REPO }}/tree/${{ secrets.PRODUCTION_BRANCH || 'main' }}
+          ## 📊 File Changes
+
+          RELEASE_NOTES_EOF
+
+          # Add file statistics
+          echo "" >> /tmp/release-notes.md
+          echo "\`\`\`" >> /tmp/release-notes.md
+          git diff --stat origin/main..HEAD | tail -1 >> /tmp/release-notes.md || echo "No file changes" >> /tmp/release-notes.md
+          echo "\`\`\`" >> /tmp/release-notes.md
+
+          # Add removed development files
+          cat >> /tmp/release-notes.md <<'REMOVED_FILES_EOF'
+
+          ## 🚫 Removed Development Files
+
+          ### Workflows Removed
+          ${{ env.REMOVED_WORKFLOWS }}
+
+          ### Directories Removed
+          ${{ env.REMOVED_DIRS }}
+
+          ## 📝 Notes
+
+          - This is a production-ready snapshot with development files removed
+          - Production workflows have been preserved: ${{ steps.preserve-workflows.outputs.preserved_count || '0' }} workflow(s)
+          - All commits maintain full history (no squashing)
 
           ---
 
-          💡 **Note**: Production repository workflows in \`.github/workflows/\` are automatically preserved during sync.
-          They will not be affected by this mirror operation.
+          🤖 Generated by [GitHub Actions](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          REMOVED_FILES_EOF
+
+          # Expand environment variables in release notes
+          envsubst < /tmp/release-notes.md > /tmp/release-notes-final.md
+
+          echo "::notice::Release notes generated"
+          echo "::group::Release Notes Preview"
+          cat /tmp/release-notes-final.md
+          echo "::endgroup::"
+
+          echo "::endgroup::"
+
+      - name: Push production branch to source repo
+        run: |
+          echo "::group::Push production branch"
+
+          # Push production branch back to source repo
+          git push origin production --force-with-lease
+
+          echo "::notice::✅ Pushed production branch to source repository"
+          echo "::notice::View at: ${{ github.server_url }}/${{ github.repository }}/tree/production"
+
+          echo "::endgroup::"
+
+      - name: Push to production repository temp branch
+        id: push-temp
+        env:
+          PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
+          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
+        run: |
+          echo "::group::Push to production repository"
+
+          # Generate temp branch name
+          TEMP_BRANCH="production-sync-$(date -u '+%Y%m%d-%H%M%S')"
+          echo "::notice::Creating temporary branch: $TEMP_BRANCH"
+          echo "temp_branch=$TEMP_BRANCH" >> $GITHUB_OUTPUT
+
+          # Push to production repo temp branch
+          git push prod-repo production:"$TEMP_BRANCH"
+
+          echo "::notice::✅ Pushed to production repository temp branch: $TEMP_BRANCH"
+
+          echo "::endgroup::"
+
+      - name: Create Pull Request in production repository
+        id: create-pr
+        env:
+          PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
+          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          echo "::group::Create Pull Request"
+
+          # Determine PR title
+          if [ -n "${{ github.event.inputs.pr_title }}" ]; then
+            PR_TITLE="${{ github.event.inputs.pr_title }}"
+          else
+            PR_TITLE="🚀 Production Sync ${{ env.NEXT_VERSION }}"
+          fi
+
+          echo "::notice::Creating PR with title: $PR_TITLE"
+
+          # Create PR in production repository
+          PR_URL=$(gh pr create \
+            --repo "${{ secrets.PRODUCTION_REPO }}" \
+            --base "${{ secrets.PRODUCTION_BRANCH || 'main' }}" \
+            --head "${{ steps.push-temp.outputs.temp_branch }}" \
+            --title "$PR_TITLE" \
+            --body-file /tmp/release-notes-final.md)
+
+          echo "::notice::✅ Pull Request created: $PR_URL"
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+
+          # Also save to job summary
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          # 🚀 Production Sync Complete
+
+          ## Pull Request Created
+
+          **PR URL**: $PR_URL
+
+          **Version**: ${{ env.NEXT_VERSION }}
+
+          **Temp Branch**: \`${{ steps.push-temp.outputs.temp_branch }}\`
+
+          ## Next Steps
+
+          1. Review the Pull Request in the production repository
+          2. Merge the PR when ready to deploy
+          3. The version tag will be created automatically after merge
+
+          ## Quick Links
+
+          - [Production Repository](${{ github.server_url }}/${{ secrets.PRODUCTION_REPO }})
+          - [Pull Request]($PR_URL)
+          - [Source Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+          - [Production Branch](${{ github.server_url }}/${{ github.repository }}/tree/production)
           EOF
+
+          echo "::endgroup::"
 
       - name: Cleanup
         if: always()
         run: |
           # Switch back to main branch
-          git checkout main || git checkout master || true
+          git checkout main 2>/dev/null || true
+
+          # Remove production repo remote
+          git remote remove prod-repo 2>/dev/null || true
 
           echo "::notice::Cleanup completed"
-
-  verify-production:
-    name: Verify Production Repo (Optional)
-    needs: mirror-to-production
-    runs-on: ubuntu-latest
-    if: success() && github.event_name == 'push'
-    continue-on-error: true
-    # SECURITY: No GitHub permissions needed for this verification job
-    permissions: {}
-
-    steps:
-      - name: Check production repository
-        env:
-          PRODUCTION_REPO: ${{ secrets.PRODUCTION_REPO }}
-          PRODUCTION_BRANCH: ${{ secrets.PRODUCTION_BRANCH || 'main' }}
-        run: |
-          echo "::group::Verifying production repository"
-
-          # Clone production repo (shallow)
-          git clone --depth=1 --branch="${PRODUCTION_BRANCH}" \
-            "https://x-access-token:${{ secrets.GH_PAT }}@github.com/${PRODUCTION_REPO}.git" \
-            production-check
-
-          cd production-check
-
-          # Verify structure
-          echo "::notice::Production repo structure:"
-          ls -la
-
-          # Check for workflows
-          if [ -d ".github/workflows" ]; then
-            WORKFLOW_COUNT=$(find .github/workflows -type f -name "*.yml" -o -name "*.yaml" 2>/dev/null | wc -l)
-            echo "::notice::✅ Production has $WORKFLOW_COUNT workflow(s)"
-            echo "::notice::Production workflows:"
-            find .github/workflows -type f -name "*.yml" -o -name "*.yaml" 2>/dev/null || echo "None"
-          else
-            echo "::warning::No .github/workflows/ found in production repo"
-            echo "::warning::You may want to add production-specific workflows"
-          fi
-
-          echo "::endgroup::"

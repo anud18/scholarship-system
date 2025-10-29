@@ -34,6 +34,8 @@ import {
 import { Search, Eye, CheckCircle, AlertCircle, Clock, X } from "lucide-react";
 import apiClient, { Application, ApiResponse } from "@/lib/api";
 import { User } from "@/types/user";
+import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
+import { Locale } from "@/lib/validators";
 
 interface ProfessorReviewComponentProps {
   user: User;
@@ -157,9 +159,7 @@ function ProfessorReviewComponentInner({
   // Get status badge variant
   const getStatusVariant = (status: string) => {
     switch (status) {
-      case "pending_recommendation":
-        return "destructive";
-      case "recommended":
+      case "under_review":
         return "default";
       case "submitted":
         return "secondary";
@@ -171,10 +171,8 @@ function ProfessorReviewComponentInner({
   // Get status display text
   const getStatusText = (status: string) => {
     switch (status) {
-      case "pending_recommendation":
-        return "待推薦";
-      case "recommended":
-        return "已推薦";
+      case "under_review":
+        return "審核中";
       case "submitted":
         return "已提交";
       default:
@@ -564,9 +562,23 @@ function ProfessorReviewComponentInner({
                           : "未提交"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getStatusVariant(app.status)}>
-                          {getStatusText(app.status)}
-                        </Badge>
+                        <div className="flex gap-2">
+                          {(() => {
+                            const statusInfo = getDisplayStatusInfo(app, "zh");
+                            return (
+                              <>
+                                <Badge variant={statusInfo.statusVariant}>
+                                  {statusInfo.statusLabel}
+                                </Badge>
+                                {statusInfo.showStage && statusInfo.stageLabel && (
+                                  <Badge variant={statusInfo.stageVariant}>
+                                    {statusInfo.stageLabel}
+                                  </Badge>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Button

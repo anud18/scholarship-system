@@ -33,9 +33,11 @@ import apiClient, {
   HistoricalApplicationFilters,
 } from "@/lib/api";
 import {
-  getStatusColor,
-  getStatusName,
   ApplicationStatus,
+  getApplicationStatusLabel,
+} from "@/lib/enums";
+import {
+  getDisplayStatusInfo,
 } from "@/lib/utils/application-helpers";
 import { Locale } from "@/lib/validators";
 import { AlertCircle, Eye, FileText, RefreshCw } from "lucide-react";
@@ -305,8 +307,6 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                       <SelectItem value="draft">草稿</SelectItem>
                       <SelectItem value="submitted">已提交</SelectItem>
                       <SelectItem value="under_review">審核中</SelectItem>
-                      <SelectItem value="pending_recommendation">待教授推薦</SelectItem>
-                      <SelectItem value="recommended">已推薦</SelectItem>
                       <SelectItem value="approved">已通過</SelectItem>
                       <SelectItem value="rejected">已拒絕</SelectItem>
                       <SelectItem value="returned">已退回</SelectItem>
@@ -511,16 +511,23 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge
-                                  variant={getStatusColor(
-                                    application.status as ApplicationStatus
-                                  )}
-                                >
-                                  {getStatusName(
-                                    application.status as ApplicationStatus,
-                                    locale
-                                  )}
-                                </Badge>
+                                <div className="flex gap-2">
+                                  {(() => {
+                                    const statusInfo = getDisplayStatusInfo(application, locale);
+                                    return (
+                                      <>
+                                        <Badge variant={statusInfo.statusVariant}>
+                                          {statusInfo.statusLabel}
+                                        </Badge>
+                                        {statusInfo.showStage && statusInfo.stageLabel && (
+                                          <Badge variant={statusInfo.stageVariant}>
+                                            {statusInfo.stageLabel}
+                                          </Badge>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               </TableCell>
                               <TableCell>
                                 <div className="text-sm">
@@ -661,8 +668,6 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                         <SelectItem value="draft">草稿</SelectItem>
                         <SelectItem value="submitted">已提交</SelectItem>
                         <SelectItem value="under_review">審核中</SelectItem>
-                        <SelectItem value="pending_recommendation">待教授推薦</SelectItem>
-                        <SelectItem value="recommended">已推薦</SelectItem>
                         <SelectItem value="approved">已通過</SelectItem>
                         <SelectItem value="rejected">已拒絕</SelectItem>
                         <SelectItem value="returned">已退回</SelectItem>
@@ -800,16 +805,23 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge
-                                  variant={getStatusColor(
-                                    application.status as ApplicationStatus
-                                  )}
-                                >
-                                  {getStatusName(
-                                    application.status as ApplicationStatus,
-                                    locale
-                                  )}
-                                </Badge>
+                                <div className="flex gap-2">
+                                  {(() => {
+                                    const statusInfo = getDisplayStatusInfo(application, locale);
+                                    return (
+                                      <>
+                                        <Badge variant={statusInfo.statusVariant}>
+                                          {statusInfo.statusLabel}
+                                        </Badge>
+                                        {statusInfo.showStage && statusInfo.stageLabel && (
+                                          <Badge variant={statusInfo.stageVariant}>
+                                            {statusInfo.stageLabel}
+                                          </Badge>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               </TableCell>
                               <TableCell>
                                 <div className="text-sm">

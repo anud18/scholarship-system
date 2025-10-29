@@ -72,13 +72,11 @@ export type ApplicationStatus =
   | "draft"
   | "submitted"
   | "pending_review"
-  | "pending_recommendation"
   | "under_review"
   | "professor_review_pending"
   | "professor_reviewed"
   | "college_review_pending"
   | "college_reviewed"
-  | "recommended"
   | "approved"
   | "rejected"
   | "returned"
@@ -3603,18 +3601,19 @@ class ApiClient {
       return this.request(`/college/quota-status?${params.toString()}`);
     },
 
-    // Get college review statistics
-    getStatistics: async (
-      academicYear?: number,
-      semester?: string
-    ): Promise<ApiResponse<any>> => {
-      const params = new URLSearchParams();
-      if (academicYear) params.append("academic_year", academicYear.toString());
-      if (semester) params.append("semester", semester);
-      return this.request(
-        `/college/statistics${params.toString() ? `?${params.toString()}` : ""}`
-      );
-    },
+    // NOTE: Statistics endpoint was removed from backend
+    // TODO: Reimplement when backend statistics endpoint is ready
+    // getStatistics: async (
+    //   academicYear?: number,
+    //   semester?: string
+    // ): Promise<ApiResponse<any>> => {
+    //   const params = new URLSearchParams();
+    //   if (academicYear) params.append("academic_year", academicYear.toString());
+    //   if (semester) params.append("semester", semester);
+    //   return this.request(
+    //     `/college/statistics${params.toString() ? `?${params.toString()}` : ""}`
+    //   );
+    // },
 
     // Get available combinations of scholarship types, years, and semesters
     getAvailableCombinations: async (): Promise<

@@ -357,17 +357,14 @@ class CollegeReviewService:
             )
             .where(
                 or_(
-                    Application.status == ApplicationStatus.recommended.value,
                     Application.status == ApplicationStatus.under_review.value,
                     Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請
+                    Application.status == ApplicationStatus.partial_approved.value,  # 包含部分核准的申請
                     Application.status == ApplicationStatus.rejected.value,  # 包含已駁回的申請
-                    Application.status == "college_reviewed",  # 向後兼容舊資料
                 )
             )
         )
-        logger.info(
-            "Base query created, looking for status in [recommended, under_review, approved, rejected, college_reviewed]"
-        )
+        logger.info("Base query created, looking for status in [under_review, approved, partial_approved, rejected]")
 
         # Apply filters
         if scholarship_type_id:
@@ -548,7 +545,6 @@ class CollegeReviewService:
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
                 Application.status.in_(  # Whitelist valid statuses
                     [
-                        ApplicationStatus.recommended.value,
                         ApplicationStatus.under_review.value,
                         ApplicationStatus.approved.value,
                         ApplicationStatus.rejected.value,
@@ -589,7 +585,6 @@ class CollegeReviewService:
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
                 Application.status.in_(  # Whitelist valid statuses
                     [
-                        ApplicationStatus.recommended.value,
                         ApplicationStatus.under_review.value,
                         ApplicationStatus.approved.value,
                         ApplicationStatus.rejected.value,
@@ -814,7 +809,7 @@ class CollegeReviewService:
 
                 # Update application status
                 item.application.quota_allocation_status = "rejected"
-                item.application.status = "rejected"
+                item.application.status = ApplicationStatus.rejected.value
             else:
                 # Allocate quota
                 item.is_allocated = True
@@ -824,7 +819,7 @@ class CollegeReviewService:
 
                 # Update application status
                 item.application.quota_allocation_status = "allocated"
-                item.application.status = "approved"
+                item.application.status = ApplicationStatus.approved.value
 
             allocation_results.append(
                 {

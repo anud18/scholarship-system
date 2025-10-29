@@ -8,6 +8,8 @@ Create Date: 2025-10-15 14:47:03.000000
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -18,6 +20,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Check if tables exist before attempting to modify them
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = inspector.get_table_names()
+
+    # Skip if college_reviews table doesn't exist
+    if "college_reviews" not in tables:
+        print("⊘ Skipping: college_reviews table does not exist")
+        return
+
+    # Skip if college_ranking_items table doesn't exist
+    if "college_ranking_items" not in tables:
+        print("⊘ Skipping: college_ranking_items table does not exist")
+        return
     # College ranking items -> college reviews
     op.execute(
         """
@@ -54,6 +70,21 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Check if tables exist before attempting to modify them
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = inspector.get_table_names()
+
+    # Skip if college_reviews table doesn't exist
+    if "college_reviews" not in tables:
+        print("⊘ Skipping downgrade: college_reviews table does not exist")
+        return
+
+    # Skip if college_ranking_items table doesn't exist
+    if "college_ranking_items" not in tables:
+        print("⊘ Skipping downgrade: college_ranking_items table does not exist")
+        return
+
     # Revert college reviews -> applications
     op.execute(
         """

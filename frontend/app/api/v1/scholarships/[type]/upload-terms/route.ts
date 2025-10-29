@@ -11,10 +11,10 @@ const INTERNAL_API_URL = process.env.INTERNAL_API_URL || "http://backend:8000";
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { type: string } }
+  { params }: { params: Promise<{ type: string }> }
 ) {
   try {
-    const { type } = params;
+    const { type } = await params;
 
     // Validate scholarship type parameter
     if (!type || typeof type !== "string") {

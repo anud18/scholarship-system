@@ -2117,8 +2117,6 @@ class ApplicationService:
                         [
                             ApplicationStatus.submitted.value,
                             ApplicationStatus.under_review.value,
-                            ApplicationStatus.pending_recommendation.value,
-                            ApplicationStatus.recommended.value,
                             ApplicationStatus.approved.value,
                             ApplicationStatus.rejected.value,
                         ]
@@ -2132,7 +2130,6 @@ class ApplicationService:
                     Application.status.in_(
                         [
                             ApplicationStatus.submitted.value,
-                            ApplicationStatus.pending_recommendation.value,
                             ApplicationStatus.under_review.value,  # Include under_review in pending
                         ]
                     )
@@ -2141,7 +2138,6 @@ class ApplicationService:
                 base_query = base_query.where(
                     Application.status.in_(
                         [
-                            ApplicationStatus.recommended.value,
                             ApplicationStatus.approved.value,
                             ApplicationStatus.rejected.value,
                         ]
@@ -2255,8 +2251,6 @@ class ApplicationService:
             if application.status not in [
                 ApplicationStatus.submitted.value,
                 ApplicationStatus.under_review.value,
-                ApplicationStatus.pending_recommendation.value,
-                ApplicationStatus.recommended.value,  # Allow viewing historical reviews
                 ApplicationStatus.approved.value,
                 ApplicationStatus.rejected.value,
             ]:
@@ -2293,7 +2287,6 @@ class ApplicationService:
             if application.status not in [
                 ApplicationStatus.submitted.value,
                 ApplicationStatus.under_review.value,
-                ApplicationStatus.pending_recommendation.value,
             ]:
                 return False
 
@@ -2482,10 +2475,10 @@ class ApplicationService:
             if application:
                 from app.utils.i18n import ScholarshipI18n
 
-                logger.info("Step 6: Setting status to recommended")
-                application.status = ApplicationStatus.recommended.value
+                logger.info("Step 6: Setting status to under_review")
+                application.status = ApplicationStatus.under_review.value
                 application.status_name = ScholarshipI18n.get_application_status_text(
-                    ApplicationStatus.recommended.value
+                    ApplicationStatus.under_review.value
                 )
 
             logger.info("Step 7: Committing transaction")
@@ -2632,7 +2625,6 @@ class ApplicationService:
                 Application.status.in_(
                     [
                         ApplicationStatus.submitted.value,
-                        ApplicationStatus.pending_recommendation.value,
                     ]
                 ),
             )

@@ -137,8 +137,6 @@ class QuotaService:
                     [
                         ApplicationStatus.submitted.value,
                         ApplicationStatus.under_review.value,
-                        ApplicationStatus.pending_recommendation.value,
-                        ApplicationStatus.recommended.value,
                     ]
                 ),
             )

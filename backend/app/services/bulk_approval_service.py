@@ -63,7 +63,6 @@ class BulkApprovalService:
                     if application.status not in [
                         ApplicationStatus.submitted.value,
                         ApplicationStatus.under_review.value,
-                        ApplicationStatus.recommended.value,
                     ]:
                         results["failed_approvals"].append(
                             {
@@ -166,7 +165,6 @@ class BulkApprovalService:
                     if application.status not in [
                         ApplicationStatus.submitted.value,
                         ApplicationStatus.under_review.value,
-                        ApplicationStatus.recommended.value,
                     ]:
                         results["failed_rejections"].append(
                             {

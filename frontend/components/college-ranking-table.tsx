@@ -185,7 +185,7 @@ function SortableItem({
     }
 
     // Check for partial approval status
-    if (app.status === 'partial_approve') {
+    if (app.status === 'partial_approved') {
       return (
         <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
           <Circle className="w-3 h-3 mr-1 fill-blue-700" />

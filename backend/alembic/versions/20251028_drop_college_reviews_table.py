@@ -20,24 +20,49 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     connection = op.get_bind()
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    # Check if college_reviews table exists
+    existing_tables = inspector.get_table_names()
+
+    if "college_reviews" not in existing_tables:
+        print("⊘ college_reviews table does not exist, skipping drop")
+        return
 
     # 1. 最後備份
-    connection.execute(
-        sa.text(
-            """
-        CREATE TABLE college_reviews_archive AS
-        SELECT * FROM college_reviews
-    """
+    if "college_reviews_archive" not in existing_tables:
+        connection.execute(
+            sa.text(
+                """
+            CREATE TABLE college_reviews_archive AS
+            SELECT * FROM college_reviews
+        """
+            )
         )
-    )
+        print("✓ Archived college_reviews table")
+    else:
+        print("⊘ Archive table already exists, skipping backup")
 
-    # 2. 刪除索引
-    op.drop_index("ix_college_reviews_application_reviewer", table_name="college_reviews")
-    op.drop_index("ix_college_reviews_recommendation_status", table_name="college_reviews")
-    op.drop_index("ix_college_reviews_priority_attention", table_name="college_reviews")
+    # 2. 刪除索引 - 檢查是否存在
+    existing_indexes = {idx["name"] for idx in inspector.get_indexes("college_reviews")}
+
+    indexes_to_drop = [
+        "ix_college_reviews_application_reviewer",
+        "ix_college_reviews_recommendation_status",
+        "ix_college_reviews_priority_attention",
+    ]
+
+    for index_name in indexes_to_drop:
+        if index_name in existing_indexes:
+            op.drop_index(index_name, table_name="college_reviews")
+            print(f"✓ Dropped index {index_name}")
+        else:
+            print(f"⊘ Index {index_name} does not exist, skipping")
 
     # 3. 刪除表
     op.drop_table("college_reviews")
+    print("✓ Dropped college_reviews table")
 
 
 def downgrade() -> None:

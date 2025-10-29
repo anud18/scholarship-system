@@ -124,12 +124,12 @@ async def verify_bank_account(
     except HTTPException:
         raise
     except ValueError as e:
-        # SECURITY: Log full exception but return sanitized message
-        logger.warning(f"ValueError in bank verification: {str(e)}", exc_info=True)
+        # SECURITY: Log exception type only, not details (prevent stack trace exposure)
+        logger.warning(f"ValueError in bank verification: {type(e).__name__}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的資源或資料不正確")
     except Exception as e:
-        # SECURITY: Log full exception but return sanitized message
-        logger.error(f"Unexpected error in bank verification: {str(e)}", exc_info=True)
+        # SECURITY: Log exception type only, not details (prevent stack trace exposure)
+        logger.error(f"Unexpected error in bank verification: {type(e).__name__}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="銀行帳戶驗證發生未預期的錯誤",
@@ -199,7 +199,8 @@ async def batch_verify_bank_accounts(
         }
 
     except Exception as e:
-        logger.error(f"Unexpected error in batch bank verification: {str(e)}")
+        # SECURITY: Log exception type only (prevent stack trace exposure)
+        logger.error(f"Unexpected error in batch bank verification: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to perform batch verification due to an unexpected error.",
@@ -274,7 +275,8 @@ async def get_bank_verification_init_data(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get bank verification init data: {str(e)}")
+        # SECURITY: Log exception type only (prevent stack trace exposure)
+        logger.error(f"Failed to get bank verification init data: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="無法載入銀行資料",
@@ -343,7 +345,8 @@ async def manual_review_bank_info(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
-        logger.error(f"Unexpected error in manual bank review: {str(e)}")
+        # SECURITY: Log exception type only (prevent stack trace exposure)
+        logger.error(f"Unexpected error in manual bank review: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="人工審核發生未預期的錯誤",
@@ -390,10 +393,11 @@ async def start_batch_verification_async(
         }
 
     except Exception as e:
-        logger.error(f"Failed to start async batch verification: {str(e)}")
+        # SECURITY: Log exception type only, don't expose details in response (prevent stack trace exposure)
+        logger.error(f"Failed to start async batch verification: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"啟動批次驗證失敗：{str(e)}",
+            detail="啟動批次驗證失敗",
         )
 
 
@@ -445,7 +449,8 @@ async def get_verification_task_status(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting task status: {str(e)}")
+        # SECURITY: Log exception type only (prevent stack trace exposure)
+        logger.error(f"Error getting task status: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="查詢任務狀態失敗",
@@ -521,7 +526,8 @@ async def list_verification_tasks(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error listing tasks: {str(e)}")
+        # SECURITY: Log exception type only (prevent stack trace exposure)
+        logger.error(f"Error listing tasks: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="查詢任務列表失敗",

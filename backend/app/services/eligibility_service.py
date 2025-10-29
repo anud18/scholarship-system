@@ -485,15 +485,10 @@ class EligibilityService:
             ApplicationStatus.draft.value,
             ApplicationStatus.submitted.value,
             ApplicationStatus.under_review.value,
-            ApplicationStatus.pending_recommendation.value,
-            ApplicationStatus.recommended.value,
             ApplicationStatus.approved.value,
             ApplicationStatus.rejected.value,
             ApplicationStatus.returned.value,
             ApplicationStatus.cancelled.value,
-            ApplicationStatus.renewal_pending.value,
-            ApplicationStatus.renewal_reviewed.value,
-            ApplicationStatus.professor_review.value,
             ApplicationStatus.withdrawn.value,
         ]
 
@@ -541,15 +536,10 @@ class EligibilityService:
             ApplicationStatus.draft.value: "草稿",
             ApplicationStatus.submitted.value: "已申請",
             ApplicationStatus.under_review.value: "審核中",
-            ApplicationStatus.pending_recommendation.value: "待推薦",
-            ApplicationStatus.recommended.value: "已推薦",
             ApplicationStatus.approved.value: "已核准",
             ApplicationStatus.rejected.value: "已拒絕",
             ApplicationStatus.returned.value: "已退回",
             ApplicationStatus.cancelled.value: "已取消",
-            ApplicationStatus.renewal_pending.value: "續領待審",
-            ApplicationStatus.renewal_reviewed.value: "續領已審",
-            ApplicationStatus.professor_review.value: "教授審核中",
             ApplicationStatus.withdrawn.value: "已撤回",
         }
 
@@ -671,12 +661,7 @@ class EligibilityService:
         active_statuses = [
             ApplicationStatus.submitted.value,
             ApplicationStatus.under_review.value,
-            ApplicationStatus.pending_recommendation.value,
-            ApplicationStatus.recommended.value,
             ApplicationStatus.approved.value,
-            ApplicationStatus.renewal_pending.value,
-            ApplicationStatus.renewal_reviewed.value,
-            ApplicationStatus.professor_review.value,
             ApplicationStatus.returned.value,  # Returned applications can still be edited
         ]
 

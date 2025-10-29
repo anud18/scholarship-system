@@ -104,13 +104,6 @@ jobs:
       uses: github/codeql-action/analyze@v4
       with:
         category: "/language:${{matrix.language}}"
-        upload: false
-
-    - name: Upload SARIF to GitHub Security
-      uses: github/codeql-action/upload-sarif@v4
-      with:
-        sarif_file: ${{ steps.analyze.outputs.sarif-output }}/${{ matrix.language }}.sarif
-        category: "/language:${{matrix.language}}"
 
     - name: Upload SARIF as artifact for PDF generation
       if: always()

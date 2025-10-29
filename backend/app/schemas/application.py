@@ -343,7 +343,6 @@ class ApplicationResponse(BaseModel):
             in [
                 ApplicationStatus.submitted.value,
                 ApplicationStatus.under_review.value,
-                ApplicationStatus.recommended.value,
             ]
         )
 
@@ -555,7 +554,6 @@ class ApplicationListResponse(BaseModel):
             in [
                 ApplicationStatus.submitted.value,
                 ApplicationStatus.under_review.value,
-                ApplicationStatus.recommended.value,
             ]
         )
 

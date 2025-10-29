@@ -25,6 +25,7 @@ def upgrade() -> None:
     """Remove all scoring fields from review tables"""
     bind = op.get_bind()
     inspector = inspect(bind)
+    tables = inspector.get_table_names()
 
     # === Application Table ===
     application_columns = {col["name"] for col in inspector.get_columns("applications")}
@@ -51,6 +52,11 @@ def upgrade() -> None:
         op.drop_column("application_reviews", "criteria_scores")
 
     # === CollegeReview Table ===
+    # Skip if college_reviews table doesn't exist
+    if "college_reviews" not in tables:
+        print("⊘ Skipping college_reviews modifications: table does not exist")
+        return
+
     college_review_columns = {col["name"] for col in inspector.get_columns("college_reviews")}
 
     # Drop constraints first (PostgreSQL specific)
