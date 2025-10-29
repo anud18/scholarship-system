@@ -2,27 +2,89 @@
 
 這個目錄包含用於 **production repository** 的 workflow 範例。這些 workflows 是專門為 production 環境設計的，不會從 development repository 同步過去。
 
+## ⚠️ 重要：關於 Here-Document 錯誤
+
+如果你在生產倉庫看到以下錯誤：
+```
+warning: here-document at line 10 delimited by end-of-file (wanted `FOOTER_EOF')
+```
+
+**解決方案**：從此目錄複製最新版本的 `auto-tag-on-merge.yml` 到生產倉庫。舊版本使用了 heredoc 語法，新版本已修正為使用 echo 命令。
+
+詳見下方「🔄 更新 Workflows」章節。
+
 ## 📁 檔案說明
 
-| 檔案 | 用途 | 觸發時機 |
-|------|------|----------|
-| `deploy.yml` | 部署應用程式到 production | Push to main / 手動觸發 |
-| `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 |
-| `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 |
+| 檔案 | 用途 | 觸發時機 | 狀態 |
+|------|------|----------|------|
+| `auto-tag-on-merge.yml` ⭐ | 自動建立 Git tag 和 Release | PR merge 到 main | **必要** |
+| `deploy.yml` | 部署應用程式到 production | Push to main / 手動觸發 | 選用 |
+| `health-check.yml` | 監控應用程式健康狀態 | 每 15 分鐘 / 手動觸發 | 選用 |
+| `backup.yml` | 備份資料庫和檔案 | 每日 2AM UTC / 手動觸發 | 選用 |
+
+### ⭐ Auto-Tag Workflow (推薦必裝)
+
+**功能**：
+- ✅ 自動從 PR 標題提取版本號（格式：`Release v1.2.3`）
+- ✅ 建立 annotated Git tag
+- ✅ 自動建立 GitHub Release（包含完整 release notes）
+- ✅ 自動偵測 pre-release 版本（alpha, beta, rc）
+- ✅ 完整錯誤處理和日誌
+
+**為什麼需要**：
+當 Mirror to Production workflow 建立的 PR 被 merge 後，此 workflow 會自動：
+1. 從 PR 標題提取版本號
+2. 建立 tag 指向 squash merge commit
+3. 建立 GitHub Release 包含完整的 release notes
 
 ## 🚀 使用方式
 
-### 1. 複製到 Production Repo
+### 1. 安裝 Auto-Tag Workflow（必要）
+
+**快速安裝**：
+
+```bash
+# 在生產倉庫
+mkdir -p .github/workflows
+
+# 從開發倉庫複製最新版本
+cp /path/to/development-repo/.github/production-workflows-examples/auto-tag-on-merge.yml \
+   .github/workflows/auto-tag-on-merge.yml
+
+# Commit 並 push
+git add .github/workflows/auto-tag-on-merge.yml
+git commit -m "feat: add auto-tag workflow for release automation"
+git push
+```
+
+**或使用 GitHub Web UI**：
+
+1. 前往生產倉庫
+2. 建立新檔案：`.github/workflows/auto-tag-on-merge.yml`
+3. 複製 `auto-tag-on-merge.yml` 的完整內容
+4. Commit 變更
+
+**驗證安裝**：
+
+```bash
+# 驗證 YAML 語法
+python3 -c "import yaml; yaml.safe_load(open('.github/workflows/auto-tag-on-merge.yml'))"
+
+# 查看 workflow
+gh workflow list
+```
+
+### 2. 安裝其他 Workflows（選用）
 
 ```bash
 # Clone production repository
 git clone https://github.com/your-org/scholarship-production.git
 cd scholarship-production
 
-# Create workflows directory
+# Create workflows directory (if not exists)
 mkdir -p .github/workflows
 
-# Copy the workflows you need
+# Copy optional workflows
 cp /path/to/development-repo/.github/production-workflows-examples/deploy.yml \
    .github/workflows/deploy.yml
 

@@ -465,10 +465,15 @@ jobs:
 
           RELEASE_NOTES_EOF
 
-          # Add file statistics
+          # Add file statistics (excluding development-only files)
           echo "" >> /tmp/release-notes.md
           echo "\`\`\`" >> /tmp/release-notes.md
-          git diff --stat origin/main..HEAD | tail -1 >> /tmp/release-notes.md || echo "No file changes" >> /tmp/release-notes.md
+          git diff --stat origin/main..HEAD -- \
+            ':!.github/workflows' \
+            ':!.github/production-workflows-examples' \
+            ':!.claude' \
+            ':!mock-student-api' \
+            | tail -1 >> /tmp/release-notes.md || echo "No file changes" >> /tmp/release-notes.md
           echo "\`\`\`" >> /tmp/release-notes.md
 
           # Add removed development files
