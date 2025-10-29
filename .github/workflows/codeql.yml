@@ -102,9 +102,15 @@ jobs:
       with:
         category: "/language:${{matrix.language}}"
         output: sarif-results
-        upload: true
+        upload: false
 
-    - name: Upload SARIF as artifact
+    - name: Upload SARIF to GitHub Security
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: sarif-results/${{ matrix.language }}.sarif
+        category: "/language:${{matrix.language}}"
+
+    - name: Upload SARIF as artifact for PDF generation
       if: always()
       uses: actions/upload-artifact@v4
       with:
