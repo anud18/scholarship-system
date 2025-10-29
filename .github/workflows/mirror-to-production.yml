@@ -359,8 +359,8 @@ jobs:
           LATEST_TAG=$(git tag -l "v*.*.*" --sort=-v:refname | head -1 || echo "")
 
           if [ -z "$LATEST_TAG" ]; then
-            echo "::notice::No previous version found, starting with v1.0.0"
-            NEXT_VERSION="v1.0.0"
+            echo "::notice::No previous version found, starting with v0.9.0"
+            NEXT_VERSION="v0.9.0"
           else
             echo "::notice::Latest version: $LATEST_TAG"
 
@@ -398,8 +398,15 @@ jobs:
         run: |
           echo "::group::Generate release notes"
 
+          # Pre-calculate sync date for use in heredoc
+          SYNC_DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+
           # Create release notes file
-          cat > /tmp/release-notes.md <<'RELEASE_NOTES_EOF'
+          cat > /tmp/release-notes.md <<RELEASE_NOTES_EOF
+          <!-- AUTO_TAG_METADATA
+          Version: ${{ env.NEXT_VERSION }}
+          -->
+
           # 🚀 Production Sync ${{ env.NEXT_VERSION }}
 
           ## 📋 Summary
@@ -411,7 +418,7 @@ jobs:
           | **Version** | ${{ env.NEXT_VERSION }} |
           | **Source Repo** | [${{ github.repository }}](https://github.com/${{ github.repository }}) |
           | **Source Commit** | [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |
-          | **Sync Date** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |
+          | **Sync Date** | ${SYNC_DATE} |
           | **Triggered By** | @${{ github.actor }} |
 
           ## 🔄 Changes Synced from Production Repository
@@ -433,7 +440,7 @@ jobs:
           echo "\`\`\`" >> /tmp/release-notes.md
 
           # Add removed development files
-          cat >> /tmp/release-notes.md <<'REMOVED_FILES_EOF'
+          cat >> /tmp/release-notes.md <<REMOVED_FILES_EOF
 
           ## 🚫 Removed Development Files
 
@@ -505,11 +512,11 @@ jobs:
         run: |
           echo "::group::Create Pull Request"
 
-          # Determine PR title
+          # Determine PR title (standardized format for auto-tagging)
           if [ -n "${{ github.event.inputs.pr_title }}" ]; then
             PR_TITLE="${{ github.event.inputs.pr_title }}"
           else
-            PR_TITLE="🚀 Production Sync ${{ env.NEXT_VERSION }}"
+            PR_TITLE="Release ${{ env.NEXT_VERSION }}"
           fi
 
           echo "::notice::Creating PR with title: $PR_TITLE"
@@ -540,8 +547,15 @@ jobs:
           ## Next Steps
 
           1. Review the Pull Request in the production repository
-          2. Merge the PR when ready to deploy
-          3. The version tag will be created automatically after merge
+          2. Merge the PR (using squash merge) when ready to deploy
+          3. **The version tag will be created automatically** after PR merge (requires auto-tag workflow in production repo)
+
+          ## 🏷️ Auto-Tagging Information
+
+          - **Tag Format**: \`${{ env.NEXT_VERSION }}\` (e.g., v1.2.3)
+          - **PR Title Format**: \`Release ${{ env.NEXT_VERSION }}\`
+          - **Metadata in PR Body**: Version information embedded for extraction
+          - **Recommended**: Set up auto-tag workflow in production repository (see production-workflows-examples/)
 
           ## Quick Links
 
