@@ -4,6 +4,8 @@
  * Handles bank account verification for scholarship applications:
  * - Single and batch verification
  * - Verification status tracking
+ * - Async batch verification with task monitoring
+ * - Student verified account management
  *
  * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
@@ -12,7 +14,7 @@ import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../../api.legacy';
 
-type BankVerificationResult = {
+export type BankVerificationResult = {
   application_id: number;
   verification_status: string;
   account_number_status?: string;
@@ -40,14 +42,14 @@ type BankVerificationResult = {
   recommendations?: string[];
 };
 
-type BankVerificationBatchResult = {
+export type BankVerificationBatchResult = {
   total: number;
   verified: number;
   failed: number;
   results: BankVerificationResult[];
 };
 
-type ManualBankReviewRequest = {
+export type ManualBankReviewRequest = {
   application_id: number;
   account_number_approved?: boolean;
   account_number_corrected?: string;
@@ -56,7 +58,7 @@ type ManualBankReviewRequest = {
   review_notes?: string;
 };
 
-type ManualBankReviewResult = {
+export type ManualBankReviewResult = {
   success: boolean;
   application_id: number;
   account_number_status: string;
@@ -64,6 +66,46 @@ type ManualBankReviewResult = {
   updated_form_data: { [key: string]: string };
   review_timestamp: string;
   reviewed_by: string;
+};
+
+export type BankVerificationTask = {
+  task_id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  total_count: number;
+  processed_count: number;
+  verified_count: number;
+  needs_review_count: number;
+  failed_count: number;
+  skipped_count?: number;
+  progress_percentage?: number;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+  is_completed: boolean;
+  is_running: boolean;
+  error_message?: string;
+  results?: { [appId: number]: any };
+};
+
+export type BatchVerificationAsyncResponse = {
+  task_id: string;
+  total_count: number;
+  status: string;
+  created_at: string;
+};
+
+export type VerifiedAccountResponse = {
+  has_verified_account: boolean;
+  account?: {
+    id: number;
+    account_number: string;
+    account_holder: string;
+    verified_at: string;
+    verification_method?: string;
+    verification_notes?: string;
+    passbook_cover_url?: string;
+  };
+  message: string;
 };
 
 export function createBankVerificationApi() {
@@ -120,6 +162,57 @@ export function createBankVerificationApi() {
         body: reviewData as any,
       });
       return toApiResponse<ManualBankReviewResult>(response);
+    },
+
+    /**
+     * Start async batch verification task
+     * Returns immediately with task_id for progress tracking
+     */
+    startBatchVerificationAsync: async (
+      applicationIds: number[]
+    ): Promise<ApiResponse<BatchVerificationAsyncResponse>> => {
+      const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch-async', {
+        body: { application_ids: applicationIds } as any,
+      });
+      return toApiResponse<BatchVerificationAsyncResponse>(response);
+    },
+
+    /**
+     * Get verification task status and progress
+     */
+    getVerificationTaskStatus: async (taskId: string): Promise<ApiResponse<BankVerificationTask>> => {
+      const response = await typedClient.raw.GET('/api/v1/admin/bank-verification/tasks/{task_id}', {
+        params: { path: { task_id: taskId } },
+      });
+      return toApiResponse<BankVerificationTask>(response);
+    },
+
+    /**
+     * List verification tasks with optional status filter
+     */
+    listVerificationTasks: async (
+      status?: string,
+      limit: number = 50,
+      offset: number = 0
+    ): Promise<ApiResponse<{ tasks: BankVerificationTask[]; pagination: any }>> => {
+      const response = await typedClient.raw.GET('/api/v1/admin/bank-verification/tasks', {
+        params: {
+          query: {
+            status,
+            limit,
+            offset,
+          },
+        },
+      });
+      return toApiResponse<{ tasks: BankVerificationTask[]; pagination: any }>(response);
+    },
+
+    /**
+     * Get student's verified bank account (student endpoint)
+     */
+    getMyVerifiedAccount: async (): Promise<ApiResponse<VerifiedAccountResponse>> => {
+      const response = await typedClient.raw.GET('/api/v1/student-bank-accounts/my-verified-account');
+      return toApiResponse<VerifiedAccountResponse>(response);
     },
   };
 }

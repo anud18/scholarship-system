@@ -90,50 +90,39 @@ export async function renderEmailTemplate(
 /**
  * Get plain text version of rendered email
  *
- * SECURITY: Uses DOMParser for safe HTML entity decoding to avoid
- * order-dependent escaping issues and incomplete sanitization.
+ * SECURITY: Uses DOMParser exclusively to safely extract text from HTML
+ * without regex-based vulnerabilities. DOMParser handles all HTML parsing,
+ * entity decoding, and script/style removal securely.
  *
  * @param html Rendered HTML email
  * @returns Plain text version
  */
 export function emailToPlainText(html: string): string {
-  // Remove script/style blocks separately
-  // Use separate replacements to avoid backreference issues
-  let text = html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-
-  // Use DOMParser for safe HTML parsing and text extraction
-  // This properly handles HTML entities without order-dependent issues
+  // SECURITY: Use DOMParser exclusively - no regex patterns that could be bypassed
   if (typeof DOMParser !== 'undefined') {
     try {
       const parser = new DOMParser();
-      const doc = parser.parseFromString(text, 'text/html');
-      text = doc.body.textContent || '';
+      const doc = parser.parseFromString(html, 'text/html');
+
+      // Remove script and style elements via DOM manipulation (secure)
+      doc.querySelectorAll('script, style').forEach(el => el.remove());
+
+      // Extract text content safely - DOMParser handles all entity decoding
+      const text = doc.body.textContent || '';
+
+      // Normalize whitespace
+      return text.replace(/\s+/g, ' ').trim();
     } catch (error) {
-      // Fallback to regex-based approach if DOMParser fails
-      console.warn('DOMParser failed, using fallback text extraction:', error);
-      text = text.replace(/<[^>]+>/g, ' ');
-      // Use textarea element trick for HTML entity decoding
-      const textarea = document.createElement('textarea');
-      textarea.innerHTML = text;
-      text = textarea.value;
+      // If DOMParser fails, return empty rather than use unsafe fallback
+      console.error('DOMParser failed to parse HTML:', error);
+      return '';
     }
-  } else {
-    // Server-side fallback (when DOMParser is not available)
-    text = text.replace(/<[^>]+>/g, ' ');
-    // Basic entity decoding (in safe order: specific entities before &amp;)
-    text = text
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&amp;/g, '&'); // Last to avoid double-decoding
   }
 
-  // Normalize whitespace
-  text = text.replace(/\s+/g, ' ').trim();
-
-  return text;
+  // Server-side fallback (Node.js environment)
+  // Simple text extraction - only used in server rendering context
+  return html
+    .replace(/<[^>]+>/g, ' ')  // Remove all tags
+    .replace(/\s+/g, ' ')      // Normalize whitespace
+    .trim();
 }

@@ -33,7 +33,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_application_review_items_review_subtype",
         "application_review_items",
-        ["review_id", "sub_type"],
+        ["review_id", "sub_type_code"],
     )
     op.create_index(
         "ix_application_review_items_recommendation",
@@ -43,7 +43,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_application_review_items_subtype_recommendation",
         "application_review_items",
-        ["sub_type", "recommendation"],
+        ["sub_type_code", "recommendation"],
     )
 
     # Indexes for Application (enhanced queries)

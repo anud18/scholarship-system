@@ -30,6 +30,18 @@ class ReactEmailTemplateService:
         else (Path(__file__).parent.parent.parent.parent / "frontend" / "emails")
     )
 
+    # SECURITY: Allowlist of valid template names to prevent path traversal
+    ALLOWED_TEMPLATES = {
+        "application-submitted",
+        "professor-review-request",
+        "college-review-request",
+        "result-notification",
+        "deadline-reminder",
+        "document-request",
+        "roster-notification",
+        "whitelist-notification",
+    }
+
     # Template display names and descriptions (can be moved to database later)
     TEMPLATE_METADATA = {
         "application-submitted": {
@@ -117,25 +129,20 @@ class ReactEmailTemplateService:
         Returns:
             Template metadata or None if not found
         """
-        # SECURITY: Validate template name to prevent path traversal
+        # SECURITY: Check allowlist FIRST before any path operations
+        if template_name not in cls.ALLOWED_TEMPLATES:
+            logger.warning(f"Template '{template_name}' not in allowlist")
+            return None
+
+        # SECURITY: Validate filename format
         try:
             validate_filename(f"{template_name}.tsx")
         except Exception as e:
             logger.warning(f"Invalid template name '{template_name}': {e}")
             return None
 
+        # Safe to construct path - template_name is validated against allowlist
         file_path = cls.TEMPLATE_DIR / f"{template_name}.tsx"
-
-        # SECURITY: Ensure resolved path is within TEMPLATE_DIR
-        try:
-            resolved_path = file_path.resolve(strict=False)
-            template_dir = cls.TEMPLATE_DIR.resolve()
-            if not str(resolved_path).startswith(str(template_dir)):
-                logger.warning(f"Template path outside allowed directory: {resolved_path}")
-                return None
-        except Exception as e:
-            logger.warning(f"Failed to resolve template path: {e}")
-            return None
 
         if not file_path.exists():
             return None
@@ -258,25 +265,20 @@ class ReactEmailTemplateService:
         Returns:
             Template source code or None
         """
-        # SECURITY: Validate template name to prevent path traversal
+        # SECURITY: Check allowlist FIRST before any path operations
+        if template_name not in cls.ALLOWED_TEMPLATES:
+            logger.warning(f"Template '{template_name}' not in allowlist")
+            return None
+
+        # SECURITY: Validate filename format
         try:
             validate_filename(f"{template_name}.tsx")
         except Exception as e:
             logger.warning(f"Invalid template name '{template_name}': {e}")
             return None
 
+        # Safe to construct path - template_name is validated against allowlist
         file_path = cls.TEMPLATE_DIR / f"{template_name}.tsx"
-
-        # SECURITY: Ensure resolved path is within TEMPLATE_DIR
-        try:
-            resolved_path = file_path.resolve(strict=False)
-            template_dir = cls.TEMPLATE_DIR.resolve()
-            if not str(resolved_path).startswith(str(template_dir)):
-                logger.warning(f"Template path outside allowed directory: {resolved_path}")
-                return None
-        except Exception as e:
-            logger.warning(f"Failed to resolve template path: {e}")
-            return None
 
         if not file_path.exists():
             return None

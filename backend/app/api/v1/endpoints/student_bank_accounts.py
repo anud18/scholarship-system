@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import get_current_user
+from app.core.config import settings
+from app.core.security import create_access_token, get_current_user
 from app.db.deps import get_db
 from app.models.student_bank_account import StudentBankAccount
 from app.models.user import User
@@ -48,12 +49,28 @@ async def get_my_verified_account(
         verified_account = result.scalar_one_or_none()
 
         if verified_account:
+            # Generate file access token and URL for passbook cover
+            passbook_cover_url = None
+            if verified_account.passbook_cover_object_name:
+                token_data = {"sub": str(current_user.id)}
+                access_token = create_access_token(token_data)
+                # Use generic file endpoint for passbook covers
+                passbook_cover_url = (
+                    f"{settings.base_url}{settings.api_v1_str}/files/passbook/"
+                    f"{verified_account.id}?token={access_token}"
+                )
+
+            account_response = StudentBankAccountResponse.model_validate(verified_account)
+            # Add passbook_cover_url to response if available
+            account_dict = account_response.model_dump()
+            account_dict["passbook_cover_url"] = passbook_cover_url
+
             return {
                 "success": True,
                 "message": "您的郵局帳號已通過驗證",
                 "data": VerifiedAccountCheckResponse(
                     has_verified_account=True,
-                    account=StudentBankAccountResponse.model_validate(verified_account),
+                    account=account_dict,
                     message=f"您的郵局帳號 {verified_account.account_number} (戶名: {verified_account.account_holder}) 已於 {verified_account.verified_at.strftime('%Y-%m-%d')} 通過驗證，您可以在申請時使用此帳號，無需重新驗證。",
                 ),
             }

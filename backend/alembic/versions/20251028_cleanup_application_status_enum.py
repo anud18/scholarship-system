@@ -67,8 +67,11 @@ def upgrade() -> None:
         "manual_excluded",
         "deleted",
         name="applicationstatus",
-        create_type=True,
+        create_type=False,
     )
+
+    # Explicitly create the enum type
+    new_status_enum.create(op.get_bind(), checkfirst=True)
 
     # 5. 改回使用 enum 類型
     op.alter_column(

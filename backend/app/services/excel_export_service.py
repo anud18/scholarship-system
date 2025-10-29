@@ -26,6 +26,13 @@ logger = logging.getLogger(__name__)
 class ExcelExportService:
     """Excel匯出服務"""
 
+    # SECURITY: Allowlist of valid Excel template files to prevent path traversal
+    ALLOWED_TEMPLATES = {
+        "STD_UP_MIXLISTA.xlsx",
+        "payment_roster_template.xlsx",
+        "scholarship_roster.xlsx",
+    }
+
     def __init__(self):
         self.export_base_path = getattr(settings, "roster_export_dir", "./exports")
         self.template_dir = getattr(settings, "roster_template_dir", "./app/templates")
@@ -188,7 +195,8 @@ class ExcelExportService:
             if not validation_result["is_valid"]:
                 logger.error(f"Data validation failed: {validation_result['errors']}")
                 raise FileStorageError(
-                    f"Data validation failed: {'; '.join(validation_result['errors'])}", file_name=file_name
+                    f"Data validation failed: {'; '.join(validation_result['errors'])}",
+                    file_name=file_name,
                 )
 
             # 建立Excel檔案
@@ -248,32 +256,27 @@ class ExcelExportService:
         """
         Resolve Excel template path based on optional template name.
 
-        SECURITY: Validates template filename to prevent path traversal attacks.
+        SECURITY: Validates template against allowlist to prevent path traversal attacks.
         """
         if not template_name:
             return self.template_path
 
         candidate = template_name if template_name.lower().endswith(".xlsx") else f"{template_name}.xlsx"
 
-        # SECURITY: Validate filename to prevent path traversal
+        # SECURITY: Check allowlist FIRST before any path operations
+        if candidate not in self.ALLOWED_TEMPLATES:
+            logger.warning(f"Template '{candidate}' not in allowlist. Using default template.")
+            return self.template_path
+
+        # SECURITY: Validate filename format
         try:
             validate_filename(candidate)
         except Exception as e:
-            logger.warning(f"Invalid template name '{template_name}': {e}. Using default template.")
+            logger.warning(f"Invalid template filename '{candidate}': {e}. Using default template.")
             return self.template_path
 
+        # Safe to construct path - candidate is validated against allowlist
         candidate_path = os.path.join(self.template_dir, candidate)
-
-        # SECURITY: Ensure resolved path is within template directory
-        try:
-            resolved_path = os.path.abspath(candidate_path)
-            template_dir = os.path.abspath(self.template_dir)
-            if not resolved_path.startswith(template_dir):
-                logger.warning(f"Template path outside allowed directory: {resolved_path}. Using default template.")
-                return self.template_path
-        except Exception as e:
-            logger.warning(f"Failed to resolve template path: {e}. Using default template.")
-            return self.template_path
 
         if os.path.exists(candidate_path):
             return candidate_path
@@ -394,7 +397,12 @@ class ExcelExportService:
 
     def _validate_export_data(self, excel_data: List[Dict]) -> Dict[str, Any]:
         """驗證STD_UP_MIXLISTA格式匯出資料品質"""
-        validation_result = {"is_valid": True, "warnings": [], "errors": [], "statistics": {}}
+        validation_result = {
+            "is_valid": True,
+            "warnings": [],
+            "errors": [],
+            "statistics": {},
+        }
 
         if not excel_data:
             validation_result["errors"].append("No data to export")
@@ -509,7 +517,10 @@ class ExcelExportService:
                         cell.alignment = Alignment(horizontal="center", vertical="center")
                         cell.fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
 
-                logger.info("Created new Excel file using default structure (include_header=%s)", include_header)
+                logger.info(
+                    "Created new Excel file using default structure (include_header=%s)",
+                    include_header,
+                )
 
             start_row = 2 if include_header else 1
 
@@ -541,7 +552,10 @@ class ExcelExportService:
 
         except Exception as e:
             logger.error(f"Failed to create Excel file: {e}")
-            raise FileStorageError(f"Failed to create Excel file: {e}", file_name=os.path.basename(file_path))
+            raise FileStorageError(
+                f"Failed to create Excel file: {e}",
+                file_name=os.path.basename(file_path),
+            )
 
     def _apply_excel_styling(self, ws, max_row: int, include_header: bool):
         """應用Excel樣式"""
@@ -598,7 +612,10 @@ class ExcelExportService:
     def _set_borders(self, ws, max_row: int):
         """設定邊框"""
         thin_border = Border(
-            left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin")
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
         )
 
         for row in range(1, max_row + 1):
@@ -615,8 +632,14 @@ class ExcelExportService:
             ["學年度", roster.academic_year],
             ["造冊週期", roster.roster_cycle.value],
             ["觸發方式", roster.trigger_type.value],
-            ["產生時間", roster.started_at.strftime("%Y-%m-%d %H:%M:%S") if roster.started_at else ""],
-            ["完成時間", roster.completed_at.strftime("%Y-%m-%d %H:%M:%S") if roster.completed_at else ""],
+            [
+                "產生時間",
+                roster.started_at.strftime("%Y-%m-%d %H:%M:%S") if roster.started_at else "",
+            ],
+            [
+                "完成時間",
+                roster.completed_at.strftime("%Y-%m-%d %H:%M:%S") if roster.completed_at else "",
+            ],
             ["總申請數", roster.total_applications or 0],
             ["合格人數", roster.qualified_count or 0],
             ["不合格人數", roster.disqualified_count or 0],

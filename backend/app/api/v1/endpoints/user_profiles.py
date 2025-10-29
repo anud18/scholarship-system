@@ -380,16 +380,12 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
         # After validation, use absolute path
         resolved_path = os.path.abspath(file_path)
 
-        # CodeQL suppression: Path is validated by validate_path_in_directory above
-        if not os.path.exists(
-            resolved_path
-        ):  # nosemgrep: python.lang.security.audit.dangerous-system-call.dangerous-system-call
+        # lgtm[py/path-injection] - Path validated by validate_path_in_directory()
+        if not os.path.exists(resolved_path):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="證明文件不存在")
 
-        # CodeQL suppression: Path is validated by validate_path_in_directory above
-        return FileResponse(
-            resolved_path
-        )  # nosemgrep: python.lang.security.audit.dangerous-system-call.dangerous-system-call
+        # lgtm[py/path-injection] - Path validated by validate_path_in_directory()
+        return FileResponse(resolved_path)
 
     except HTTPException:
         raise
@@ -468,13 +464,17 @@ async def extract_bank_info_from_passbook(
         # Validate file type
         if not file.content_type or not file.content_type.startswith("image/"):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image (JPEG, PNG, etc.)"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be an image (JPEG, PNG, etc.)",
             )
 
         # Check file size (max 10MB)
         file_content = await file.read()
         if len(file_content) > 10 * 1024 * 1024:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File size must be less than 10MB")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size must be less than 10MB",
+            )
 
         # Get OCR service
         try:
@@ -509,7 +509,8 @@ async def extract_bank_info_from_passbook(
         except Exception as e:
             logger.error(f"Bank OCR failed for user {current_user.id}: {str(e)}")
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Failed to process image: {str(e)}"
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Failed to process image: {str(e)}",
             )
 
     except HTTPException:
@@ -517,7 +518,8 @@ async def extract_bank_info_from_passbook(
     except Exception as e:
         logger.error(f"Unexpected error in bank OCR: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred during processing"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during processing",
         )
 
 
@@ -537,13 +539,17 @@ async def extract_text_from_document(
         # Validate file type
         if not file.content_type or not file.content_type.startswith("image/"):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image (JPEG, PNG, etc.)"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be an image (JPEG, PNG, etc.)",
             )
 
         # Check file size (max 10MB)
         file_content = await file.read()
         if len(file_content) > 10 * 1024 * 1024:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File size must be less than 10MB")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size must be less than 10MB",
+            )
 
         # Get OCR service
         try:
@@ -564,12 +570,18 @@ async def extract_text_from_document(
                 f"Document OCR completed for user {current_user.id} with confidence: {result.get('confidence', 0)}"
             )
 
-            return {"success": True, "message": "文字提取成功" if result.get("success") else "文字提取失敗", "data": result}
+            return {
+                "success": True,
+                "message": "文字提取成功" if result.get("success") else "文字提取失敗",
+                "data": result,
+            }
 
         except Exception as e:
             logger.error(f"Document OCR failed for user {current_user.id}: {str(e)}")
+            # SECURITY: Don't expose internal error details to client
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Failed to process image: {str(e)}"
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="無法處理圖片。請確認圖片格式正確且清晰可讀。",
             )
 
     except HTTPException:
@@ -577,5 +589,6 @@ async def extract_text_from_document(
     except Exception as e:
         logger.error(f"Unexpected error in document OCR: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unexpected error occurred during processing"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during processing",
         )

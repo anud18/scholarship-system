@@ -7,7 +7,7 @@ the verified account is saved here so the student can see the verification statu
 in future applications.
 """
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -34,8 +34,13 @@ class StudentBankAccount(Base):
     account_number = Column(String(20), nullable=False, index=True)  # 郵局帳號
     account_holder = Column(String(100), nullable=False)  # 戶名
 
+    # Passbook cover image (stored in MinIO)
+    passbook_cover_object_name = Column(String(500), nullable=True)  # MinIO object path
+
     # Verification information
     verification_status = Column(String(20), nullable=False, default="verified")  # verified, failed, pending, revoked
+    verification_method = Column(String(20), nullable=True)  # ai_verified, manual_verified
+    ai_verification_confidence = Column(Float, nullable=True)  # AI confidence score (0.0 to 1.0)
     verified_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     verified_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     verification_source_application_id = Column(

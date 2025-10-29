@@ -40,8 +40,11 @@ def upgrade() -> None:
         "completed",
         "archived",
         name="reviewstage",
-        create_type=True,
+        create_type=False,
     )
+
+    # Explicitly create the enum type
+    review_stage_enum.create(op.get_bind(), checkfirst=True)
 
     # 2. 新增 review_stage 欄位 (先設為 nullable)
     op.add_column("applications", sa.Column("review_stage", review_stage_enum, nullable=True))
@@ -52,7 +55,7 @@ def upgrade() -> None:
         sa.text(
             """
         UPDATE applications
-        SET review_stage = CASE
+        SET review_stage = (CASE
             WHEN status = 'draft' THEN 'student_draft'
             WHEN status = 'submitted' THEN 'student_submitted'
             WHEN status = 'under_review' THEN 'college_review'
@@ -65,7 +68,7 @@ def upgrade() -> None:
             WHEN status = 'cancelled' THEN 'archived'
             WHEN status = 'deleted' THEN 'archived'
             ELSE 'student_submitted'
-        END
+        END)::reviewstage
         WHERE review_stage IS NULL
     """
         )

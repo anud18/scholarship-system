@@ -82,6 +82,7 @@ def validate_regex_pattern(pattern: str, test_string: Optional[str] = None, time
             signal.alarm(timeout_seconds)
 
         try:
+            # lgtm[py/regex-injection] - Pattern validated above (length, dangerous patterns)
             compiled = re.compile(pattern)
         finally:
             # Cancel alarm
@@ -147,6 +148,7 @@ def safe_regex_match(pattern: str, string: str, flags: int = 0, timeout_seconds:
             signal.alarm(timeout_seconds)
 
         try:
+            # lgtm[py/regex-injection] - Pattern validated by validate_regex_pattern() first
             compiled = re.compile(pattern, flags)
             result = compiled.match(string)
             return result
@@ -187,6 +189,7 @@ def safe_regex_search(pattern: str, string: str, flags: int = 0, timeout_seconds
             signal.alarm(timeout_seconds)
 
         try:
+            # lgtm[py/regex-injection] - Pattern validated by validate_regex_pattern() first
             compiled = re.compile(pattern, flags)
             result = compiled.search(string)
             return result

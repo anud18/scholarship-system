@@ -204,6 +204,7 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
             if existing:
                 # Skip if already exists (don't overwrite user modifications)
                 skipped_count += 1
+                # SECURITY: Only log key name, not value
                 print(f"  ⊘ Skipped existing setting: {setting_data['key']}")
                 continue
 
@@ -219,10 +220,12 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
                 change_reason="Initial system setup",
             )
             created_count += 1
+            # SECURITY: Only log key name, not value
             print(f"  ✓ Created setting: {setting_data['key']}")
 
-        except Exception as e:
-            print(f"  ✗ Failed to seed setting '{setting_data['key']}': {str(e)}")
+        except Exception:
+            # SECURITY: Don't log exception details which might contain sensitive values
+            print(f"  ✗ Failed to seed setting '{setting_data['key']}'")
             continue
 
     print("\n✓ System settings seed completed:")

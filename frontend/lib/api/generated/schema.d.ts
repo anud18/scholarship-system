@@ -2144,6 +2144,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/bank-verification/batch-async": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Batch Verification Async
+         * @description Start async batch bank verification task (admin only)
+         *
+         *     Creates a background task to verify multiple applications without blocking.
+         *     Returns immediately with a task_id for progress tracking.
+         */
+        post: operations["start_batch_verification_async_api_v1_admin_bank_verification_batch_async_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bank-verification/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Verification Task Status
+         * @description Get bank verification task status and progress (admin only)
+         *
+         *     Returns task details including progress counters and current results.
+         */
+        get: operations["get_verification_task_status_api_v1_admin_bank_verification_tasks__task_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bank-verification/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Verification Tasks
+         * @description List bank verification tasks (admin only)
+         *
+         *     Supports filtering by status and pagination.
+         */
+        get: operations["list_verification_tasks_api_v1_admin_bank_verification_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/scholarships": {
         parameters: {
             query?: never;
@@ -4285,26 +4352,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college-review/reviews/{review_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Update College Review
-         * @description Update an existing college review
-         */
-        put: operations["update_college_review_api_v1_college_review_reviews__review_id__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/college-review/students/{student_id}/preview": {
         parameters: {
             query?: never;
@@ -4572,26 +4619,6 @@ export interface paths {
          *     - Rejected students
          */
         get: operations["get_distribution_details_api_v1_college_review_rankings__ranking_id__distribution_details_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/college-review/statistics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get College Review Statistics
-         * @description Get college review statistics
-         */
-        get: operations["get_college_review_statistics_api_v1_college_review_statistics_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7385,28 +7412,6 @@ export interface components {
              * @default set
              */
             operation: string;
-        };
-        /**
-         * CollegeReviewUpdate
-         * @description Schema for updating a college review.
-         *
-         *     Note: Scoring fields removed. Update ranking position and comments only.
-         */
-        CollegeReviewUpdate: {
-            /** Review Comments */
-            review_comments?: string | null;
-            /** Recommendation */
-            recommendation?: string | null;
-            /** Decision Reason */
-            decision_reason?: string | null;
-            /** Is Priority */
-            is_priority?: boolean | null;
-            /** Needs Special Attention */
-            needs_special_attention?: boolean | null;
-            /** Preliminary Rank */
-            preliminary_rank?: number | null;
-            /** Final Rank */
-            final_rank?: number | null;
         };
         /**
          * ConfigCategory
@@ -13126,6 +13131,103 @@ export interface operations {
             };
         };
     };
+    start_batch_verification_async_api_v1_admin_bank_verification_batch_async_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankVerificationBatchRequestSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_verification_task_status_api_v1_admin_bank_verification_tasks__task_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_verification_tasks_api_v1_admin_bank_verification_tasks_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_all_scholarships_api_v1_scholarships_get: {
         parameters: {
             query?: {
@@ -16793,41 +16895,6 @@ export interface operations {
             };
         };
     };
-    update_college_review_api_v1_college_review_reviews__review_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                review_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CollegeReviewUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_student_preview_api_v1_college_review_students__student_id__preview_get: {
         parameters: {
             query?: {
@@ -17298,40 +17365,6 @@ export interface operations {
             path: {
                 ranking_id: number;
             };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_college_review_statistics_api_v1_college_review_statistics_get: {
-        parameters: {
-            query?: {
-                /** @description Filter by academic year */
-                academic_year?: number | null;
-                /** @description Filter by semester */
-                semester?: string | null;
-            };
-            header?: never;
-            path?: never;
             cookie?: never;
         };
         requestBody?: never;

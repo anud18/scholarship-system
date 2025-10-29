@@ -17,6 +17,12 @@ from app.models.payment_roster import PaymentRosterItem
 from app.models.student_bank_account import StudentBankAccount
 from app.services.ocr_service import get_ocr_service
 
+# Verification thresholds and constants
+ACCOUNT_NUMBER_EXACT_MATCH_REQUIRED = True  # Account number must match 100%
+ACCOUNT_HOLDER_SIMILARITY_THRESHOLD = 0.8  # Account holder name similarity threshold
+HIGH_CONFIDENCE_THRESHOLD = 0.9  # Above this = auto verify (high confidence)
+LOW_CONFIDENCE_THRESHOLD = 0.7  # Below this = needs manual review (low confidence)
+
 
 class BankVerificationService:
     """Service for verifying bank account information against passbook images"""
@@ -48,6 +54,43 @@ class BankVerificationService:
             return False, "郵局帳號只能包含數字"
 
         return True, None
+
+    def normalize_account_number(self, account: str) -> str:
+        """
+        Normalize account number by removing all non-digit characters
+
+        Args:
+            account: Account number string (may contain spaces, dashes, etc.)
+
+        Returns:
+            Normalized account number with only digits
+        """
+        if not account:
+            return ""
+        return re.sub(r"[^0-9]", "", account)
+
+    def verify_account_number_exact(self, form_value: str, ocr_value: str) -> Dict[str, Any]:
+        """
+        Verify account number with exact match requirement (100%)
+
+        Args:
+            form_value: Account number from application form
+            ocr_value: Account number extracted from OCR
+
+        Returns:
+            Dict with match result and details
+        """
+        normalized_form = self.normalize_account_number(form_value)
+        normalized_ocr = self.normalize_account_number(ocr_value)
+
+        is_match = normalized_form == normalized_ocr
+
+        return {
+            "is_match": is_match,
+            "normalized_form": normalized_form,
+            "normalized_ocr": normalized_ocr,
+            "exact_match_required": ACCOUNT_NUMBER_EXACT_MATCH_REQUIRED,
+        }
 
     def normalize_text(self, text: str) -> str:
         """Normalize text for comparison"""
@@ -248,49 +291,82 @@ class BankVerificationService:
                 continue
 
             if form_value or ocr_value:
-                similarity = self.calculate_similarity(form_value, ocr_value)
-                is_match = similarity >= 0.8  # 80% similarity threshold
-                confidence_level = "high" if similarity >= 0.9 else "medium" if similarity >= 0.7 else "low"
-
-                # Determine if manual review is needed
-                needs_manual_review = False
-                if not is_match or confidence_level == "low":
-                    needs_manual_review = True
-                    requires_manual_review = True
-
-                comparisons[field_key] = {
-                    "field_name": field_name,
-                    "form_value": form_value,
-                    "ocr_value": ocr_value,
-                    "similarity_score": round(similarity, 3),
-                    "is_match": is_match,
-                    "confidence": confidence_level,
-                    "needs_manual_review": needs_manual_review,
-                    "manual_review_status": "pending" if needs_manual_review else None,
-                    "manual_review_corrected_value": None,
-                }
-
-                # Set individual field status
+                # Different verification logic for account number vs account holder
                 if field_key == "account_number":
-                    if is_match and confidence_level == "high":
+                    # Account number: 100% exact match required
+                    account_result = self.verify_account_number_exact(form_value, ocr_value)
+                    is_match = account_result["is_match"]
+                    similarity = 1.0 if is_match else 0.0
+                    confidence_level = "high" if is_match else "low"
+                    needs_manual_review = not is_match
+
+                    comparisons[field_key] = {
+                        "field_name": field_name,
+                        "form_value": form_value,
+                        "ocr_value": ocr_value,
+                        "normalized_form": account_result["normalized_form"],
+                        "normalized_ocr": account_result["normalized_ocr"],
+                        "similarity_score": similarity,
+                        "is_match": is_match,
+                        "confidence": confidence_level,
+                        "needs_manual_review": needs_manual_review,
+                        "exact_match_required": True,
+                        "manual_review_status": "pending" if needs_manual_review else None,
+                        "manual_review_corrected_value": None,
+                    }
+
+                    # Set account number status
+                    if is_match:
                         account_number_status = "verified"
-                    elif needs_manual_review:
-                        account_number_status = "needs_review"
                     else:
-                        account_number_status = "failed"
+                        account_number_status = "needs_review"
+                        requires_manual_review = True
+                        overall_match = False
+
+                    total_confidence += similarity
+                    compared_fields += 1
+
                 elif field_key == "account_holder":
+                    # Account holder: Fuzzy match allowed (80% threshold)
+                    similarity = self.calculate_similarity(form_value, ocr_value)
+                    is_match = similarity >= ACCOUNT_HOLDER_SIMILARITY_THRESHOLD
+                    confidence_level = (
+                        "high"
+                        if similarity >= HIGH_CONFIDENCE_THRESHOLD
+                        else "medium"
+                        if similarity >= LOW_CONFIDENCE_THRESHOLD
+                        else "low"
+                    )
+                    needs_manual_review = similarity < LOW_CONFIDENCE_THRESHOLD or not is_match
+
+                    comparisons[field_key] = {
+                        "field_name": field_name,
+                        "form_value": form_value,
+                        "ocr_value": ocr_value,
+                        "similarity_score": round(similarity, 3),
+                        "is_match": is_match,
+                        "confidence": confidence_level,
+                        "needs_manual_review": needs_manual_review,
+                        "exact_match_required": False,
+                        "manual_review_status": "pending" if needs_manual_review else None,
+                        "manual_review_corrected_value": None,
+                    }
+
+                    # Set account holder status
                     if is_match and confidence_level == "high":
                         account_holder_status = "verified"
                     elif needs_manual_review:
                         account_holder_status = "needs_review"
+                        requires_manual_review = True
                     else:
                         account_holder_status = "failed"
+                        overall_match = False
 
-                if not is_match:
-                    overall_match = False
+                    if not is_match:
+                        overall_match = False
 
-                total_confidence += similarity
-                compared_fields += 1
+                    total_confidence += similarity
+                    compared_fields += 1
 
         # Calculate overall confidence
         average_confidence = total_confidence / compared_fields if compared_fields > 0 else 0.0
@@ -626,6 +702,16 @@ class BankVerificationService:
                 final_account_holder = account_holder_corrected or current_bank_fields.get("account_holder", "")
 
                 if final_account_number and final_account_holder:
+                    # Get passbook cover document (CRITICAL: must save photo)
+                    passbook_doc = await self.get_bank_passbook_document(application)
+                    if not passbook_doc or not passbook_doc.object_name:
+                        raise ValueError("無法儲存已驗證帳戶：缺少帳本封面照片")
+
+                    # Get AI verification confidence if available from meta_data
+                    ai_confidence = None
+                    if application.meta_data and "bank_verification" in application.meta_data:
+                        ai_confidence = application.meta_data["bank_verification"].get("average_confidence")
+
                     # Check if this account already exists for this user
                     existing_account_stmt = select(StudentBankAccount).where(
                         StudentBankAccount.user_id == application.user_id,
@@ -644,7 +730,10 @@ class BankVerificationService:
                         reviewer = reviewer_result.scalar_one_or_none()
 
                         existing_account.account_holder = final_account_holder
+                        existing_account.passbook_cover_object_name = passbook_doc.object_name  # Save photo
                         existing_account.verification_status = "verified"
+                        existing_account.verification_method = "manual_verified"
+                        existing_account.ai_verification_confidence = ai_confidence
                         existing_account.verified_at = review_timestamp
                         existing_account.verified_by_user_id = reviewer.id if reviewer else None
                         existing_account.verification_source_application_id = application.id
@@ -673,7 +762,10 @@ class BankVerificationService:
                             user_id=application.user_id,
                             account_number=final_account_number,
                             account_holder=final_account_holder,
+                            passbook_cover_object_name=passbook_doc.object_name,  # Save photo (CRITICAL)
                             verification_status="verified",
+                            verification_method="manual_verified",
+                            ai_verification_confidence=ai_confidence,
                             verified_at=review_timestamp,
                             verified_by_user_id=reviewer.id if reviewer else None,
                             verification_source_application_id=application.id,

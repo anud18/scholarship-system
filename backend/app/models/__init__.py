@@ -6,6 +6,7 @@ from app.models.application import Application, ApplicationFile, ApplicationStat
 from app.models.application_field import ApplicationDocument, ApplicationField, FieldType
 from app.models.application_sequence import ApplicationSequence
 from app.models.audit_log import AuditAction, AuditLog
+from app.models.bank_verification_task import BankVerificationTask, BankVerificationTaskStatus
 from app.models.batch_import import BatchImport
 from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
 from app.models.document_request import DocumentRequest, DocumentRequestStatus
@@ -35,6 +36,7 @@ from app.models.student import (  # 查詢表模型 (Reference data only); Helpe
     StudyingStatus,
     get_student_type_from_degree,
 )
+from app.models.student_bank_account import StudentBankAccount
 from app.models.system_setting import SystemSetting
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile, UserProfileHistory
@@ -113,4 +115,8 @@ __all__ = [
     "EmailStatus",
     "ScheduleStatus",
     "EmailCategory",
+    # Bank verification models
+    "StudentBankAccount",
+    "BankVerificationTask",
+    "BankVerificationTaskStatus",
 ]

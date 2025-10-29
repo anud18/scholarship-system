@@ -69,13 +69,18 @@ async def verify_bank_account(
         verification_status = result.get("verification_status")
 
         # Handle error cases
+        # SECURITY: Don't expose internal error details, use sanitized messages
         if verification_status == "no_data":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error", "找不到銀行帳戶資料"))
+            logger.warning(f"Bank verification no_data: {result.get('error', 'N/A')}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="找不到銀行帳戶資料")
         elif verification_status == "no_document":
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.get("error", "找不到存摺文件"))
+            logger.warning(f"Bank verification no_document: {result.get('error', 'N/A')}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="找不到存摺文件")
         elif verification_status == "ocr_failed":
+            logger.error(f"Bank verification OCR failed: {result.get('error', 'N/A')}")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=result.get("error", "OCR 處理失敗")
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="OCR 處理失敗，請確認文件清晰度",
             )
 
         # Handle successful verification results

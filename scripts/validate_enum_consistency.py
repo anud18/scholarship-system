@@ -16,12 +16,11 @@ Requirements:
     - TypeScript frontend files accessible
 """
 
-import json
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List
 
 import psycopg2
 
@@ -51,7 +50,8 @@ class EnumConsistencyValidator:
 
     def __init__(self, db_url: str = None):
         self.db_url = db_url or os.getenv(
-            "DATABASE_URL", "postgresql://scholarship_user:scholarship_pass@localhost:5432/scholarship_db"
+            "DATABASE_URL",
+            "postgresql://scholarship_user:scholarship_pass@localhost:5432/scholarship_db",
         )
         self.backend_path = Path(__file__).parent.parent / "backend"
         self.frontend_path = Path(__file__).parent.parent / "frontend"
@@ -141,7 +141,8 @@ class EnumConsistencyValidator:
             try:
                 values = [e.value for e in enum_class]
                 python_enums[enum_name.lower()] = values
-                print(f"✅ {enum_name}: {values}")
+                # SECURITY: Only log count, not actual enum values
+                print(f"✅ {enum_name}: {len(values)} values")
             except Exception as e:
                 self.errors.append(f"Failed to extract Python enum {enum_name}: {e}")
 
@@ -200,7 +201,10 @@ class EnumConsistencyValidator:
         return enums
 
     def validate_enum_consistency(
-        self, db_enums: Dict[str, List[str]], python_enums: Dict[str, List[str]], typescript_enums: Dict[str, List[str]]
+        self,
+        db_enums: Dict[str, List[str]],
+        python_enums: Dict[str, List[str]],
+        typescript_enums: Dict[str, List[str]],
     ):
         """Validate that enum values are consistent across all three sources"""
         print("\n🔍 Validating enum consistency...")
@@ -229,22 +233,32 @@ class EnumConsistencyValidator:
                 continue
 
             # Check for value mismatches
+            # SECURITY: Log counts and mismatch info, not actual enum values
             if py_values and ts_values and py_values != ts_values:
+                py_only = py_values - ts_values
+                ts_only = ts_values - py_values
                 self.errors.append(
                     f"{enum_name}: Python/TypeScript mismatch - "
-                    f"Python: {sorted(py_values)}, TypeScript: {sorted(ts_values)}"
+                    f"Python has {len(py_values)} values, TypeScript has {len(ts_values)} values, "
+                    f"{len(py_only)} unique to Python, {len(ts_only)} unique to TypeScript"
                 )
 
             if db_values and py_values and db_values != py_values:
+                db_only = db_values - py_values
+                py_only = py_values - db_values
                 self.errors.append(
                     f"{enum_name}: Database/Python mismatch - "
-                    f"Database: {sorted(db_values)}, Python: {sorted(py_values)}"
+                    f"Database has {len(db_values)} values, Python has {len(py_values)} values, "
+                    f"{len(db_only)} unique to Database, {len(py_only)} unique to Python"
                 )
 
             if db_values and ts_values and db_values != ts_values:
+                db_only = db_values - ts_values
+                ts_only = ts_values - db_values
                 self.errors.append(
                     f"{enum_name}: Database/TypeScript mismatch - "
-                    f"Database: {sorted(db_values)}, TypeScript: {sorted(ts_values)}"
+                    f"Database has {len(db_values)} values, TypeScript has {len(ts_values)} values, "
+                    f"{len(db_only)} unique to Database, {len(ts_only)} unique to TypeScript"
                 )
 
             # Check for perfect consistency
