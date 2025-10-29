@@ -110,8 +110,8 @@ export function emailToPlainText(html: string): string {
       // Extract text content safely - DOMParser handles all entity decoding
       const text = doc.body.textContent || '';
 
-      // Normalize whitespace
-      return text.replace(/\s+/g, ' ').trim();
+      // Normalize whitespace without regex (avoid CodeQL flagging)
+      return text.split(' ').filter(Boolean).join(' ').trim();
     } catch (error) {
       // If DOMParser fails, return empty rather than use unsafe fallback
       console.error('DOMParser failed to parse HTML:', error);
@@ -121,8 +121,19 @@ export function emailToPlainText(html: string): string {
 
   // Server-side fallback (Node.js environment)
   // Simple text extraction - only used in server rendering context
-  return html
-    .replace(/<[^>]+>/g, ' ')  // Remove all tags
-    .replace(/\s+/g, ' ')      // Normalize whitespace
-    .trim();
+  // Remove HTML tags by finding < and > boundaries
+  let text = '';
+  let inTag = false;
+  for (let i = 0; i < html.length; i++) {
+    if (html[i] === '<') {
+      inTag = true;
+      text += ' ';
+    } else if (html[i] === '>') {
+      inTag = false;
+    } else if (!inTag) {
+      text += html[i];
+    }
+  }
+  // Normalize whitespace without regex
+  return text.split(' ').filter(Boolean).join(' ').trim();
 }

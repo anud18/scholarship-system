@@ -11,13 +11,12 @@ student information system API endpoints, now with real database integration.
 
 import hashlib
 import hmac
-import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -29,7 +28,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="校計中獎學金學生資料 Mock API", description="⚠️ 開發/測試專用 ⚠️ 模擬校計中 API，支援 HMAC-SHA256 驗簽，連接真實資料庫", version="2.0.0"
+    title="校計中獎學金學生資料 Mock API",
+    description="⚠️ 開發/測試專用 ⚠️ 模擬校計中 API，支援 HMAC-SHA256 驗簽，連接真實資料庫",
+    version="2.0.0",
 )
 
 # CORS middleware
@@ -43,14 +44,18 @@ app.add_middleware(
 
 # Configuration
 MOCK_HMAC_KEY_HEX = os.getenv(
-    "MOCK_HMAC_KEY_HEX", "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
+    "MOCK_HMAC_KEY_HEX",
+    "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a",
 )
 STRICT_TIME_CHECK = os.getenv("STRICT_TIME_CHECK", "true").lower() == "true"
 STRICT_ENCODE_CHECK = os.getenv("STRICT_ENCODE_CHECK", "false").lower() == "true"
 TIME_TOLERANCE_MINUTES = int(os.getenv("TIME_TOLERANCE_MINUTES", "5"))
 
 # Database Configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db",
+)
 
 # Create database engine and session
 engine = create_engine(DATABASE_URL)
@@ -186,7 +191,10 @@ def get_student_terms_from_db(stdcode: str, trmyear: str, trmterm: str) -> List[
 
 
 def verify_hmac_signature(
-    authorization: str, request_body: str, content_type: str, encode_type: Optional[str] = None
+    authorization: str,
+    request_body: str,
+    content_type: str,
+    encode_type: Optional[str] = None,
 ) -> bool:
     """
     Verify HMAC-SHA256 signature according to university API specification
@@ -278,7 +286,9 @@ async def health_check():
         db.execute(text("SELECT 1"))
         db.close()
     except Exception as e:
-        db_status = f"error: {str(e)}"
+        # SECURITY: Log full error but don't expose details in response
+        logger.error(f"Database health check failed: {str(e)}")
+        db_status = "error: database connection failed"
 
     return {
         "status": "healthy",
@@ -310,26 +320,42 @@ async def get_student_basic_info(
 
         if not verify_hmac_signature(authorization, request_json, content_type, encode_type):
             return JSONResponse(
-                status_code=401, content={"code": 401, "msg": "HMAC signature verification failed", "data": []}
+                status_code=401,
+                content={
+                    "code": 401,
+                    "msg": "HMAC signature verification failed",
+                    "data": [],
+                },
             )
 
         if request.account != "scholarship":
-            return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid account", "data": []})
+            return JSONResponse(
+                status_code=400,
+                content={"code": 400, "msg": "Invalid account", "data": []},
+            )
 
         if request.action != "qrySoaaScholarshipStudent":
-            return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid action", "data": []})
+            return JSONResponse(
+                status_code=400,
+                content={"code": 400, "msg": "Invalid action", "data": []},
+            )
 
         # Get student data from database
         student_data = get_student_from_db(request.stdcode)
         if not student_data:
-            return JSONResponse(status_code=404, content={"code": 404, "msg": "Student not found", "data": []})
+            return JSONResponse(
+                status_code=404,
+                content={"code": 404, "msg": "Student not found", "data": []},
+            )
 
         return {"code": 200, "msg": "success", "data": [student_data]}
 
     except Exception as e:
-        logger.error(f"Error in get_student_basic_info: {str(e)}")
+        # SECURITY: Log full error details, return generic message to client
+        logger.error(f"Error in get_student_basic_info: {str(e)}", exc_info=True)
         return JSONResponse(
-            status_code=500, content={"code": 500, "msg": f"Internal server error: {str(e)}", "data": []}
+            status_code=500,
+            content={"code": 500, "msg": "Internal server error occurred", "data": []},
         )
 
 
@@ -352,27 +378,43 @@ async def get_student_term_info(
 
         if not verify_hmac_signature(authorization, request_json, content_type, encode_type):
             return JSONResponse(
-                status_code=401, content={"code": 401, "msg": "HMAC signature verification failed", "data": []}
+                status_code=401,
+                content={
+                    "code": 401,
+                    "msg": "HMAC signature verification failed",
+                    "data": [],
+                },
             )
 
         if request.account != "scholarship":
-            return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid account", "data": []})
+            return JSONResponse(
+                status_code=400,
+                content={"code": 400, "msg": "Invalid account", "data": []},
+            )
 
         if request.action != "qrySoaaScholarshipStudentTerm":
-            return JSONResponse(status_code=400, content={"code": 400, "msg": "Invalid action", "data": []})
+            return JSONResponse(
+                status_code=400,
+                content={"code": 400, "msg": "Invalid action", "data": []},
+            )
 
         # Get student term data
         filtered_terms = get_student_terms_from_db(request.stdcode, request.trmyear, request.trmterm)
 
         if not filtered_terms:
-            return JSONResponse(status_code=404, content={"code": 404, "msg": "Term data not found", "data": []})
+            return JSONResponse(
+                status_code=404,
+                content={"code": 404, "msg": "Term data not found", "data": []},
+            )
 
         return {"code": 200, "msg": "success", "data": filtered_terms}
 
     except Exception as e:
-        logger.error(f"Error in get_student_term_info: {str(e)}")
+        # SECURITY: Log full error details, return generic message to client
+        logger.error(f"Error in get_student_term_info: {str(e)}", exc_info=True)
         return JSONResponse(
-            status_code=500, content={"code": 500, "msg": f"Internal server error: {str(e)}", "data": []}
+            status_code=500,
+            content={"code": 500, "msg": "Internal server error occurred", "data": []},
         )
 
 
