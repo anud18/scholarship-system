@@ -135,14 +135,14 @@ jobs:
           # sed -i '/## 📊 File Changes/,/```$/d' /tmp/release-notes-raw.md
 
           # 添加 footer
-          cat >> /tmp/release-notes-raw.md <<FOOTER_EOF
-
-___
-
-📦 **Auto-generated Release**
-🔗 Generated from PR #${{ github.event.pull_request.number }}
-🤖 Created by Auto-Tag Workflow
-FOOTER_EOF
+          {
+            echo ""
+            echo "___"
+            echo ""
+            echo "📦 **Auto-generated Release**"
+            echo "🔗 Generated from PR #${{ github.event.pull_request.number }}"
+            echo "🤖 Created by Auto-Tag Workflow"
+          } >> /tmp/release-notes-raw.md
 
           # 展開環境變量
           envsubst < /tmp/release-notes-raw.md > /tmp/release-notes.md
