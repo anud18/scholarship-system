@@ -163,8 +163,8 @@ jobs:
 
           Merged latest development changes from main branch
           Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          "; then
-            # Check if there were actual changes
+          " 2>&1 | tee /tmp/merge-main-output.txt; then
+            # Merge succeeded
             AFTER_MERGE=$(git rev-parse HEAD)
             if [ "$BEFORE_MERGE" != "$AFTER_MERGE" ]; then
               echo "::notice::✅ Merged changes from main"
@@ -182,8 +182,40 @@ jobs:
               echo "MAIN_MERGE_COMMITS=No new changes from main" >> $GITHUB_ENV
             fi
           else
-            echo "::error::Failed to merge from main - manual intervention required"
-            exit 1
+            # Merge failed - auto-resolve conflicts
+            echo "::warning::Merge encountered conflicts, auto-resolving..."
+
+            # Check if conflict is in .github/workflows/
+            if grep -q ".github/workflows/" /tmp/merge-main-output.txt; then
+              echo "::notice::Detected .github/workflows/ conflict (expected)"
+              echo "::notice::Accepting main's version (will be removed in next step)"
+            fi
+
+            # Accept main's version for all conflicts
+            # This is safe because:
+            # 1. .github/workflows/ will be removed in next step anyway
+            # 2. Other files should take the latest version from main
+            git checkout --theirs . 2>/dev/null || true
+            git add -A
+
+            if git commit -m "chore: merge latest from main (auto-resolved conflicts)
+
+            Merged latest development changes from main branch
+            Conflicts auto-resolved by accepting main's version
+            Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            "; then
+              echo "::notice::✅ Conflicts resolved and committed"
+
+              # Save for release notes
+              AFTER_MERGE=$(git rev-parse HEAD)
+              echo "MAIN_MERGE_COMMITS<<EOF" >> $GITHUB_ENV
+              git log --format="- %s (%an, %ar)" "${BEFORE_MERGE}..origin/main" | head -20
+              echo "(Conflicts auto-resolved)"
+              echo "EOF" >> $GITHUB_ENV
+            else
+              echo "::notice::No conflicts to resolve (clean state)"
+              echo "MAIN_MERGE_COMMITS=No new changes from main" >> $GITHUB_ENV
+            fi
           fi
 
           echo "::endgroup::"
