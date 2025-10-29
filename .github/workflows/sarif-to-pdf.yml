@@ -1,0 +1,401 @@
+name: "Generate CodeQL PDF Report"
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "GitHub Actions run ID that produced SARIF artifacts (leave empty for latest)"
+        required: false
+        type: string
+
+jobs:
+  generate-pdf:
+    name: Generate PDF from SARIF
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get latest CodeQL run ID
+        if: ${{ github.event.inputs.run_id == '' }}
+        id: get-run-id
+        run: |
+          LATEST_RUN=$(gh run list --workflow=codeql.yml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+          echo "run_id=$LATEST_RUN" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Set run ID
+        id: set-run-id
+        run: |
+          if [ -n "${{ github.event.inputs.run_id }}" ]; then
+            echo "run_id=${{ github.event.inputs.run_id }}" >> $GITHUB_OUTPUT
+          else
+            echo "run_id=${{ steps.get-run-id.outputs.run_id }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download SARIF artifacts
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          run_id: ${{ steps.set-run-id.outputs.run_id }}
+          name: codeql-sarif-.*
+          name_is_regexp: true
+          path: sarif-artifacts
+          skip_unpack: false
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wkhtmltopdf
+          python -m pip install --upgrade pip
+          python -m pip install jinja2 markdown2
+
+      - name: Parse SARIF and generate report
+        run: |
+          python - << 'PYTHON_SCRIPT'
+          import json
+          import pathlib
+          from datetime import datetime
+          from collections import defaultdict
+          from jinja2 import Template
+
+          # Find all SARIF files
+          sarif_dir = pathlib.Path("sarif-artifacts")
+          sarif_files = list(sarif_dir.rglob("*.sarif"))
+
+          if not sarif_files:
+              print("No SARIF files found!")
+              exit(1)
+
+          print(f"Found {len(sarif_files)} SARIF file(s)")
+
+          # Parse all SARIF files
+          all_results = []
+          severity_counts = defaultdict(lambda: defaultdict(int))
+          languages = set()
+
+          for sarif_file in sarif_files:
+              print(f"Processing: {sarif_file}")
+              sarif_data = json.loads(sarif_file.read_text(encoding="utf-8"))
+
+              for run in sarif_data.get("runs", []):
+                  tool_name = run.get("tool", {}).get("driver", {}).get("name", "Unknown")
+                  language = sarif_file.parent.name.replace("codeql-sarif-", "")
+                  languages.add(language)
+
+                  # Build rules lookup
+                  rules = {}
+                  for rule in run.get("tool", {}).get("driver", {}).get("rules", []):
+                      rules[rule["id"]] = rule
+
+                  # Process results
+                  for result in run.get("results", []):
+                      rule_id = result.get("ruleId", "unknown")
+                      rule = rules.get(rule_id, {})
+
+                      # Determine severity
+                      level = result.get("level", "warning")
+                      severity_map = {
+                          "error": "High",
+                          "warning": "Medium",
+                          "note": "Low",
+                          "none": "Info"
+                      }
+                      severity = severity_map.get(level, "Medium")
+
+                      # Get security severity if available
+                      security_severity = rule.get("properties", {}).get("security-severity")
+                      if security_severity:
+                          score = float(security_severity)
+                          if score >= 9.0:
+                              severity = "Critical"
+                          elif score >= 7.0:
+                              severity = "High"
+                          elif score >= 4.0:
+                              severity = "Medium"
+                          else:
+                              severity = "Low"
+
+                      # Get location info
+                      locations = result.get("locations", [{}])
+                      if locations:
+                          physical_loc = locations[0].get("physicalLocation", {})
+                          artifact = physical_loc.get("artifactLocation", {})
+                          region = physical_loc.get("region", {})
+
+                          file_path = artifact.get("uri", "Unknown")
+                          start_line = region.get("startLine", 0)
+                          end_line = region.get("endLine", start_line)
+                      else:
+                          file_path = "Unknown"
+                          start_line = 0
+                          end_line = 0
+
+                      # Get message
+                      message = result.get("message", {}).get("text", "No description")
+
+                      # Get rule description
+                      rule_desc = rule.get("shortDescription", {}).get("text", "") or \
+                                  rule.get("fullDescription", {}).get("text", "")
+
+                      all_results.append({
+                          "language": language,
+                          "tool": tool_name,
+                          "rule_id": rule_id,
+                          "rule_description": rule_desc,
+                          "severity": severity,
+                          "file": file_path,
+                          "start_line": start_line,
+                          "end_line": end_line,
+                          "message": message
+                      })
+
+                      severity_counts[language][severity] += 1
+
+          # Sort results by severity then language
+          severity_order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3, "Info": 4}
+          all_results.sort(key=lambda x: (severity_order.get(x["severity"], 99), x["language"], x["file"]))
+
+          # Generate HTML report
+          html_template = Template('''
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <meta charset="utf-8">
+              <title>CodeQL Security Audit Report</title>
+              <style>
+                  body {
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      margin: 40px;
+                      line-height: 1.6;
+                      color: #333;
+                  }
+                  h1 {
+                      color: #2c3e50;
+                      border-bottom: 3px solid #3498db;
+                      padding-bottom: 10px;
+                  }
+                  h2 {
+                      color: #34495e;
+                      margin-top: 30px;
+                      border-left: 4px solid #3498db;
+                      padding-left: 10px;
+                  }
+                  h3 {
+                      color: #7f8c8d;
+                      margin-top: 20px;
+                  }
+                  .meta-info {
+                      background: #ecf0f1;
+                      padding: 15px;
+                      border-radius: 5px;
+                      margin: 20px 0;
+                  }
+                  .summary-table {
+                      width: 100%;
+                      border-collapse: collapse;
+                      margin: 20px 0;
+                  }
+                  .summary-table th, .summary-table td {
+                      border: 1px solid #bdc3c7;
+                      padding: 10px;
+                      text-align: left;
+                  }
+                  .summary-table th {
+                      background: #34495e;
+                      color: white;
+                  }
+                  .summary-table tr:nth-child(even) {
+                      background: #f8f9fa;
+                  }
+                  .finding {
+                      margin: 20px 0;
+                      padding: 15px;
+                      border-left: 4px solid #95a5a6;
+                      background: #f8f9fa;
+                      page-break-inside: avoid;
+                  }
+                  .finding.critical {
+                      border-left-color: #8b0000;
+                      background: #ffe6e6;
+                  }
+                  .finding.high {
+                      border-left-color: #e74c3c;
+                      background: #ffebe6;
+                  }
+                  .finding.medium {
+                      border-left-color: #f39c12;
+                      background: #fff8e6;
+                  }
+                  .finding.low {
+                      border-left-color: #3498db;
+                      background: #e6f2ff;
+                  }
+                  .severity {
+                      display: inline-block;
+                      padding: 4px 8px;
+                      border-radius: 3px;
+                      font-weight: bold;
+                      font-size: 0.9em;
+                  }
+                  .severity.critical { background: #8b0000; color: white; }
+                  .severity.high { background: #e74c3c; color: white; }
+                  .severity.medium { background: #f39c12; color: white; }
+                  .severity.low { background: #3498db; color: white; }
+                  .severity.info { background: #95a5a6; color: white; }
+                  .location {
+                      font-family: 'Courier New', monospace;
+                      background: #ecf0f1;
+                      padding: 5px;
+                      border-radius: 3px;
+                      font-size: 0.9em;
+                  }
+                  code {
+                      background: #ecf0f1;
+                      padding: 2px 5px;
+                      border-radius: 3px;
+                      font-family: 'Courier New', monospace;
+                  }
+              </style>
+          </head>
+          <body>
+              <h1>CodeQL Security Audit Report</h1>
+
+              <div class="meta-info">
+                  <p><strong>Generated:</strong> {{ timestamp }}</p>
+                  <p><strong>Repository:</strong> {{ repo }}</p>
+                  <p><strong>Languages Analyzed:</strong> {{ languages|join(', ') }}</p>
+                  <p><strong>Total Findings:</strong> {{ total_findings }}</p>
+              </div>
+
+              <h2>Executive Summary</h2>
+              <table class="summary-table">
+                  <thead>
+                      <tr>
+                          <th>Language</th>
+                          <th>Critical</th>
+                          <th>High</th>
+                          <th>Medium</th>
+                          <th>Low</th>
+                          <th>Info</th>
+                          <th>Total</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      {% for lang in languages %}
+                      <tr>
+                          <td><strong>{{ lang }}</strong></td>
+                          <td>{{ severity_counts[lang]['Critical'] or 0 }}</td>
+                          <td>{{ severity_counts[lang]['High'] or 0 }}</td>
+                          <td>{{ severity_counts[lang]['Medium'] or 0 }}</td>
+                          <td>{{ severity_counts[lang]['Low'] or 0 }}</td>
+                          <td>{{ severity_counts[lang]['Info'] or 0 }}</td>
+                          <td><strong>{{ lang_totals[lang] }}</strong></td>
+                      </tr>
+                      {% endfor %}
+                  </tbody>
+              </table>
+
+              {% for lang in languages %}
+              <h2>{{ lang }} Analysis Results</h2>
+              {% set lang_findings = results|selectattr("language", "equalto", lang)|list %}
+              {% if lang_findings %}
+                  {% for finding in lang_findings %}
+                  <div class="finding {{ finding.severity|lower }}">
+                      <h3>
+                          <span class="severity {{ finding.severity|lower }}">{{ finding.severity }}</span>
+                          {{ finding.rule_id }}
+                      </h3>
+                      {% if finding.rule_description %}
+                      <p><strong>Description:</strong> {{ finding.rule_description }}</p>
+                      {% endif %}
+                      <p><strong>Message:</strong> {{ finding.message }}</p>
+                      <p><strong>Location:</strong>
+                          <span class="location">
+                              {{ finding.file }}
+                              {% if finding.start_line > 0 %}
+                                  {% if finding.end_line > finding.start_line %}
+                                      (lines {{ finding.start_line }}-{{ finding.end_line }})
+                                  {% else %}
+                                      (line {{ finding.start_line }})
+                                  {% endif %}
+                              {% endif %}
+                          </span>
+                      </p>
+                  </div>
+                  {% endfor %}
+              {% else %}
+                  <p>No findings for this language.</p>
+              {% endif %}
+              {% endfor %}
+
+              <div style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #bdc3c7; text-align: center; color: #7f8c8d;">
+                  <p>Generated by CodeQL Security Analysis</p>
+              </div>
+          </body>
+          </html>
+          ''')
+
+          # Calculate totals
+          lang_totals = {lang: sum(counts.values()) for lang, counts in severity_counts.items()}
+
+          # Render HTML
+          html_content = html_template.render(
+              timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
+              repo="${{ github.repository }}",
+              languages=sorted(languages),
+              total_findings=len(all_results),
+              severity_counts=severity_counts,
+              lang_totals=lang_totals,
+              results=all_results
+          )
+
+          # Write HTML file
+          pathlib.Path("codeql-report.html").write_text(html_content, encoding="utf-8")
+          print(f"Generated HTML report with {len(all_results)} findings")
+
+          PYTHON_SCRIPT
+
+      - name: Convert HTML to PDF
+        run: |
+          wkhtmltopdf \
+            --enable-local-file-access \
+            --page-size A4 \
+            --margin-top 15mm \
+            --margin-bottom 15mm \
+            --margin-left 15mm \
+            --margin-right 15mm \
+            codeql-report.html \
+            codeql-security-report.pdf
+          echo "PDF generated successfully"
+          ls -lh codeql-security-report.pdf
+
+      - name: Upload PDF Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-security-report
+          path: codeql-security-report.pdf
+          retention-days: 90
+
+      - name: Upload HTML Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-security-report-html
+          path: codeql-report.html
+          retention-days: 90
+
+      - name: Summary
+        run: |
+          echo "## CodeQL PDF Report Generated ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 **Report Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Source Run ID: ${{ steps.set-run-id.outputs.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 **Download:**" >> $GITHUB_STEP_SUMMARY
+          echo "- PDF report available in workflow artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- HTML report also available for preview" >> $GITHUB_STEP_SUMMARY
