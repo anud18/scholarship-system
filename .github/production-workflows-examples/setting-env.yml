@@ -1049,6 +1049,158 @@ jobs:
           echo ""
 
       #########################################################################
+      # STEP 8.5: Verify Docker Permissions (Non-sudo)
+      #########################################################################
+      - name: Verify Docker Permissions
+        if: github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_KEY: ${{ secrets.DB_VM_SSH_KEY }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+        run: |
+          echo "=========================================="
+          echo "Verifying Docker Permissions (Non-sudo)"
+          echo "=========================================="
+          echo ""
+          echo "ℹ️  Checking if Docker can run without sudo."
+          echo "   (Group membership requires re-login to take effect)"
+          echo ""
+
+          #####################################################################
+          # Part 1: AP VM Docker Permission Check
+          #####################################################################
+          echo "=========================================="
+          echo "Part 1: AP VM Docker Permission Check"
+          echo "=========================================="
+          echo ""
+
+          AP_DOCKER_STATUS="unknown"
+
+          # Test without sudo
+          echo "🔍 Testing: docker ps (without sudo)..."
+          if docker ps > /dev/null 2>&1; then
+            echo "   ✅ SUCCESS: Docker works without sudo on AP VM"
+            AP_DOCKER_STATUS="works"
+          else
+            echo "   ⚠️  FAILED: Permission denied (docker group not active)"
+
+            # Try with sg docker (activates group without re-login)
+            echo ""
+            echo "🔄 Attempting to activate docker group with 'sg docker'..."
+            if sg docker -c "docker ps" > /dev/null 2>&1; then
+              echo "   ✅ SUCCESS: Docker group activated with 'sg docker -c'"
+              echo "   ℹ️  Note: This activation is session-specific"
+              AP_DOCKER_STATUS="sg_works"
+            else
+              echo "   ❌ FAILED: Docker group cannot be activated"
+              AP_DOCKER_STATUS="requires_sudo"
+            fi
+          fi
+
+          echo ""
+          echo "AP VM Status: $AP_DOCKER_STATUS"
+          echo ""
+
+          #####################################################################
+          # Part 2: DB VM Docker Permission Check
+          #####################################################################
+          echo "=========================================="
+          echo "Part 2: DB VM Docker Permission Check"
+          echo "=========================================="
+          echo ""
+
+          # Setup SSH (reuse from previous steps)
+          echo "::add-mask::$DB_VM_SSH_KEY"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$DB_VM_SSH_KEY" > ~/.ssh/db_vm_key
+          chmod 600 ~/.ssh/db_vm_key
+
+          DB_DOCKER_STATUS="unknown"
+
+          # Test without sudo
+          echo "🔍 Testing: docker ps (without sudo on DB VM)..."
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "docker ps" > /dev/null 2>&1; then
+            echo "   ✅ SUCCESS: Docker works without sudo on DB VM"
+            DB_DOCKER_STATUS="works"
+          else
+            echo "   ⚠️  FAILED: Permission denied (docker group not active)"
+
+            # Try with sg docker
+            echo ""
+            echo "🔄 Attempting to activate docker group with 'sg docker'..."
+            if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sg docker -c 'docker ps'" > /dev/null 2>&1; then
+              echo "   ✅ SUCCESS: Docker group activated with 'sg docker -c'"
+              echo "   ℹ️  Note: This activation is session-specific"
+              DB_DOCKER_STATUS="sg_works"
+            else
+              echo "   ❌ FAILED: Docker group cannot be activated"
+              DB_DOCKER_STATUS="requires_sudo"
+            fi
+          fi
+
+          echo ""
+          echo "DB VM Status: $DB_DOCKER_STATUS"
+          echo ""
+
+          # Cleanup
+          rm -f ~/.ssh/db_vm_key
+
+          #####################################################################
+          # Summary and Recommendations
+          #####################################################################
+          echo "=========================================="
+          echo "Docker Permission Check Summary"
+          echo "=========================================="
+          echo ""
+
+          # AP VM Summary
+          case "$AP_DOCKER_STATUS" in
+            works)
+              echo "✅ AP VM: Docker works without sudo"
+              ;;
+            sg_works)
+              echo "⚠️  AP VM: Docker requires 'sg docker -c' or 'sudo'"
+              echo "   Recommendation: Re-login to activate docker group permanently"
+              echo "   Temporary workaround: sg docker -c \"docker ps\""
+              ;;
+            requires_sudo)
+              echo "❌ AP VM: Docker requires 'sudo'"
+              echo "   Recommendation: Re-login to activate docker group"
+              echo "   Workaround: sudo docker ps"
+              ;;
+          esac
+
+          echo ""
+
+          # DB VM Summary
+          case "$DB_DOCKER_STATUS" in
+            works)
+              echo "✅ DB VM: Docker works without sudo"
+              ;;
+            sg_works)
+              echo "⚠️  DB VM: Docker requires 'sg docker -c' or 'sudo'"
+              echo "   Recommendation: Re-login to activate docker group permanently"
+              echo "   Temporary workaround: ssh DB_VM 'sg docker -c \"docker ps\"'"
+              ;;
+            requires_sudo)
+              echo "❌ DB VM: Docker requires 'sudo'"
+              echo "   Recommendation: Re-login to activate docker group"
+              echo "   Workaround: ssh DB_VM 'sudo docker ps'"
+              ;;
+          esac
+
+          echo ""
+          echo "=========================================="
+          echo "✅ Docker Permission Check Complete"
+          echo "=========================================="
+          echo ""
+          echo "Note: Group membership changes require re-login to take effect."
+          echo "      Until then, use 'sudo docker' or 'sg docker -c \"docker ...\"'"
+          echo ""
+
+      #########################################################################
       # STEP 9: Final Summary
       #########################################################################
       - name: Display Summary
