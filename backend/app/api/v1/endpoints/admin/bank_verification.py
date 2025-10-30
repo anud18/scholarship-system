@@ -7,7 +7,7 @@ Handles bank account verification operations including:
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -32,6 +32,56 @@ from app.services.bank_verification_task_service import BankVerificationTaskServ
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def sanitize_error_string(value: Any, max_length: int = 500) -> Any:
+    """
+    Sanitize potentially sensitive error strings to prevent stack trace exposure.
+
+    SECURITY: This function prevents internal error details and stack traces
+    from being exposed in API responses by:
+    1. Removing common stack trace patterns
+    2. Truncating to single-line format
+    3. Limiting string length
+
+    Args:
+        value: The value to sanitize (any type)
+        max_length: Maximum allowed string length
+
+    Returns:
+        Sanitized value (same type as input, or generic string if suspicious)
+    """
+    # Only sanitize strings
+    if not isinstance(value, str):
+        return value
+
+    # Check for stack trace indicators
+    stack_trace_patterns = [
+        "Traceback (most recent call last)",
+        'File "',
+        "line ",
+        "raise ",
+        "Exception:",
+        "Error:",
+        "  at ",
+        "\\n  File",
+    ]
+
+    # If value contains stack trace patterns, return generic message
+    for pattern in stack_trace_patterns:
+        if pattern in value:
+            logger.warning(f"Stack trace pattern detected in value, sanitizing: {pattern}")
+            return "[Error details removed for security]"
+
+    # Remove newlines and excessive whitespace (keep single line)
+    sanitized = " ".join(value.split())
+
+    # Truncate if too long
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "..."
+        logger.info(f"Value truncated to {max_length} characters")
+
+    return sanitized
 
 
 @router.post("/bank-verification")
@@ -101,7 +151,8 @@ async def verify_bank_account(
             success = result.get("success", True)
 
         # SECURITY: Explicitly whitelist safe fields before passing to schema
-        safe_result = {
+        # Sanitize string values to prevent stack trace exposure
+        raw_result = {
             "success": result.get("success", False),
             "application_id": result.get("application_id"),
             "verification_status": result.get("verification_status"),
@@ -114,6 +165,17 @@ async def verify_bank_account(
             "comparison_details": result.get("comparison_details"),
             "timestamp": result.get("timestamp"),
         }
+
+        # Apply sanitization to all string values (recursive for nested dicts)
+        def sanitize_dict(d):
+            if isinstance(d, dict):
+                return {k: sanitize_dict(v) for k, v in d.items()}
+            elif isinstance(d, list):
+                return [sanitize_dict(item) for item in d]
+            else:
+                return sanitize_error_string(d)
+
+        safe_result = sanitize_dict(raw_result)
 
         return {
             "success": success,
