@@ -173,7 +173,7 @@ jobs:
 
           # 創建 release
           RELEASE_URL=$(gh release create "$TAG_NAME" \
-            --title "Production Release $TAG_NAME" \
+            --title "$TAG_NAME" \
             --notes-file /tmp/release-notes.md \
             --target "${{ github.event.pull_request.merge_commit_sha }}" \
             $PRERELEASE_FLAG)
