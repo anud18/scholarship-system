@@ -492,6 +492,109 @@ if not resolved_path.startswith(expected_dir):
 - [ ] Validate with regex pattern `^[a-zA-Z0-9_\-\.]+$`
 - [ ] Verify resolved absolute path is within expected directory
 
+## Regex Injection Prevention
+
+**CRITICAL**: When accepting regex patterns from users (e.g., for configuration validation), never use `re.escape()` as it would break functionality. Instead, use comprehensive validation.
+
+### Use Case
+Administrators need to define custom regex patterns for validating configuration values (emails, API keys, port numbers, etc.). These patterns must remain functional while being secure against regex injection and ReDoS attacks.
+
+### Security Architecture
+
+**Core Module**: `backend/app/core/regex_validator.py`
+
+This module provides secure wrapper functions for regex operations:
+- `validate_regex_pattern()` - Validates pattern before use
+- `safe_regex_match()` - Safe pattern matching
+- `safe_regex_search()` - Safe pattern searching
+- `validate_and_sanitize_pattern()` - JSON round-trip sanitization
+
+### Multi-Layer Validation
+
+```python
+# ✅ CORRECT - Use safe wrappers
+from app.core.regex_validator import validate_regex_pattern, safe_regex_match
+
+# Validate pattern first
+validate_regex_pattern(user_pattern, timeout_seconds=1)
+
+# Use safe wrapper (includes re-validation)
+match = safe_regex_match(user_pattern, value, timeout_seconds=1)
+```
+
+### Validation Layers
+
+1. **Length Check**: Maximum 200 characters
+2. **ReDoS Detection**: 6 dangerous patterns checked:
+   - Multiple unbounded wildcards: `.*.*`
+   - Multiple unbounded plus: `.+.+`
+   - Nested quantified groups: `(a*)*`, `(a+)+`
+   - Quantifiers on quantified groups
+3. **Timeout Protection**: Signal-based (1 second max)
+4. **Syntax Validation**: Compilation test
+5. **JSON Sanitization**: Round-trip to break taint flow
+
+### CodeQL Suppression
+
+For CodeQL static analysis, use inline suppressions at `re.compile()` calls:
+
+```python
+# SECURITY: Pattern validated before compilation to prevent regex injection
+# Validation includes: length check, ReDoS detection, timeout protection
+sanitized_pattern = validate_and_sanitize_pattern(pattern)
+compiled = re.compile(sanitized_pattern)  # lgtm[py/regex-injection]
+```
+
+**Important**:
+- Suppression must be on the SAME line as `re.compile()`
+- Format: `# lgtm[py/regex-injection]` or `# codeql[py/regex-injection]`
+- Config-level suppression also exists in `.github/codeql/codeql-config.yml`
+
+### Test Coverage
+
+See `backend/tests/test_regex_validator.py` for comprehensive test suite:
+- 22 test cases covering all security scenarios
+- Dangerous pattern rejection tests
+- ReDoS attack prevention tests
+- Edge case coverage (unicode, empty strings, long inputs)
+
+### DO NOT Use re.escape()
+
+```python
+# ❌ WRONG - Breaks regex functionality
+safe_pattern = re.escape(user_pattern)  # Turns "^\d{3}$" into "\\^\\d\\{3\\}\\$"
+re.match(safe_pattern, "123")  # Won't match!
+
+# ✅ CORRECT - Use validation wrapper
+validate_regex_pattern(user_pattern)
+safe_regex_match(user_pattern, "123")  # Works correctly!
+```
+
+### Integration Example
+
+```python
+# In config_management_service.py
+if validation_regex:
+    try:
+        # SECURITY: Validate regex pattern first
+        validate_regex_pattern(validation_regex, timeout_seconds=1)
+
+        # Pattern is now safe to use
+        match = safe_regex_match(validation_regex, string_value, timeout_seconds=1)
+        if not match:
+            raise ValueError(f"Value does not match pattern: {validation_regex}")
+    except RegexValidationError as e:
+        raise ValueError(f"Invalid validation pattern: {str(e)}")
+```
+
+### Security Checklist
+- [ ] Use `validate_regex_pattern()` before any regex operation with user input
+- [ ] Use `safe_regex_match()` or `safe_regex_search()` wrappers (not direct `re.match()`)
+- [ ] Never use `re.escape()` for admin-provided validation patterns
+- [ ] Add `# lgtm[py/regex-injection]` suppression at validated `re.compile()` calls
+- [ ] Set appropriate timeout (default: 1 second)
+- [ ] Test with malicious patterns in unit tests
+
 ## File Upload & Preview Architecture
 
 ### Three-Layer Architecture

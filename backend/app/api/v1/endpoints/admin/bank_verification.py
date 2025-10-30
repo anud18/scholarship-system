@@ -420,7 +420,9 @@ async def manual_review_bank_info(
         }
 
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        # SECURITY: Log exception details server-side only, return generic message to user
+        logger.warning(f"ValueError in manual bank review: {type(e).__name__}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到指定的申請或資料格式不正確")
     except Exception as e:
         # SECURITY: Log exception type only (prevent stack trace exposure)
         logger.error(f"Unexpected error in manual bank review: {type(e).__name__}")
