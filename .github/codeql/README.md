@@ -7,62 +7,81 @@ This directory contains CodeQL configuration files for security analysis of the 
 ### `codeql-config.yml`
 
 Main CodeQL configuration that defines:
-- Query filters to suppress false positives
+- Query packs to run (Python and JavaScript)
 - Paths to analyze
 - Security justifications for suppressed alerts
 
-## Inline Suppression Comments
+## Alert Suppression
 
-This project uses inline CodeQL suppression comments in the code:
+**IMPORTANT:** CodeQL does **NOT** support inline comment suppressions (e.g., `# codeql[...]` or `# lgtm[...]`) for Python.
 
-```python
-# codeql[query-id]: Justification here
+The correct method for suppressing false positives is using the **filter-sarif GitHub Action** in the CodeQL workflow.
+
+### How Suppressions Work
+
+Alerts are suppressed in `.github/workflows/codeql.yml` using the `filter-sarif` action:
+
+```yaml
+- name: Filter Python SARIF (Remove False Positives)
+  if: matrix.language == 'python'
+  uses: advanced-security/filter-sarif@v1
+  with:
+    patterns: |
+      -backend/app/core/regex_validator.py:py/regex-injection
+      -backend/app/api/v1/endpoints/admin/bank_verification.py:py/stack-trace-exposure
+    input: sarif-results/python.sarif
+    output: sarif-results/python.sarif
 ```
 
-These comments are placed **immediately before** the line that triggers the alert.
+### Currently Suppressed Alerts
 
-### Suppressed Alerts with Inline Comments
+#### 1. Regex Injection (py/regex-injection)
 
-#### 1. Stack Trace Exposure (py/stack-trace-exposure)
+**Location:** `backend/app/core/regex_validator.py`
+
+**Why Suppressed:** False positive. The regex_validator.py module implements comprehensive validation:
+
+- Pattern length check (max 200 chars)
+- Dangerous ReDoS pattern detection (6 patterns checked)
+- Regex syntax compilation test with timeout
+- Signal-based timeout protection (1 second max)
+- JSON round-trip sanitization to break taint flow
+- Comprehensive test coverage (22 test cases)
+
+This is a legitimate use case where administrators define regex patterns for configuration validation (emails, API keys, etc.). Using `re.escape()` would break functionality by converting patterns to literal strings.
+
+#### 2. Stack Trace Exposure (py/stack-trace-exposure)
 
 **Location:** `backend/app/api/v1/endpoints/admin/bank_verification.py:195`
 
-**Suppression Comment:**
-```python
-# codeql[py/stack-trace-exposure]: Multiple layers of sanitization applied:
-# 1. sanitize_error_string() - Pattern detection and removal
-# 2. sanitize_dict() - Recursive sanitization of nested structures
-# 3. JSON round-trip - Creates new objects, breaks taint flow
-# 4. Pydantic field_validator - Schema-level validation
-# 5. Exception handlers - Generic messages only
+**Why Suppressed:** False positive. Five layers of defense prevent stack traces from reaching API responses:
+
+1. `sanitize_error_string()` detects and removes stack trace patterns
+2. `sanitize_dict()` recursively sanitizes nested structures
+3. JSON round-trip creates new objects, breaks taint flow
+4. Pydantic field validators check for stack traces at serialization
+5. Exception handlers return only generic user-friendly messages
+
+No stack trace information can reach the API response due to these comprehensive defense-in-depth measures.
+
+## Adding New Suppressions
+
+To suppress a new false positive alert:
+
+1. **Add pattern to workflow:** Edit `.github/workflows/codeql.yml` line 116
+2. **Document justification:** Add explanation to `codeql-config.yml`
+3. **Test thoroughly:** Verify the alert is truly a false positive
+4. **Commit changes:** Push to trigger new CodeQL scan
+
+**Pattern format:**
+```
+-<file-path>:<query-id>
 ```
 
-**Why Suppressed:** False positive. Five layers of defense prevent stack traces from reaching API responses.
-
-#### 2. Regex Injection (py/regex-injection)
-
-**Locations:**
-- `backend/app/core/regex_validator.py:127`
-- `backend/app/core/regex_validator.py:199`
-- `backend/app/core/regex_validator.py:246`
-
-**Suppression Comment:**
-```python
-# codeql[py/regex-injection]: Comprehensive validation applied before use:
-# 1. Length check (max 200 characters)
-# 2. ReDoS pattern detection (6 dangerous patterns checked)
-# 3. Regex syntax compilation test
-# 4. Signal-based timeout protection (1 second max)
-# 5. JSON round-trip creates new string object
+**Example:**
+```yaml
+-backend/app/services/example.py:py/some-query
 ```
-
-**Why Suppressed:** False positive. Comprehensive validation includes length checks, ReDoS detection, syntax validation, timeout protection, and JSON sanitization.
-
-## How CodeQL Recognizes This Configuration
-
-1. **Inline Comments:** CodeQL automatically recognizes `# codeql[query-id]` comments and marks alerts as suppressed
-2. **Config File:** When CodeQL runs via GitHub Actions, it reads `.github/codeql/codeql-config.yml`
-3. **SARIF Output:** Suppressed alerts are marked with `suppressions.kind: ["InSource"]`
 
 ## Security Review
 
@@ -91,5 +110,5 @@ These suppressions were reviewed and approved based on:
 ## References
 
 - [CodeQL Documentation](https://codeql.github.com/docs/)
-- [CodeQL Inline Suppressions](https://github.com/github/codeql/discussions/10940)
+- [filter-sarif GitHub Action](https://github.com/advanced-security/filter-sarif)
 - [Alert Suppression Guide](https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/managing-code-scanning-alerts-for-your-repository)
