@@ -104,11 +104,30 @@ jobs:
       uses: github/codeql-action/analyze@v4
       with:
         category: "/language:${{matrix.language}}"
+        output: sarif-results
+        upload: false  # Don't upload yet - filter first for Python
+
+    # Filter false positives from Python SARIF before uploading
+    - name: Filter Python SARIF (Remove False Positives)
+      if: matrix.language == 'python'
+      uses: advanced-security/filter-sarif@v1
+      with:
+        patterns: |
+          -backend/app/core/regex_validator.py:py/regex-injection
+        input: sarif-results/python.sarif
+        output: sarif-results/python.sarif
+
+    # Upload filtered SARIF to Code Scanning
+    - name: Upload SARIF to Code Scanning
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: sarif-results/${{ matrix.language }}.sarif
+        category: "/language:${{matrix.language}}"
 
     - name: Upload SARIF as artifact for PDF generation
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: codeql-sarif-${{ matrix.language }}
-        path: ${{ steps.analyze.outputs.sarif-output }}
+        path: sarif-results/${{ matrix.language }}.sarif
         retention-days: 30

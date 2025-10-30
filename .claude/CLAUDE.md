@@ -536,19 +536,39 @@ match = safe_regex_match(user_pattern, value, timeout_seconds=1)
 
 ### CodeQL Suppression
 
-For CodeQL static analysis, use inline suppressions at `re.compile()` calls:
+**IMPORTANT**: CodeQL does NOT support inline comment suppressions (e.g., `# lgtm[...]`). The correct way to suppress false positives is using the `filter-sarif` GitHub Action.
 
-```python
-# SECURITY: Pattern validated before compilation to prevent regex injection
-# Validation includes: length check, ReDoS detection, timeout protection
-sanitized_pattern = validate_and_sanitize_pattern(pattern)
-compiled = re.compile(sanitized_pattern)  # lgtm[py/regex-injection]
+**Implementation** (`.github/workflows/codeql.yml`):
+
+```yaml
+- name: Perform CodeQL Analysis
+  uses: github/codeql-action/analyze@v4
+  with:
+    output: sarif-results
+    upload: false  # Filter before upload
+
+- name: Filter Python SARIF (Remove False Positives)
+  if: matrix.language == 'python'
+  uses: advanced-security/filter-sarif@v1
+  with:
+    patterns: |
+      -backend/app/core/regex_validator.py:py/regex-injection
+    input: sarif-results/python.sarif
+    output: sarif-results/python.sarif
+
+- name: Upload SARIF to Code Scanning
+  uses: github/codeql-action/upload-sarif@v4
+  with:
+    sarif_file: sarif-results/${{ matrix.language }}.sarif
 ```
 
-**Important**:
-- Suppression must be on the SAME line as `re.compile()`
-- Format: `# lgtm[py/regex-injection]` or `# codeql[py/regex-injection]`
-- Config-level suppression also exists in `.github/codeql/codeql-config.yml`
+**Pattern Syntax**:
+- `-<file-path>:<query-id>` - Exclude specific query from specific file
+- `+<file-path>:<query-id>` - Include only this query for this file
+
+**Documentation**:
+- All suppression justifications are in `.github/codeql/codeql-config.yml`
+- The filter-sarif action is the official supported method
 
 ### Test Coverage
 
@@ -591,7 +611,7 @@ if validation_regex:
 - [ ] Use `validate_regex_pattern()` before any regex operation with user input
 - [ ] Use `safe_regex_match()` or `safe_regex_search()` wrappers (not direct `re.match()`)
 - [ ] Never use `re.escape()` for admin-provided validation patterns
-- [ ] Add `# lgtm[py/regex-injection]` suppression at validated `re.compile()` calls
+- [ ] Suppress false positives via `filter-sarif` in CodeQL workflow (not inline comments)
 - [ ] Set appropriate timeout (default: 1 second)
 - [ ] Test with malicious patterns in unit tests
 

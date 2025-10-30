@@ -113,11 +113,11 @@ def validate_regex_pattern(pattern: str, test_string: Optional[str] = None, time
             signal.alarm(timeout_seconds)
 
         try:
-            # SECURITY: Pattern validated before compilation to prevent regex injection
-            # Validation includes: length check (max 200 chars), ReDoS pattern detection
-            # (6 dangerous patterns), timeout protection (1 sec), and JSON sanitization
+            # SECURITY: Pattern validated before compilation
+            # Comprehensive validation includes length check, ReDoS detection,
+            # timeout protection, and JSON sanitization. See module docstring.
             sanitized_pattern = validate_and_sanitize_pattern(pattern)
-            compiled = re.compile(sanitized_pattern)  # lgtm[py/regex-injection]
+            compiled = re.compile(sanitized_pattern)
         finally:
             # Cancel alarm
             if hasattr(signal, "SIGALRM"):
@@ -182,10 +182,10 @@ def safe_regex_match(pattern: str, string: str, flags: int = 0, timeout_seconds:
             signal.alarm(timeout_seconds)
 
         try:
-            # SECURITY: Pattern validated by validate_regex_pattern() before compilation
-            # Includes: length check, ReDoS detection, timeout protection, JSON sanitization
+            # SECURITY: Pattern validated by validate_regex_pattern() before use
+            # See validate_regex_pattern() for comprehensive security checks
             sanitized_pattern = validate_and_sanitize_pattern(pattern)
-            compiled = re.compile(sanitized_pattern, flags)  # lgtm[py/regex-injection]
+            compiled = re.compile(sanitized_pattern, flags)
             result = compiled.match(string)
             return result
         finally:
@@ -225,10 +225,10 @@ def safe_regex_search(pattern: str, string: str, flags: int = 0, timeout_seconds
             signal.alarm(timeout_seconds)
 
         try:
-            # SECURITY: Pattern validated by validate_regex_pattern() before compilation
-            # Includes: length check, ReDoS detection, timeout protection, JSON sanitization
+            # SECURITY: Pattern validated by validate_regex_pattern() before use
+            # See validate_regex_pattern() for comprehensive security checks
             sanitized_pattern = validate_and_sanitize_pattern(pattern)
-            compiled = re.compile(sanitized_pattern, flags)  # lgtm[py/regex-injection]
+            compiled = re.compile(sanitized_pattern, flags)
             result = compiled.search(string)
             return result
         finally:

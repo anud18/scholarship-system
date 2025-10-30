@@ -45,42 +45,32 @@ query-filters:
   # comprehensive defense-in-depth measures. The warning is a limitation
   # of static analysis not recognizing our custom sanitization pipeline.
 
-  # Regex injection in regex validator
-  - exclude:
-      id: py/regex-injection
-      where: "backend/app/core/regex_validator.py"
-
+  # NOTE: File-specific query exclusions are handled via filter-sarif action
+  # in the CodeQL workflow (.github/workflows/codeql.yml), not here.
+  # Query-filters do not support "where" clauses for file paths.
+  #
+  # SUPPRESSED ALERTS (via filter-sarif):
+  #
+  # 1. py/regex-injection in backend/app/core/regex_validator.py
+  #
   # JUSTIFICATION FOR SUPPRESSION:
-  # This is a false positive. The code implements comprehensive validation:
+  # This is a false positive. The regex_validator.py module implements
+  # comprehensive validation specifically designed to prevent regex injection:
   #
-  # 1. validate_and_sanitize_pattern() function (lines 44-72):
-  #    - Pattern length check (max 200 chars)
-  #    - Dangerous ReDoS pattern detection (6 patterns checked)
-  #    - Regex syntax compilation test
-  #    - Signal-based timeout protection (1 second)
-  #    - JSON round-trip to break taint flow
-  #    - Explicit type casting
+  # Security Measures:
+  #   - Pattern length check (max 200 chars)
+  #   - Dangerous ReDoS pattern detection (6 patterns checked)
+  #   - Regex syntax compilation test with timeout
+  #   - Signal-based timeout protection (1 second max)
+  #   - JSON round-trip sanitization to break taint flow
+  #   - Comprehensive test coverage (22 test cases)
   #
-  # 2. DANGEROUS_PATTERNS detection (lines 34-41):
-  #    - Multiple unbounded wildcards (.*..*)
-  #    - Multiple unbounded plus quantifiers (.+..+)
-  #    - Nested quantified groups
-  #    - Quantifiers on quantified groups
+  # This is a legitimate use case where administrators define regex patterns
+  # for configuration validation (emails, API keys, etc.). Using re.escape()
+  # would break functionality by converting patterns to literal strings.
   #
-  # 3. Timeout protection (throughout):
-  #    - SIGALRM signal handlers
-  #    - Maximum 1 second for compilation
-  #    - Maximum 1 second for execution
-  #
-  # 4. Test coverage (test_regex_validator.py):
-  #    - 22 test cases including security scenarios
-  #    - Tests for dangerous patterns
-  #    - Tests for ReDoS attacks
-  #    - Edge case coverage
-  #
-  # The patterns are thoroughly validated before use. JSON round-trip
-  # creates new string objects, breaking taint tracking. Static analysis
-  # cannot recognize our multi-layer validation as a proper sanitizer.
+  # Static analysis cannot recognize our multi-layer validation as proper
+  # sanitization, hence the false positive. Suppression is appropriate.
 
 # Paths to analyze
 paths:
