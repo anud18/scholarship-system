@@ -465,15 +465,10 @@ jobs:
 
           RELEASE_NOTES_EOF
 
-          # Add file statistics (excluding development-only files)
+          # Add file statistics placeholder (will be calculated after squashing)
           echo "" >> /tmp/release-notes.md
           echo "\`\`\`" >> /tmp/release-notes.md
-          git diff --stat origin/main..HEAD -- \
-            ':!.github/workflows' \
-            ':!.github/production-workflows-examples' \
-            ':!.claude' \
-            ':!mock-student-api' \
-            | tail -1 >> /tmp/release-notes.md || echo "No file changes" >> /tmp/release-notes.md
+          echo "PLACEHOLDER_FILE_STATS" >> /tmp/release-notes.md
           echo "\`\`\`" >> /tmp/release-notes.md
 
           # Add removed development files
@@ -556,6 +551,55 @@ jobs:
           # Show commit info
           echo "::group::Squashed Commit Details"
           git log -1 --stat
+          echo "::endgroup::"
+
+          echo "::endgroup::"
+
+      - name: Calculate actual file changes
+        run: |
+          echo "::group::Calculate actual file statistics"
+
+          # Get production repo's latest commit (already fetched in squash step)
+          PROD_LATEST=$(git rev-parse prod-repo/main 2>/dev/null || echo "")
+
+          if [ -n "$PROD_LATEST" ]; then
+            # Calculate diff between production's latest and current HEAD (squashed commit)
+            # Exclude development-only files
+            FILE_STATS=$(git diff --stat $PROD_LATEST..HEAD -- \
+              ':!.github/workflows' \
+              ':!.github/production-workflows-examples' \
+              ':!.claude' \
+              ':!mock-student-api' \
+              | tail -1)
+
+            # Handle case where there are no changes
+            if [ -z "$FILE_STATS" ] || [ "$FILE_STATS" = "" ]; then
+              FILE_STATS="No file changes"
+            fi
+
+            echo "::notice::File statistics: $FILE_STATS"
+          else
+            # First sync - compare to empty tree
+            FILE_STATS=$(git diff --stat $(git hash-object -t tree /dev/null)..HEAD -- \
+              ':!.github/workflows' \
+              ':!.github/production-workflows-examples' \
+              ':!.claude' \
+              ':!mock-student-api' \
+              | tail -1 || echo "Initial commit")
+            echo "::notice::First sync - file statistics: $FILE_STATS"
+          fi
+
+          # Update release notes with actual file statistics
+          # Use a different sed delimiter to avoid issues with special characters
+          FILE_STATS_ESCAPED=$(echo "$FILE_STATS" | sed 's/[&/\]/\\&/g')
+          sed -i "s|PLACEHOLDER_FILE_STATS|$FILE_STATS_ESCAPED|" /tmp/release-notes.md
+
+          # Regenerate final release notes with environment variables expanded
+          envsubst < /tmp/release-notes.md > /tmp/release-notes-final.md
+
+          echo "::notice::✅ Release notes updated with actual file statistics"
+          echo "::group::Updated Release Notes Preview"
+          cat /tmp/release-notes-final.md
           echo "::endgroup::"
 
           echo "::endgroup::"
