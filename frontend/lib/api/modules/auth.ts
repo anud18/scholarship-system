@@ -12,7 +12,8 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse, User } from '../../api.legacy';
+import type { ApiResponse } from '../types';
+import type { User } from '../types';
 
 export function createAuthApi() {
   return {

@@ -107,6 +107,17 @@ jobs:
         output: sarif-results
         upload: false  # Don't upload yet - filter first for Python
 
+    # Map matrix language name to SARIF filename
+    # CodeQL generates simplified filenames: javascript-typescript -> javascript.sarif
+    - name: Map language name to SARIF filename
+      id: sarif-lang
+      run: |
+        if [ "${{ matrix.language }}" = "javascript-typescript" ]; then
+          echo "name=javascript" >> $GITHUB_OUTPUT
+        else
+          echo "name=${{ matrix.language }}" >> $GITHUB_OUTPUT
+        fi
+
     # Filter false positives from Python SARIF before uploading
     - name: Filter Python SARIF (Remove False Positives)
       if: matrix.language == 'python'
@@ -115,14 +126,14 @@ jobs:
         patterns: |
           -backend/app/core/regex_validator.py:py/regex-injection
           -backend/app/api/v1/endpoints/admin/bank_verification.py:py/stack-trace-exposure
-        input: sarif-results/python.sarif
-        output: sarif-results/python.sarif
+        input: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
+        output: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
 
     # Upload filtered SARIF to Code Scanning
     - name: Upload SARIF to Code Scanning
       uses: github/codeql-action/upload-sarif@v4
       with:
-        sarif_file: sarif-results/${{ matrix.language }}.sarif
+        sarif_file: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
         category: "/language:${{matrix.language}}"
 
     - name: Upload SARIF as artifact for PDF generation
@@ -130,5 +141,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: codeql-sarif-${{ matrix.language }}
-        path: sarif-results/${{ matrix.language }}.sarif
+        path: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
         retention-days: 30

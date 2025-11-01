@@ -5,7 +5,7 @@
  * used throughout the application, maintaining backward compatibility.
  */
 
-import type { ApiResponse } from '../api.legacy';
+import type { ApiResponse } from './types';
 
 /**
  * openapi-fetch response type

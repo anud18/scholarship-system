@@ -12,7 +12,8 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse, User, Student, StudentInfoResponse } from '../../api.legacy';
+import type { ApiResponse } from '../types';
+import type { User, Student, StudentInfoResponse } from '../types';
 
 // Import types from main api.ts for now
 // TODO: Move these to a shared types file

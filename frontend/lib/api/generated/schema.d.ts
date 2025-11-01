@@ -2477,50 +2477,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarship-management/quota/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Quota Status
-         * @description DEPRECATED: Use /api/v1/quota-dashboard/overview or /detailed endpoints instead
-         *
-         *     This endpoint used removed ScholarshipMainType enum and ScholarshipQuotaService.
-         */
-        get: operations["get_quota_status_api_v1_scholarship_management_quota_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/scholarship-management/quota/process-by-priority": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Process Applications By Priority
-         * @description DEPRECATED: Priority processing logic moved to college review workflow
-         *
-         *     This endpoint used removed ScholarshipQuotaService.
-         */
-        post: operations["process_applications_by_priority_api_v1_scholarship_management_quota_process_by_priority_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/scholarship-management/renewals/process-priority": {
         parameters: {
             query?: never;
@@ -2639,46 +2595,6 @@ export interface paths {
         get: operations["get_detailed_quota_status_api_v1_quota_dashboard_detailed__scholarship_type_id___sub_type__get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/quota-dashboard/trends": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Quota Trends
-         * @description TODO: This endpoint needs to be refactored to use new QuotaService
-         */
-        get: operations["get_quota_trends_api_v1_quota_dashboard_trends_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/quota-dashboard/adjust": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Adjust Quota Limits
-         * @description TODO: Quota adjustment should be done through ScholarshipConfiguration management endpoints
-         */
-        post: operations["adjust_quota_limits_api_v1_quota_dashboard_adjust_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7262,15 +7178,6 @@ export interface components {
             /** Student Id */
             student_id?: string | null;
         };
-        /** Body_process_applications_by_priority_api_v1_scholarship_management_quota_process_by_priority_post */
-        Body_process_applications_by_priority_api_v1_scholarship_management_quota_process_by_priority_post: {
-            /** Main Type */
-            main_type: string;
-            /** Sub Type */
-            sub_type: string;
-            /** Semester */
-            semester: string;
-        };
         /** Body_simulate_priority_processing_api_v1_scholarship_management_dev_simulate_priority_processing_post */
         Body_simulate_priority_processing_api_v1_scholarship_management_dev_simulate_priority_processing_post: {
             /** Academic Year */
@@ -8200,6 +8107,12 @@ export interface components {
              * @description 指定排名ID（若有多個排名時使用）
              */
             ranking_id?: number | null;
+            /**
+             * Auto Export Excel
+             * @description 是否自動產生Excel檔案並上傳到MinIO
+             * @default true
+             */
+            auto_export_excel: boolean;
         };
         /**
          * RosterCycle
@@ -13600,75 +13513,6 @@ export interface operations {
             };
         };
     };
-    get_quota_status_api_v1_scholarship_management_quota_status_get: {
-        parameters: {
-            query: {
-                /** @description Main scholarship type */
-                main_type: string;
-                /** @description Sub scholarship type */
-                sub_type: string;
-                /** @description Semester */
-                semester: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    process_applications_by_priority_api_v1_scholarship_management_quota_process_by_priority_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Body_process_applications_by_priority_api_v1_scholarship_management_quota_process_by_priority_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     process_renewal_applications_api_v1_scholarship_management_renewals_process_priority_post: {
         parameters: {
             query?: never;
@@ -13854,46 +13698,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_quota_trends_api_v1_quota_dashboard_trends_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    adjust_quota_limits_api_v1_quota_dashboard_adjust_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };

@@ -178,50 +178,6 @@ async def get_applications_by_priority(
         sync_session.close()
 
 
-# Quota Management Endpoints - DEPRECATED
-
-
-@router.get("/quota/status")
-async def get_quota_status(
-    main_type: str = Query(..., description="Main scholarship type"),
-    sub_type: str = Query(..., description="Sub scholarship type"),
-    semester: str = Query(..., description="Semester"),
-    current_user: User = Depends(require_staff),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    DEPRECATED: Use /api/v1/quota-dashboard/overview or /detailed endpoints instead
-
-    This endpoint used removed ScholarshipMainType enum and ScholarshipQuotaService.
-    """
-    raise HTTPException(
-        status_code=410,
-        detail="This endpoint is deprecated. Use /api/v1/quota-dashboard/overview "
-        "or /api/v1/quota-dashboard/detailed/{scholarship_type_id}/{sub_type} instead. "
-        "Quota management now uses configuration-driven approach via ScholarshipConfiguration.",
-    )
-
-
-@router.post("/quota/process-by-priority")
-async def process_applications_by_priority(
-    main_type: str = Body(...),
-    sub_type: str = Body(...),
-    semester: str = Body(...),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    DEPRECATED: Priority processing logic moved to college review workflow
-
-    This endpoint used removed ScholarshipQuotaService.
-    """
-    raise HTTPException(
-        status_code=410,
-        detail="This endpoint is deprecated. Priority processing is now handled "
-        "through the college review workflow (/api/v1/college-review/ranking endpoints).",
-    )
-
-
 # Renewal Processing Endpoints
 
 

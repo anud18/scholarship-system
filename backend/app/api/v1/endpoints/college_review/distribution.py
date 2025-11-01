@@ -179,12 +179,56 @@ async def execute_matrix_distribution(
         )
 
     except ValueError as e:
-        logger.warning(f"Invalid matrix distribution request: {str(e)}")
+        # Validation errors (missing data, invalid parameters, configuration errors)
+        logger.warning(f"Invalid matrix distribution request for ranking {ranking_id}: {str(e)}")
+
+        # Log failed attempt in audit log
+        audit_log = AuditLog.create_log(
+            user_id=current_user.id,
+            action=AuditAction.execute_distribution.value,
+            resource_type="distribution",
+            resource_id=str(ranking_id),
+            description="Failed to execute matrix distribution: Validation error",
+            new_values={"error": str(e)},
+            ip_address=request.client.host if request and request.client else None,
+            user_agent=request.headers.get("user-agent") if request else None,
+            status="failure",
+        )
+        db.add(audit_log)
+        await db.commit()
+
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     except HTTPException:
+        # Re-raise existing HTTPExceptions (from permission checks, etc.)
         raise
+
     except Exception as e:
-        logger.error(f"Error executing matrix distribution: {str(e)}")
+        # Unexpected errors (database errors, transaction failures, etc.)
+        logger.error(
+            f"Error executing matrix distribution for ranking {ranking_id}: {str(e)}",
+            exc_info=True,
+            extra={"ranking_id": ranking_id, "user_id": current_user.id},
+        )
+
+        # Log failed attempt in audit log
+        try:
+            audit_log = AuditLog.create_log(
+                user_id=current_user.id,
+                action=AuditAction.execute_distribution.value,
+                resource_type="distribution",
+                resource_id=str(ranking_id),
+                description="Failed to execute matrix distribution: System error",
+                new_values={"error_type": type(e).__name__, "error": str(e)},
+                ip_address=request.client.host if request and request.client else None,
+                user_agent=request.headers.get("user-agent") if request else None,
+                status="failure",
+            )
+            db.add(audit_log)
+            await db.commit()
+        except Exception as audit_error:
+            logger.error(f"Failed to log audit entry for failed distribution: {audit_error}")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to execute matrix distribution: {str(e)}"
         )

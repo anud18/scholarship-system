@@ -12,14 +12,6 @@ from app.models.system_setting import SendingType
 T = TypeVar("T")
 
 
-class MessageResponse(BaseModel):
-    """Standard message response"""
-
-    success: bool = True
-    message: str
-    trace_id: Optional[str] = None
-
-
 class ApiResponse(BaseModel, Generic[T]):
     """Standard API response format"""
 

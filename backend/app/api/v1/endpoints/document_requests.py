@@ -85,14 +85,16 @@ async def create_document_request(
         from app.services.email_automation_service import email_automation_service
 
         # Get student email from application
-        stmt_student = select(Application).options(joinedload(Application.user)).where(Application.id == application_id)
+        stmt_student = (
+            select(Application).options(joinedload(Application.student)).where(Application.id == application_id)
+        )
         result_student = await db.execute(stmt_student)
         app_with_user = result_student.scalar_one_or_none()
 
-        if app_with_user and app_with_user.user:
+        if app_with_user and app_with_user.student:
             student_data = app_with_user.student_data or {}
-            student_email = student_data.get("email") or app_with_user.user.email
-            student_name = student_data.get("name") or app_with_user.user.name
+            student_email = student_data.get("email") or app_with_user.student.email
+            student_name = student_data.get("name") or app_with_user.student.name
 
             await email_automation_service.trigger_supplement_requested(
                 db=db,

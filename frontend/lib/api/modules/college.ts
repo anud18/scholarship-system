@@ -13,7 +13,7 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse } from '../../api.legacy';
+import type { ApiResponse } from '../types';
 import type { components as SchemaComponents } from '../generated/schema';
 
 type CreateRankingRequest =

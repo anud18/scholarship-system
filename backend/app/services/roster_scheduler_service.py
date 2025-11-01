@@ -265,11 +265,41 @@ class RosterSchedulerService:
                     force_regenerate=force_regenerate,  # 使用參數而非硬編碼
                 )
 
+                # Auto-export Excel for scheduled rosters
+                excel_export_result = None
+                try:
+                    from app.services.excel_export_service import ExcelExportService
+
+                    export_service = ExcelExportService()
+                    excel_export_result = export_service.export_roster_to_excel(
+                        roster=roster,
+                        template_name="STD_UP_MIXLISTA",
+                        include_header=True,
+                        include_statistics=True,
+                        include_excluded=False,
+                    )
+                    db.commit()  # Commit to save minio_object_name
+                    logger.info(
+                        f"Excel file automatically exported for scheduled roster {roster.roster_code}: "
+                        f"{excel_export_result.get('minio_object_name', 'N/A')}"
+                    )
+                except Exception as export_error:
+                    logger.error(
+                        f"Auto-export failed for scheduled roster {roster.roster_code}: {export_error}", exc_info=True
+                    )
+                    # Don't fail roster generation if export fails
+                    excel_export_result = {"error": str(export_error)}
+
+                message = f"Successfully created roster {roster.roster_code}"
+                if excel_export_result and "error" not in excel_export_result:
+                    message += " with Excel file"
+
                 return {
                     "success": True,
                     "roster_id": roster.id,
                     "roster_code": roster.roster_code,
-                    "message": f"Successfully created roster {roster.roster_code}",
+                    "message": message,
+                    "excel_export": excel_export_result,
                 }
 
         except Exception as e:

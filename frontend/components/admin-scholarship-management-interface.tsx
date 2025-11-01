@@ -44,7 +44,6 @@ import {
   Download,
   FileSpreadsheet,
 } from "lucide-react";
-import { WhitelistManagement } from "@/components/whitelist-management";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ApplicationFieldForm } from "@/components/application-field-form";
 import { ApplicationDocumentForm } from "@/components/application-document-form";

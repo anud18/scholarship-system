@@ -1080,27 +1080,7 @@ class EmailService:
             **metadata,
         )
 
-    # Legacy methods - kept for backward compatibility but deprecated
-    async def send_to_college_reviewers(self, application, db: Optional[AsyncSession] = None):
-        """DEPRECATED: Use send_college_review_notification instead"""
-        if db:
-            application_data = {
-                "id": getattr(application, "id", None),
-                "app_id": application.app_id,
-                "student_name": getattr(application, "student_name", ""),
-                "scholarship_type": getattr(application, "scholarship_type", ""),
-                "submit_date": application.submitted_at.strftime("%Y-%m-%d")
-                if getattr(application, "submitted_at", None)
-                else "",
-                "professor_name": getattr(application, "professor_name", ""),
-                "professor_recommendation": "",
-                "college_name": getattr(application, "college_name", ""),
-                "review_deadline": getattr(application, "review_deadline", ""),
-                "scholarship_type_id": getattr(application, "scholarship_type_id", None),
-                "college_emails": ["mock_college@nycu.edu.tw"],
-            }
-            await self.send_college_review_notification(db, application_data)
-
+    # Legacy method - kept for backward compatibility
     async def send_to_professor(self, application, db: Optional[AsyncSession] = None):
         """DEPRECATED: Use send_professor_review_notification instead"""
         if db:
