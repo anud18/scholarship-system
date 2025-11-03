@@ -41,11 +41,13 @@ jobs:
       - name: Download SARIF artifacts
         uses: dawidd6/action-download-artifact@v6
         with:
+          github_token: ${{ github.token }}
           run_id: ${{ steps.set-run-id.outputs.run_id }}
           name: codeql-sarif-.*
           name_is_regexp: true
           path: sarif-artifacts
           skip_unpack: false
+          if_no_artifact_found: warn
 
       - name: Setup Python
         uses: actions/setup-python@v5
