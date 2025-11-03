@@ -35,7 +35,7 @@ import {
   FileText,
   Eye,
 } from "lucide-react";
-import api, { ScholarshipType, ApplicationCreate } from "@/lib/api";
+import api, { ScholarshipType, ApplicationCreate, Application } from "@/lib/api";
 import { clsx } from "@/lib/utils";
 import { useApplications } from "@/hooks/use-applications";
 
@@ -44,6 +44,7 @@ interface ScholarshipApplicationStepProps {
   onComplete: () => void;
   locale: "zh" | "en";
   userId: number;
+  editingApplication?: Application | null;
 }
 
 export function ScholarshipApplicationStep({
@@ -51,6 +52,7 @@ export function ScholarshipApplicationStep({
   onComplete,
   locale,
   userId,
+  editingApplication,
 }: ScholarshipApplicationStepProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -75,6 +77,7 @@ export function ScholarshipApplicationStep({
     createApplication,
     uploadDocument,
     submitApplication: submitApplicationApi,
+    updateApplication,
   } = useApplications();
 
   const t = {
@@ -155,6 +158,72 @@ export function ScholarshipApplicationStep({
   useEffect(() => {
     calculateProgress();
   }, [selectedScholarship, selectedSubTypes, dynamicFormData, dynamicFileData]);
+
+  // Load editing application data
+  useEffect(() => {
+    if (editingApplication && eligibleScholarships.length > 0) {
+      // Find and set the scholarship
+      const scholarship = eligibleScholarships.find(
+        s => s.code === editingApplication.scholarship_type
+      );
+      if (scholarship) {
+        setSelectedScholarship(scholarship);
+      }
+
+      // Load sub-types
+      if (editingApplication.scholarship_subtype_list && editingApplication.scholarship_subtype_list.length > 0) {
+        const validSubTypes = editingApplication.scholarship_subtype_list.filter(
+          st => st !== "general"
+        );
+        setSelectedSubTypes(validSubTypes);
+      }
+
+      // Load form data
+      const formData = editingApplication.submitted_form_data || editingApplication.form_data || {};
+      if (formData.fields) {
+        const existingFormData: Record<string, any> = {};
+        Object.entries(formData.fields).forEach(([fieldId, fieldData]: [string, any]) => {
+          if (fieldData && typeof fieldData === "object" && "value" in fieldData) {
+            existingFormData[fieldId] = fieldData.value;
+          }
+        });
+        setDynamicFormData(existingFormData);
+      }
+
+      // Load file data
+      if (formData.documents) {
+        const existingFileData: Record<string, File[]> = {};
+        formData.documents.forEach((doc: any) => {
+          if (doc.document_id && doc.original_filename) {
+            const fileData = {
+              id: doc.file_id || doc.id,
+              filename: doc.filename || doc.original_filename,
+              original_filename: doc.original_filename,
+              file_size: doc.file_size,
+              mime_type: doc.mime_type,
+              file_type: doc.document_type,
+              file_path: doc.file_path,
+              download_url: doc.download_url,
+              is_verified: doc.is_verified,
+              uploaded_at: doc.upload_time,
+              name: doc.original_filename,
+              size: doc.file_size || 0,
+              originalSize: doc.file_size || 0,
+              type: doc.mime_type || "application/octet-stream",
+              isUploaded: true,
+            };
+            existingFileData[doc.document_id] = [fileData as any];
+          }
+        });
+        setDynamicFileData(existingFileData);
+      }
+
+      // Set agreed to terms
+      if (editingApplication.agree_terms) {
+        setAgreedToTerms(true);
+      }
+    }
+  }, [editingApplication, eligibleScholarships]);
 
   const loadEligibleScholarships = async () => {
     setLoading(true);
@@ -355,24 +424,41 @@ export function ScholarshipApplicationStep({
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
         scholarship_subtype_list: selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
-        agree_terms: true,
+        agree_terms: agreedToTerms,
         form_data: {
           fields: formFields,
           documents: documents,
         },
       };
 
-      const application = await createApplication(applicationData, true);
+      if (editingApplication && editingApplication.id) {
+        // Update existing draft
+        await updateApplication(editingApplication.id, applicationData);
 
-      if (application && application.id) {
-        // Upload files
+        // Upload new files only
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
-            await uploadDocument(application.id, file, docType);
+            if (!(file as any).isUploaded) {
+              await uploadDocument(editingApplication.id, file, docType);
+            }
           }
         }
 
         alert(text.draftSaved);
+      } else {
+        // Create new draft
+        const application = await createApplication(applicationData, true);
+
+        if (application && application.id) {
+          // Upload files
+          for (const [docType, files] of Object.entries(dynamicFileData)) {
+            for (const file of files) {
+              await uploadDocument(application.id, file, docType);
+            }
+          }
+
+          alert(text.draftSaved);
+        }
       }
     } catch (error: any) {
       alert(text.submitError + ": " + error.message);
@@ -411,28 +497,47 @@ export function ScholarshipApplicationStep({
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
         scholarship_subtype_list: selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
-        agree_terms: true,
+        agree_terms: agreedToTerms,
         form_data: {
           fields: formFields,
           documents: documents,
         },
       };
 
-      const application = await createApplication(applicationData, true);
+      let applicationId: number;
 
-      if (!application || !application.id) {
-        throw new Error("Failed to create application");
-      }
+      if (editingApplication && editingApplication.id) {
+        // Update existing draft
+        await updateApplication(editingApplication.id, applicationData);
+        applicationId = editingApplication.id;
 
-      // Upload files
-      for (const [docType, files] of Object.entries(dynamicFileData)) {
-        for (const file of files) {
-          await uploadDocument(application.id, file, docType);
+        // Upload new files only
+        for (const [docType, files] of Object.entries(dynamicFileData)) {
+          for (const file of files) {
+            if (!(file as any).isUploaded) {
+              await uploadDocument(applicationId, file, docType);
+            }
+          }
+        }
+      } else {
+        // Create new application
+        const application = await createApplication(applicationData, true);
+
+        if (!application || !application.id) {
+          throw new Error("Failed to create application");
+        }
+        applicationId = application.id;
+
+        // Upload files
+        for (const [docType, files] of Object.entries(dynamicFileData)) {
+          for (const file of files) {
+            await uploadDocument(applicationId, file, docType);
+          }
         }
       }
 
       // Submit application
-      await submitApplicationApi(application.id);
+      await submitApplicationApi(applicationId);
 
       alert(text.submitSuccess);
       onComplete();

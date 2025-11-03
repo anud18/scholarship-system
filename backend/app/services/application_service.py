@@ -1783,11 +1783,15 @@ class ApplicationService:
         self, application_id: int, current_user: User, reason: Optional[str] = None
     ) -> Application:
         """
-        Soft delete an application
+        Delete an application (hard delete for drafts, soft delete for submitted applications)
 
         Permission Control:
         - Students: Can only delete their own draft applications
         - Staff (professor/college/admin): Can delete any application (reason required)
+
+        Deletion Behavior:
+        - Draft applications: Permanently deleted from database (hard delete)
+        - Submitted applications: Status set to 'deleted' (soft delete)
 
         Args:
             application_id: ID of application to delete
@@ -1797,8 +1801,8 @@ class ApplicationService:
         Returns:
             Deleted application object
         """
-        # Get application
-        stmt = select(Application).where(Application.id == application_id)
+        # Get application with files relationship loaded
+        stmt = select(Application).options(selectinload(Application.files)).where(Application.id == application_id)
         result = await self.db.execute(stmt)
         application = result.scalar_one_or_none()
 
@@ -1823,16 +1827,48 @@ class ApplicationService:
         else:
             raise AuthorizationError("You don't have permission to delete applications")
 
-        # Perform soft delete
-        application.status = ApplicationStatus.deleted.value
-        application.deleted_at = datetime.now(timezone.utc)
-        application.deleted_by_id = current_user.id
-        application.deletion_reason = reason or "Student deleted draft application"
+        # Determine deletion type based on application status
+        is_draft = application.status == ApplicationStatus.draft.value
 
-        await self.db.commit()
-        await self.db.refresh(application)
+        if is_draft:
+            # Hard delete for draft applications
+            logger.info(f"Performing hard delete for draft application {application.app_id}")
 
-        return application
+            # Delete associated files from MinIO
+            deleted_files_count = 0
+            if application.files:
+                for app_file in application.files:
+                    if app_file.object_name:
+                        try:
+                            minio_service.delete_file(app_file.object_name)
+                            deleted_files_count += 1
+                            logger.info(f"Deleted file from MinIO: {app_file.object_name}")
+                        except Exception as e:
+                            logger.error(f"Failed to delete file {app_file.object_name} from MinIO: {e}")
+
+            logger.info(f"Deleted {deleted_files_count} files from MinIO for application {application.app_id}")
+
+            # Delete from database (cascade will delete related ApplicationFile records)
+            await self.db.delete(application)
+            await self.db.commit()
+
+            logger.info(f"Hard deleted draft application {application.app_id} from database")
+            return application
+
+        else:
+            # Soft delete for submitted applications
+            logger.info(f"Performing soft delete for submitted application {application.app_id}")
+
+            application.status = ApplicationStatus.deleted.value
+            application.deleted_at = datetime.now(timezone.utc)
+            application.deleted_by_id = current_user.id
+            application.deletion_reason = reason or "Application deleted"
+
+            await self.db.commit()
+            await self.db.refresh(application)
+
+            logger.info(f"Soft deleted application {application.app_id}")
+            return application
 
     async def restore_application(self, application_id: int, current_user: User) -> Application:
         """

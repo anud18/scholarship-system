@@ -113,6 +113,29 @@ export function DynamicApplicationForm({
 
       if (response.success && response.data) {
         setFormConfig(response.data);
+
+        // Auto-populate prefilled values for fixed fields
+        const prefillData: Record<string, any> = {};
+        response.data.fields.forEach((field) => {
+          if (field.prefill_value !== undefined &&
+              field.prefill_value !== null &&
+              field.prefill_value !== "") {
+            prefillData[field.field_name] = field.prefill_value;
+          }
+        });
+
+        // Merge with existing form data (existing data takes priority)
+        if (Object.keys(prefillData).length > 0) {
+          const mergedData = { ...prefillData, ...formData };
+          setFormData(mergedData);
+
+          // Notify parent component of prefilled values
+          Object.entries(prefillData).forEach(([fieldName, value]) => {
+            if (!(fieldName in formData)) {
+              onFieldChange?.(fieldName, value);
+            }
+          });
+        }
       } else {
         setError(
           locale === "zh"

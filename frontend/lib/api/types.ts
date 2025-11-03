@@ -186,6 +186,7 @@ export interface Application {
     config_name: string;
   };
   academic_year?: number;
+  semester?: string | null;
 }
 
 /**
