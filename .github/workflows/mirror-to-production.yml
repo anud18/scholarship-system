@@ -86,64 +86,22 @@ jobs:
         run: |
           echo "::group::Syncing from production repository"
 
-          # Add production repo as remote
+          # Add production repo as remote (for later push, not for merge)
           echo "::notice::Adding production repository as remote"
           git remote add prod-repo "https://x-access-token:${{ secrets.GH_PAT }}@github.com/${PRODUCTION_REPO}.git" 2>/dev/null || true
 
-          # Fetch production repository
-          echo "::notice::Fetching production repository: ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}"
+          # SKIP merge from production repo to avoid file content conflicts
+          # The production repo contains squashed commits with same file states as dev repo
+          # Merging would cause Git to think there are no new changes in Step 6
+          echo "::notice::Skipping merge from production repository (not needed for one-way sync)"
+          echo "PROD_SYNC_COMMITS=Skipped (one-way sync from dev to prod)" >> $GITHUB_ENV
+
+          # Still fetch for reference (not for merge)
           if git fetch prod-repo "${PRODUCTION_BRANCH}" 2>/dev/null; then
-            echo "::notice::Production repository fetched successfully"
-
-            # Get current HEAD commit before merge
-            BEFORE_MERGE=$(git rev-parse HEAD)
-
-            # Merge production changes (prioritize production repo changes)
-            echo "::notice::Merging production changes (using -X theirs strategy)"
-            if git merge prod-repo/"${PRODUCTION_BRANCH}" -X theirs \
-              --allow-unrelated-histories \
-              -m "chore: sync from production repository
-
-            Synced from ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}
-            Strategy: theirs (prioritize production changes)
-            Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-            " 2>&1 | tee /tmp/merge-output.txt; then
-
-              # Check if there were actual changes
-              AFTER_MERGE=$(git rev-parse HEAD)
-              if [ "$BEFORE_MERGE" != "$AFTER_MERGE" ]; then
-                echo "::notice::✅ Synced changes from production repository"
-
-                # Show what was synced
-                echo "::notice::Changes synced:"
-                git log --oneline "${BEFORE_MERGE}..${AFTER_MERGE}" | head -10 || true
-
-                # Save for release notes
-                echo "PROD_SYNC_COMMITS<<EOF" >> $GITHUB_ENV
-                git log --format="- %s (%an, %ar)" "${BEFORE_MERGE}..prod-repo/${PRODUCTION_BRANCH}" | head -20 || echo "No new commits"
-                echo "EOF" >> $GITHUB_ENV
-              else
-                echo "::notice::No changes to sync from production repository"
-                echo "PROD_SYNC_COMMITS=No changes from production repository" >> $GITHUB_ENV
-              fi
-            else
-              echo "::warning::Merge encountered conflicts, resolving with theirs strategy"
-              # Accept all their changes
-              git checkout --theirs .
-              git add -A
-              git commit -m "chore: sync from production repository (auto-resolved conflicts)
-
-              Synced from ${PRODUCTION_REPO}:${PRODUCTION_BRANCH}
-              Conflicts auto-resolved using theirs strategy
-              Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-              " || echo "::notice::No conflicts to resolve"
-
-              echo "PROD_SYNC_COMMITS=Synced with conflict resolution (theirs strategy)" >> $GITHUB_ENV
-            fi
+            echo "::notice::Production repository fetched successfully (for reference only)"
           else
             echo "::notice::Production repository not found or first sync"
             echo "::notice::This is expected for first-time setup"
-            echo "PROD_SYNC_COMMITS=First sync - no previous production repository" >> $GITHUB_ENV
           fi
 
           echo "::endgroup::"
