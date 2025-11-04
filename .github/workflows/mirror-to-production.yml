@@ -117,7 +117,7 @@ jobs:
           git fetch origin main
           echo "::notice::Merging latest changes from main branch"
 
-          if git merge origin/main -m "chore: merge latest from main
+          if git merge origin/main --allow-unrelated-histories -m "chore: merge latest from main
 
           Merged latest development changes from main branch
           Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
