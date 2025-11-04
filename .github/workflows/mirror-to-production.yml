@@ -514,8 +514,9 @@ jobs:
           CURRENT_TREE=$(git write-tree)
           echo "::notice::Current tree: $CURRENT_TREE"
 
-          # Try to get production repo's latest commit as parent
-          PROD_LATEST=$(git rev-parse prod-repo/main 2>/dev/null || echo "")
+          # Use origin/production as the baseline (not prod-repo/main)
+          # This ensures we calculate diff from last sync, not from production repo's current state
+          PROD_LATEST=$(git rev-parse origin/production 2>/dev/null || echo "")
 
           # Prepare commit message using generated release notes
           echo "Release $NEXT_VERSION" > /tmp/squash-commit-msg.txt
@@ -559,8 +560,8 @@ jobs:
         run: |
           echo "::group::Calculate actual file statistics"
 
-          # Get production repo's latest commit (already fetched in squash step)
-          PROD_LATEST=$(git rev-parse prod-repo/main 2>/dev/null || echo "")
+          # Use origin/production as baseline (consistent with squash step)
+          PROD_LATEST=$(git rev-parse origin/production 2>/dev/null || echo "")
 
           if [ -n "$PROD_LATEST" ]; then
             # Calculate diff between production's latest and current HEAD (squashed commit)
