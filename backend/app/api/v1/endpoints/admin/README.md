@@ -10,7 +10,7 @@
 admin/
 ├── __init__.py              # 聚合所有子路由 (主入口)
 ├── _helpers.py              # 共用工具函數 (權限檢查、篩選器等)
-├── _legacy.py               # 原 admin.py 備份 (待遷移的端點)
+├── configurations.py        # ✅ 配置管理 (已遷移)
 ├── dashboard.py             # ✅ 儀表板與統計 (已遷移)
 ├── system_settings.py       # ✅ 系統設定 (已遷移)
 └── README.md                # 本文件
@@ -50,7 +50,7 @@ admin/
 
 ## 未來遷移計劃
 
-以下端點目前仍在 `_legacy.py` 中，建議按優先級逐步遷移：
+以下端點建議按優先級逐步遷移為獨立模組：
 
 ### 優先級 1 - 高頻使用
 - [ ] `applications.py` - 申請管理 (8 個端點)
@@ -82,9 +82,9 @@ async def get_all_applications(...):
     ...
 ```
 
-### 步驟 2: 從 `_legacy.py` 複製端點代碼
-- 複製相關的路由函數
-- 更新導入語句
+### 步驟 2: 實現端點代碼
+- 實現相關的路由函數
+- 添加必要的導入語句
 - 使用 `_helpers.py` 中的共用函數
 
 ### 步驟 3: 更新 `__init__.py`
@@ -122,8 +122,7 @@ python3 -m uvicorn app.main:app --reload
 
 ## 注意事項
 
-- 原 `admin.py` 已備份為 `_legacy.py`，請勿刪除直到所有端點遷移完成
-- 新端點應直接在相應模組中創建，不要添加到 `_legacy.py`
+- 新端點應直接在相應模組中創建
 - 遷移時保持 API 路徑和參數不變，確保前端兼容性
 - 所有更改應通過測試驗證
 

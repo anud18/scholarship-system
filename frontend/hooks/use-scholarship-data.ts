@@ -15,7 +15,7 @@
 
 import useSWR from 'swr';
 import { apiClient } from '@/lib/api';
-import type { ApiResponse } from '@/lib/api.legacy';
+import type { ApiResponse } from '@/lib/api/types';
 
 type ScholarshipData = Array<{
   id: number;

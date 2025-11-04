@@ -387,18 +387,22 @@ async def delete_application(
     request: Request = None,
 ):
     """
-    Soft delete an application
+    Delete an application (hard delete for drafts, soft delete for submitted applications)
 
     Permission Control:
     - Students: Can only delete their own draft applications (no reason required)
     - Staff (professor/college/admin): Can delete any application (reason required)
 
-    The application status will be set to 'deleted' and deletion metadata will be tracked.
+    Deletion Behavior:
+    - Draft applications: Permanently deleted from database and MinIO storage (hard delete)
+    - Submitted applications: Status set to 'deleted', data preserved (soft delete)
+
+    Note: Draft deletions are irreversible. Submitted application deletions can be restored.
     """
     service = ApplicationService(db)
 
     try:
-        # Perform soft delete
+        # Perform deletion (hard delete for drafts, soft delete for submitted)
         deleted_app = await service.delete_application(id, current_user, reason)
 
         # Log audit trail for deletion

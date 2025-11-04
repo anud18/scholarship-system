@@ -33,12 +33,14 @@ import api from "@/lib/api";
 import { ApplicationFormDataDisplay } from "@/components/application-form-data-display";
 import { ProfessorAssignmentDropdown } from "@/components/professor-assignment-dropdown";
 import {
+  ApplicationStatus,
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
+import {
   getApplicationTimeline,
-  getStatusColor,
-  getStatusName,
   getDocumentLabel,
   fetchApplicationFiles,
-  ApplicationStatus,
   formatFieldName,
 } from "@/lib/utils/application-helpers";
 import { useReferenceData, getDegreeName } from "@/hooks/use-reference-data";
@@ -614,11 +616,11 @@ export function ApplicationDetailDialog({
                     </Label>
                     <p>
                       <Badge
-                        variant={getStatusColor(
+                        variant={getApplicationStatusBadgeVariant(
                           application.status as ApplicationStatus
                         )}
                       >
-                        {getStatusName(
+                        {getApplicationStatusLabel(
                           application.status as ApplicationStatus,
                           locale
                         )}

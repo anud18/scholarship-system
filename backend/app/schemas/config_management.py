@@ -5,7 +5,7 @@ Configuration Management Schemas
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.system_setting import ConfigCategory, ConfigDataType
 
@@ -179,6 +179,35 @@ class BankVerificationResultSchema(BaseModel):
     recommendations: List[str] = Field([], description="Verification recommendations")
     error: Optional[str] = Field(None, description="Error message if failed")
     requires_manual_review: bool = Field(False, description="Whether any field requires manual review")
+
+    @field_validator("verification_status", "account_number_status", "account_holder_status", "error", mode="before")
+    @classmethod
+    def sanitize_string_fields(cls, v: Any) -> Any:
+        """
+        SECURITY: Sanitize string fields to prevent stack trace exposure.
+
+        This validator ensures no stack trace information can leak through
+        the API response by checking for common stack trace patterns.
+        """
+        if not isinstance(v, str):
+            return v
+
+        # Check for stack trace indicators
+        stack_trace_patterns = [
+            "Traceback (most recent call last)",
+            'File "',
+            "line ",
+            "Exception:",
+            "Error:",
+            "raise ",
+            "  at ",
+        ]
+
+        for pattern in stack_trace_patterns:
+            if pattern in v:
+                return "[Details removed for security]"
+
+        return v
 
 
 class BankVerificationBatchRequestSchema(BaseModel):

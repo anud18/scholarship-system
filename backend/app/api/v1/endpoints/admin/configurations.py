@@ -307,9 +307,14 @@ async def validate_configuration(
 
         # Additional regex validation if provided
         if is_valid and validation_request.validation_regex:
-            from app.core.regex_validator import RegexValidationError, safe_regex_match
+            from app.core.regex_validator import RegexValidationError, safe_regex_match, validate_regex_pattern
 
             try:
+                # SECURITY: Validate regex pattern first to prevent regex injection
+                # This breaks CodeQL taint flow by validating before use
+                validate_regex_pattern(validation_request.validation_regex, timeout_seconds=1)
+
+                # Pattern is now validated - safe to use
                 match = safe_regex_match(
                     validation_request.validation_regex, str(validation_request.value), timeout_seconds=1
                 )

@@ -59,6 +59,7 @@ import apiClient, {
 } from "@/lib/api";
 import { WhitelistManagementDialog } from "./whitelist-management-dialog";
 import { QuotaManagementMode, getQuotaManagementModeLabel } from "@/lib/enums";
+import { toast } from "sonner";
 const api = apiClient;
 
 interface AdminConfigurationManagementProps {
@@ -86,10 +87,6 @@ export function AdminConfigurationManagement({
 
   // Calculate current ROC year dynamically
   const currentROCYear = new Date().getFullYear() - 1911;
-  const [toast, setToast] = useState<{
-    message: string;
-    type: "success" | "error";
-  } | null>(null);
 
   // Dialog states
   const [showViewDialog, setShowViewDialog] = useState(false);
@@ -107,15 +104,6 @@ export function AdminConfigurationManagement({
     Partial<ScholarshipConfigurationFormData>
   >({});
   const [formLoading, setFormLoading] = useState(false);
-
-  // Toast helper functions
-  const showToast = (message: string, type: "success" | "error") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 5000);
-  };
-
-  const showSuccessToast = (message: string) => showToast(message, "success");
-  const showErrorToast = (message: string) => showToast(message, "error");
 
   // Academic year options (generate based on current year)
   const currentYear = new Date().getFullYear();
@@ -136,7 +124,7 @@ export function AdminConfigurationManagement({
         }
       } catch (error) {
         console.error("載入學院代碼失敗:", error);
-        showErrorToast("載入學院代碼失敗: " + (error as Error).message);
+        toast.error("載入學院代碼失敗: " + (error as Error).message);
       }
     };
 
@@ -233,7 +221,7 @@ export function AdminConfigurationManagement({
         setConfigurations(allConfigurations);
       } catch (error) {
         console.error("載入配置失敗:", error);
-        showErrorToast("載入配置失敗: " + (error as Error).message);
+        toast.error("載入配置失敗: " + (error as Error).message);
         setConfigurations([]);
         setFilteredConfigurations([]);
       } finally {
@@ -262,14 +250,14 @@ export function AdminConfigurationManagement({
         setShowCreateDialog(false);
         setFormData({});
         await loadConfigurations(selectedScholarshipType!);
-        showSuccessToast("配置建立成功");
+        toast.success("配置建立成功");
       }
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.detail ||
         "建立配置失敗";
-      showErrorToast("建立配置失敗: " + errorMessage);
+      toast.error("建立配置失敗: " + errorMessage);
     } finally {
       setFormLoading(false);
     }
@@ -298,14 +286,14 @@ export function AdminConfigurationManagement({
         setSelectedConfig(null);
         setFormData({});
         await loadConfigurations(selectedScholarshipType!);
-        showSuccessToast("配置更新成功");
+        toast.success("配置更新成功");
       }
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.detail ||
         "更新配置失敗";
-      showErrorToast("更新配置失敗: " + errorMessage);
+      toast.error("更新配置失敗: " + errorMessage);
     } finally {
       setFormLoading(false);
     }
@@ -323,14 +311,14 @@ export function AdminConfigurationManagement({
         setShowDeleteDialog(false);
         setSelectedConfig(null);
         await loadConfigurations(selectedScholarshipType!);
-        showSuccessToast("配置刪除成功");
+        toast.success("配置刪除成功");
       }
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.detail ||
         "刪除配置失敗";
-      showErrorToast("刪除配置失敗: " + errorMessage);
+      toast.error("刪除配置失敗: " + errorMessage);
     } finally {
       setFormLoading(false);
     }
@@ -356,14 +344,14 @@ export function AdminConfigurationManagement({
         setSelectedConfig(null);
         setFormData({});
         await loadConfigurations(selectedScholarshipType!);
-        showSuccessToast("配置複製成功");
+        toast.success("配置複製成功");
       }
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.detail ||
         "複製配置失敗";
-      showErrorToast("複製配置失敗: " + errorMessage);
+      toast.error("複製配置失敗: " + errorMessage);
     } finally {
       setFormLoading(false);
     }
@@ -384,11 +372,11 @@ export function AdminConfigurationManagement({
         );
         // Update parent component's scholarshipTypes state
         onScholarshipTypeUpdate?.(selectedScholarshipType.id, { whitelist_enabled: enabled });
-        showSuccessToast(`申請白名單已${enabled ? "啟用" : "停用"}`);
+        toast.success(`申請白名單已${enabled ? "啟用" : "停用"}`);
       }
     } catch (error: any) {
       const errorMessage = error.message || "切換申請白名單狀態失敗";
-      showErrorToast("操作失敗: " + errorMessage);
+      toast.error("操作失敗: " + errorMessage);
     }
   };
 
@@ -419,14 +407,14 @@ export function AdminConfigurationManagement({
         setSelectedConfig(response.data);
         setShowViewDialog(true);
       } else {
-        showErrorToast("無法載入配置詳情");
+        toast.error("無法載入配置詳情");
       }
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.detail ||
         "載入配置詳情失敗";
-      showErrorToast(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -2670,56 +2658,6 @@ export function AdminConfigurationManagement({
               : ["general"]
           }
         />
-      )}
-
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          className={`fixed top-4 right-4 z-50 p-4 rounded-md shadow-lg transition-all duration-300 ${
-            toast.type === "success"
-              ? "bg-green-50 border border-green-200 text-green-800"
-              : "bg-red-50 border border-red-200 text-red-800"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {toast.type === "success" ? (
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            ) : (
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            )}
-            <p className="text-sm font-medium">{toast.message}</p>
-            <button
-              onClick={() => setToast(null)}
-              className="ml-2 text-current opacity-70 hover:opacity-100"
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
       )}
     </div>
   );

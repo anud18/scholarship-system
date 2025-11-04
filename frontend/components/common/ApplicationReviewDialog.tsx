@@ -61,12 +61,14 @@ import {
   getEnrollTypeName,
 } from "@/hooks/use-reference-data";
 import {
+  ApplicationStatus,
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
+import {
   getApplicationTimeline,
-  getStatusColor,
-  getStatusName,
   getDocumentLabel,
   fetchApplicationFiles,
-  ApplicationStatus,
   formatFieldName,
 } from "@/lib/utils/application-helpers";
 import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
@@ -637,9 +639,9 @@ export function ApplicationReviewDialog({
       );
       if (response.success) {
         toast.success(
-          locale === "zh" ? "銀行驗證成功" : "Bank Verification Successful",
+          locale === "zh" ? "郵局驗證成功" : "Post Office Verification Successful",
           {
-            description: locale === "zh" ? "銀行帳戶驗證已完成" : "Bank account verification completed",
+            description: locale === "zh" ? "郵局帳戶驗證已完成" : "Post office account verification completed",
           }
         );
         // Refresh application data
@@ -648,18 +650,18 @@ export function ApplicationReviewDialog({
         }
       } else {
         toast.error(
-          locale === "zh" ? "銀行驗證失敗" : "Bank Verification Failed",
+          locale === "zh" ? "郵局驗證失敗" : "Post Office Verification Failed",
           {
-            description: response.message || (locale === "zh" ? "無法完成銀行帳戶驗證" : "Could not complete bank account verification"),
+            description: response.message || (locale === "zh" ? "無法完成郵局帳戶驗證" : "Could not complete post office account verification"),
           }
         );
       }
     } catch (error) {
-      console.error("Bank verification error:", error);
+      console.error("Post office verification error:", error);
       toast.error(
-        locale === "zh" ? "銀行驗證錯誤" : "Bank Verification Error",
+        locale === "zh" ? "郵局驗證錯誤" : "Post Office Verification Error",
         {
-          description: locale === "zh" ? "銀行帳戶驗證過程中發生錯誤" : "An error occurred during bank account verification",
+          description: locale === "zh" ? "郵局帳戶驗證過程中發生錯誤" : "An error occurred during post office account verification",
         }
       );
     } finally {
@@ -667,10 +669,69 @@ export function ApplicationReviewDialog({
     }
   };
 
-  // Get bank verification status
+  // Get post office verification status (支援新舊兩種資料格式)
   const getBankVerificationStatus = () => {
     if (!detailedApplication) return null;
 
+    // 新版：檢查 bank_verification 物件中的分開狀態
+    const bankVerification = (detailedApplication as Application).meta_data?.bank_verification;
+    const accountNumberStatus = bankVerification?.account_number_status;
+    const accountHolderStatus = bankVerification?.account_holder_status;
+
+    // 如果有分開狀態，判斷整體驗證狀態
+    if (accountNumberStatus || accountHolderStatus) {
+      const allVerified = accountNumberStatus === "verified" && accountHolderStatus === "verified";
+      const anyFailed = accountNumberStatus === "failed" || accountHolderStatus === "failed";
+      const anyNeedsReview = accountNumberStatus === "needs_review" || accountHolderStatus === "needs_review";
+
+      if (allVerified) {
+        return {
+          status: "verified",
+          icon: <ShieldCheck className="h-5 w-5 text-green-600" />,
+          label: locale === "zh" ? "已驗證" : "Verified",
+          description:
+            locale === "zh"
+              ? "郵局帳戶已通過驗證"
+              : "Post office account has been verified",
+          variant: "default" as const,
+        };
+      } else if (anyFailed) {
+        return {
+          status: "failed",
+          icon: <ShieldX className="h-5 w-5 text-red-600" />,
+          label: locale === "zh" ? "驗證失敗" : "Verification Failed",
+          description:
+            locale === "zh"
+              ? "郵局帳戶驗證失敗"
+              : "Post office account verification failed",
+          variant: "destructive" as const,
+        };
+      } else if (anyNeedsReview) {
+        return {
+          status: "needs_review",
+          icon: <Shield className="h-5 w-5 text-yellow-600" />,
+          label: locale === "zh" ? "需人工檢閱" : "Needs Review",
+          description:
+            locale === "zh"
+              ? "郵局帳戶需要人工檢閱"
+              : "Post office account needs manual review",
+          variant: "secondary" as const,
+        };
+      } else {
+        return {
+          status: "pending",
+          icon: <Shield className="h-5 w-5 text-yellow-600" />,
+          label: locale === "zh" ? "待驗證" : "Pending",
+          description:
+            locale === "zh"
+              ? "郵局帳戶待驗證"
+              : "Post office account pending verification",
+          variant: "secondary" as const,
+        };
+      }
+    }
+
+    // 舊版：向下相容舊的 bank_verification_status 欄位
     const bankVerified =
       (detailedApplication as Application).meta_data?.bank_verification_status === "verified";
     const bankVerificationFailed =
@@ -685,8 +746,8 @@ export function ApplicationReviewDialog({
         label: locale === "zh" ? "已驗證" : "Verified",
         description:
           locale === "zh"
-            ? "銀行帳戶已通過驗證"
-            : "Bank account has been verified",
+            ? "郵局帳戶已通過驗證"
+            : "Post office account has been verified",
         variant: "default" as const,
       };
     } else if (bankVerificationFailed) {
@@ -696,8 +757,8 @@ export function ApplicationReviewDialog({
         label: locale === "zh" ? "驗證失敗" : "Verification Failed",
         description:
           locale === "zh"
-            ? "銀行帳戶驗證失敗"
-            : "Bank account verification failed",
+            ? "郵局帳戶驗證失敗"
+            : "Post office account verification failed",
         variant: "destructive" as const,
       };
     } else if (bankVerificationPending) {
@@ -707,8 +768,8 @@ export function ApplicationReviewDialog({
         label: locale === "zh" ? "驗證中" : "Verification Pending",
         description:
           locale === "zh"
-            ? "銀行帳戶驗證進行中"
-            : "Bank account verification in progress",
+            ? "郵局帳戶驗證進行中"
+            : "Post office account verification in progress",
         variant: "secondary" as const,
       };
     } else {
@@ -718,8 +779,8 @@ export function ApplicationReviewDialog({
         label: locale === "zh" ? "未驗證" : "Not Verified",
         description:
           locale === "zh"
-            ? "銀行帳戶尚未驗證"
-            : "Bank account not verified yet",
+            ? "郵局帳戶尚未驗證"
+            : "Post office account not verified yet",
         variant: "outline" as const,
       };
     }
@@ -1367,8 +1428,8 @@ export function ApplicationReviewDialog({
                             {locale === "zh" ? "申請狀態" : "Status"}
                           </Label>
                           <div className="flex items-center gap-2">
-                            <Badge variant={getStatusColor(displayData.status as ApplicationStatus)}>
-                              {displayData.status_name || getStatusName(displayData.status as ApplicationStatus, locale)}
+                            <Badge variant={getApplicationStatusBadgeVariant(displayData.status as ApplicationStatus)}>
+                              {displayData.status_name || getApplicationStatusLabel(displayData.status as ApplicationStatus, locale)}
                             </Badge>
                             {displayData.is_renewal && (
                               <Badge variant="outline" className="text-blue-600 border-blue-300">
@@ -1916,14 +1977,14 @@ export function ApplicationReviewDialog({
                 {/* Management Tab (Admin and Super Admin) */}
                 {["admin", "super_admin"].includes(role) && (
                   <TabsContent value="management" className="space-y-4 mt-4">
-                    {/* Bank Verification Section */}
+                    {/* Post Office Verification Section */}
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2">
                           <CreditCard className="h-5 w-5" />
                           {locale === "zh"
-                            ? "銀行帳戶驗證"
-                            : "Bank Account Verification"}
+                            ? "郵局帳戶驗證"
+                            : "Post Office Account Verification"}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>

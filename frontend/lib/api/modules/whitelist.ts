@@ -14,7 +14,8 @@
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
-import type { ApiResponse, WhitelistResponse } from '../../api.legacy';
+import type { ApiResponse } from '../types';
+import type { WhitelistResponse } from '../types';
 
 export function createWhitelistApi() {
   return {

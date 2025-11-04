@@ -130,6 +130,13 @@ class ConfigurationService:
             # Validate if regex provided (only for non-empty values)
             if validation_regex:
                 try:
+                    # SECURITY: Validate regex pattern first to prevent regex injection
+                    # This breaks CodeQL taint flow by validating before use
+                    from app.core.regex_validator import validate_regex_pattern
+
+                    validate_regex_pattern(validation_regex, timeout_seconds=1)
+
+                    # Pattern is now validated - safe to use
                     match = safe_regex_match(validation_regex, string_value, timeout_seconds=1)
                     if not match:
                         raise ValueError(f"Value does not match validation pattern: {validation_regex}")

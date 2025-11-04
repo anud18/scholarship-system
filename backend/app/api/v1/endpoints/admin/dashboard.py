@@ -184,13 +184,13 @@ async def get_system_health(current_user: User = Depends(require_admin)):
             nycu_emp_details = {"error": f"API returned status: {test_result.status}", "message": test_result.message}
 
     except NYCUEmpError as e:
-        # SECURITY: Log full exception details but return sanitized message
-        logger.error(f"NYCU Employee API error: {type(e).__name__}: {str(e)}", exc_info=True)
+        # SECURITY: Log exception type only, not details (prevent stack trace exposure)
+        logger.error(f"NYCU Employee API error: {type(e).__name__}", exc_info=True)
         nycu_emp_status = "error"
         nycu_emp_details = {"error": "NYCU Employee API connection failed", "type": type(e).__name__}
     except Exception as e:
-        # SECURITY: Log full exception details but return sanitized message
-        logger.error(f"Unexpected error checking NYCU Employee API: {str(e)}", exc_info=True)
+        # SECURITY: Log exception type only, not details (prevent stack trace exposure)
+        logger.error(f"Unexpected error checking NYCU Employee API: {type(e).__name__}", exc_info=True)
         nycu_emp_status = "error"
         nycu_emp_details = {"error": "Service temporarily unavailable", "type": "ServiceError"}
 

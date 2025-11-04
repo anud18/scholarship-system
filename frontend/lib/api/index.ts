@@ -37,10 +37,11 @@ import { createDocumentRequestsApi } from './modules/document-requests';
 import { createPaymentRostersApi } from './modules/payment-rosters';
 // import { createReviewApi } from './modules/reviews'; // Not used - professor reviews use professor endpoints with adapter
 
-// Re-export ALL types from legacy api.ts for backward compatibility
-// TODO: Move these to a dedicated types.ts file in the modular structure
+// Re-export ALL types from modular types file
 export type {
+  // Core types
   ApiResponse,
+  PaginatedResponse,
   User,
   Student,
   StudentInfoResponse,
@@ -48,59 +49,67 @@ export type {
   ApplicationStatus,
   ApplicationFile,
   ScholarshipType,
+  WhitelistStudentInfo,
+  WhitelistResponse,
+  // Scholarship types
   ScholarshipConfiguration,
   ScholarshipRule,
-  PaginatedResponse,
+  ScholarshipStats,
+  SubTypeStats,
+  SubTypeOption,
+  ScholarshipPermission,
+  ScholarshipPermissionCreate,
+  ScholarshipConfigurationFormData,
+  ScholarshipFormConfig,
+  // Application types
   ApplicationCreate,
+  ApplicationField,
+  ApplicationFieldCreate,
+  ApplicationFieldUpdate,
+  ApplicationDocument,
+  ApplicationDocumentCreate,
+  ApplicationDocumentUpdate,
+  FormConfigSaveRequest,
+  HistoricalApplication,
+  HistoricalApplicationFilters,
+  // System types
   DashboardStats,
-  RecipientOption,
-  EmailTemplate,
   SystemSetting,
   SystemConfiguration,
   SystemConfigurationCreate,
   SystemConfigurationUpdate,
   SystemConfigurationValidation,
   ConfigurationValidationResult,
-  BankVerificationResult,
-  BankVerificationBatchResult,
-  ProfessorStudentRelationship,
-  ProfessorStudentRelationshipCreate,
-  ProfessorStudentRelationshipUpdate,
+  SystemStats,
+  Workflow,
+  // Email types
+  EmailTemplate,
+  RecipientOption,
+  // Notification types
   AnnouncementCreate,
   AnnouncementUpdate,
   NotificationResponse,
-  SubTypeOption,
+  // User types
   UserListResponse,
   UserResponse,
   UserCreate,
   UserUpdate,
   UserStats,
-  ApplicationField,
-  ApplicationFieldCreate,
-  ApplicationFieldUpdate,
-  ApplicationDocument,
-  HistoricalApplication,
-  HistoricalApplicationFilters,
-  ApplicationDocumentCreate,
-  ApplicationDocumentUpdate,
-  ScholarshipFormConfig,
-  FormConfigSaveRequest,
-  ScholarshipStats,
-  SubTypeStats,
-  Workflow,
-  SystemStats,
-  ScholarshipPermission,
-  ScholarshipPermissionCreate,
-  WhitelistStudentInfo,
-  WhitelistResponse,
+  UserProfile,
+  CompleteUserProfile,
+  // Bank verification types
+  BankVerificationResult,
+  BankVerificationBatchResult,
+  // Professor-Student types
+  ProfessorStudentRelationship,
+  ProfessorStudentRelationshipCreate,
+  ProfessorStudentRelationshipUpdate,
+  // Whitelist types
   WhitelistBatchAddRequest,
   WhitelistBatchRemoveRequest,
   WhitelistImportResult,
   WhitelistToggleRequest,
-  ScholarshipConfigurationFormData,
-  UserProfile,
-  CompleteUserProfile,
-} from '../api.legacy';
+} from './types';
 
 // Re-export quota helper functions
 export {

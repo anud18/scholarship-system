@@ -1,0 +1,1285 @@
+# Production Environment Setup Workflow
+# This workflow should be copied to production repository at: .github/workflows/setting-env.yml
+#
+# Purpose: Automate Docker installation and environment setup
+# - Installs Docker Engine on AP VM (online) and DB VM (offline)
+# - Transfers Docker images to DB VM
+# - Creates necessary directory structure with correct permissions
+# - Generates .env files from GitHub Secrets
+#
+# GitHub Runner: Runs on self-hosted runner installed on AP VM
+# Reference: See installation manual Section 3 (Docker) and Section 6 (GitHub Runner)
+
+name: Setup Production Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - validate
+          - setup
+          - full-check
+        default: 'validate'
+
+jobs:
+  setup-environment:
+    name: ${{ github.event.inputs.action == 'validate' && 'Validate Environment' || github.event.inputs.action == 'setup' && 'Setup Environment' || 'Full Check & Setup' }}
+    runs-on: [self-hosted, linux]
+
+    steps:
+      #########################################################################
+      # STEP 1: Checkout Code
+      #########################################################################
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      #########################################################################
+      # STEP 2: Validate Docker Setup Secrets (Simplified)
+      #########################################################################
+      - name: Validate Docker Setup Secrets
+        if: github.event.inputs.action == 'validate' || github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_KEY: ${{ secrets.DB_VM_SSH_KEY }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+        run: |
+          echo "=========================================="
+          echo "Validating Docker Setup Secrets"
+          echo "=========================================="
+          echo ""
+          echo "ℹ️  This workflow focuses on Docker installation."
+          echo "   Only Docker-related secrets are validated here."
+          echo "   Other secrets will be validated during .env generation."
+          echo ""
+
+          # Mask SSH key
+          echo "::add-mask::$DB_VM_SSH_KEY"
+
+          VALIDATION_FAILED=0
+
+          echo "🔑 Docker Setup Requirements:"
+          if [ -z "$DB_HOST" ]; then
+            echo "❌ MISSING: DB_HOST (required for DB VM access)"
+            VALIDATION_FAILED=1
+          else
+            echo "✅ DB_HOST: configured"
+          fi
+
+          if [ -z "$DB_VM_USER" ]; then
+            echo "❌ MISSING: DB_VM_USER (required for SSH to DB VM)"
+            VALIDATION_FAILED=1
+          else
+            echo "✅ DB_VM_USER: configured"
+          fi
+
+          if [ -z "$DB_VM_SSH_KEY" ]; then
+            echo "❌ MISSING: DB_VM_SSH_KEY (required for SSH authentication)"
+            VALIDATION_FAILED=1
+          else
+            echo "✅ DB_VM_SSH_KEY: configured"
+          fi
+
+          if [ -z "$DB_VM_SSH_PORT" ]; then
+            echo "❌ MISSING: DB_VM_SSH_PORT (required for SSH connection)"
+            VALIDATION_FAILED=1
+          else
+            echo "✅ DB_VM_SSH_PORT: configured"
+          fi
+          echo ""
+
+          if [ $VALIDATION_FAILED -eq 1 ]; then
+            echo "=========================================="
+            echo "❌ Docker Setup Secrets Validation FAILED"
+            echo "=========================================="
+            echo ""
+            echo "Required secrets for Docker installation:"
+            echo "- DB_HOST: Database VM hostname or IP"
+            echo "- DB_VM_USER: SSH username for DB VM"
+            echo "- DB_VM_SSH_KEY: SSH private key for DB VM"
+            echo "- DB_VM_SSH_PORT: SSH port number (e.g., 8822)"
+            echo ""
+            echo "See SECRETS-SETUP-GUIDE.md for setup instructions"
+            exit 1
+          else
+            echo "=========================================="
+            echo "✅ Docker Setup Secrets Validated"
+            echo "=========================================="
+            echo ""
+            echo "Note: Other secrets (database credentials, application secrets,"
+            echo "      email config, etc.) will be validated when generating"
+            echo "      .env file in later steps."
+          fi
+
+      #########################################################################
+      # STEP 2.5: Setup System Prerequisites on AP VM
+      #########################################################################
+      - name: Setup System Prerequisites on AP VM
+        if: github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        run: |
+          echo "=========================================="
+          echo "Setting up System Prerequisites on AP VM"
+          echo "=========================================="
+          echo ""
+          echo "ℹ️  Configuring LVM disk extension and NTP time synchronization."
+          echo ""
+
+          #####################################################################
+          # Step 1: LVM Disk Extension
+          #####################################################################
+          echo "=========================================="
+          echo "Step 1: LVM Disk Extension"
+          echo "=========================================="
+          echo ""
+
+          # Check if bc is installed (needed for floating-point comparison)
+          if ! command -v bc &> /dev/null; then
+            echo "📦 Installing bc (required for LVM checks)..."
+            sudo apt-get update > /dev/null 2>&1
+            sudo apt-get install -y bc > /dev/null 2>&1
+          fi
+
+          # Check VG free space
+          echo "🔍 Checking available disk space in volume group..."
+          VG_FREE=$(sudo vgs --noheadings -o vg_free --units g ubuntu-vg 2>/dev/null | tr -d ' G' || echo "0")
+          echo "   Available space: ${VG_FREE}G"
+          echo ""
+
+          # Extend LV if free space available
+          if (( $(echo "$VG_FREE > 1" | bc -l) )); then
+            echo "📈 Extending logical volume by 95% of free space..."
+            if sudo lvextend -l +95%FREE /dev/ubuntu-vg/ubuntu-lv; then
+              echo "   ✅ Logical volume extended"
+            else
+              echo "   ⚠️  LV extension failed (may not be critical)"
+            fi
+
+            echo "📏 Resizing filesystem..."
+            if sudo resize2fs /dev/ubuntu-vg/ubuntu-lv; then
+              echo "   ✅ Filesystem resized"
+            else
+              echo "   ⚠️  Filesystem resize failed"
+            fi
+
+            echo ""
+            echo "💾 Current disk usage:"
+            df -h | grep ubuntu-lv || df -h | grep "/$"
+          else
+            echo "✅ LVM already extended or no free space available (VG free: ${VG_FREE}G)"
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 2: NTP Time Synchronization Setup
+          #####################################################################
+          echo "=========================================="
+          echo "Step 2: NTP Time Synchronization"
+          echo "=========================================="
+          echo ""
+
+          echo "🕐 Configuring NTP time sync with time.stdtime.gov.tw..."
+
+          # Backup existing config
+          if [ -f /etc/systemd/timesyncd.conf ]; then
+            sudo cp /etc/systemd/timesyncd.conf /etc/systemd/timesyncd.conf.bak.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
+            echo "   ✅ Backed up existing timesyncd.conf"
+          fi
+
+          # Configure NTP server
+          {
+            echo "[Time]"
+            echo "NTP=time.stdtime.gov.tw"
+            echo "FallbackNTP=ntp.ubuntu.com time.google.com"
+          } | sudo tee /etc/systemd/timesyncd.conf > /dev/null
+          echo "   ✅ NTP server configured: time.stdtime.gov.tw"
+
+          # Restart and enable time sync
+          echo "🔄 Restarting time synchronization service..."
+          sudo systemctl restart systemd-timesyncd
+          sudo timedatectl set-ntp true
+          echo "   ✅ Time synchronization enabled"
+          echo ""
+
+          # Verify configuration
+          echo "🔍 Current time sync status:"
+          timedatectl status | grep -E "(NTP service|System clock|Time zone)" || timedatectl status
+          echo ""
+
+          echo "=========================================="
+          echo "✅ System Prerequisites Setup Complete"
+          echo "=========================================="
+          echo ""
+
+      #########################################################################
+      # STEP 4: Install Docker on AP VM (Online)
+      #########################################################################
+      - name: Install Docker on AP VM
+        if: github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        run: |
+          echo "=========================================="
+          echo "Installing Docker on AP VM"
+          echo "=========================================="
+          echo ""
+          echo "ℹ️  AP VM has internet access."
+          echo "   Docker will be installed directly from official repository."
+          echo ""
+
+          #####################################################################
+          # Check if Docker is already installed
+          #####################################################################
+          echo "=========================================="
+          echo "Step 1: Checking Existing Docker Installation"
+          echo "=========================================="
+          echo ""
+
+          DOCKER_INSTALLED=false
+          if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+            DOCKER_VERSION=$(docker --version 2>/dev/null || echo "unknown")
+            COMPOSE_VERSION=$(docker compose version 2>/dev/null || echo "unknown")
+
+            echo "✅ Docker is already installed on AP VM:"
+            echo "   $DOCKER_VERSION"
+            echo "   $COMPOSE_VERSION"
+            echo ""
+            echo "⏭️  Skipping Docker installation"
+            DOCKER_INSTALLED=true
+          else
+            echo "⚠️  Docker is NOT installed on AP VM"
+            echo "   Will proceed with online installation"
+            DOCKER_INSTALLED=false
+          fi
+          echo ""
+
+          if [ "$DOCKER_INSTALLED" = true ]; then
+            echo "=========================================="
+            echo "✅ Docker Already Installed - Skipping"
+            echo "=========================================="
+            exit 0
+          fi
+
+          #####################################################################
+          # Step 2: Install Prerequisites
+          #####################################################################
+          echo "=========================================="
+          echo "Step 2: Installing Prerequisites"
+          echo "=========================================="
+          echo ""
+
+          echo "📦 Installing ca-certificates, curl, gnupg..."
+          if sudo apt-get update > /dev/null 2>&1 && sudo apt-get install -y ca-certificates curl gnupg lsb-release libmagic1 > /dev/null 2>&1; then
+            echo "   ✅ Prerequisites installed"
+          else
+            echo "   ❌ Failed to install prerequisites"
+            exit 1
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 3: Add Docker Repository
+          #####################################################################
+          echo "=========================================="
+          echo "Step 3: Adding Docker Repository"
+          echo "=========================================="
+          echo ""
+
+          echo "🔑 Adding Docker GPG key..."
+          sudo install -m 0755 -d /etc/apt/keyrings
+          if curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg > /dev/null 2>&1; then
+            sudo chmod a+r /etc/apt/keyrings/docker.gpg
+            echo "   ✅ Docker GPG key added"
+          else
+            echo "   ❌ Failed to add Docker GPG key"
+            exit 1
+          fi
+
+          echo "📝 Adding Docker repository..."
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          echo "   ✅ Docker repository added"
+          echo ""
+
+          #####################################################################
+          # Step 4: Install Docker Packages
+          #####################################################################
+          echo "=========================================="
+          echo "Step 4: Installing Docker Packages"
+          echo "=========================================="
+          echo ""
+
+          echo "📥 Updating package index..."
+          if sudo apt-get update > /dev/null 2>&1; then
+            echo "   ✅ Package index updated"
+          else
+            echo "   ❌ Failed to update package index"
+            exit 1
+          fi
+
+          echo "🐳 Installing Docker packages..."
+          if sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null 2>&1; then
+            echo "   ✅ Docker packages installed"
+          else
+            echo "   ❌ Failed to install Docker packages"
+            exit 1
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 5: Enable and Start Docker
+          #####################################################################
+          echo "=========================================="
+          echo "Step 5: Enabling Docker Service"
+          echo "=========================================="
+          echo ""
+
+          echo "🚀 Starting Docker daemon..."
+          if sudo systemctl enable --now docker > /dev/null 2>&1; then
+            echo "   ✅ Docker service enabled and started"
+          else
+            echo "   ❌ Failed to start Docker service"
+            exit 1
+          fi
+
+          # Add current user to docker group
+          echo "👤 Adding user to docker group..."
+          sudo usermod -aG docker $USER || true
+          echo "   ✅ User added to docker group"
+          echo "   ℹ️  Note: Group membership takes effect after re-login"
+          echo ""
+
+          #####################################################################
+          # Step 6: Verify Installation
+          #####################################################################
+          echo "=========================================="
+          echo "Step 6: Verifying Docker Installation"
+          echo "=========================================="
+          echo ""
+
+          # Wait for Docker to be ready
+          echo "⏳ Waiting for Docker daemon to be ready..."
+          sleep 3
+
+          # Test Docker
+          echo "🔍 Testing Docker installation..."
+          DOCKER_VERSION=$(sudo docker --version 2>/dev/null || echo "")
+          COMPOSE_VERSION=$(sudo docker compose version 2>/dev/null || echo "")
+
+          if [ -n "$DOCKER_VERSION" ] && [ -n "$COMPOSE_VERSION" ]; then
+            echo "   ✅ $DOCKER_VERSION"
+            echo "   ✅ $COMPOSE_VERSION"
+          else
+            echo "   ❌ Docker installation verification failed"
+            exit 1
+          fi
+
+          # Test Docker daemon
+          echo "🔍 Testing Docker daemon..."
+          if sudo docker ps > /dev/null 2>&1; then
+            echo "   ✅ Docker daemon is running"
+          else
+            echo "   ❌ Docker daemon is not responding"
+            exit 1
+          fi
+          echo ""
+
+          echo "=========================================="
+          echo "✅ Docker Installation Complete on AP VM"
+          echo "=========================================="
+          echo ""
+          echo "Docker Engine and Docker Compose have been successfully installed."
+          echo ""
+
+      #########################################################################
+      # STEP 7: Install Docker Engine on DB VM (Offline Installation)
+      #########################################################################
+      - name: Install Docker Engine on DB VM (Offline)
+        if: github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_KEY: ${{ secrets.DB_VM_SSH_KEY }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+        run: |
+          echo "=========================================="
+          echo "Checking Docker Installation on DB VM"
+          echo "=========================================="
+          echo ""
+          echo "ℹ️  DB VM is offline and cannot install Docker from internet."
+          echo "   If Docker is not installed, packages will be downloaded on AP VM"
+          echo "   and transferred to DB VM for offline installation."
+          echo ""
+
+          # Mask SSH key
+          echo "::add-mask::$DB_VM_SSH_KEY"
+
+          # Setup SSH
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$DB_VM_SSH_KEY" > ~/.ssh/db_vm_key
+          chmod 600 ~/.ssh/db_vm_key
+
+          # Add to known_hosts if needed
+          if [ ! -f ~/.ssh/known_hosts ] || ! grep -q "$DB_HOST" ~/.ssh/known_hosts; then
+            ssh-keyscan -p $DB_VM_SSH_PORT -H "$DB_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+
+          #####################################################################
+          # Check if Docker is already installed on DB VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 1: Checking Existing Docker Installation"
+          echo "=========================================="
+          echo ""
+
+          DOCKER_INSTALLED=false
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=10 "$DB_VM_USER@$DB_HOST" "docker --version &>/dev/null && docker compose version &>/dev/null" 2>/dev/null; then
+            DOCKER_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "docker --version" 2>/dev/null || echo "unknown")
+            COMPOSE_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "docker compose version" 2>/dev/null || echo "unknown")
+
+            echo "✅ Docker is already installed on DB VM:"
+            echo "   $DOCKER_VERSION"
+            echo "   $COMPOSE_VERSION"
+            echo ""
+            echo "⏭️  Skipping Docker installation"
+            DOCKER_INSTALLED=true
+          else
+            echo "⚠️  Docker is NOT installed on DB VM"
+            echo "   Will proceed with offline installation"
+            DOCKER_INSTALLED=false
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 1.5: Setup System Prerequisites on DB VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 1.5: System Prerequisites Setup on DB VM"
+          echo "=========================================="
+          echo ""
+          echo "ℹ️  Configuring LVM disk extension and NTP time synchronization."
+          echo ""
+
+          # Sub-step 1.5.1: LVM Disk Extension
+          echo "📦 Step 1.5.1: LVM Disk Extension"
+          echo "---"
+
+          # Check if bc is installed on DB VM (needed for floating-point comparison)
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "
+            if ! command -v bc &> /dev/null; then
+              echo '📦 Installing bc (required for LVM checks)...'
+              sudo apt-get update > /dev/null 2>&1
+              sudo apt-get install -y bc > /dev/null 2>&1
+              echo '   ✅ bc installed'
+            fi
+          "
+
+          # Check VG free space and extend if needed
+          echo "🔍 Checking available disk space in volume group..."
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "
+            VG_FREE=\$(sudo vgs --noheadings -o vg_free --units g ubuntu-vg 2>/dev/null | tr -d ' G' || echo '0')
+            echo \"   Available space: \${VG_FREE}G\"
+            echo \"\"
+
+            if (( \$(echo \"\$VG_FREE > 1\" | bc -l) )); then
+              echo '📈 Extending logical volume by 95% of free space...'
+              if sudo lvextend -l +95%FREE /dev/ubuntu-vg/ubuntu-lv; then
+                echo '   ✅ Logical volume extended'
+              else
+                echo '   ⚠️  LV extension failed (may not be critical)'
+              fi
+
+              echo '📏 Resizing filesystem...'
+              if sudo resize2fs /dev/ubuntu-vg/ubuntu-lv; then
+                echo '   ✅ Filesystem resized'
+              else
+                echo '   ⚠️  Filesystem resize failed'
+              fi
+
+              echo ''
+              echo '💾 Current disk usage:'
+              df -h | grep ubuntu-lv || df -h | grep '/\$'
+            else
+              echo \"✅ LVM already extended or no free space available (VG free: \${VG_FREE}G)\"
+            fi
+          "
+          echo ""
+
+          # Sub-step 1.5.2: NTP Time Synchronization
+          echo "🕐 Step 1.5.2: NTP Time Synchronization"
+          echo "---"
+
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "
+            echo 'Configuring NTP time sync with time.stdtime.gov.tw...'
+
+            # Backup existing config
+            if [ -f /etc/systemd/timesyncd.conf ]; then
+              sudo cp /etc/systemd/timesyncd.conf /etc/systemd/timesyncd.conf.bak.\$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
+              echo '   ✅ Backed up existing timesyncd.conf'
+            fi
+
+            # Configure NTP server
+            {
+              echo '[Time]'
+              echo 'NTP=time.stdtime.gov.tw'
+              echo 'FallbackNTP=ntp.ubuntu.com time.google.com'
+            } | sudo tee /etc/systemd/timesyncd.conf > /dev/null
+            echo '   ✅ NTP server configured: time.stdtime.gov.tw'
+
+            # Restart and enable time sync
+            echo '🔄 Restarting time synchronization service...'
+            sudo systemctl restart systemd-timesyncd
+            sudo timedatectl set-ntp true
+            echo '   ✅ Time synchronization enabled'
+            echo ''
+
+            # Verify configuration
+            echo '🔍 Current time sync status:'
+            timedatectl status | grep -E '(NTP service|System clock|Time zone)' || timedatectl status
+          "
+          echo ""
+
+          echo "=========================================="
+          echo "✅ System Prerequisites Setup Complete on DB VM"
+          echo "=========================================="
+          echo ""
+
+          if [ "$DOCKER_INSTALLED" = true ]; then
+            echo "=========================================="
+            echo "✅ Docker Already Installed - Skipping Docker Installation"
+            echo "=========================================="
+            rm -f ~/.ssh/db_vm_key
+            exit 0
+          fi
+
+          #####################################################################
+          # Step 2: Download Docker Packages on AP VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 2: Downloading Docker Packages on AP VM"
+          echo "=========================================="
+          echo ""
+
+          # Create temporary directory
+          DOCKER_TEMP="/tmp/docker-packages-$$"
+          mkdir -p "$DOCKER_TEMP"
+
+          echo "📦 Downloading Docker repository information..."
+
+          # Add Docker's official GPG key
+          sudo install -m 0755 -d /etc/apt/keyrings
+          if curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/docker.asc > /dev/null; then
+            sudo chmod a+r /etc/apt/keyrings/docker.asc
+            echo "   ✅ Docker GPG key added"
+          else
+            echo "   ❌ Failed to download Docker GPG key"
+            rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
+            exit 1
+          fi
+
+          # Add Docker repository
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          echo "   ✅ Docker repository configured"
+          echo ""
+
+          # Update package index
+          echo "📦 Updating package index..."
+          if sudo apt-get update > /dev/null 2>&1; then
+            echo "   ✅ Package index updated"
+          else
+            echo "   ❌ Failed to update package index"
+            rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
+            exit 1
+          fi
+          echo ""
+
+          # Download Docker packages
+          echo "📥 Downloading Docker packages (this may take a few minutes)..."
+          cd "$DOCKER_TEMP"
+
+          PACKAGES=(
+            "docker-ce"
+            "docker-ce-cli"
+            "containerd.io"
+            "docker-buildx-plugin"
+            "docker-compose-plugin"
+          )
+
+          for PKG in "${PACKAGES[@]}"; do
+            echo "   Downloading $PKG..."
+            if sudo apt-get download "$PKG" > /dev/null 2>&1; then
+              echo "   ✅ $PKG downloaded"
+            else
+              echo "   ❌ Failed to download $PKG"
+              rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
+              exit 1
+            fi
+          done
+          echo ""
+
+          # Show downloaded packages
+          echo "📋 Downloaded packages:"
+          ls -lh "$DOCKER_TEMP"/*.deb | awk '{printf "   %s (%s)\n", $9, $5}'
+          TOTAL_SIZE=$(du -sh "$DOCKER_TEMP" | cut -f1)
+          echo "   Total size: $TOTAL_SIZE"
+          echo ""
+
+          #####################################################################
+          # Step 3: Transfer Packages to DB VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 3: Transferring Packages to DB VM"
+          echo "=========================================="
+          echo ""
+
+          echo "📤 Transferring Docker packages to DB VM ($TOTAL_SIZE)..."
+          if scp -P $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o StrictHostKeyChecking=no "$DOCKER_TEMP"/*.deb "$DB_VM_USER@$DB_HOST:/tmp/"; then
+            echo "   ✅ All packages transferred successfully"
+          else
+            echo "   ❌ Failed to transfer packages"
+            rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
+            exit 1
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 4: Install Prerequisites on DB VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 4: Installing Prerequisites on DB VM"
+          echo "=========================================="
+          echo ""
+
+          echo "📦 Installing ca-certificates, curl, gnupg, lsb-release..."
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo apt-get update > /dev/null 2>&1 && sudo apt-get install -y ca-certificates curl gnupg lsb-release > /dev/null 2>&1"; then
+            echo "   ✅ Prerequisites installed"
+          else
+            echo "   ⚠️  Warning: Could not install prerequisites (may already be installed)"
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 5: Install Docker on DB VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 5: Installing Docker on DB VM"
+          echo "=========================================="
+          echo ""
+
+          echo "🐳 Installing Docker packages..."
+          echo "   This will install in order: containerd → docker-ce-cli → docker-ce → plugins"
+          echo ""
+
+          # Install packages in correct order
+          INSTALL_ORDER=(
+            "containerd.io"
+            "docker-ce-cli"
+            "docker-ce"
+            "docker-buildx-plugin"
+            "docker-compose-plugin"
+          )
+
+          for PKG in "${INSTALL_ORDER[@]}"; do
+            echo "   Installing $PKG..."
+            if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "cd /tmp && sudo dpkg -i ${PKG}_*.deb 2>&1" | grep -qE "Unpacking|Setting up"; then
+              echo "   ✅ $PKG installed"
+            else
+              echo "   ⚠️  $PKG may already be installed or had warnings"
+            fi
+          done
+          echo ""
+
+          # Fix any dependency issues
+          echo "🔧 Fixing any missing dependencies..."
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo apt-get -f install -y > /dev/null 2>&1" || true
+          echo "   ✅ Dependencies resolved"
+          echo ""
+
+          #####################################################################
+          # Step 6: Enable and Start Docker
+          #####################################################################
+          echo "=========================================="
+          echo "Step 6: Enabling Docker Service"
+          echo "=========================================="
+          echo ""
+
+          echo "🚀 Starting Docker daemon..."
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo systemctl enable --now docker > /dev/null 2>&1"; then
+            echo "   ✅ Docker service enabled and started"
+          else
+            echo "   ❌ Failed to start Docker service"
+            rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
+            exit 1
+          fi
+          echo ""
+
+          # Add user to docker group (optional, for non-root access)
+          echo "👤 Adding $DB_VM_USER to docker group..."
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo usermod -aG docker $DB_VM_USER" > /dev/null 2>&1 || true
+          echo "   ✅ User added to docker group (requires re-login to take effect)"
+          echo ""
+
+          #####################################################################
+          # Step 7: Verify Installation
+          #####################################################################
+          echo "=========================================="
+          echo "Step 7: Verifying Docker Installation"
+          echo "=========================================="
+          echo ""
+
+          # Wait a moment for Docker to fully start
+          echo "⏳ Waiting for Docker daemon to be ready..."
+          sleep 3
+
+          # Test Docker
+          echo "🔍 Testing Docker installation..."
+          DOCKER_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker --version" 2>/dev/null || echo "")
+          COMPOSE_VERSION=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker compose version" 2>/dev/null || echo "")
+
+          if [ -n "$DOCKER_VERSION" ] && [ -n "$COMPOSE_VERSION" ]; then
+            echo "   ✅ $DOCKER_VERSION"
+            echo "   ✅ $COMPOSE_VERSION"
+          else
+            echo "   ❌ Docker installation verification failed"
+            rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
+            exit 1
+          fi
+          echo ""
+
+          # Test Docker daemon
+          echo "🔍 Testing Docker daemon..."
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker ps > /dev/null 2>&1"; then
+            echo "   ✅ Docker daemon is running"
+          else
+            echo "   ❌ Docker daemon is not responding"
+            rm -rf "$DOCKER_TEMP" ~/.ssh/db_vm_key
+            exit 1
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 8: Cleanup
+          #####################################################################
+          echo "=========================================="
+          echo "Step 8: Cleaning Up"
+          echo "=========================================="
+          echo ""
+
+          # Remove local packages
+          echo "🧹 Removing local package files..."
+          rm -rf "$DOCKER_TEMP"
+          echo "   ✅ Local packages removed: $DOCKER_TEMP"
+
+          # Remove remote packages
+          echo "🧹 Removing package files from DB VM..."
+          ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "rm /tmp/*.deb" > /dev/null 2>&1 || true
+          echo "   ✅ Remote packages removed"
+
+          # Remove SSH key
+          rm -f ~/.ssh/db_vm_key
+          echo "   ✅ Temporary SSH key removed"
+          echo ""
+
+          echo "=========================================="
+          echo "✅ Docker Installation Complete"
+          echo "=========================================="
+          echo ""
+          echo "Docker Engine and Docker Compose have been successfully installed on DB VM."
+          echo ""
+          echo "Note: User $DB_VM_USER has been added to 'docker' group."
+          echo "      A re-login is required for group membership to take effect."
+          echo "      Until then, Docker commands require 'sudo'."
+          echo ""
+
+      #########################################################################
+      # STEP 8: Prepare and Transfer Docker Images to DB VM (Offline Setup)
+      #########################################################################
+      - name: Prepare and Transfer Docker Images to DB VM
+        if: github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_KEY: ${{ secrets.DB_VM_SSH_KEY }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+        run: |
+          echo "=========================================="
+          echo "Preparing Docker Images for DB VM"
+          echo "=========================================="
+          echo ""
+          echo "ℹ️  DB VM is offline and cannot pull images directly."
+          echo "   Images will be pulled on AP VM, then transferred via SCP."
+          echo ""
+
+          # Mask SSH key
+          echo "::add-mask::$DB_VM_SSH_KEY"
+
+          # Define images to transfer (match docker-compose.prod-db.yml)
+          POSTGRES_IMAGE="postgres:15-alpine"
+          MINIO_IMAGE="minio/minio:latest"
+
+          # Temporary directory for tar files
+          TEMP_DIR="/tmp/db-images-$$"
+          mkdir -p "$TEMP_DIR"
+
+          #####################################################################
+          # Step 8.1: Pull Docker Images on AP VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 1/6: Pulling Docker Images"
+          echo "=========================================="
+          echo ""
+
+          echo "📦 Pulling $POSTGRES_IMAGE..."
+          if docker pull "$POSTGRES_IMAGE"; then
+            echo "   ✅ PostgreSQL image pulled successfully"
+          else
+            echo "   ❌ Failed to pull PostgreSQL image"
+            rm -rf "$TEMP_DIR"
+            exit 1
+          fi
+          echo ""
+
+          echo "📦 Pulling $MINIO_IMAGE..."
+          if docker pull "$MINIO_IMAGE"; then
+            echo "   ✅ MinIO image pulled successfully"
+          else
+            echo "   ❌ Failed to pull MinIO image"
+            rm -rf "$TEMP_DIR"
+            exit 1
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 8.2: Save Images as Tar Files
+          #####################################################################
+          echo "=========================================="
+          echo "Step 2/6: Saving Images as Tar Files"
+          echo "=========================================="
+          echo ""
+
+          echo "💾 Saving $POSTGRES_IMAGE to tar..."
+          if docker save "$POSTGRES_IMAGE" -o "$TEMP_DIR/postgres.tar"; then
+            POSTGRES_SIZE=$(du -h "$TEMP_DIR/postgres.tar" | cut -f1)
+            echo "   ✅ Saved: $TEMP_DIR/postgres.tar ($POSTGRES_SIZE)"
+          else
+            echo "   ❌ Failed to save PostgreSQL image"
+            rm -rf "$TEMP_DIR"
+            exit 1
+          fi
+          echo ""
+
+          echo "💾 Saving $MINIO_IMAGE to tar..."
+          if docker save "$MINIO_IMAGE" -o "$TEMP_DIR/minio.tar"; then
+            MINIO_SIZE=$(du -h "$TEMP_DIR/minio.tar" | cut -f1)
+            echo "   ✅ Saved: $TEMP_DIR/minio.tar ($MINIO_SIZE)"
+          else
+            echo "   ❌ Failed to save MinIO image"
+            rm -rf "$TEMP_DIR"
+            exit 1
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 8.3: Setup SSH Connection to DB VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 3/6: Setting up SSH Connection"
+          echo "=========================================="
+          echo ""
+
+          # Create SSH directory
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # Write SSH private key
+          echo "$DB_VM_SSH_KEY" > ~/.ssh/db_vm_key
+          chmod 600 ~/.ssh/db_vm_key
+
+          # Add DB_HOST to known_hosts (disable strict host key checking for automation)
+          if [ ! -f ~/.ssh/known_hosts ] || ! grep -q "$DB_HOST" ~/.ssh/known_hosts; then
+            echo "   Adding $DB_HOST to known_hosts..."
+            ssh-keyscan -p $DB_VM_SSH_PORT -H "$DB_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+
+          # Test SSH connection
+          echo "   Testing SSH connection to $DB_VM_USER@$DB_HOST..."
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$DB_VM_USER@$DB_HOST" "echo 'SSH connection successful'" 2>/dev/null; then
+            echo "   ✅ SSH connection verified"
+          else
+            echo "   ❌ SSH connection failed"
+            echo ""
+            echo "Please verify:"
+            echo "1. DB_VM_SSH_KEY secret is correct"
+            echo "2. DB_VM_USER secret is correct"
+            echo "3. Public key is added to $DB_VM_USER@$DB_HOST:~/.ssh/authorized_keys"
+            echo "4. DB VM allows SSH connections from this AP VM"
+            rm -rf "$TEMP_DIR" ~/.ssh/db_vm_key
+            exit 1
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 8.4: Check if Images Already Exist on DB VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 4/6: Checking Existing Images on DB VM"
+          echo "=========================================="
+          echo ""
+
+          POSTGRES_EXISTS=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker images -q $POSTGRES_IMAGE 2>/dev/null" || echo "")
+          MINIO_EXISTS=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker images -q $MINIO_IMAGE 2>/dev/null" || echo "")
+
+          if [ -n "$POSTGRES_EXISTS" ]; then
+            echo "   ℹ️  $POSTGRES_IMAGE already exists on DB VM (skipping transfer)"
+            SKIP_POSTGRES=true
+          else
+            echo "   ⚠️  $POSTGRES_IMAGE not found on DB VM (will transfer)"
+            SKIP_POSTGRES=false
+          fi
+
+          if [ -n "$MINIO_EXISTS" ]; then
+            echo "   ℹ️  $MINIO_IMAGE already exists on DB VM (skipping transfer)"
+            SKIP_MINIO=true
+          else
+            echo "   ⚠️  $MINIO_IMAGE not found on DB VM (will transfer)"
+            SKIP_MINIO=false
+          fi
+          echo ""
+
+          #####################################################################
+          # Step 8.5: Transfer and Load Images on DB VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 5/6: Transferring Images to DB VM"
+          echo "=========================================="
+          echo ""
+
+          # Transfer PostgreSQL image
+          if [ "$SKIP_POSTGRES" = false ]; then
+            echo "📤 Transferring postgres.tar to DB VM ($POSTGRES_SIZE)..."
+            if scp -P $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o StrictHostKeyChecking=no "$TEMP_DIR/postgres.tar" "$DB_VM_USER@$DB_HOST:/tmp/postgres.tar"; then
+              echo "   ✅ Transfer complete"
+
+              echo "   Loading image on DB VM..."
+              if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker load -i /tmp/postgres.tar"; then
+                echo "   ✅ PostgreSQL image loaded successfully"
+
+                # Cleanup remote tar file
+                ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "rm /tmp/postgres.tar"
+              else
+                echo "   ❌ Failed to load PostgreSQL image on DB VM"
+              fi
+            else
+              echo "   ❌ Failed to transfer postgres.tar"
+            fi
+            echo ""
+          fi
+
+          # Transfer MinIO image
+          if [ "$SKIP_MINIO" = false ]; then
+            echo "📤 Transferring minio.tar to DB VM ($MINIO_SIZE)..."
+            if scp -P $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key -o StrictHostKeyChecking=no "$TEMP_DIR/minio.tar" "$DB_VM_USER@$DB_HOST:/tmp/minio.tar"; then
+              echo "   ✅ Transfer complete"
+
+              echo "   Loading image on DB VM..."
+              if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker load -i /tmp/minio.tar"; then
+                echo "   ✅ MinIO image loaded successfully"
+
+                # Cleanup remote tar file
+                ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "rm /tmp/minio.tar"
+              else
+                echo "   ❌ Failed to load MinIO image on DB VM"
+              fi
+            else
+              echo "   ❌ Failed to transfer minio.tar"
+            fi
+            echo ""
+          fi
+
+          #####################################################################
+          # Step 8.6: Verify Images on DB VM
+          #####################################################################
+          echo "=========================================="
+          echo "Step 6/6: Verifying Images on DB VM"
+          echo "=========================================="
+          echo ""
+
+          echo "🔍 Checking loaded images on DB VM..."
+          IMAGES_OUTPUT=$(ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sudo docker images --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}' | grep -E '(postgres|minio)'" || echo "")
+
+          if [ -n "$IMAGES_OUTPUT" ]; then
+            echo "$IMAGES_OUTPUT"
+            echo ""
+            echo "✅ Required images are available on DB VM"
+          else
+            echo "⚠️  Warning: Could not verify images on DB VM"
+          fi
+          echo ""
+
+          #####################################################################
+          # Cleanup
+          #####################################################################
+          echo "=========================================="
+          echo "Cleaning Up Temporary Files"
+          echo "=========================================="
+          echo ""
+
+          # Remove local tar files
+          rm -rf "$TEMP_DIR"
+          echo "   ✅ Local tar files removed: $TEMP_DIR"
+
+          # Remove SSH key
+          rm -f ~/.ssh/db_vm_key
+          echo "   ✅ Temporary SSH key removed"
+          echo ""
+
+          echo "=========================================="
+          echo "✅ Docker Images Prepared for DB VM"
+          echo "=========================================="
+          echo ""
+          echo "DB VM is now ready with required Docker images:"
+          echo "- $POSTGRES_IMAGE"
+          echo "- $MINIO_IMAGE"
+          echo ""
+          echo "Next: Admin can start DB services with:"
+          echo "  ssh -p $DB_VM_SSH_PORT $DB_VM_USER@$DB_HOST"
+          echo "  cd /srv/naass/app/naass"
+          echo "  docker compose -f docker-compose.prod-db.yml up -d"
+          echo ""
+
+      #########################################################################
+      # STEP 8.5: Verify Docker Permissions (Non-sudo)
+      #########################################################################
+      - name: Verify Docker Permissions
+        if: github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_VM_USER: ${{ secrets.DB_VM_USER }}
+          DB_VM_SSH_KEY: ${{ secrets.DB_VM_SSH_KEY }}
+          DB_VM_SSH_PORT: ${{ secrets.DB_VM_SSH_PORT }}
+        run: |
+          echo "=========================================="
+          echo "Verifying Docker Permissions (Non-sudo)"
+          echo "=========================================="
+          echo ""
+          echo "ℹ️  Checking if Docker can run without sudo."
+          echo "   (Group membership requires re-login to take effect)"
+          echo ""
+
+          #####################################################################
+          # Part 1: AP VM Docker Permission Check
+          #####################################################################
+          echo "=========================================="
+          echo "Part 1: AP VM Docker Permission Check"
+          echo "=========================================="
+          echo ""
+
+          AP_DOCKER_STATUS="unknown"
+
+          # Test without sudo
+          echo "🔍 Testing: docker ps (without sudo)..."
+          if docker ps > /dev/null 2>&1; then
+            echo "   ✅ SUCCESS: Docker works without sudo on AP VM"
+            AP_DOCKER_STATUS="works"
+          else
+            echo "   ⚠️  FAILED: Permission denied (docker group not active)"
+
+            # Try with sg docker (activates group without re-login)
+            echo ""
+            echo "🔄 Attempting to activate docker group with 'sg docker'..."
+            if sg docker -c "docker ps" > /dev/null 2>&1; then
+              echo "   ✅ SUCCESS: Docker group activated with 'sg docker -c'"
+              echo "   ℹ️  Note: This activation is session-specific"
+              AP_DOCKER_STATUS="sg_works"
+            else
+              echo "   ❌ FAILED: Docker group cannot be activated"
+              AP_DOCKER_STATUS="requires_sudo"
+            fi
+          fi
+
+          echo ""
+          echo "AP VM Status: $AP_DOCKER_STATUS"
+          echo ""
+
+          #####################################################################
+          # Part 2: DB VM Docker Permission Check
+          #####################################################################
+          echo "=========================================="
+          echo "Part 2: DB VM Docker Permission Check"
+          echo "=========================================="
+          echo ""
+
+          # Setup SSH (reuse from previous steps)
+          echo "::add-mask::$DB_VM_SSH_KEY"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$DB_VM_SSH_KEY" > ~/.ssh/db_vm_key
+          chmod 600 ~/.ssh/db_vm_key
+
+          DB_DOCKER_STATUS="unknown"
+
+          # Test without sudo
+          echo "🔍 Testing: docker ps (without sudo on DB VM)..."
+          if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "docker ps" > /dev/null 2>&1; then
+            echo "   ✅ SUCCESS: Docker works without sudo on DB VM"
+            DB_DOCKER_STATUS="works"
+          else
+            echo "   ⚠️  FAILED: Permission denied (docker group not active)"
+
+            # Try with sg docker
+            echo ""
+            echo "🔄 Attempting to activate docker group with 'sg docker'..."
+            if ssh -p $DB_VM_SSH_PORT -i ~/.ssh/db_vm_key "$DB_VM_USER@$DB_HOST" "sg docker -c 'docker ps'" > /dev/null 2>&1; then
+              echo "   ✅ SUCCESS: Docker group activated with 'sg docker -c'"
+              echo "   ℹ️  Note: This activation is session-specific"
+              DB_DOCKER_STATUS="sg_works"
+            else
+              echo "   ❌ FAILED: Docker group cannot be activated"
+              DB_DOCKER_STATUS="requires_sudo"
+            fi
+          fi
+
+          echo ""
+          echo "DB VM Status: $DB_DOCKER_STATUS"
+          echo ""
+
+          # Cleanup
+          rm -f ~/.ssh/db_vm_key
+
+          #####################################################################
+          # Summary and Recommendations
+          #####################################################################
+          echo "=========================================="
+          echo "Docker Permission Check Summary"
+          echo "=========================================="
+          echo ""
+
+          # AP VM Summary
+          case "$AP_DOCKER_STATUS" in
+            works)
+              echo "✅ AP VM: Docker works without sudo"
+              ;;
+            sg_works)
+              echo "⚠️  AP VM: Docker requires 'sg docker -c' or 'sudo'"
+              echo "   Recommendation: Re-login to activate docker group permanently"
+              echo "   Temporary workaround: sg docker -c \"docker ps\""
+              ;;
+            requires_sudo)
+              echo "❌ AP VM: Docker requires 'sudo'"
+              echo "   Recommendation: Re-login to activate docker group"
+              echo "   Workaround: sudo docker ps"
+              ;;
+          esac
+
+          echo ""
+
+          # DB VM Summary
+          case "$DB_DOCKER_STATUS" in
+            works)
+              echo "✅ DB VM: Docker works without sudo"
+              ;;
+            sg_works)
+              echo "⚠️  DB VM: Docker requires 'sg docker -c' or 'sudo'"
+              echo "   Recommendation: Re-login to activate docker group permanently"
+              echo "   Temporary workaround: ssh DB_VM 'sg docker -c \"docker ps\"'"
+              ;;
+            requires_sudo)
+              echo "❌ DB VM: Docker requires 'sudo'"
+              echo "   Recommendation: Re-login to activate docker group"
+              echo "   Workaround: ssh DB_VM 'sudo docker ps'"
+              ;;
+          esac
+
+          echo ""
+          echo "=========================================="
+          echo "✅ Docker Permission Check Complete"
+          echo "=========================================="
+          echo ""
+          echo "Note: Group membership changes require re-login to take effect."
+          echo "      Until then, use 'sudo docker' or 'sg docker -c \"docker ...\"'"
+          echo ""
+
+      #########################################################################
+      # STEP 9: Final Summary
+      #########################################################################
+      - name: Display Summary
+        if: always()
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "🎉 Environment Setup Summary"
+          echo "=========================================="
+          echo ""
+          echo "Action performed: ${{ github.event.inputs.action }}"
+          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo ""
+
+          if [ "${{ github.event.inputs.action }}" = "validate" ]; then
+            echo "✅ Validation completed"
+            echo ""
+            echo "Next steps:"
+            echo "1. Review validation results above"
+            echo "2. Fix any warnings or errors"
+            echo "3. Run 'setup' action to create directories and .env file"
+            echo "4. Deploy application with: docker compose -f docker-compose.prod.yml up -d"
+          elif [ "${{ github.event.inputs.action }}" = "setup" ]; then
+            echo "✅ Setup completed"
+            echo ""
+            echo "Next steps:"
+            echo "1. Review .env.prod file: cat .env.prod"
+            echo "2. Ensure .env.prod is not committed: git status"
+            echo "3. Verify directory structure: ls -la /opt/scholarship/"
+            echo "4. Deploy application with: docker compose -f docker-compose.prod.yml up -d"
+          else
+            echo "✅ Full check and setup completed"
+            echo ""
+            echo "Your environment is ready for deployment!"
+            echo ""
+            echo "Next steps:"
+            echo "1. Review all checks passed above"
+            echo "2. Deploy application:"
+            echo "   docker compose -f docker-compose.prod.yml up -d"
+            echo "3. Monitor deployment:"
+            echo "   docker compose -f docker-compose.prod.yml logs -f"
+            echo "4. Verify services:"
+            echo "   docker compose -f docker-compose.prod.yml ps"
+            echo "   curl https://${{ secrets.DOMAIN }}/health"
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "📚 Documentation"
+          echo "=========================================="
+          echo ""
+          echo "For more information, see:"
+          echo "- Installation Manual: .github/production-workflows-examples/IT-BACKUP-TRANSFER-GUIDE.md"
+          echo "- Secrets Setup: .github/production-workflows-examples/SECRETS-SETUP-GUIDE.md"
+          echo "- GitHub Actions: .github/production-workflows-examples/README.md"
+          echo ""
+
+      #########################################################################
+      # STEP 10: Post-Setup Security Reminder
+      #########################################################################
+      - name: Security Reminder
+        if: github.event.inputs.action == 'setup' || github.event.inputs.action == 'full-check'
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "🔐 Security Reminders"
+          echo "=========================================="
+          echo ""
+          echo "✅ .env.prod file permissions: 600 (owner only)"
+          echo "⚠️  Ensure .env.prod is in .gitignore"
+          echo "⚠️  Never commit .env.prod to version control"
+          echo "⚠️  Rotate secrets regularly (every 90 days recommended)"
+          echo "⚠️  Use strong passwords (16+ characters with mixed case, numbers, symbols)"
+          echo ""
+          echo "To verify .env.prod is not tracked:"
+          echo "  git status | grep .env.prod"
+          echo ""
+          echo "If .env.prod appears in git status, add to .gitignore:"
+          echo "  echo '.env.prod' >> .gitignore"
+          echo "  git add .gitignore"
+          echo "  git commit -m 'chore: add .env.prod to .gitignore'"
+          echo ""

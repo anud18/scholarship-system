@@ -12,7 +12,8 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse, Application, PaginatedResponse } from '../../api.legacy';
+import type { ApiResponse, PaginatedResponse } from '../types';
+import type { Application } from '../types';
 
 export function createProfessorApi() {
   return {

@@ -11,7 +11,8 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse, ScholarshipType } from '../../api.legacy';
+import type { ApiResponse } from '../types';
+import type { ScholarshipType } from '../types';
 
 export function createScholarshipsApi() {
   return {

@@ -6,7 +6,7 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse } from '../../api.legacy';
+import type { ApiResponse } from '../types';
 
 export function createPaymentRostersApi() {
   return {
@@ -55,11 +55,13 @@ export function createPaymentRostersApi() {
       academic_year: number;
       student_verification_enabled?: boolean;
       ranking_id?: number;
+      auto_export_excel?: boolean;
     }): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/payment-rosters/generate', {
         body: {
           ...data,
           student_verification_enabled: data.student_verification_enabled ?? true,
+          auto_export_excel: data.auto_export_excel ?? true,
         },
       });
       return toApiResponse(response);

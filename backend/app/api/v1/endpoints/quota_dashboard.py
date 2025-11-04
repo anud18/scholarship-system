@@ -188,38 +188,6 @@ async def get_detailed_quota_status(
     )
 
 
-# Note: Other endpoints (trends, adjust, alerts, export) need similar refactoring
-# For now, marking them as deprecated or requiring update
-
-
-@router.get("/trends")
-async def get_quota_trends(
-    current_user: User = Depends(require_staff),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    TODO: This endpoint needs to be refactored to use new QuotaService
-    """
-    raise HTTPException(
-        status_code=501,
-        detail="This endpoint is being refactored to use configuration-driven quotas. Please use /overview instead.",
-    )
-
-
-@router.post("/adjust")
-async def adjust_quota_limits(
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    TODO: Quota adjustment should be done through ScholarshipConfiguration management endpoints
-    """
-    raise HTTPException(
-        status_code=501,
-        detail="Quota adjustment is now done through /api/v1/admin/scholarship-configurations. This endpoint is deprecated.",
-    )
-
-
 @router.get("/alerts")
 async def get_quota_alerts(
     academic_year: int = Query(..., description="Academic year"),

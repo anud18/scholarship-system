@@ -15,22 +15,42 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { User as UserType } from "@/types/user";
+import { Application } from "@/lib/api";
 
 interface StudentApplicationWizardProps {
   user: UserType;
   locale: "zh" | "en";
   onApplicationComplete?: () => void;
+  editingApplication?: Application | null;
+  initialStep?: number;
 }
 
 export function StudentApplicationWizard({
   user,
   locale,
   onApplicationComplete,
+  editingApplication,
+  initialStep,
 }: StudentApplicationWizardProps) {
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [studentDataConfirmed, setStudentDataConfirmed] = useState(false);
-  const [personalInfoCompleted, setPersonalInfoCompleted] = useState(false);
+  // 如果是編輯模式且指定了 initialStep，使用 initialStep；否則從 0 開始
+  const [currentStepIndex, setCurrentStepIndex] = useState(
+    editingApplication && initialStep !== undefined ? initialStep : 0
+  );
+
+  // 如果是編輯模式且 initialStep >= 1，自動同意條款
+  const [agreedToTerms, setAgreedToTerms] = useState(
+    editingApplication && initialStep !== undefined && initialStep >= 1 ? true : false
+  );
+
+  // 如果是編輯模式且 initialStep >= 2，自動確認學籍資料
+  const [studentDataConfirmed, setStudentDataConfirmed] = useState(
+    editingApplication && initialStep !== undefined && initialStep >= 2 ? true : false
+  );
+
+  // 如果是編輯模式且 initialStep >= 3，自動完成個人資料（可選）
+  const [personalInfoCompleted, setPersonalInfoCompleted] = useState(
+    editingApplication && initialStep !== undefined && initialStep >= 3 ? true : false
+  );
 
   const initialSteps: WizardStep[] = [
     {
@@ -189,6 +209,7 @@ export function StudentApplicationWizard({
             onComplete={handleApplicationComplete}
             locale={locale}
             userId={parseInt(user.id) || 1}
+            editingApplication={editingApplication}
           />
         );
       default:

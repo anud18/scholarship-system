@@ -9,19 +9,19 @@ Handles scholarship rule operations including:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, delete, func, or_, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
-from app.core.exceptions import NotFoundError
-from app.core.security import require_admin
+from app.core.security import check_scholarship_permission, require_admin
 from app.db.deps import get_db
+from app.models.enums import Semester
 from app.models.scholarship import ScholarshipRule, ScholarshipType
-from app.models.user import AdminScholarship, User, UserRole
+from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.scholarship import (
     ApplyTemplateRequest,
@@ -32,8 +32,6 @@ from app.schemas.scholarship import (
     ScholarshipRuleResponse,
     ScholarshipRuleUpdate,
 )
-
-from ._helpers import get_allowed_scholarship_ids, require_super_admin
 
 logger = logging.getLogger(__name__)
 

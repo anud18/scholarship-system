@@ -40,7 +40,7 @@ import { useScholarshipSpecificApplications } from "@/hooks/use-admin";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { Locale } from "@/lib/validators";
-import { getStatusName } from "@/lib/utils/application-helpers";
+import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 import {
   getStudentName,
   getStudentId,
@@ -472,35 +472,35 @@ export function AdminScholarshipDashboard({
     }
   };
 
-  // 處理銀行帳戶驗證
+  // 處理郵局帳戶驗證
   const handleBankVerification = async (applicationId: number) => {
     setBankVerificationLoading(prev => ({ ...prev, [applicationId]: true }));
     try {
       const response =
         await apiClient.bankVerification.verifyBankAccount(applicationId);
       if (response.success) {
-        toast.success("銀行帳戶驗證已完成");
+        toast.success("郵局帳戶驗證已完成");
 
         // 如果需要手動檢閱，自動開啟手動檢閱 dialog
         if (response.data?.requires_manual_review) {
           setCurrentBankVerification(response.data);
           setBankReviewDialogOpen(true);
-          toast.info("需要人工檢閱，請審核銀行帳號資訊");
+          toast.info("需要人工檢閱，請審核郵局帳號資訊");
         }
 
         refetch(); // 重新載入數據以顯示更新的驗證狀態
       } else {
-        toast.error(response.message || "無法完成銀行帳戶驗證");
+        toast.error(response.message || "無法完成郵局帳戶驗證");
       }
     } catch (error) {
-      console.error("Bank verification error:", error);
-      toast.error("銀行帳戶驗證過程中發生錯誤");
+      console.error("Post office verification error:", error);
+      toast.error("郵局帳戶驗證過程中發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
     }
   };
 
-  // 手動開啟銀行帳戶檢閱 dialog（包含 OCR）
+  // 手動開啟郵局帳戶檢閱 dialog（包含 OCR）
   const handleOpenBankReview = async (applicationId: number) => {
     setBankVerificationLoading(prev => ({ ...prev, [applicationId]: true }));
     try {
@@ -514,7 +514,7 @@ export function AdminScholarshipDashboard({
         toast.error(response.message || "無法載入驗證資料");
       }
     } catch (error) {
-      console.error("Failed to load bank verification data:", error);
+      console.error("Failed to load post office verification data:", error);
       toast.error("載入驗證資料時發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
@@ -536,17 +536,17 @@ export function AdminScholarshipDashboard({
         // 提示用戶已執行 OCR
         toast.info("已執行 OCR 辨識，請進行人工檢閱");
       } else {
-        toast.error(response.message || "無法執行銀行帳號驗證");
+        toast.error(response.message || "無法執行郵局帳號驗證");
       }
     } catch (error) {
-      console.error("Failed to verify bank account:", error);
+      console.error("Failed to verify post office account:", error);
       toast.error("執行驗證時發生錯誤");
     } finally {
       setBankVerificationLoading(prev => ({ ...prev, [applicationId]: false }));
     }
   };
 
-  // 處理批量銀行帳戶驗證
+  // 處理批量郵局帳戶驗證
   const handleBatchBankVerification = async () => {
     if (selectedApplicationsForBatch.length === 0) {
       toast.error("請至少選擇一個申請案件進行批量驗證");
@@ -559,15 +559,15 @@ export function AdminScholarshipDashboard({
         selectedApplicationsForBatch
       );
       if (response.success) {
-        toast.success(`已完成 ${selectedApplicationsForBatch.length} 個申請案件的銀行帳戶驗證`);
+        toast.success(`已完成 ${selectedApplicationsForBatch.length} 個申請案件的郵局帳戶驗證`);
         setSelectedApplicationsForBatch([]);
         refetch(); // 重新載入數據
       } else {
-        toast.error(response.message || "無法完成批量銀行帳戶驗證");
+        toast.error(response.message || "無法完成批量郵局帳戶驗證");
       }
     } catch (error) {
-      console.error("Batch bank verification error:", error);
-      toast.error("批量銀行帳戶驗證過程中發生錯誤");
+      console.error("Batch post office verification error:", error);
+      toast.error("批量郵局帳戶驗證過程中發生錯誤");
     } finally {
       setBatchVerificationLoading(false);
     }
@@ -605,45 +605,25 @@ export function AdminScholarshipDashboard({
     }
   };
 
-  // 獲取銀行驗證狀態的顯示組件
+  // 獲取郵局驗證狀態的顯示組件（簡化版：僅顯示 icon）
   const getBankVerificationStatus = (app: DashboardApplication) => {
     // 新版：檢查 bank_verification 物件中的分開狀態
     const bankVerification = app.meta_data?.bank_verification;
     const accountNumberStatus = bankVerification?.account_number_status;
     const accountHolderStatus = bankVerification?.account_holder_status;
 
-    // Helper function to render individual field status
-    const renderFieldStatus = (status: string | undefined, label: string) => {
-      if (status === "verified") {
-        return <span className="text-green-600">✓</span>;
-      } else if (status === "failed") {
-        return <span className="text-red-600">✗</span>;
-      } else if (status === "needs_review") {
-        return <span className="text-yellow-600">⚠</span>;
-      } else if (status === "not_reviewed") {
-        return <span className="text-gray-400">○</span>;
-      } else {
-        return <span className="text-gray-400">-</span>;
-      }
-    };
-
-    // 如果有分開狀態，顯示詳細資訊
+    // 如果有分開狀態，判斷整體驗證狀態
     if (accountNumberStatus || accountHolderStatus) {
       const allVerified = accountNumberStatus === "verified" && accountHolderStatus === "verified";
       const anyFailed = accountNumberStatus === "failed" || accountHolderStatus === "failed";
 
-      return (
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1 text-xs">
-            {renderFieldStatus(accountNumberStatus, "帳號")}
-            <span className="text-gray-600">帳號</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs">
-            {renderFieldStatus(accountHolderStatus, "戶名")}
-            <span className="text-gray-600">戶名</span>
-          </div>
-        </div>
-      );
+      if (allVerified) {
+        return <ShieldCheck className="h-5 w-5 text-green-600" />;
+      } else if (anyFailed) {
+        return <ShieldX className="h-5 w-5 text-red-600" />;
+      } else {
+        return <Shield className="h-5 w-5 text-yellow-600" />;
+      }
     }
 
     // 舊版：向下相容舊的 bank_verification_status 欄位
@@ -654,33 +634,13 @@ export function AdminScholarshipDashboard({
       app.meta_data?.bank_verification_status === "pending";
 
     if (bankVerified) {
-      return (
-        <div className="flex items-center gap-1 text-green-600">
-          <ShieldCheck className="h-4 w-4" />
-          <span className="text-xs">已驗證</span>
-        </div>
-      );
+      return <ShieldCheck className="h-5 w-5 text-green-600" />;
     } else if (bankVerificationFailed) {
-      return (
-        <div className="flex items-center gap-1 text-red-600">
-          <ShieldX className="h-4 w-4" />
-          <span className="text-xs">驗證失敗</span>
-        </div>
-      );
+      return <ShieldX className="h-5 w-5 text-red-600" />;
     } else if (bankVerificationPending) {
-      return (
-        <div className="flex items-center gap-1 text-yellow-600">
-          <Shield className="h-4 w-4" />
-          <span className="text-xs">驗證中</span>
-        </div>
-      );
+      return <Shield className="h-5 w-5 text-yellow-600" />;
     } else {
-      return (
-        <div className="flex items-center gap-1 text-gray-500">
-          <CreditCard className="h-4 w-4" />
-          <span className="text-xs">未驗證</span>
-        </div>
-      );
+      return <Shield className="h-5 w-5 text-gray-400" />;
     }
   };
 
@@ -854,7 +814,7 @@ export function AdminScholarshipDashboard({
                     ) : (
                       <>
                         <CreditCard className="h-4 w-4 mr-2" />
-                        批量銀行驗證
+                        批量郵局驗證
                       </>
                     )}
                   </Button>
@@ -888,7 +848,7 @@ export function AdminScholarshipDashboard({
                 <option value="submitted">已提交</option>
                 <option value="under_review">審核中</option>
                 <option value="approved">已核准</option>
-                <option value="partial_approve">部分核准</option>
+                <option value="partial_approved">部分核准</option>
                 <option value="rejected">已拒絕</option>
               </select>
             </div>
@@ -919,10 +879,10 @@ export function AdminScholarshipDashboard({
                     />
                   </TableHead>
                   <TableHead>申請人</TableHead>
+                  <TableHead>郵局驗證</TableHead>
                   {showSubTypes && <TableHead>子項目</TableHead>}
                   <TableHead>指派教授</TableHead>
                   <TableHead>狀態</TableHead>
-                  <TableHead>銀行驗證</TableHead>
                   <TableHead>提交時間</TableHead>
                   <TableHead>等待天數</TableHead>
                   <TableHead>操作</TableHead>
@@ -951,6 +911,12 @@ export function AdminScholarshipDashboard({
                       </div>
                       <div className="text-sm text-gray-500 whitespace-nowrap">
                         {app.student_email || app.user?.email || "N/A"}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {/* 僅顯示驗證狀態 icon，所有操作移至申請詳情的「管理」tab */}
+                      <div className="flex justify-center">
+                        {getBankVerificationStatus(app)}
                       </div>
                     </TableCell>
                     {showSubTypes && (
@@ -1134,96 +1100,29 @@ export function AdminScholarshipDashboard({
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      {app.status === 'partial_approve' ? (
-                        <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
-                          <Circle className="w-3 h-3 mr-1 fill-blue-700" />
-                          {getStatusName(app.status as any, "zh")}
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant={
-                            app.status === "approved"
-                              ? "default"
-                              : app.status === "rejected"
-                                ? "destructive"
-                                : app.status === "submitted"
-                                  ? "secondary"
-                                  : "outline"
-                          }
-                        >
-                          {getStatusName(app.status as any, "zh")}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        {/* 驗證狀態顯示 */}
-                        {getBankVerificationStatus(app)}
-
-                        <div className="flex gap-1 flex-wrap">
-                          {/* 自動驗證按鈕（含 OCR） */}
-                          {!app.meta_data?.bank_verification_status &&
-                            ["submitted", "under_review", "approved"].includes(
-                              app.status
-                            ) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleBankVerification(app.id)}
-                                disabled={bankVerificationLoading[app.id]}
-                                className="text-xs h-6 px-2"
-                              >
-                                {bankVerificationLoading[app.id] ? (
-                                  <>
-                                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                    驗證中
-                                  </>
-                                ) : (
-                                  <>
-                                    <CreditCard className="h-3 w-3 mr-1" />
-                                    自動驗證
-                                  </>
-                                )}
-                              </Button>
-                            )}
-
-                          {/* 需要檢閱時的檢閱按鈕 */}
-                          {app.meta_data?.bank_verification_status === "needs_review" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenBankReview(app.id)}
-                              disabled={bankVerificationLoading[app.id]}
-                              className="text-xs h-6 px-2 border-yellow-500 text-yellow-700 hover:bg-yellow-50"
-                            >
-                              {bankVerificationLoading[app.id] ? (
-                                <>
-                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                  載入中
-                                </>
+                      <div className="flex gap-2">
+                        {(() => {
+                          const statusInfo = getDisplayStatusInfo(app, "zh");
+                          return (
+                            <>
+                              {app.status === 'partial_approved' ? (
+                                <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+                                  <Circle className="w-3 h-3 mr-1 fill-blue-700" />
+                                  {statusInfo.statusLabel}
+                                </Badge>
                               ) : (
-                                <>
-                                  <Eye className="h-3 w-3 mr-1" />
-                                  檢閱
-                                </>
+                                <Badge variant={statusInfo.statusVariant}>
+                                  {statusInfo.statusLabel}
+                                </Badge>
                               )}
-                            </Button>
-                          )}
-
-                          {/* 直接手動檢閱按鈕（任何狀態都可用） */}
-                          {["submitted", "under_review", "approved"].includes(app.status) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDirectManualReview(app.id)}
-                              disabled={bankVerificationLoading[app.id]}
-                              className="text-xs h-6 px-2 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                            >
-                              <Eye className="h-3 w-3 mr-1" />
-                              手動檢閱
-                            </Button>
-                          )}
-                        </div>
+                              {statusInfo.showStage && statusInfo.stageLabel && (
+                                <Badge variant={statusInfo.stageVariant}>
+                                  {statusInfo.stageLabel}
+                                </Badge>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -1238,7 +1137,7 @@ export function AdminScholarshipDashboard({
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        {/* 1️⃣ 查看按鈕（最左邊） */}
+                        {/* 查看按鈕 - 點擊進入申請詳情進行審核操作 */}
                         <Button
                           variant="outline"
                           size="sm"
@@ -1252,33 +1151,7 @@ export function AdminScholarshipDashboard({
                           )}
                         </Button>
 
-                        {/* 2️⃣ 核准/拒絕按鈕（中間） */}
-                        {app.status === "submitted" && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                handleStatusUpdate(app.id, "approved")
-                              }
-                              className="hover:bg-green-50 hover:border-green-300 hover:text-green-600"
-                            >
-                              <CheckCircle className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                handleStatusUpdate(app.id, "rejected")
-                              }
-                              className="hover:bg-red-50 hover:border-red-300 hover:text-red-600"
-                            >
-                              <XCircle className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-
-                        {/* 3️⃣ 刪除按鈕（最右邊） */}
+                        {/* 刪除按鈕 */}
                         {(app.status === "draft" || app.status === "submitted") && (
                           <Button
                             variant="outline"

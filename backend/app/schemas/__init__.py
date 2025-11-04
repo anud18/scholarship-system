@@ -10,7 +10,7 @@ from .application import (
     StudentFinancialInfo,
     SupervisorInfo,
 )
-from .common import MessageResponse, PaginatedResponse, PaginationParams
+from .common import PaginatedResponse, PaginationParams
 from .notification import NotificationResponse
 from .scholarship import (
     ApplicationCycleEnum,
@@ -50,7 +50,6 @@ __all__ = [
     "ApplicationCycleEnum",
     "SubTypeSelectionModeEnum",
     "NotificationResponse",
-    "MessageResponse",
     "PaginationParams",
     "PaginatedResponse",
     "SystemSettingCreate",

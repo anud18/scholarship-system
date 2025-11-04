@@ -88,6 +88,27 @@ class RosterService:
             if existing_roster and existing_roster.is_locked:
                 raise RosterLockedError(f"Cannot regenerate locked roster {existing_roster.roster_code}")
 
+            # Validate that distribution is executed when ranking_id is provided
+            if ranking_id:
+                from app.models.college_review import CollegeRanking
+
+                ranking = self.db.query(CollegeRanking).filter(CollegeRanking.id == ranking_id).first()
+
+                if not ranking:
+                    raise ValueError(f"Ranking with ID {ranking_id} not found")
+
+                if not ranking.distribution_executed:
+                    raise ValueError(
+                        f"Cannot generate roster from ranking {ranking_id}: "
+                        f"Distribution has not been executed yet. "
+                        f"Please execute matrix distribution before generating roster."
+                    )
+
+                logger.info(
+                    f"Validated ranking {ranking_id} has executed distribution "
+                    f"({ranking.allocated_count} students allocated)"
+                )
+
             # 產生造冊代碼
             roster_code = self._generate_roster_code(scholarship_configuration_id, period_label, academic_year)
 

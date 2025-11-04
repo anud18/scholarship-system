@@ -106,6 +106,7 @@ class PaymentRoster(Base):
     excel_file_path = Column(String(500))
     excel_file_size = Column(Integer)
     excel_file_hash = Column(String(64))  # SHA256
+    minio_object_name = Column(String(500))  # MinIO object name for Excel file
 
     # 學籍驗證設定
     student_verification_enabled = Column(Boolean, default=True)

@@ -11,7 +11,7 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
-import type { ApiResponse } from '../../api.legacy';
+import type { ApiResponse } from '../types';
 
 type ProfessorStudentRelationship = {
   id: number;

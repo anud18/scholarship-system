@@ -43,7 +43,7 @@ export function getStatusBadgeVariant(status: string): "default" | "secondary" |
   }
 
   // Partial approval state
-  if (statusLower === "partial_approve") {
+  if (statusLower === "partial_approved") {
     return "outline";
   }
 

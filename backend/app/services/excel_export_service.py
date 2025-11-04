@@ -18,6 +18,7 @@ from openpyxl.utils import get_column_letter
 from app.core.config import settings
 from app.core.exceptions import FileStorageError
 from app.models.payment_roster import PaymentRoster, PaymentRosterItem
+from app.services.minio_service import MinIOService
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ class ExcelExportService:
         匯出造冊至Excel檔案
 
         Args:
-            roster: 造冊對象
+            roster: 造冊對象 (MUST be already persisted with a valid ID)
             include_excluded: 是否包含被排除的項目
             template_name: 指定模板名稱 (預設為設定檔定義)
             include_header: 是否在檔案中包含表頭
@@ -158,6 +159,7 @@ class ExcelExportService:
                 "file_name": str,
                 "file_size": int,
                 "file_hash": str,
+                "minio_object_name": str,  # MinIO object path (if upload succeeded)
                 "total_rows": int,
                 "qualified_count": int,
                 "disqualified_count": int,
@@ -168,6 +170,12 @@ class ExcelExportService:
 
         Raises:
             FileStorageError: 檔案儲存失敗
+
+        Important:
+            - This method modifies roster.minio_object_name in memory
+            - CALLER MUST call db.commit() to persist the MinIO object name
+            - If MinIO upload fails, export still succeeds with local file only
+            - roster.id must be valid (not None) for MinIO upload to work
         """
         resolved_template_path = self._resolve_template_path(template_name)
         resolved_template_name = os.path.basename(resolved_template_path)
@@ -226,6 +234,55 @@ class ExcelExportService:
             roster.excel_file_size = file_size
             roster.excel_file_hash = file_hash
 
+            # Upload to MinIO automatically (if roster has valid ID)
+            if roster.id is None:
+                logger.warning(
+                    "Roster ID is None, cannot upload to MinIO. " "Roster must be persisted to database before export."
+                )
+            else:
+                try:
+                    # File size check (default limit: 50MB)
+                    max_file_size = 50 * 1024 * 1024  # 50MB
+                    if file_size > max_file_size:
+                        logger.warning(
+                            f"Excel file size ({file_size} bytes) exceeds recommended limit "
+                            f"({max_file_size} bytes). Upload may be slow."
+                        )
+
+                    minio_service = MinIOService()
+
+                    # Read the Excel file
+                    with open(file_path, "rb") as f:
+                        file_content = f.read()
+
+                    # Upload to MinIO
+                    minio_result = minio_service.upload_roster_file(
+                        file_content=file_content,
+                        filename=file_name,
+                        roster_id=roster.id,
+                        metadata={"export_type": "excel", "template": resolved_template_name},
+                    )
+
+                    # Store MinIO object name in roster (caller must commit to persist)
+                    roster.minio_object_name = minio_result["object_name"]
+
+                    logger.info(
+                        f"Excel file uploaded to MinIO: {minio_result['object_name']} "
+                        f"(size: {file_size} bytes, hash: {file_hash[:8]}...)"
+                    )
+
+                    # Clean up local file after successful MinIO upload
+                    try:
+                        os.remove(file_path)
+                        logger.info(f"Cleaned up local file after MinIO upload: {file_path}")
+                    except Exception as cleanup_error:
+                        logger.warning(f"Failed to cleanup local file {file_path}: {cleanup_error}")
+
+                except Exception as minio_error:
+                    # Log error but don't fail the export - local file still exists
+                    logger.error(f"Failed to upload Excel file to MinIO: {minio_error}", exc_info=True)
+                    logger.warning(f"Excel file remains available locally at: {file_path}")
+
             qualified_count = sum(1 for item in roster_items if item.is_qualified and item.is_included)
             disqualified_count = len(roster_items) - qualified_count
 
@@ -236,6 +293,7 @@ class ExcelExportService:
                 "file_name": file_name,
                 "file_size": file_size,
                 "file_hash": file_hash,
+                "minio_object_name": roster.minio_object_name,  # Include MinIO object name
                 "total_rows": len(roster_items),
                 "qualified_count": qualified_count,
                 "disqualified_count": disqualified_count,

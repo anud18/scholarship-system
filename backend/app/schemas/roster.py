@@ -22,6 +22,7 @@ class RosterCreateRequest(BaseModel):
     academic_year: int = Field(..., description="學年度")
     student_verification_enabled: bool = Field(True, description="是否啟用學籍驗證")
     ranking_id: Optional[int] = Field(None, description="指定排名ID（若有多個排名時使用）")
+    auto_export_excel: bool = Field(True, description="是否自動產生Excel檔案並上傳到MinIO")
 
 
 class RosterExportRequest(BaseModel):
@@ -92,6 +93,13 @@ class RosterResponse(BaseModel):
     updated_at: Optional[datetime] = None
     locked_at: Optional[datetime] = None
     locked_by_user_id: Optional[int] = None
+
+    # Excel 檔案資訊
+    excel_filename: Optional[str] = None
+    excel_file_path: Optional[str] = None
+    excel_file_size: Optional[int] = None
+    excel_file_hash: Optional[str] = None
+    minio_object_name: Optional[str] = None  # MinIO object path for Excel file
 
     # 前端需要的額外欄位
     scholarship_config_name: Optional[str] = None

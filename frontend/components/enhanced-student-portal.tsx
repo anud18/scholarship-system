@@ -70,10 +70,13 @@ import api, {
   ApplicationDocument,
 } from "@/lib/api";
 import {
-  getApplicationTimeline,
-  getStatusColor,
-  getStatusName,
   ApplicationStatus,
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
+import {
+  getApplicationTimeline,
+  getDisplayStatusInfo,
 } from "@/lib/utils/application-helpers";
 import { clsx } from "@/lib/utils";
 import { User } from "@/types/user";
@@ -88,6 +91,9 @@ interface EnhancedStudentPortalProps {
   locale: Locale;
   initialTab?: "scholarship-list" | "new-application" | "applications";
   onApplicationSubmitted?: () => void;
+  editingApplicationId?: number | null;
+  onStartEditing?: (applicationId: number) => void;
+  onClearEditing?: () => void;
 }
 
 type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
@@ -97,9 +103,14 @@ export function EnhancedStudentPortal({
   locale,
   initialTab = "scholarship-list",
   onApplicationSubmitted,
+  editingApplicationId,
+  onStartEditing,
+  onClearEditing,
 }: EnhancedStudentPortalProps) {
   const t = (key: string) => getTranslation(locale, key);
   const validator = useMemo(() => new FormValidator(locale), [locale]);
+
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   const {
     applications,
@@ -115,9 +126,11 @@ export function EnhancedStudentPortal({
     deleteApplication,
   } = useApplications();
 
-  const [activeTab, setActiveTab] = useState("scholarship-list");
-  const [editingApplication, setEditingApplication] =
-    useState<Application | null>(null);
+  // Get the editing application from the applications list
+  const editingApplication = editingApplicationId
+    ? applications.find(app => app.id === editingApplicationId) || null
+    : null;
+
   const [selectedSubTypes, setSelectedSubTypes] = useState<
     Record<string, string[]>
   >({});
@@ -198,15 +211,13 @@ export function EnhancedStudentPortal({
     });
   };
 
-  // Update active tab based on applications
+  // Load form data when editingApplication changes
   useEffect(() => {
-    if (!applicationsLoading && !applicationsError) {
-      if (applications && applications.length > 0 && activeTab === "scholarship-list") {
-        setActiveTab("applications");
-      }
+    if (editingApplication && initialTab === "new-application") {
+      handleEditApplication(editingApplication);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applications, applicationsLoading, applicationsError]);
+  }, [editingApplication, initialTab]);
 
   // Debug authentication status
   useEffect(() => {
@@ -735,12 +746,13 @@ export function EnhancedStudentPortal({
       setDynamicFileData({});
       setUploadedFiles({});
       setSelectedScholarship(null);
-      setEditingApplication(null);
       setAgreeTerms(false);
+
+      // 清除編輯狀態並通知父組件切換到「我的申請」tab
+      onClearEditing?.();
 
       // 重新載入申請列表
       await fetchApplications();
-      setActiveTab("applications");
 
       // 通知父組件切換到「我的申請」tab
       onApplicationSubmitted?.();
@@ -921,6 +933,12 @@ export function EnhancedStudentPortal({
 
     try {
       await deleteApplication(applicationId);
+
+      // 如果刪除的是正在編輯的申請，清除編輯狀態
+      if (editingApplicationId === applicationId) {
+        onClearEditing?.();
+      }
+
       alert(locale === "zh" ? "草稿已成功刪除" : "Draft deleted successfully");
     } catch (error) {
       console.error("Failed to delete application:", error);
@@ -956,7 +974,10 @@ export function EnhancedStudentPortal({
 
   // 取消編輯函數
   const handleCancelEdit = () => {
-    setEditingApplication(null);
+    // 清除編輯狀態
+    onClearEditing?.();
+
+    // 重置表單
     setNewApplicationData({
       scholarship_type: "",
       configuration_id: 0,
@@ -971,7 +992,6 @@ export function EnhancedStudentPortal({
     setSelectedScholarship(null);
     setAgreeTerms(false);
     setSelectedSubTypes({});
-    setActiveTab("applications");
   };
 
   // 編輯處理函數
@@ -983,8 +1003,11 @@ export function EnhancedStudentPortal({
 
   // Handle application completion - switch to applications tab and refresh
   const handleApplicationComplete = () => {
-    setActiveTab("applications");
     fetchApplications();
+    setActiveTab("applications");
+
+    // 通知父組件切換到「我的申請」tab
+    onApplicationSubmitted?.();
 
     // Optionally show a success message
     // You can use a toast library if available
@@ -995,168 +1018,9 @@ export function EnhancedStudentPortal({
     );
   };
   const handleEditApplication = async (application: Application) => {
-    // 設置編輯模式
-    setEditingApplication(application);
-
-    // 先設置獎學金類型，這樣可以確保 selectedScholarship 正確設置
-    const scholarship =
-      eligibleScholarships.find(s => s.code === application.scholarship_type) ||
-      null;
-    setSelectedScholarship(scholarship);
-
-    // 載入申請資料到表單
-    setNewApplicationData({
-      scholarship_type: application.scholarship_type,
-      configuration_id: scholarship?.configuration_id || 0,
-      personal_statement: application.personal_statement || "",
-      form_data: {
-        fields: {},
-        documents: [],
-      },
-    });
-
-    // 載入同意條款狀態
-    setAgreeTerms(application.agree_terms || false);
-
-    // 載入現有的表單資料
-    const existingFormData: Record<string, any> = {};
-    const existingFileData: Record<string, File[]> = {};
-
-    // 處理 submitted_form_data 或 form_data
-    const formData =
-      application.submitted_form_data || application.form_data || {};
-
-    // 處理欄位資料
-    if (formData.fields) {
-      // 後端格式：{ fields: { field_id: { value: "..." } } }
-      Object.entries(formData.fields).forEach(
-        ([fieldId, fieldData]: [string, any]) => {
-          if (
-            fieldData &&
-            typeof fieldData === "object" &&
-            "value" in fieldData
-          ) {
-            existingFormData[fieldId] = fieldData.value;
-          }
-        }
-      );
-    } else {
-      // 前端格式：直接是欄位資料
-      Object.entries(formData).forEach(([key, value]) => {
-        if (
-          key !== "documents" &&
-          key !== "files" &&
-          value !== undefined &&
-          value !== null &&
-          value !== ""
-        ) {
-          existingFormData[key] = value;
-        }
-      });
-    }
-
-    // 處理文件資料
-    if (formData.documents) {
-      // 後端格式：{ documents: [{ document_id: "...", ... }] }
-      formData.documents.forEach((doc: any) => {
-        if (doc.document_id && doc.original_filename) {
-          // 直接使用後端返回的文件數據，轉換為 FileUpload 組件期望的格式
-          const fileData = {
-            id: doc.file_id || doc.id,
-            filename: doc.filename || doc.original_filename,
-            original_filename: doc.original_filename,
-            file_size: doc.file_size,
-            mime_type: doc.mime_type,
-            file_type: doc.document_type,
-            file_path: doc.file_path,
-            download_url: doc.download_url,
-            is_verified: doc.is_verified,
-            uploaded_at: doc.upload_time,
-            // 添加 FileUpload 組件需要的屬性
-            name: doc.original_filename,
-            size: doc.file_size || 0,
-            originalSize: doc.file_size || 0, // FileUpload 組件使用這個屬性
-            type: doc.mime_type || "application/octet-stream",
-            // 標記為已上傳的文件
-            isUploaded: true,
-          };
-          existingFileData[doc.document_id] = [fileData as any];
-        }
-      });
-    }
-
-    // 載入子類型選擇 - 確保在設置 selectedScholarship 之後
-    // 檢查獎學金是否有特殊的子類型（不是只有 general）
-    const hasSpecialSubTypes =
-      scholarship?.eligible_sub_types &&
-      scholarship.eligible_sub_types.length > 0 &&
-      scholarship.eligible_sub_types[0]?.value !== "general" &&
-      scholarship.eligible_sub_types[0]?.value !== null;
-
-    console.log("Debug handleEditApplication:", {
-      applicationId: application.id,
-      scholarshipType: application.scholarship_type,
-      scholarshipSubtypeList: application.scholarship_subtype_list,
-      hasSpecialSubTypes,
-      eligibleSubTypes: scholarship?.eligible_sub_types,
-    });
-
-    if (hasSpecialSubTypes) {
-      // 只有當獎學金有特殊子類型時才載入子類型選擇
-      if (
-        application.scholarship_subtype_list &&
-        application.scholarship_subtype_list.length > 0
-      ) {
-        console.log(
-          "Loading from scholarship_subtype_list:",
-          application.scholarship_subtype_list
-        );
-        setSelectedSubTypes(prev => ({
-          ...prev,
-          [application.scholarship_type]:
-            application.scholarship_subtype_list as string[],
-        }));
-      } else {
-        // 如果沒有子類型列表，嘗試從表單資料中獲取
-        const formData =
-          application.submitted_form_data || application.form_data || {};
-        if (
-          formData.scholarship_subtype_list &&
-          formData.scholarship_subtype_list.length > 0
-        ) {
-          console.log(
-            "Loading from form data:",
-            formData.scholarship_subtype_list
-          );
-          setSelectedSubTypes(prev => ({
-            ...prev,
-            [application.scholarship_type]:
-              formData.scholarship_subtype_list as string[],
-          }));
-        } else {
-          // 如果都沒有，設置為空陣列
-          console.log("No subtype data found, setting empty array");
-          setSelectedSubTypes(prev => ({
-            ...prev,
-            [application.scholarship_type]: [],
-          }));
-        }
-      }
-    } else {
-      // 如果獎學金只有 general 類型，設置為空陣列（不顯示子類型選擇）
-      console.log("Scholarship has only general type, setting empty array");
-      setSelectedSubTypes(prev => ({
-        ...prev,
-        [application.scholarship_type]: [],
-      }));
-    }
-
-    // 設置動態表單資料
-    setDynamicFormData(existingFormData);
-    setDynamicFileData(existingFileData);
-
-    // 切換到新增申請頁面
-    setActiveTab("new-application");
+    // 通知父組件開始編輯（這會設置 editingApplicationId 和切換 Tab）
+    // StudentApplicationWizard 會自動載入編輯數據到第四階段
+    onStartEditing?.(application.id);
   };
 
   // Loading state
@@ -1210,11 +1074,23 @@ export function EnhancedStudentPortal({
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>{application.scholarship_type}</span>
-          <Badge
-            variant={getStatusColor(application.status as ApplicationStatus)}
-          >
-            {getStatusName(application.status as ApplicationStatus, locale)}
-          </Badge>
+          <div className="flex gap-2">
+            {(() => {
+              const statusInfo = getDisplayStatusInfo(application, locale);
+              return (
+                <>
+                  <Badge variant={statusInfo.statusVariant}>
+                    {statusInfo.statusLabel}
+                  </Badge>
+                  {statusInfo.showStage && statusInfo.stageLabel && (
+                    <Badge variant={statusInfo.stageVariant}>
+                      {statusInfo.stageLabel}
+                    </Badge>
+                  )}
+                </>
+              );
+            })()}
+          </div>
         </CardTitle>
         <CardDescription>
           {t("applications.submitted_at")}:{" "}
@@ -1253,8 +1129,8 @@ export function EnhancedStudentPortal({
         />
       )}
 
-      {/* Conditional rendering based on initialTab */}
-      {initialTab === "applications" && (
+      {/* Conditional rendering based on activeTab */}
+      {activeTab === "applications" && (
         <Card>
           <CardHeader>
             <CardTitle>{t("portal.application_records")}</CardTitle>
@@ -1304,11 +1180,11 @@ export function EnhancedStudentPortal({
                         </p>
                       </div>
                       <Badge
-                        variant={getStatusColor(
+                        variant={getApplicationStatusBadgeVariant(
                           app.status as ApplicationStatus
                         )}
                       >
-                        {getStatusName(
+                        {getApplicationStatusLabel(
                           app.status as ApplicationStatus,
                           locale
                         )}
@@ -1370,15 +1246,17 @@ export function EnhancedStudentPortal({
         </Card>
       )}
 
-      {initialTab === "new-application" && (
+      {activeTab === "new-application" && (
         <StudentApplicationWizard
           user={user}
           locale={locale}
           onApplicationComplete={handleApplicationComplete}
+          editingApplication={editingApplication}
+          initialStep={editingApplication ? 3 : undefined}
         />
       )}
 
-      {initialTab === "scholarship-list" && (
+      {activeTab === "scholarship-list" && (
         <>
           {/* Scholarship Info Cards */}
           {eligibleScholarships.map(scholarship => {

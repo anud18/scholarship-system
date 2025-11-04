@@ -21,6 +21,7 @@ import {
 import { api } from "@/lib/api";
 import { ScholarshipTimeline } from "@/components/scholarship-timeline";
 import { useScholarshipPermissions } from "@/hooks/use-scholarship-permissions";
+import { getDisplayStatusInfo } from "@/lib/utils/application-helpers";
 
 interface AdminDashboardProps {
   stats: any;
@@ -57,23 +58,6 @@ export function AdminDashboard({
 }: AdminDashboardProps) {
   // Get user's scholarship permissions
   const { filterScholarshipsByPermission } = useScholarshipPermissions();
-
-  // 狀態中文化映射
-  const getStatusText = (status: string) => {
-    const statusMap = {
-      draft: "草稿",
-      submitted: "已提交",
-      under_review: "審核中",
-      pending_recommendation: "待推薦",
-      recommended: "已推薦",
-      approved: "已核准",
-      rejected: "已拒絕",
-      returned: "已退回",
-      withdrawn: "已撤回",
-      cancelled: "已取消",
-    };
-    return statusMap[status as keyof typeof statusMap] || status;
-  };
 
   // 直接使用 API 回傳的獎學金名稱
   const getScholarshipTypeName = (
@@ -278,24 +262,14 @@ export function AdminDashboard({
                             {app.app_id || `APP-${app.id}`}
                           </span>
                         </p>
-                        <Badge
-                          variant={
-                            app.status === "approved"
-                              ? "default"
-                              : app.status === "rejected"
-                                ? "destructive"
-                                : "outline"
-                          }
-                          className={
-                            app.status === "approved"
-                              ? "bg-green-600"
-                              : app.status === "rejected"
-                                ? "bg-red-600"
-                                : "border-nycu-orange-300 text-nycu-orange-700"
-                          }
-                        >
-                          {getStatusText(app.status)}
-                        </Badge>
+                        {(() => {
+                          const statusInfo = getDisplayStatusInfo(app, "zh");
+                          return (
+                            <Badge variant={statusInfo.statusVariant}>
+                              {statusInfo.statusLabel}
+                            </Badge>
+                          );
+                        })()}
                       </div>
                       <div className="flex items-center justify-between text-sm text-nycu-navy-600">
                         <div className="flex items-center gap-4">

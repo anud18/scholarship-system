@@ -485,10 +485,6 @@ class ScholarshipApplicationService:
         # Create initial review record
         self._create_initial_review(application)
 
-        # NOTE: Professor review is no longer pre-created. It will be created
-        # when the professor actually submits their review through the unified review system.
-        # The old _create_professor_review_request method has been deprecated.
-
         await self.db.commit()
         return True, "Application submitted successfully"
 
@@ -543,12 +539,12 @@ class ScholarshipApplicationService:
         for app in renewal_apps:
             # Auto-approve if meets renewal criteria
             if self._meets_renewal_criteria(app):
-                app.status = ApplicationStatus.approved
+                app.status = ApplicationStatus.approved.value
                 app.decision_date = datetime.now(timezone.utc)
                 approved_count += 1
             else:
                 # Move to regular review process
-                app.status = ApplicationStatus.under_review
+                app.status = ApplicationStatus.under_review.value
 
             processed_count += 1
 
@@ -622,14 +618,6 @@ class ScholarshipApplicationService:
 
         self.db.add(review)
         return review
-
-    # DEPRECATED: This method is no longer used. Professor reviews are created
-    # via the unified review system when professors actually submit their reviews.
-    # See ReviewService.create_review() and professor.py endpoints for the new approach.
-    #
-    # def _create_professor_review_request(self, application: "Application") -> "ProfessorReview":
-    #     """Create professor review request"""
-    #     # ... old implementation removed ...
 
     def _meets_renewal_criteria(self, application: "Application") -> bool:
         """Check if renewal application meets auto-approval criteria"""

@@ -312,7 +312,6 @@ async def get_scholarship_sub_types(
                 in [
                     ApplicationStatus.submitted.value,
                     ApplicationStatus.under_review.value,
-                    ApplicationStatus.pending_recommendation.value,
                 ]
             ]
         )

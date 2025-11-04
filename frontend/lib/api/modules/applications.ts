@@ -13,7 +13,8 @@
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
-import type { ApiResponse, Application, ApplicationFile } from '../../api.legacy';
+import type { ApiResponse } from '../types';
+import type { Application, ApplicationFile } from '../types';
 import type { components } from '../generated/schema';
 
 type ApplicationStatusUpdateResponse = components['schemas']['ApplicationStatusUpdateResponse'];

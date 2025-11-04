@@ -199,15 +199,16 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
 
     for setting_data in settings_to_seed:
         setting_key_name = setting_data["key"]
+        is_sensitive = setting_data.get("is_sensitive", False)
 
         try:
             # Check if setting already exists
             existing = await config_service.get_configuration(setting_key_name)
 
             if existing:
+                # SECURITY: Don't log settings (may contain sensitive data like passwords)
                 # Skip if already exists (don't overwrite user modifications)
                 skipped_count += 1
-                # SECURITY: Don't log variable content - CodeQL taint tracking
                 continue
 
             # Create new setting
@@ -217,15 +218,16 @@ async def seed_system_settings(db: AsyncSession, system_user_id: int = 1):
                 category=setting_data["category"],
                 data_type=setting_data["data_type"],
                 description=setting_data["description"],
-                is_sensitive=setting_data["is_sensitive"],
+                is_sensitive=is_sensitive,
                 user_id=system_user_id,
                 change_reason="Initial system setup",
             )
+            # SECURITY: Don't log settings (may contain sensitive data like passwords)
             created_count += 1
-            # SECURITY: Don't log variable content - CodeQL taint tracking
 
         except Exception:
-            # SECURITY: Don't log variable content - CodeQL taint tracking
+            # SECURITY: Don't log exception details (may contain sensitive data like passwords)
+            # Silently fail and continue with other settings
             failed_count += 1
             continue
 

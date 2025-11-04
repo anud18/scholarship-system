@@ -30,6 +30,22 @@ def _drop_fk_if_exists(table_name: str, constraint_name: str) -> None:
 
 
 def upgrade() -> None:
+    # Check if tables exist before attempting to modify them
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = inspector.get_table_names()
+
+    # Skip if college_reviews table doesn't exist
+    # (may have been removed in earlier migrations or never created)
+    if "college_reviews" not in tables:
+        print("⊘ Skipping: college_reviews table does not exist")
+        return
+
+    # Skip if college_ranking_items table doesn't exist
+    if "college_ranking_items" not in tables:
+        print("⊘ Skipping: college_ranking_items table does not exist")
+        return
+
     _drop_fk_if_exists("college_reviews", "college_reviews_application_id_fkey")
     op.create_foreign_key(
         "college_reviews_application_id_fkey",
@@ -52,6 +68,21 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Check if tables exist before attempting to modify them
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    tables = inspector.get_table_names()
+
+    # Skip if college_reviews table doesn't exist
+    if "college_reviews" not in tables:
+        print("⊘ Skipping downgrade: college_reviews table does not exist")
+        return
+
+    # Skip if college_ranking_items table doesn't exist
+    if "college_ranking_items" not in tables:
+        print("⊘ Skipping downgrade: college_ranking_items table does not exist")
+        return
+
     _drop_fk_if_exists("college_reviews", "college_reviews_application_id_fkey")
     op.create_foreign_key(
         "college_reviews_application_id_fkey",

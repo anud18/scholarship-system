@@ -274,12 +274,13 @@ async def get_matrix_quota_status(
         usage_data = {}
 
         # Query applications for this scholarship type and period
+        # Use quota_allocation_status to track distribution results (獲得分發狀態)
         app_stmt = select(Application).where(
             and_(
                 Application.scholarship_type_id == phd_scholarship.id,
                 Application.academic_year == academic_year,
                 Application.semester == semester if semester else Application.semester.is_(None),
-                Application.status.in_(["allocated", "submitted", "professor_reviewed", "college_reviewed"]),
+                Application.quota_allocation_status.in_(["allocated", "rejected", "waitlisted"]),
             )
         )
 
@@ -310,8 +311,8 @@ async def get_matrix_quota_status(
             if college_code not in usage_data:
                 usage_data[college_code] = {"used": 0, "applications": 0}
 
-            # Count allocated applications as "used"
-            if app.status == "allocated":
+            # Count applications with allocated quota as "used" (獲得分發的配額)
+            if app.quota_allocation_status == "allocated":
                 usage_data[college_code]["used"] += 1
 
             # Count all applications

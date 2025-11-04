@@ -47,6 +47,7 @@ import { User } from "@/types/user";
 
 export default function ScholarshipManagementSystem() {
   const [activeTab, setActiveTab] = useState("main");
+  const [editingApplicationId, setEditingApplicationId] = useState<number | null>(null);
 
   // Debug activeTab changes
   useEffect(() => {
@@ -259,6 +260,17 @@ export default function ScholarshipManagementSystem() {
   }, [user]);
 
   const t = (key: string) => getTranslation(locale, key);
+
+  // Handle editing application from "My Applications" tab
+  const handleStartEditingApplication = (applicationId: number) => {
+    setEditingApplicationId(applicationId);
+    setActiveTab("new-application");
+  };
+
+  // Clear editing state when application is submitted or cancelled
+  const handleClearEditingState = () => {
+    setEditingApplicationId(null);
+  };
 
   // Show loading screen while checking authentication
   if (authLoading) {
@@ -536,6 +548,9 @@ export default function ScholarshipManagementSystem() {
                   locale={locale}
                   initialTab="scholarship-list"
                   onApplicationSubmitted={() => setActiveTab("applications")}
+                  editingApplicationId={editingApplicationId}
+                  onStartEditing={handleStartEditingApplication}
+                  onClearEditing={handleClearEditingState}
                 />
               </TabsContent>
 
@@ -549,7 +564,13 @@ export default function ScholarshipManagementSystem() {
                   }
                   locale={locale}
                   initialTab="new-application"
-                  onApplicationSubmitted={() => setActiveTab("applications")}
+                  onApplicationSubmitted={() => {
+                    setActiveTab("applications");
+                    handleClearEditingState();
+                  }}
+                  editingApplicationId={editingApplicationId}
+                  onStartEditing={handleStartEditingApplication}
+                  onClearEditing={handleClearEditingState}
                 />
               </TabsContent>
 
@@ -563,6 +584,9 @@ export default function ScholarshipManagementSystem() {
                   }
                   locale={locale}
                   initialTab="applications"
+                  editingApplicationId={editingApplicationId}
+                  onStartEditing={handleStartEditingApplication}
+                  onClearEditing={handleClearEditingState}
                 />
               </TabsContent>
             </>

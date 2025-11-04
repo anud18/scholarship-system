@@ -135,7 +135,7 @@ class DeadlineChecker:
         stmt = (
             select(Application)
             .options(
-                selectinload(Application.user),
+                selectinload(Application.student),
                 selectinload(Application.scholarship_type_ref),
             )
             .where(
@@ -160,7 +160,7 @@ class DeadlineChecker:
 
         for application in draft_applications:
             try:
-                if not application.user:
+                if not application.student:
                     logger.warning(f"Application {application.id} has no user, skipping")
                     continue
 
@@ -171,8 +171,8 @@ class DeadlineChecker:
                     application_id=application.id,
                     deadline_data={
                         "app_id": application.app_id,
-                        "student_name": student_data.get("name") or application.user.name,
-                        "student_email": student_data.get("email") or application.user.email,
+                        "student_name": student_data.get("name") or application.student.name,
+                        "student_email": student_data.get("email") or application.student.email,
                         "deadline": deadline.strftime("%Y-%m-%d %H:%M"),
                         "days_remaining": str(days_remaining),
                         "deadline_type": deadline_label,
@@ -182,7 +182,7 @@ class DeadlineChecker:
                 )
 
                 logger.info(
-                    f"Triggered {deadline_type} deadline notification for application {application.id} (student: {application.user.email})"
+                    f"Triggered {deadline_type} deadline notification for application {application.id} (student: {application.student.email})"
                 )
 
             except Exception as e:

@@ -16,7 +16,7 @@
 
 import useSWR from 'swr';
 import { api } from '@/lib/api';
-import type { ApiResponse } from '@/lib/api.legacy';
+import type { ApiResponse } from '@/lib/api/types';
 
 /**
  * Complete user profile structure

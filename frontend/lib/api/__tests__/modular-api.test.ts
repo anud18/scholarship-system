@@ -754,20 +754,22 @@ describe('Modular API Structure', () => {
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
 
-    it('should get college statistics', async () => {
-      mockFetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({ success: true, message: 'Stats retrieved', data: {} }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      })
-    );
+    // NOTE: Statistics endpoint was removed from backend
+    // TODO: Re-enable test when statistics endpoint is reimplemented
+    // it('should get college statistics', async () => {
+    //   mockFetch.mockResolvedValueOnce(
+    //   new Response(JSON.stringify({ success: true, message: 'Stats retrieved', data: {} }), {
+    //     status: 200,
+    //     headers: { 'content-type': 'application/json' },
+    //   })
+    // );
 
-      const result = await api.college.getStatistics(113, 'first');
+    //   const result = await api.college.getStatistics(113, 'first');
 
-      expect(result.success).toBe(true);
-      const fetchCall = mockFetch.mock.calls[0];
-      expect(getUrl(fetchCall[0])).toBe('/api/v1/college-review/statistics?academic_year=113&semester=first');
-    });
+    //   expect(result.success).toBe(true);
+    //   const fetchCall = mockFetch.mock.calls[0];
+    //   expect(getUrl(fetchCall[0])).toBe('/api/v1/college-review/statistics?academic_year=113&semester=first');
+    // });
   });
 
   describe('Whitelist Module', () => {

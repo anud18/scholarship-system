@@ -267,11 +267,13 @@ async def upload_bank_document_file(
             "data": {"document_url": document_url},
         }
     except ValueError as e:
-        logger.error(f"ValueError in upload: {e}")
+        # SECURITY: Log exception type only (prevent stack trace exposure)
+        logger.error(f"ValueError in upload: {type(e).__name__}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        logger.error(f"Unexpected error in upload: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"上傳失敗: {str(e)}")
+        # SECURITY: Log exception type only, sanitized detail (prevent stack trace exposure)
+        logger.error(f"Unexpected error in upload: {type(e).__name__}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="上傳失敗")
 
 
 @router.delete("/me/bank-document")
@@ -374,27 +376,31 @@ async def get_bank_document(filename: str, db: AsyncSession = Depends(get_db)):
         bank_docs_dir = os.environ.get("BANK_DOCUMENTS_DIR", "bank_documents")
         storage_directory = os.path.join(upload_base, bank_docs_dir)
 
-        # SECURITY: Break CodeQL taint flow by validating against directory listing
-        # Filename is already validated by validate_filename_strict() above
-        # Now check if it exists in the directory (source of truth is filesystem, not user input)
+        # SECURITY: Path injection prevention - use filesystem as source of truth
+        # 1. Validate directory exists
         if not os.path.exists(storage_directory):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="儲存目錄不存在")
 
-        # List all files in the directory
+        # 2. List all available files (untainted source from filesystem)
         try:
             available_files = os.listdir(storage_directory)
         except OSError:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="無法讀取儲存目錄")
 
-        # Check if the requested file exists in the directory
-        # This breaks taint flow: we're using the filename from directory listing, not from user input
-        if filename not in available_files:
+        # 3. Find matching file from filesystem listing (breaks taint flow)
+        # Search for the requested filename in the filesystem-provided list
+        safe_filename = None
+        for fs_filename in available_files:
+            if fs_filename == filename:  # Match found in filesystem
+                safe_filename = fs_filename  # Use filename from filesystem, not user input
+                break
+
+        # 4. Verify file was found
+        if safe_filename is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="證明文件不存在")
 
-        # Get the safe filename from the directory listing (breaks taint flow)
-        safe_filename = available_files[available_files.index(filename)]
-
-        # Construct path using the safe filename from directory listing
+        # 5. Construct path using filesystem-provided filename (untainted)
+        # safe_filename comes from os.listdir(), not user input
         file_path = os.path.join(storage_directory, safe_filename)
 
         return FileResponse(file_path)
@@ -492,7 +498,8 @@ async def extract_bank_info_from_passbook(
         try:
             ocr_service = get_ocr_service()
         except Exception as e:
-            logger.error(f"OCR service initialization failed: {str(e)}")
+            # SECURITY: Log exception type only (prevent stack trace exposure)
+            logger.error(f"OCR service initialization failed: {type(e).__name__}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="OCR service is not available. Please contact administrator.",
@@ -539,7 +546,8 @@ async def extract_bank_info_from_passbook(
                 )
 
         except Exception as e:
-            logger.error(f"Bank OCR failed for user {current_user.id}: {str(e)}")
+            # SECURITY: Log exception type only (prevent stack trace exposure)
+            logger.error(f"Bank OCR failed for user {current_user.id}: {type(e).__name__}")
             # SECURITY: Don't expose internal error details to client
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -549,7 +557,8 @@ async def extract_bank_info_from_passbook(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in bank OCR: {str(e)}")
+        # SECURITY: Log exception type only (prevent stack trace exposure)
+        logger.error(f"Unexpected error in bank OCR: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during processing",
@@ -588,7 +597,8 @@ async def extract_text_from_document(
         try:
             ocr_service = get_ocr_service()
         except Exception as e:
-            logger.error(f"OCR service initialization failed: {str(e)}")
+            # SECURITY: Log exception type only (prevent stack trace exposure)
+            logger.error(f"OCR service initialization failed: {type(e).__name__}")
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="OCR service is not available. Please contact administrator.",
@@ -617,7 +627,8 @@ async def extract_text_from_document(
             }
 
         except Exception as e:
-            logger.error(f"Document OCR failed for user {current_user.id}: {str(e)}")
+            # SECURITY: Log exception type only (prevent stack trace exposure)
+            logger.error(f"Document OCR failed for user {current_user.id}: {type(e).__name__}")
             # SECURITY: Don't expose internal error details to client
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -627,7 +638,8 @@ async def extract_text_from_document(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in document OCR: {str(e)}")
+        # SECURITY: Log exception type only (prevent stack trace exposure)
+        logger.error(f"Unexpected error in document OCR: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during processing",

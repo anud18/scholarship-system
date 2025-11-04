@@ -227,7 +227,6 @@ class Application(Base):
             in [
                 ApplicationStatus.submitted.value,
                 ApplicationStatus.under_review.value,
-                ApplicationStatus.recommended.value,
             ]
         )
 
@@ -275,12 +274,12 @@ class Application(Base):
         if self.is_renewal:
             if self.status == ApplicationStatus.submitted.value:
                 return "renewal_professor"
-            elif self.status == ApplicationStatus.recommended.value:
+            elif self.status == ApplicationStatus.under_review.value:
                 return "renewal_college"
         else:
             if self.status == ApplicationStatus.submitted.value:
                 return "general_professor"
-            elif self.status == ApplicationStatus.recommended.value:
+            elif self.status == ApplicationStatus.under_review.value:
                 return "general_college"
         return None
 

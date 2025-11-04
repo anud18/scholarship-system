@@ -14,7 +14,7 @@
 
 import useSWR from 'swr';
 import { api } from '@/lib/api';
-import type { ApiResponse } from '@/lib/api.legacy';
+import type { ApiResponse } from '@/lib/api/types';
 
 type ReferenceDataAll = {
   academies: Array<{ id: number; code: string; name: string }>;

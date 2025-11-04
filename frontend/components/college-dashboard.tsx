@@ -47,9 +47,12 @@ import { DeleteApplicationDialog } from "@/components/delete-application-dialog"
 import { DocumentRequestForm } from "@/components/document-request-form";
 import { getTranslation } from "@/lib/i18n";
 import {
-  getStatusColor,
-  getStatusName,
   ApplicationStatus,
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
+import {
+  getDisplayStatusInfo,
 } from "@/lib/utils/application-helpers";
 import {
   Search,
@@ -1340,13 +1343,13 @@ export function CollegeDashboard({
       // Prepare export data
       const exportData = applications.map((app) => {
         // Format status
-        const statusText = app.status_zh || getStatusName(app.status as ApplicationStatus, locale);
+        const statusText = app.status_zh || getApplicationStatusLabel(app.status as ApplicationStatus, locale);
 
         // Format review status (學院審核狀態)
         let collegeReviewStatus = "-";
         if (app.college_review_completed) {
           collegeReviewStatus = locale === "zh" ? "已審核" : "Reviewed";
-        } else if (app.status === "recommended" || app.status === "submitted") {
+        } else if (app.status === "submitted") {
           collegeReviewStatus = locale === "zh" ? "待審核" : "Pending";
         } else if (app.status === "under_review") {
           collegeReviewStatus = locale === "zh" ? "審核中" : "Under Review";
@@ -1729,7 +1732,6 @@ export function CollegeDashboard({
                         {
                           applications.filter(
                             app =>
-                              app.status === "recommended" ||
                               app.status === "submitted"
                           ).length
                         }
@@ -1754,9 +1756,7 @@ export function CollegeDashboard({
                         {
                           applications.filter(
                             app =>
-                              app.status === "under_review" ||
-                              (app.status === "recommended" &&
-                                app.college_review_completed)
+                              app.status === "under_review"
                           ).length
                         }
                       </div>
@@ -1969,11 +1969,23 @@ export function CollegeDashboard({
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge
-                                    variant={getStatusColor(app.status as ApplicationStatus)}
-                                  >
-                                    {app.status_zh || getStatusName(app.status as ApplicationStatus, locale)}
-                                  </Badge>
+                                  <div className="flex gap-2">
+                                    {(() => {
+                                      const statusInfo = getDisplayStatusInfo(app, locale);
+                                      return (
+                                        <>
+                                          <Badge variant={statusInfo.statusVariant}>
+                                            {app.status_zh || statusInfo.statusLabel}
+                                          </Badge>
+                                          {statusInfo.showStage && statusInfo.stageLabel && (
+                                            <Badge variant={statusInfo.stageVariant}>
+                                              {statusInfo.stageLabel}
+                                            </Badge>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   {app.created_at
