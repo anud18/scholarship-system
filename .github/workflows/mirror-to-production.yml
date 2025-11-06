@@ -543,6 +543,7 @@ jobs:
             # Calculate diff between production's latest and current HEAD (squashed commit)
             # Exclude development-only files
             FILE_STATS=$(git diff --stat $PROD_LATEST..HEAD -- \
+              ':!.github/codeql' \
               ':!.github/workflows' \
               ':!.github/production-workflows-examples' \
               ':!.claude' \
@@ -576,6 +577,7 @@ jobs:
           else
             # First sync - compare to empty tree
             FILE_STATS=$(git diff --stat $(git hash-object -t tree /dev/null)..HEAD -- \
+              ':!.github/codeql' \
               ':!.github/workflows' \
               ':!.github/production-workflows-examples' \
               ':!.claude' \
