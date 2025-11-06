@@ -39,8 +39,8 @@ export function Header({
         label: user.role === "student" ? t("roles.student") : "學生",
         variant: "default" as const,
       },
-      professor: { label: "教授", variant: "secondary" as const },
-      college: { label: "學院", variant: "secondary" as const },
+      professor: { label: "教授", variant: "default" as const },
+      college: { label: "學院", variant: "default" as const },
       admin: { label: "管理員", variant: "destructive" as const },
       super_admin: { label: "系統管理員", variant: "destructive" as const },
     };
