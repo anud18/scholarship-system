@@ -236,6 +236,13 @@ jobs:
 
           REMOVED_DIRS=""
 
+          # Remove .github/production-workflows-examples directory
+          if [ -d ".github/production-workflows-examples" ]; then
+            echo "::notice::Removing .github/production-workflows-examples/ directory"
+            git rm -rf .github/production-workflows-examples/
+            REMOVED_DIRS="${REMOVED_DIRS}- .github/production-workflows-examples/ (Production workflows examples)\n"
+          fi
+
           # Remove mock-student-api (development only)
           if [ -d "mock-student-api" ]; then
             echo "::notice::Removing mock-student-api/ directory"
@@ -248,6 +255,36 @@ jobs:
             echo "::notice::Removing .claude/ directory"
             git rm -rf .claude/
             REMOVED_DIRS="${REMOVED_DIRS}- .claude/ (Claude Code configuration)\n"
+          fi
+
+          # Remove all test files ( frontend and backend )
+
+          # frontend/__tests__ directory
+          if [ -d "frontend/__tests__" ]; then
+            echo "::notice::Removing frontend/__tests__/ directory"
+            git rm -rf frontend/__tests__/
+            REMOVED_DIRS="${REMOVED_DIRS}- frontend/__tests__/ (Frontend tests)\n"
+          fi
+
+          # frontend/*/__tests__ directory
+          if [ -d "frontend/*/__tests__" ]; then
+            echo "::notice::Removing frontend/*/__tests__/ directory"
+            git rm -rf frontend/*/__tests__/
+            REMOVED_DIRS="${REMOVED_DIRS}- frontend/*/__tests__/ (Frontend tests)\n"
+          fi
+
+          # backend/app/tests directory
+          if [ -d "backend/app/tests" ]; then
+            echo "::notice::Removing backend/app/tests/ directory"
+            git rm -rf backend/app/tests/
+            REMOVED_DIRS="${REMOVED_DIRS}- backend/app/tests/ (Backend tests)\n"
+          fi
+
+          # docker-compose.*.yml files
+          if [ -d "docker-compose.*.yml" ]; then
+            echo "::notice::Removing docker-compose.*.yml files"
+            git rm -rf docker-compose.*.yml
+            REMOVED_DIRS="${REMOVED_DIRS}- docker-compose.*.yml (Docker compose files)\n"
           fi
 
           # Save for release notes
