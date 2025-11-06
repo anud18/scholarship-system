@@ -59,7 +59,6 @@ packs:
 # Paths to analyze
 paths:
   - backend/app
-  - backend/tests
   - frontend
 
 # Paths to ignore
@@ -68,6 +67,3 @@ paths-ignore:
   - "**/.pytest_cache/**"
   - "**/node_modules/**"
   - "**/.venv/**"
-  - "**/test_*.py"
-  - "**/*_test.py"
-  - "**/tests/**"
