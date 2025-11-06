@@ -264,8 +264,67 @@ jobs:
             REMOVED_DIRS="${REMOVED_DIRS}- .claude/ (Claude Code configuration)\n"
           fi
 
-          # NOTE: Test files and docker-compose variants are excluded via git diff patterns
-          # in the "Calculate actual file changes" step, not deleted from the repository
+          # Remove docker-compose variants (keep only monitoring if needed)
+          echo "::notice::Removing docker-compose variant files"
+          for file in docker-compose.*.yml; do
+            if [ -f "$file" ]; then
+              echo "::notice::Removing $file"
+              git rm "$file" 2>/dev/null || true
+              REMOVED_DIRS="${REMOVED_DIRS}- $file (Docker Compose variant)\n"
+            fi
+          done
+
+          # Remove subdirectory docker-compose files (except monitoring)
+          find . -type f -name "docker-compose*.yml" 2>/dev/null | while read file; do
+            if [[ "$file" != "./monitoring/"* ]]; then
+              echo "::notice::Removing $file"
+              git rm "$file" 2>/dev/null || true
+              REMOVED_DIRS="${REMOVED_DIRS}- $file (Docker Compose file)\n"
+            fi
+          done
+
+          # Remove test directories
+          echo "::notice::Removing test directories"
+          git rm -rf frontend/__tests__/ 2>/dev/null || true
+          git rm -rf frontend/components/__tests__/ 2>/dev/null || true
+          git rm -rf frontend/hooks/__tests__/ 2>/dev/null || true
+          git rm -rf frontend/lib/__tests__/ 2>/dev/null || true
+          git rm -rf frontend/lib/api/__tests__/ 2>/dev/null || true
+          git rm -rf frontend/lib/utils/__tests__/ 2>/dev/null || true
+          git rm -rf backend/app/tests/ 2>/dev/null || true
+
+          if git diff --cached --quiet --name-only | grep -q "__tests__\|/tests/"; then
+            REMOVED_DIRS="${REMOVED_DIRS}- Test directories (__tests__/, tests/)\n"
+          fi
+
+          # Remove test files
+          echo "::notice::Removing test files"
+          find . -type f \( -name "*.test.ts" -o -name "*.test.tsx" -o -name "*.test.py" -o -name "test_*.py" \) 2>/dev/null | \
+            xargs -r git rm -f 2>/dev/null || true
+
+          if git diff --cached --quiet --name-only | grep -q "\.test\.\|test_"; then
+            REMOVED_DIRS="${REMOVED_DIRS}- Test files (*.test.*, test_*.py)\n"
+          fi
+
+          # Remove test configuration files
+          echo "::notice::Removing test configuration files"
+          git rm -f frontend/jest.config.js 2>/dev/null || true
+          git rm -f frontend/jest.config.standalone.js 2>/dev/null || true
+          git rm -f frontend/tsconfig.test.json 2>/dev/null || true
+          git rm -f backend/pytest.ini 2>/dev/null || true
+          git rm -f backend/.coverage 2>/dev/null || true
+
+          if git diff --cached --quiet --name-only | grep -q "jest.config\|pytest.ini\|\.coverage"; then
+            REMOVED_DIRS="${REMOVED_DIRS}- Test configuration files\n"
+          fi
+
+          # Remove all markdown documentation files
+          echo "::notice::Removing markdown documentation files"
+          find . -type f -name "*.md" 2>/dev/null | xargs -r git rm -f 2>/dev/null || true
+
+          if git diff --cached --quiet --name-only | grep -q "\.md$"; then
+            REMOVED_DIRS="${REMOVED_DIRS}- Documentation files (*.md)\n"
+          fi
 
           # Save for release notes
           if [ -n "$REMOVED_DIRS" ]; then
@@ -572,6 +631,8 @@ jobs:
               ':!backend/pytest.ini' \
               ':!backend/.coverage' \
               ':!docker-compose.*.yml' \
+              ':!backend/docker-compose.yml' \
+              ':!**/docker-compose.yml' \
               ':!**/*.md' \
               | tail -1)
 
@@ -606,6 +667,8 @@ jobs:
               ':!backend/pytest.ini' \
               ':!backend/.coverage' \
               ':!docker-compose.*.yml' \
+              ':!backend/docker-compose.yml' \
+              ':!**/docker-compose.yml' \
               ':!**/*.md' \
               | tail -1 || echo "Initial commit")
             echo "::notice::First sync - file statistics: $FILE_STATS"
