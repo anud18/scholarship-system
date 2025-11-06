@@ -236,6 +236,13 @@ jobs:
 
           REMOVED_DIRS=""
 
+          # Remove .github/codeql directory
+          if [ -d ".github/codeql" ]; then
+            echo "::notice::Removing .github/codeql/ directory"
+            git rm -rf .github/codeql/
+            REMOVED_DIRS="${REMOVED_DIRS}- .github/codeql/ (CodeQL configuration)\n"
+          fi
+
           # Remove .github/production-workflows-examples directory
           if [ -d ".github/production-workflows-examples" ]; then
             echo "::notice::Removing .github/production-workflows-examples/ directory"
