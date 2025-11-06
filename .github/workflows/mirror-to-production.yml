@@ -99,6 +99,14 @@ jobs:
           # Still fetch for reference (not for merge)
           if git fetch prod-repo "${PRODUCTION_BRANCH}" 2>/dev/null; then
             echo "::notice::Production repository fetched successfully (for reference only)"
+
+            # Verify prod-repo/main is available for baseline tracking
+            if git rev-parse prod-repo/main >/dev/null 2>&1; then
+              PROD_MAIN_SHA=$(git rev-parse --short prod-repo/main)
+              echo "::notice::prod-repo/main available for baseline tracking (SHA: $PROD_MAIN_SHA)"
+            else
+              echo "::warning::prod-repo/main not found, will use origin/production as fallback"
+            fi
           else
             echo "::notice::Production repository not found or first sync"
             echo "::notice::This is expected for first-time setup"
@@ -556,9 +564,12 @@ jobs:
           CURRENT_TREE=$(git write-tree)
           echo "::notice::Current tree: $CURRENT_TREE"
 
-          # Use origin/production as the baseline (not prod-repo/main)
-          # This ensures we calculate diff from last sync, not from production repo's current state
-          PROD_LATEST=$(git rev-parse origin/production 2>/dev/null || echo "")
+          # Use prod-repo/main as the baseline to track production repo's actual state
+          # This correctly handles squash merge where commit SHAs differ between repos
+          # Fallback to origin/production for backward compatibility
+          PROD_LATEST=$(git rev-parse prod-repo/main 2>/dev/null || \
+                        git rev-parse origin/production 2>/dev/null || \
+                        echo "")
 
           # Prepare commit message using generated release notes
           echo "Release $NEXT_VERSION" > /tmp/squash-commit-msg.txt
@@ -602,8 +613,11 @@ jobs:
         run: |
           echo "::group::Calculate actual file statistics"
 
-          # Use origin/production as baseline (consistent with squash step)
-          PROD_LATEST=$(git rev-parse origin/production 2>/dev/null || echo "")
+          # Use prod-repo/main as baseline (consistent with squash step)
+          # Fallback to origin/production for backward compatibility
+          PROD_LATEST=$(git rev-parse prod-repo/main 2>/dev/null || \
+                        git rev-parse origin/production 2>/dev/null || \
+                        echo "")
 
           if [ -n "$PROD_LATEST" ]; then
             # Calculate diff between production's latest and current HEAD (squashed commit)
