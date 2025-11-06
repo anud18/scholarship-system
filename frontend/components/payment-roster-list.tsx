@@ -320,7 +320,9 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
                               // Get token from localStorage, following CLAUDE.md pattern
                               const token = localStorage.getItem("auth_token") ||
                                             localStorage.getItem("token") || "";
-                              window.open(`/api/v1/preview?type=roster&rosterId=${roster.id}&token=${token}`, '_blank')
+                              const encodedToken = encodeURIComponent(token);
+                              const encodedRosterId = encodeURIComponent(String(roster.id));
+                              window.open(`/api/v1/preview?type=roster&rosterId=${encodedRosterId}&token=${encodedToken}`, '_blank')
                             }}
                           >
                             <Eye className="mr-2 h-4 w-4" />

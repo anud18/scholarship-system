@@ -205,8 +205,12 @@ export function DynamicApplicationForm({
     // 使用傳遞的用戶ID或預設值
     const userId = currentUserId || 1;
 
-    // 建立預覽 URL
-    const previewUrl = `/api/v1/preview?fileId=${fileId}&filename=${encodeURIComponent(filename)}&type=${fileType}&userId=${userId}&token=${token}`;
+    // 建立預覽 URL - encode all parameters for XSS protection
+    const encodedFileId = encodeURIComponent(fileId);
+    const encodedFilename = encodeURIComponent(filename);
+    const encodedUserId = encodeURIComponent(String(userId));
+    const encodedToken = encodeURIComponent(token);
+    const previewUrl = `/api/v1/preview?fileId=${encodedFileId}&filename=${encodedFilename}&type=${fileType}&userId=${encodedUserId}&token=${encodedToken}`;
 
     // 判斷文件類型
     let fileTypeDisplay = "other";
@@ -678,7 +682,9 @@ export function DynamicApplicationForm({
               onClick={(e) => {
                 e.preventDefault();
                 const token = localStorage.getItem("auth_token");
-                const previewUrl = `/api/v1/preview-document-example?documentId=${document.id}&token=${token}`;
+                const encodedToken = encodeURIComponent(token || "");
+                const encodedDocumentId = encodeURIComponent(String(document.id));
+                const previewUrl = `/api/v1/preview-document-example?documentId=${encodedDocumentId}&token=${encodedToken}`;
 
                 // Create and trigger download/preview
                 const link = window.document.createElement('a');

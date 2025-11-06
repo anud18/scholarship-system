@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     database_url_sync: str = "postgresql://postgres:postgres@localhost:5432/scholarship_test"
 
     # Security
-    secret_key: str = "test-secret-key-for-development-only-please-change-in-production-this-is-32-chars"
+    secret_key: str  # Required: Must be set via SECRET_KEY environment variable
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
@@ -41,11 +41,14 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "http://localhost:3000,http://140.113.207.40:3000,http://140.113.0.229:3000"
 
-    # Email
+    # Email Configuration
+    # Note: SMTP credentials are loaded from environment variables via Pydantic Settings
+    # Empty defaults allow no-auth SMTP (e.g., port 25 internal relay)
+    # Production systems should set SMTP_PASSWORD in environment if auth is required
     smtp_host: str = "140.113.7.200"
     smtp_port: int = 25
     smtp_user: str = ""
-    smtp_password: str = ""
+    smtp_password: str = ""  # Empty default is valid for no-auth SMTP
     smtp_use_tls: bool = False  # STARTTLS/TLS encryption (default: False for plain SMTP)
     email_from: str = "ss-test.aa@nycu.edu.tw"
     email_from_name: str = "(測試)獎學金申請與簽核系統"
@@ -66,8 +69,8 @@ class Settings(BaseSettings):
 
     # MinIO Configuration
     minio_endpoint: str = "localhost:9000"
-    minio_access_key: str = "minioadmin"
-    minio_secret_key: str = "minioadmin123"
+    minio_access_key: str  # Required: Must be set via MINIO_ACCESS_KEY environment variable
+    minio_secret_key: str  # Required: Must be set via MINIO_SECRET_KEY environment variable
     minio_bucket: str = "scholarship-files"
     minio_secure: bool = False
 

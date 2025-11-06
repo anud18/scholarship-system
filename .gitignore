@@ -2,12 +2,18 @@
 
 # Environment files
 .env
+.env.dev
+.env.staging
+.env.prod
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 .env.staging-db-monitoring
 .env.prod-db-monitoring
+
+# Grafana configuration (contains credentials)
+monitoring/config/grafana/grafana.ini
 
 # Python
 __pycache__/
