@@ -84,6 +84,9 @@ jobs:
         env:
           DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
           APP_ENV: test
+          SECRET_KEY: test-secret-key-ci-api-check
+          MINIO_ACCESS_KEY: ci-test-minio-access
+          MINIO_SECRET_KEY: ci-test-minio-secret
         run: |
           echo "Running Alembic migrations..."
           alembic upgrade head
@@ -95,6 +98,8 @@ jobs:
           DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
           REDIS_URL: "redis://localhost:6379/0"
           SECRET_KEY: test-secret-key-for-ci
+          MINIO_ACCESS_KEY: ci-test-minio-access
+          MINIO_SECRET_KEY: ci-test-minio-secret
           APP_ENV: test
           TESTING: true
         run: |

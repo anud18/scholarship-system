@@ -236,6 +236,9 @@ jobs:
         env:
           DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
           APP_ENV: test
+          SECRET_KEY: test-secret-key-ci-backend-tests
+          MINIO_ACCESS_KEY: ci-test-minio-access
+          MINIO_SECRET_KEY: ci-test-minio-secret
         run: |
           echo "Running Alembic migrations..."
           alembic upgrade head
