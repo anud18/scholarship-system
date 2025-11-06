@@ -35,6 +35,7 @@ import { createEmailManagementApi } from './modules/email-management';
 import { createAdminApi } from './modules/admin';
 import { createDocumentRequestsApi } from './modules/document-requests';
 import { createPaymentRostersApi } from './modules/payment-rosters';
+import { createStudentsApi } from './modules/students';
 // import { createReviewApi } from './modules/reviews'; // Not used - professor reviews use professor endpoints with adapter
 
 // Re-export ALL types from modular types file
@@ -43,7 +44,7 @@ export type {
   ApiResponse,
   PaginatedResponse,
   User,
-  Student,
+  // Student type is now exported from modules/students.ts (see below)
   StudentInfoResponse,
   Application,
   ApplicationStatus,
@@ -111,6 +112,15 @@ export type {
   WhitelistToggleRequest,
 } from './types';
 
+// Re-export Students module types
+export type {
+  Student,
+  StudentStats,
+  StudentSISBasicInfo,
+  StudentSISTermData,
+  StudentSISData,
+} from './modules/students';
+
 // Re-export quota helper functions
 export {
   calculateTotalQuota,
@@ -143,6 +153,7 @@ class ExtendedApiClient extends ApiClient {
   public admin: ReturnType<typeof createAdminApi>;
   public documentRequests: ReturnType<typeof createDocumentRequestsApi>;
   public paymentRosters: ReturnType<typeof createPaymentRostersApi>;
+  public students: ReturnType<typeof createStudentsApi>;
   // public reviews: ReturnType<typeof createReviewApi>; // Not used - professor reviews use professor endpoints
 
   // Backward compatibility alias
@@ -173,6 +184,7 @@ class ExtendedApiClient extends ApiClient {
     this.admin = createAdminApi(); // Now using typed client internally
     this.documentRequests = createDocumentRequestsApi(); // Now using typed client internally
     this.paymentRosters = createPaymentRostersApi(); // Now using typed client internally
+    this.students = createStudentsApi(); // Now using typed client internally
     // this.reviews = createReviewApi(); // Not used - professor reviews use professor endpoints
 
     // Initialize backward compatibility alias

@@ -13,6 +13,7 @@ This package aggregates all admin endpoints organized by functionality:
 - Configurations Management (配置管理) - ✅ configurations.py
 - Professors Management (教授管理) - ✅ professors.py
 - Bank Verification (銀行帳戶驗證) - ✅ bank_verification.py
+- Students Management (學生管理) - ✅ students.py
 
 Note: The prefix "/admin" is set in api.py, not here.
 
@@ -32,6 +33,7 @@ from .permissions import router as permissions_router
 from .professors import router as professors_router
 from .rules import router as rules_router
 from .scholarships import router as scholarships_router
+from .students import router as students_router
 from .system_settings import router as system_settings_router
 
 # Create main router for admin (without prefix - it's set in api.py)
@@ -49,5 +51,6 @@ router.include_router(email_templates_router, tags=["Admin - Email Templates"])
 router.include_router(configurations_router, tags=["Admin - Configurations"])
 router.include_router(professors_router, tags=["Admin - Professors"])
 router.include_router(bank_verification_router, tags=["Admin - Bank Verification"])
+router.include_router(students_router, prefix="/students", tags=["Admin - Students"])
 
 __all__ = ["router"]

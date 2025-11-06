@@ -13,7 +13,7 @@
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
 import type { ApiResponse } from '../types';
-import type { User, Student, StudentInfoResponse } from '../types';
+import type { User, StudentInfoResponse } from '../types';
 
 // Import types from main api.ts for now
 // TODO: Move these to a shared types file
@@ -127,14 +127,15 @@ export function createUsersApi() {
     /**
      * Update current student's information
      * Type-safe: Request body validated against OpenAPI
+     * Note: This endpoint updates SIS-related data, not the Student user record
      */
     updateStudentInfo: async (
-      studentData: Partial<Student>
-    ): Promise<ApiResponse<Student>> => {
+      studentData: Record<string, any>
+    ): Promise<ApiResponse<StudentInfoResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/users/student-info', {
-        body: studentData as any, // Partial<Student> makes all fields optional for PATCH updates
+        body: studentData as any,
       });
-      return toApiResponse<Student>(response);
+      return toApiResponse<StudentInfoResponse>(response);
     },
 
     /**
