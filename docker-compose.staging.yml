@@ -3,8 +3,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: scholarship_redis_staging
-    env_file:
-      - .env.staging
     ports:
       - "6379:6379"
     volumes:
@@ -91,8 +89,6 @@ services:
   frontend:
     image: ghcr.io/jotpalch/scholarship-system-frontend:${TAG:-latest}
     container_name: scholarship_frontend_staging
-    env_file:
-      - .env.staging
     ports:
       - "3000:3000"
     environment:
