@@ -25,6 +25,7 @@ const AnnouncementsPanel = dynamic(() => import("./announcements/AnnouncementsPa
 
 // Import lighter components directly
 import { UserManagementPanel } from "./users/UserManagementPanel";
+import { StudentListManagement } from "./students/StudentListManagement";
 import { QuotaPanel } from "./quota/QuotaPanel";
 import { ConfigurationsPanel } from "./configurations/ConfigurationsPanel";
 import { RulesPanel } from "./rules/RulesPanel";
@@ -98,10 +99,11 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList
-          className={`grid w-full ${hasQuotaPermission ? "grid-cols-10" : "grid-cols-9"}`}
+          className={`grid w-full ${hasQuotaPermission ? "grid-cols-11" : "grid-cols-10"}`}
         >
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
           <TabsTrigger value="users">使用者權限</TabsTrigger>
+          <TabsTrigger value="students">學生列表</TabsTrigger>
           {hasQuotaPermission && (
             <TabsTrigger value="quota">名額管理</TabsTrigger>
           )}
@@ -120,6 +122,10 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
         <TabsContent value="users" className="space-y-4">
           <UserManagementPanel />
+        </TabsContent>
+
+        <TabsContent value="students" className="space-y-4">
+          <StudentListManagement />
         </TabsContent>
 
         {hasQuotaPermission && (

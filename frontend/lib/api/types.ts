@@ -62,20 +62,9 @@ export interface User {
  * Student interface
  * Represents student-specific information
  */
-export interface Student {
-  id: string;
-  user_id: string;
-  student_id: string;
-  student_type: "undergraduate" | "graduate" | "phd";
-  department: string;
-  gpa: number;
-  nationality: string;
-  phone_number?: string;
-  address?: string;
-  bank_account?: string;
-  created_at: string;
-  updated_at: string;
-}
+// Student type has been moved to lib/api/modules/students.ts
+// It is now based on actual backend User model with role=student
+// Student-specific academic data is fetched from external SIS API
 
 /**
  * Student info response from API
@@ -170,7 +159,7 @@ export interface Application {
   scholarship_period_status?: number;
   scholarship_period_gpa?: number;
   user?: User;
-  student?: Student;
+  // student field removed - use user field instead (Student = User with role='student')
   scholarship?: ScholarshipType;
   professor_id?: number | string;
   professor?: {
