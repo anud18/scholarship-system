@@ -33,6 +33,17 @@ jobs:
           # Copy monitoring directory to /opt/scholarship/monitoring
           cp -r ./monitoring/* /opt/scholarship/monitoring/
 
+          # Initialize Grafana config from example if it doesn't exist
+          # This allows grafana.ini to be excluded from git while still functioning in deployment
+          if [ ! -f /opt/scholarship/monitoring/config/grafana/grafana.ini ]; then
+            echo "Creating Grafana configuration from example..."
+            cp /opt/scholarship/monitoring/config/grafana/grafana.ini.example \
+               /opt/scholarship/monitoring/config/grafana/grafana.ini
+            echo "✅ Grafana configuration initialized"
+          else
+            echo "✅ Grafana configuration already exists"
+          fi
+
       - name: Pull latest monitoring images
         run: |
           cd /opt/scholarship/monitoring
