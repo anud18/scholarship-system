@@ -257,35 +257,8 @@ jobs:
             REMOVED_DIRS="${REMOVED_DIRS}- .claude/ (Claude Code configuration)\n"
           fi
 
-          # Remove all test files ( frontend and backend )
-
-          # frontend/__tests__ directory
-          if [ -d "frontend/__tests__" ]; then
-            echo "::notice::Removing frontend/__tests__/ directory"
-            git rm -rf frontend/__tests__/
-            REMOVED_DIRS="${REMOVED_DIRS}- frontend/__tests__/ (Frontend tests)\n"
-          fi
-
-          # frontend/*/__tests__ directory
-          if [ -d "frontend/*/__tests__" ]; then
-            echo "::notice::Removing frontend/*/__tests__/ directory"
-            git rm -rf frontend/*/__tests__/
-            REMOVED_DIRS="${REMOVED_DIRS}- frontend/*/__tests__/ (Frontend tests)\n"
-          fi
-
-          # backend/app/tests directory
-          if [ -d "backend/app/tests" ]; then
-            echo "::notice::Removing backend/app/tests/ directory"
-            git rm -rf backend/app/tests/
-            REMOVED_DIRS="${REMOVED_DIRS}- backend/app/tests/ (Backend tests)\n"
-          fi
-
-          # docker-compose.*.yml files
-          if [ -d "docker-compose.*.yml" ]; then
-            echo "::notice::Removing docker-compose.*.yml files"
-            git rm -rf docker-compose.*.yml
-            REMOVED_DIRS="${REMOVED_DIRS}- docker-compose.*.yml (Docker compose files)\n"
-          fi
+          # NOTE: Test files and docker-compose variants are excluded via git diff patterns
+          # in the "Calculate actual file changes" step, not deleted from the repository
 
           # Save for release notes
           if [ -n "$REMOVED_DIRS" ]; then
@@ -466,10 +439,10 @@ jobs:
           echo "PLACEHOLDER_FILE_STATS" >> /tmp/release-notes.md
           echo "\`\`\`" >> /tmp/release-notes.md
 
-          # Add removed development files
+          # Add excluded/removed development files information
           cat >> /tmp/release-notes.md <<REMOVED_FILES_EOF
 
-          ## 🚫 Removed Development Files
+          ## 🚫 Excluded Development Files
 
           ### Workflows Removed
           ${{ env.REMOVED_WORKFLOWS }}
@@ -477,9 +450,17 @@ jobs:
           ### Directories Removed
           ${{ env.REMOVED_DIRS }}
 
+          ### Files Excluded from Sync (Not Deleted)
+          - All test directories: `frontend/__tests__/`, `frontend/*/‌__tests__/`, `backend/app/tests/`
+          - All test files: `*.test.tsx`, `*.test.ts`, `*.test.py`, `test_*.py`
+          - Test configuration: `jest.config.js`, `pytest.ini`, `tsconfig.test.json`, `.coverage`
+          - Docker compose variants: `docker-compose.*.yml`
+          - Documentation files: `*.md` (README, CONTRIBUTING, etc.)
+
           ## 📝 Notes
 
-          - This is a production-ready snapshot with development files removed
+          - This is a production-ready snapshot with development files excluded or removed
+          - Test files remain in development repository but are excluded from production sync
           - Production workflows have been preserved: ${{ steps.preserve-workflows.outputs.preserved_count || '0' }} workflow(s)
           - All changes squashed into a single clean commit for production
 
@@ -566,6 +547,24 @@ jobs:
               ':!.github/production-workflows-examples' \
               ':!.claude' \
               ':!mock-student-api' \
+              ':!frontend/__tests__/**' \
+              ':!frontend/components/__tests__/**' \
+              ':!frontend/hooks/__tests__/**' \
+              ':!frontend/lib/__tests__/**' \
+              ':!frontend/lib/api/__tests__/**' \
+              ':!frontend/lib/utils/__tests__/**' \
+              ':!backend/app/tests/**' \
+              ':!**/*.test.tsx' \
+              ':!**/*.test.ts' \
+              ':!**/*.test.py' \
+              ':!**/test_*.py' \
+              ':!frontend/jest.config.js' \
+              ':!frontend/jest.config.standalone.js' \
+              ':!frontend/tsconfig.test.json' \
+              ':!backend/pytest.ini' \
+              ':!backend/.coverage' \
+              ':!docker-compose.*.yml' \
+              ':!**/*.md' \
               | tail -1)
 
             # Handle case where there are no changes
@@ -581,6 +580,24 @@ jobs:
               ':!.github/production-workflows-examples' \
               ':!.claude' \
               ':!mock-student-api' \
+              ':!frontend/__tests__/**' \
+              ':!frontend/components/__tests__/**' \
+              ':!frontend/hooks/__tests__/**' \
+              ':!frontend/lib/__tests__/**' \
+              ':!frontend/lib/api/__tests__/**' \
+              ':!frontend/lib/utils/__tests__/**' \
+              ':!backend/app/tests/**' \
+              ':!**/*.test.tsx' \
+              ':!**/*.test.ts' \
+              ':!**/*.test.py' \
+              ':!**/test_*.py' \
+              ':!frontend/jest.config.js' \
+              ':!frontend/jest.config.standalone.js' \
+              ':!frontend/tsconfig.test.json' \
+              ':!backend/pytest.ini' \
+              ':!backend/.coverage' \
+              ':!docker-compose.*.yml' \
+              ':!**/*.md' \
               | tail -1 || echo "Initial commit")
             echo "::notice::First sync - file statistics: $FILE_STATS"
           fi
