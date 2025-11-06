@@ -568,7 +568,9 @@ export function AdminScholarshipManagementInterface({
         ? window.localStorage?.getItem("auth_token")
         : null;
 
-    const previewUrl = `/api/v1/preview-document-example?documentId=${documentId}&token=${token}`;
+    const encodedDocumentId = encodeURIComponent(String(documentId));
+    const encodedToken = encodeURIComponent(token || "");
+    const previewUrl = `/api/v1/preview-document-example?documentId=${encodedDocumentId}&token=${encodedToken}`;
 
     setExamplePreviewFile({
       url: previewUrl,

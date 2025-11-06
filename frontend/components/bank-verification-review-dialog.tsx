@@ -97,11 +97,12 @@ export function BankVerificationReviewDialog({
         return
       }
 
-      const url = `/api/v1/preview?fileId=${doc.file_id}&filename=${encodeURIComponent(
-        doc.original_filename
-      )}&type=${encodeURIComponent(doc.file_type || "存摺封面")}&applicationId=${
-        verificationData.application_id
-      }&token=${token}`
+      const encodedFileId = encodeURIComponent(String(doc.file_id));
+      const encodedFilename = encodeURIComponent(doc.original_filename);
+      const encodedFileType = encodeURIComponent(doc.file_type || "存摺封面");
+      const encodedApplicationId = encodeURIComponent(String(verificationData.application_id));
+      const encodedToken = encodeURIComponent(token);
+      const url = `/api/v1/preview?fileId=${encodedFileId}&filename=${encodedFilename}&type=${encodedFileType}&applicationId=${encodedApplicationId}&token=${encodedToken}`
       setPreviewUrl(url)
       setImageLoading(true)
     }

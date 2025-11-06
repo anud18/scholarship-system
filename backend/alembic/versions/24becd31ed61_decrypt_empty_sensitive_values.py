@@ -35,7 +35,12 @@ def upgrade() -> None:
     # Get SECRET_KEY from environment to initialize encryption
     import os
 
-    secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
+    secret_key = os.environ.get("SECRET_KEY")
+    if not secret_key:
+        raise ValueError(
+            "SECRET_KEY environment variable is required for this migration. "
+            "Please set SECRET_KEY before running migrations."
+        )
 
     # Initialize Fernet cipher (same logic as ConfigEncryption class)
     key_material = secret_key.encode()[:32].ljust(32, b"0")

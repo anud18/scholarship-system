@@ -254,55 +254,80 @@ The `make dev` command starts both backend (port 8000) and frontend (port 3000) 
 
 ## Environment Configuration
 
-### Backend Configuration
+### Security First Approach
 
-Create `backend/.env` from template:
+This project follows security best practices for credential management:
 
+- ✅ **Environment-Specific Files**: `.env.dev`, `.env.staging`, `.env.prod`
+- ✅ **No Hardcoded Credentials**: All secrets via environment variables
+- ✅ **Git Protection**: All `.env` files (except `.example`) are `.gitignore`d
+- ✅ **Automated Validation**: Pre-commit hooks and CI/CD checks
+- ✅ **Template Files**: `.env.example` and `.env.prod.example` for setup guidance
+
+📖 **See [SECURITY.md](./SECURITY.md) for comprehensive security guidelines**
+
+### Quick Setup
+
+**For Local Development:**
 ```bash
-# Database
-DATABASE_URL=postgresql+asyncpg://scholarship_user:scholarship_pass@localhost:5432/scholarship_db
+# Copy pre-configured development environment
+cp .env.dev .env
 
-# Security
-SECRET_KEY=your-secret-key-here-change-in-production
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=10080
-
-# MinIO Object Storage
-MINIO_ENDPOINT=minio:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET=scholarship-system
-MINIO_SECURE=false
-
-# Redis
-REDIS_URL=redis://redis:6379/0
-
-# CORS
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8000
-
-# Feature Flags
-ENABLE_OCR=false
-ENABLE_EMPLOYEE_API=false
-ENABLE_SSO=false
-DEBUG_MODE=true
+# Or create from template
+cp .env.example .env
+# Edit .env with your local configuration
 ```
 
-### Frontend Configuration
-
-Create `frontend/.env.local`:
-
+**For Production:**
 ```bash
-# API URLs
-NEXT_PUBLIC_API_URL=http://localhost:8000
-INTERNAL_API_URL=http://backend:8000  # Docker internal network
+# Start from production template
+cp .env.prod.example .env.prod
 
-# Feature Flags
-NEXT_PUBLIC_ENABLE_DEBUG_PANEL=true
+# Replace ALL CHANGEME values with actual secrets
+# Generate SECRET_KEY: openssl rand -hex 32
+vim .env.prod
+
+# Validate security before deployment
+./scripts/validate_security.sh
 ```
 
-### Mock Student API
+### Environment File Structure
 
-The mock student API runs on port 8080 and provides test data for local development. Configuration is in `mock-student-api/.env`.
+```bash
+.env.example          # Template with documentation (committed)
+.env.dev              # Development defaults (committed, safe values)
+.env.staging          # Staging credentials (NOT committed)
+.env.prod.example     # Production template (committed, no secrets)
+.env.prod             # Production credentials (NOT committed)
+```
+
+### Required Environment Variables
+
+**Critical Security Settings:**
+```bash
+SECRET_KEY=generate-with-openssl-rand-hex-32  # Min 32 characters
+POSTGRES_USER=your_db_user
+POSTGRES_PASSWORD=strong_password_here
+MINIO_ACCESS_KEY=your_minio_access_key
+MINIO_SECRET_KEY=your_minio_secret_key
+```
+
+**See `.env.example` for complete configuration documentation**
+
+### Security Validation
+
+Before committing or deploying:
+
+```bash
+# Validate security configuration
+./scripts/validate_security.sh
+
+# Run pre-commit checks
+pre-commit run --all-files
+
+# Check for secrets
+detect-secrets scan --baseline .secrets.baseline
+```
 
 ## Development Workflow
 

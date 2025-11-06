@@ -3,6 +3,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: scholarship_redis_staging
+    env_file:
+      - .env.staging
     ports:
       - "6379:6379"
     volumes:
@@ -23,17 +25,17 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://scholarship_user:scholarship_pass@10.113.74.25:5432/scholarship_db}
-      DATABASE_URL_SYNC: ${DATABASE_URL_SYNC:-postgresql://scholarship_user:scholarship_pass@10.113.74.25:5432/scholarship_db}
+      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL_SYNC: ${DATABASE_URL_SYNC}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-staging-secret-key-for-docker-staging-only}
+      SECRET_KEY: ${SECRET_KEY}
       DEBUG: "true"
-      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      CORS_ORIGINS: ${CORS_ORIGINS}
       ENVIRONMENT: production
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-10.113.74.25:9000}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
-      MINIO_BUCKET: ${MINIO_BUCKET:-scholarship-documents}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_SECURE: "false"
       # Mock SSO Configuration for Testing (fallback)
       ENABLE_MOCK_SSO: "false"
@@ -49,13 +51,13 @@ services:
       BYPASS_TIME_RESTRICTIONS: "false"
       # Student API Configuration (Real NYCU API)
       STUDENT_API_ENABLED: "true"
-      STUDENT_API_BASE_URL: ${STUDENT_API_BASE_URL:-http://140.113.7.136/api/SoAA}
-      STUDENT_API_ACCOUNT: ${STUDENT_API_ACCOUNT:-scholarship}
-      STUDENT_API_HMAC_KEY: ${STUDENT_API_HMAC_KEY:-4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a}
+      STUDENT_API_BASE_URL: ${STUDENT_API_BASE_URL}
+      STUDENT_API_ACCOUNT: ${STUDENT_API_ACCOUNT}
+      STUDENT_API_HMAC_KEY: ${STUDENT_API_HMAC_KEY}
       STUDENT_API_TIMEOUT: "10.0"
       STUDENT_API_ENCODE_TYPE: "UTF-8"
       # Super Admin Configuration
-      SUPER_ADMIN_NYCU_ID: ${SUPER_ADMIN_NYCU_ID:-super_admin}
+      SUPER_ADMIN_NYCU_ID: ${SUPER_ADMIN_NYCU_ID}
     depends_on:
       redis:
         condition: service_healthy
@@ -89,11 +91,13 @@ services:
   frontend:
     image: ghcr.io/jotpalch/scholarship-system-frontend:${TAG:-latest}
     container_name: scholarship_frontend_staging
+    env_file:
+      - .env.staging
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ss.test.nycu.edu.tw}
-      NEXT_PUBLIC_NYCU_PORTAL_URL: ${NEXT_PUBLIC_NYCU_PORTAL_URL:-https://portal.test.nycu.edu.tw}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_NYCU_PORTAL_URL: ${NEXT_PUBLIC_NYCU_PORTAL_URL}
       NODE_ENV: ${NODE_ENV:-production}
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000

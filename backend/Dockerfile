@@ -10,15 +10,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    gcc \
-    postgresql-client \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    libpq-dev \
-    libmagic-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Security: Pin exact package versions to prevent dependency confusion attacks
+# Configure trusted Debian repositories explicitly
+RUN echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian-security trixie-security main" >> /etc/apt/sources.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends --allow-unauthenticated=false \
+    curl=8.14.1-2 \
+    gcc=4:14.2.0-1 \
+    postgresql-client=17+278 \
+    tesseract-ocr=5.5.0-1+b1 \
+    tesseract-ocr-eng=1:4.1.0-2 \
+    libpq-dev=17.6-0+deb13u1 \
+    libmagic-dev=1:5.46-5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && dpkg --get-selections > /installed-packages.list
 
 # Copy requirements
 COPY requirements.txt .
@@ -34,6 +40,17 @@ COPY emails /frontend/emails
 
 # Create uploads directory
 RUN mkdir -p uploads
+
+# Create non-root user for security
+RUN groupadd -r appuser -g 1000 && \
+    useradd -r -u 1000 -g appuser -d /app -s /sbin/nologin appuser
+
+# Create required directories with proper ownership
+RUN mkdir -p uploads exports logs && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 8000

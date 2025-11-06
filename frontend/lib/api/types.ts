@@ -831,6 +831,11 @@ export interface UserResponse {
   student_no?: string;
 }
 
+/**
+ * User Creation Schema
+ * Note: System uses SSO-only authentication via NYCU Portal
+ * No password field - authentication is handled externally
+ */
 export interface UserCreate {
   nycu_id: string;
   email: string;
@@ -852,7 +857,6 @@ export interface UserCreate {
   full_name?: string;
   chinese_name?: string;
   english_name?: string;
-  password?: string; // 不再需要，但保留向後相容性
   student_no?: string;
   is_active?: boolean;
 }

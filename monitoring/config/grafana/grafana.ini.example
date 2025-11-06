@@ -1,0 +1,261 @@
+# Grafana Configuration File
+# Custom configuration for Scholarship System monitoring
+
+[default]
+# Instance name (appears in the footer)
+instance_name = Scholarship System Monitoring
+
+#################################### Paths ####################################
+[paths]
+# Path to where grafana can store temp files, sessions, and the sqlite3 db (if used)
+data = /var/lib/grafana
+# Temporary files in `data` directory older than given duration will be removed
+temp_data_lifetime = 24h
+# Directory where grafana can store logs
+logs = /var/log/grafana
+# Directory where grafana will automatically scan and look for plugins
+plugins = /var/lib/grafana/plugins
+# Folder that contains provisioning config files that grafana will apply on startup
+provisioning = /etc/grafana/provisioning
+
+#################################### Server ####################################
+[server]
+# Protocol (http, https, h2, socket)
+# Note: Use http here because nginx terminates SSL and connects internally via HTTP
+protocol = http
+# The http port to use
+http_port = 3000
+# The public facing domain name used to access grafana from a browser
+domain = ss.test.nycu.edu.tw
+# Redirect to correct domain if host header does not match domain
+enforce_domain = false
+# The full public facing url (accessible via nginx reverse proxy)
+root_url = https://ss.test.nycu.edu.tw/monitoring
+# Serve Grafana from subpath specified in `root_url` setting
+serve_from_sub_path = true
+# Log web requests
+router_logging = false
+# The maximum size of the request body (in MB)
+http_server_max_request_size = 10
+
+#################################### Database ##################################
+[database]
+# You can configure the database connection by specifying type, host, name, user and password
+# as separate properties or as on string using the url property.
+# Either "mysql", "postgres" or "sqlite3", it's your choice
+type = sqlite3
+host = 127.0.0.1:5432
+name = grafana
+user = grafana
+password = ""
+# For "postgres", use either "disable", "require" or "verify-full"
+# For "mysql", use either "true", "false", or "skip-verify".
+ssl_mode = disable
+# Database drivers may support different transaction isolation levels.
+# Currently, only "mysql" driver supports isolation levels.
+# If the value is empty - driver's default isolation level is applied.
+isolation_level = ""
+# For "sqlite3" only, path relative to data_path setting
+path = grafana.db
+# Max idle conn setting default is 2
+max_idle_conn = 2
+# Max conn setting default is 0 (mean not set)
+max_open_conn = 0
+# Connection Max Lifetime default is 14400 (means 14400 seconds or 4 hours)
+conn_max_lifetime = 14400
+# Set to true to log the sql calls and execution times
+log_queries = false
+# For "sqlite3" only. cache mode setting used for connecting to the database
+cache_mode = private
+
+#################################### Session ###################################
+[session]
+# Either "memory", "file", "redis", "postgres", "mysql", default is "file"
+provider = file
+# Provider config options
+# memory: not have any config yet
+# file: session dir path, is relative to grafana data_path
+# redis: config like redis server addr, poolSize, password, e.g. `127.0.0.1:6379,100,grafana`
+# postgres: user=a password=b host=localhost port=5432 dbname=c sslmode=disable
+# mysql: go-sql-driver/mysql dsn config string, e.g. `user:password@tcp(127.0.0.1:3306)/database_name`
+provider_config = sessions
+# Session cookie name
+cookie_name = grafana_sess
+# If you use session in https only, default is false
+cookie_secure = true
+# Session life time, default is 86400 (24 hours)
+session_life_time = 86400
+# Session GC time interval, default is 86400 (24 hours)
+gc_interval_time = 86400
+# Connection Max Lifetime default is 14400 (means 14400 seconds or 4 hours)
+conn_max_lifetime = 14400
+
+#################################### Security ##################################
+[security]
+# disable creation of admin user on first start of grafana
+disable_initial_admin_creation = false
+# default admin user, created on startup (override with GF_SECURITY_ADMIN_USER env var)
+admin_user = ${GF_SECURITY_ADMIN_USER}
+# default admin password, can be changed before first start of grafana, or in profile settings (override with GF_SECURITY_ADMIN_PASSWORD env var)
+admin_password = ${GF_SECURITY_ADMIN_PASSWORD}
+# used for signing (override with GF_SECURITY_SECRET_KEY env var)
+secret_key = ${GF_SECURITY_SECRET_KEY}
+# disable gravatar profile images
+disable_gravatar = false
+# data source proxy whitelist (ip_or_domain:port separated by spaces)
+data_source_proxy_whitelist =
+# disable protection against brute force login attempts
+disable_brute_force_login_protection = false
+# set to true if you host Grafana behind HTTPS
+cookie_secure = true
+# set cookie SameSite attribute
+cookie_samesite = lax
+# set to true if you want to allow browsers to render Grafana in a <frame>, <iframe>, <embed> or <object>
+allow_embedding = false
+# Set to true if you want to enable http strict transport security (HSTS) response header
+strict_transport_security = false
+# Sets how long a browser should cache HSTS
+strict_transport_security_max_age_seconds = 86400
+# Set to true if to enable HSTS preloading option
+strict_transport_security_preload = false
+# Set to true if to enable the HSTS includeSubDomains option
+strict_transport_security_subdomains = false
+# Set to true to enable the X-Content-Type-Options response header
+x_content_type_options = true
+# Set to true to enable the X-XSS-Protection header
+x_xss_protection = true
+# Set to false to disable the Content-Security-Policy response header
+content_security_policy = false
+
+#################################### Users #####################################
+[users]
+# disable user signup / registration
+allow_sign_up = false
+# Allow non admin users to create organizations
+allow_org_create = false
+# Set to true to automatically assign new users to the default organization (id 1)
+auto_assign_org = true
+# Set this value to automatically add new users to the provided organization (if auto_assign_org above is set to true)
+auto_assign_org_id = 1
+# Default role new users will be automatically assigned (if auto_assign_org above is set to true)
+auto_assign_org_role = Viewer
+# Require email validation before sign up completes
+verify_email_enabled = false
+# Background text for the user field on the login page
+login_hint = email or username
+# Default UI theme ("dark" or "light")
+default_theme = dark
+# Path to a custom home page
+home_page =
+# External user management
+external_manage_link_url =
+external_manage_link_name =
+external_manage_info =
+
+#################################### Auth ######################################
+[auth]
+# Login cookie name
+login_cookie_name = grafana_session
+# The maximum lifetime (duration) an authenticated user can be inactive before being required to login at next visit
+login_maximum_inactive_lifetime_duration = 7d
+# The maximum lifetime (duration) an authenticated user can be logged in since login time before being required to login
+login_maximum_lifetime_duration = 30d
+# How often should auth tokens be rotated for authenticated users when being active
+token_rotation_interval_minutes = 10
+# Set to true to disable (hide) the login form, useful if you use OAuth
+disable_login_form = false
+# Set to true to disable the signout link in the side menu
+disable_signout_menu = false
+# URL to redirect the user to after sign out
+signout_redirect_url =
+# Set to true to attempt login with OAuth automatically
+oauth_auto_login = false
+# OAuth state max age cookie duration in seconds
+oauth_state_cookie_max_age = 60
+# limit of api_key seconds to live before expiration
+api_key_max_seconds_to_live = -1
+
+#################################### Anonymous Auth ############################
+[auth.anonymous]
+# enable anonymous access
+enabled = false
+# specify organization name that should be used for unauthenticated users
+org_name = Main Org.
+# specify role for unauthenticated users
+org_role = Viewer
+
+#################################### Logging ###################################
+[log]
+# Either "console", "file", "syslog". Default is console and file
+mode = console
+# Either "debug", "info", "warn", "error", "critical", default is "info"
+level = info
+# optional settings to set different levels for specific loggers
+filters =
+
+[log.console]
+# log line format, valid options are text, console and json
+format = console
+
+#################################### Metrics ###################################
+[metrics]
+# Disable / Enable internal metrics
+enabled = true
+# Disable total stats (stat_totals_*) metrics to be generated
+disable_total_stats = false
+# Publish interval
+interval_seconds = 10
+
+#################################### Grafana.com integration  ##################
+[grafana_com]
+url = https://grafana.com
+
+#################################### Unified Alerting ###########################
+# Note: Grafana 12.x uses unified alerting by default
+# Legacy alerting has been removed - unified alerting is always enabled
+# Configure alerting rules through the Grafana UI or provisioning
+
+#################################### Explore ###################################
+[explore]
+# Enable the Explore section
+enabled = true
+
+#################################### Help ######################################
+[help]
+# Enable the Help section
+enabled = true
+
+#################################### Panels ####################################
+[panels]
+# Enable or disable panel plugins globally
+enable_alpha = false
+# If set to true Grafana will allow script tags in text panels
+disable_sanitize_html = false
+
+#################################### Plugins ###################################
+[plugins]
+# Enable or disable installing / uninstalling / updating plugins directly from the Grafana UI
+enable_alpha = false
+# Allow loading unsigned plugins
+allow_loading_unsigned_plugins =
+
+#################################### Feature Toggles ###########################
+[feature_toggles]
+# Enable features, separated by spaces
+enable =
+
+#################################### Date formats ##############################
+[date_formats]
+# Used by graph panel
+full_date = YYYY-MM-DD HH:mm:ss
+# Used by date time picker
+interval_second = HH:mm:ss
+interval_minute = HH:mm
+interval_hour = MM/DD HH:mm
+interval_day = MM/DD
+interval_month = YYYY-MM
+interval_year = YYYY
+# Experimental feature
+use_browser_locale = false
+# Default timezone
+default_timezone = browser

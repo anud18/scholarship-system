@@ -385,6 +385,8 @@ export function AdminManagementInterface({
   });
   const [showUserForm, setShowUserForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserListResponse | null>(null);
+  // User form state - SSO authentication system (no password-based auth)
+  // User details (name, email) are auto-populated on first SSO login via NYCU Portal
   const [userForm, setUserForm] = useState<UserCreate>({
     nycu_id: "",
     email: "",
@@ -404,7 +406,6 @@ export function AdminManagementInterface({
     full_name: "",
     chinese_name: "",
     english_name: "",
-    password: "",
     student_no: "",
   });
   const [userPagination, setUserPagination] = useState({
@@ -1414,7 +1415,6 @@ export function AdminManagementInterface({
       full_name: user.full_name || "",
       chinese_name: user.chinese_name || "",
       english_name: user.english_name || "",
-      password: "", // 編輯時不需要密碼
       student_no: user.student_no || "",
     });
 
@@ -1450,7 +1450,6 @@ export function AdminManagementInterface({
       full_name: "",
       chinese_name: "",
       english_name: "",
-      password: "",
       student_no: "",
     });
   };

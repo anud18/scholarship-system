@@ -48,8 +48,8 @@ interface UserListResponse {
 // Using UserStats from @/lib/api
 
 // Extend imported UserCreate with form-specific fields
+// Note: System uses SSO-only authentication via NYCU Portal - no password authentication
 interface UserCreateForm extends UserCreateType {
-  password?: string;
   student_no?: string;
 }
 
@@ -87,12 +87,13 @@ export function UserPermissionManagement() {
   });
   const [showUserForm, setShowUserForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserListResponse | null>(null);
+  // User form state - SSO authentication system (no password-based auth)
+  // User details (name, email) are auto-populated on first SSO login via NYCU Portal
   const [userForm, setUserForm] = useState<UserCreateForm>({
     nycu_id: "",
     email: "",
     name: "",
     role: "college",
-    password: "",
     student_no: "",
   });
   const [userPagination, setUserPagination] = useState({
@@ -403,10 +404,9 @@ export function UserPermissionManagement() {
       full_name: user.full_name || "",
       chinese_name: user.chinese_name || "",
       english_name: user.english_name || "",
-      password: "",
-          student_no: user.student_no || "",
-          college_code: user.college_code || "",
-        });
+      student_no: user.student_no || "",
+      college_code: user.college_code || "",
+    });
     setShowUserForm(true);
   };
 
@@ -432,7 +432,6 @@ export function UserPermissionManagement() {
       full_name: "",
       chinese_name: "",
       english_name: "",
-      password: "",
       student_no: "",
     });
   };

@@ -132,6 +132,98 @@ jobs:
           command: test
         continue-on-error: true
 
+  # Credential Management Security Validation
+  credential-security:
+    name: Credential Management Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect secrets with detect-secrets
+        run: |
+          pip install detect-secrets
+          detect-secrets scan --baseline .secrets.baseline
+        continue-on-error: false
+
+      - name: Check for hardcoded credentials in code
+        run: |
+          echo "🔍 Scanning for hardcoded credentials..."
+          if grep -rn --include="*.{py,yml,yaml,js,ts,tsx}" \
+            -E "(password|secret|api_key|token|hmac)\s*[:=]\s*[\"'][^\"'\$\{]+[\"']" \
+            --exclude-dir=node_modules \
+            --exclude-dir=.git \
+            --exclude="*.example" \
+            --exclude="*test*.py" \
+            --exclude="*mock*.py" . | \
+            grep -v "CHANGEME" | \
+            grep -v "your-" | \
+            grep -v "TODO" | \
+            grep -v "# " | \
+            grep -v 'password = ""'; then
+            echo "❌ Found hardcoded credentials! Use environment variables instead."
+            exit 1
+          else
+            echo "✅ No hardcoded credentials found"
+          fi
+
+      - name: Validate docker-compose uses environment variables
+        run: |
+          echo "🔍 Validating docker-compose credential management..."
+          if grep -n --include="docker-compose*.yml" \
+            -E "(POSTGRES_PASSWORD|MINIO_SECRET_KEY|SECRET_KEY|MINIO_ROOT_PASSWORD)\s*:\s*[a-zA-Z0-9_-]{8,}" . | \
+            grep -v "\${" | \
+            grep -v "env_file"; then
+            echo "❌ Found hardcoded credentials in docker-compose! Use environment variables with \${VAR} syntax."
+            exit 1
+          else
+            echo "✅ Docker-compose files properly use environment variables"
+          fi
+
+      - name: Verify .env files are in .gitignore
+        run: |
+          echo "🔍 Checking .gitignore configuration..."
+          if ! grep -q "^\.env$" .gitignore || \
+             ! grep -q "^\.env\.dev$" .gitignore || \
+             ! grep -q "^\.env\.staging$" .gitignore || \
+             ! grep -q "^\.env\.prod$" .gitignore; then
+            echo "❌ .env files not properly excluded in .gitignore"
+            exit 1
+          else
+            echo "✅ .env files properly excluded from git"
+          fi
+
+      - name: Check Grafana config is not in git
+        run: |
+          echo "🔍 Checking Grafana configuration..."
+          if git ls-files | grep -q "monitoring/config/grafana/grafana.ini$"; then
+            echo "❌ grafana.ini should not be tracked! Only grafana.ini.example should be in git."
+            exit 1
+          else
+            echo "✅ Grafana configuration properly handled"
+          fi
+
+      - name: Validate backend config has no default credentials
+        run: |
+          echo "🔍 Validating backend configuration..."
+          if grep -n "minio_access_key.*=.*\".*\"" backend/app/core/config.py | grep -v "Required:"; then
+            echo "❌ Found default MinIO credentials in config.py"
+            exit 1
+          else
+            echo "✅ Backend configuration requires environment variables"
+          fi
+
+      - name: Security validation summary
+        if: success()
+        run: |
+          echo "🎉 All credential security validations passed!"
+          echo "✅ No hardcoded credentials"
+          echo "✅ Docker-compose uses environment variables"
+          echo "✅ .env files excluded from git"
+          echo "✅ Grafana config not committed"
+          echo "✅ Backend config requires environment variables"
+
   # Dependency Updates Check
   dependency-check:
     name: Dependency Check
@@ -166,6 +258,7 @@ jobs:
             - ✅ CodeQL Analysis completed
             - ✅ Backend security scan completed
             - ✅ Frontend security scan completed
+            - ✅ Credential management validation completed
             - ✅ Dependency check completed
 
             Check the workflow artifacts for detailed reports.`;
