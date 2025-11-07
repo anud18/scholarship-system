@@ -234,6 +234,7 @@ jobs:
       - name: Initialize database schema with Alembic
         working-directory: ./backend
         env:
+          DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
           DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
           APP_ENV: test
           SECRET_KEY: test-secret-key-ci-backend-tests
