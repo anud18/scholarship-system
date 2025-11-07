@@ -49,10 +49,11 @@ class EnumConsistencyValidator:
     """Validates enum consistency across database, Python, and TypeScript"""
 
     def __init__(self, db_url: str = None):
-        self.db_url = db_url or os.getenv(
-            "DATABASE_URL",
-            "postgresql://scholarship_user:scholarship_pass@localhost:5432/scholarship_db",
-        )
+        # Required: DATABASE_URL must be set via environment variable
+        # No hardcoded fallback to prevent accidental use of credentials in source code
+        self.db_url = db_url or os.getenv("DATABASE_URL")
+        if not self.db_url:
+            raise ValueError("DATABASE_URL environment variable is required.")
         self.backend_path = Path(__file__).parent.parent / "backend"
         self.frontend_path = Path(__file__).parent.parent / "frontend"
         self.errors = []
