@@ -504,7 +504,7 @@ class TestConfigurationSettings:
         # Act & Assert
         assert hasattr(settings, "smtp_host")
         assert hasattr(settings, "smtp_port")
-        assert hasattr(settings, "smtp_username")
+        assert hasattr(settings, "smtp_user")
 
         if settings.smtp_host:
             assert isinstance(settings.smtp_host, str)
