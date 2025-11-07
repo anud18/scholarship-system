@@ -29,8 +29,10 @@ class Settings(BaseSettings):
     frontend_internal_url: str = "http://frontend:3000"  # Frontend URL for backend API calls (internal Docker network)
 
     # Database
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/scholarship_test"
-    database_url_sync: str = "postgresql://postgres:postgres@localhost:5432/scholarship_test"
+    # Required: Must be set via DATABASE_URL and DATABASE_URL_SYNC environment variables
+    # No default values to prevent accidental use of hardcoded credentials
+    database_url: str
+    database_url_sync: str
 
     # Security
     secret_key: str  # Required: Must be set via SECRET_KEY environment variable
