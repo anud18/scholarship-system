@@ -356,8 +356,9 @@ class NotificationService:
         """Send notification via email"""
         from app.core.config import settings
 
-        if not all([settings.smtp_host, settings.smtp_username, settings.smtp_password, settings.smtp_from_email]):
-            logger.warning("SMTP configuration incomplete, skipping email notification")
+        # Check required SMTP configuration (host and from address)
+        if not settings.smtp_host or not settings.email_from:
+            logger.warning("SMTP basic configuration incomplete (host/from), skipping email notification")
             return
 
         if not notification.user:
@@ -373,10 +374,10 @@ class NotificationService:
 
             # Configure email connection
             conf = ConnectionConfig(
-                MAIL_USERNAME=settings.smtp_username,
+                MAIL_USERNAME=settings.smtp_user,
                 MAIL_PASSWORD=settings.smtp_password,
-                MAIL_FROM=settings.smtp_from_email,
-                MAIL_FROM_NAME=settings.smtp_from_name,
+                MAIL_FROM=settings.email_from,
+                MAIL_FROM_NAME=settings.email_from_name,
                 MAIL_PORT=settings.smtp_port,
                 MAIL_SERVER=settings.smtp_host,
                 MAIL_STARTTLS=settings.smtp_use_tls,

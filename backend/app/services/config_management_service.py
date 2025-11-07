@@ -333,7 +333,7 @@ class ConfigurationService:
                 "default_value": "587",
                 "validation_regex": r"^[1-9]\d{1,4}$",
             },
-            "smtp_username": {
+            "smtp_user": {
                 "category": ConfigCategory.email,
                 "data_type": ConfigDataType.string,
                 "is_sensitive": True,
@@ -345,7 +345,7 @@ class ConfigurationService:
                 "is_sensitive": True,
                 "description": "SMTP password for authentication",
             },
-            "smtp_from_email": {
+            "email_from": {
                 "category": ConfigCategory.email,
                 "data_type": ConfigDataType.string,
                 "is_sensitive": False,

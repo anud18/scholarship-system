@@ -45,12 +45,12 @@ class Settings(BaseSettings):
 
     # Email Configuration
     # Note: SMTP credentials are loaded from environment variables via Pydantic Settings
-    # Empty defaults allow no-auth SMTP (e.g., port 25 internal relay)
+    # None defaults allow no-auth SMTP (e.g., port 25 internal relay)
     # Production systems should set SMTP_PASSWORD in environment if auth is required
     smtp_host: str = "140.113.7.200"
     smtp_port: int = 25
-    smtp_user: str = ""
-    smtp_password: str = ""  # Empty default is valid for no-auth SMTP
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
     smtp_use_tls: bool = False  # STARTTLS/TLS encryption (default: False for plain SMTP)
     email_from: str = "ss-test.aa@nycu.edu.tw"
     email_from_name: str = "(測試)獎學金申請與簽核系統"
