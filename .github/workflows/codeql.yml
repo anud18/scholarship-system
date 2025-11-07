@@ -129,6 +129,17 @@ jobs:
         input: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
         output: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
 
+    # Filter false positives from JavaScript/TypeScript SARIF before uploading
+    - name: Filter JavaScript SARIF (Remove False Positives)
+      if: matrix.language == 'javascript-typescript'
+      uses: advanced-security/filter-sarif@v1
+      with:
+        patterns: |
+          -frontend/components/dynamic-application-form.tsx:js/client-side-unvalidated-url-redirection
+          -frontend/components/payment-roster-list.tsx:js/client-side-unvalidated-url-redirection
+        input: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
+        output: sarif-results/${{ steps.sarif-lang.outputs.name }}.sarif
+
     # Upload filtered SARIF to Code Scanning
     - name: Upload SARIF to Code Scanning
       uses: github/codeql-action/upload-sarif@v4

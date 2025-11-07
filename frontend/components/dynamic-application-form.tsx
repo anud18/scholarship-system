@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileUpload } from "@/components/file-upload";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
+import { buildSecurePreviewUrl, getAuthToken } from "@/lib/utils/url-validation";
 import {
   Loader2,
   AlertCircle,
@@ -681,17 +682,23 @@ export function DynamicApplicationForm({
               type="button"
               onClick={(e) => {
                 e.preventDefault();
-                const token = localStorage.getItem("auth_token");
-                const encodedToken = encodeURIComponent(token || "");
-                const encodedDocumentId = encodeURIComponent(String(document.id));
-                const previewUrl = `/api/v1/preview-document-example?documentId=${encodedDocumentId}&token=${encodedToken}`;
+                try {
+                  // SECURITY: Use validated URL builder to prevent open redirect
+                  const safeUrl = buildSecurePreviewUrl('/api/v1/preview-document-example', {
+                    documentId: document.id,
+                    token: getAuthToken()
+                  });
 
-                // Create and trigger download/preview
-                const link = window.document.createElement('a');
-                link.href = previewUrl;
-                link.target = '_blank';
-                link.rel = 'noopener noreferrer';
-                link.click();
+                  // Create and trigger download/preview
+                  const link = window.document.createElement('a');
+                  link.href = safeUrl;
+                  link.target = '_blank';
+                  link.rel = 'noopener noreferrer';
+                  link.click();
+                } catch (error) {
+                  console.error('Failed to build preview URL:', error);
+                  alert('無法開啟預覽，請稍後再試');
+                }
               }}
               className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium mt-2"
             >

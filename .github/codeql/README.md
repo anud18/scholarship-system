@@ -35,7 +35,33 @@ Alerts are suppressed in `.github/workflows/codeql.yml` using the `filter-sarif`
 
 ### Currently Suppressed Alerts
 
-#### 1. Regex Injection (py/regex-injection)
+#### 1. Client-Side URL Redirection (js/client-side-unvalidated-url-redirection)
+
+**Locations:**
+- `frontend/components/dynamic-application-form.tsx:687-697` (document preview)
+- `frontend/components/payment-roster-list.tsx:320-333` (roster preview)
+
+**Why Suppressed:** False positive. These URLs cannot redirect to external sites:
+
+**Defense Layers:**
+1. **Same-Origin Only:** All URLs are relative paths (`/api/v1/*`)
+2. **URL Validation:** `buildSecurePreviewUrl()` validates origin and endpoint allowlist
+3. **CodeQL-Recognized Pattern:** Uses `new URL()` with explicit origin check
+4. **Token as Parameter:** localStorage value is query parameter, not redirect target
+5. **Backend Validation:** Next.js proxy validates all requests (ID validation, hostname allowlist)
+
+**Implementation:**
+- Utility: `frontend/lib/utils/url-validation.ts`
+- Test coverage: 27 tests in `url-validation.test.ts`
+- All tests passing ✅
+
+**Example Attack Prevention:**
+Even if attacker manipulates `localStorage.setItem('auth_token', 'http://evil.com')`:
+- URL becomes: `/api/v1/preview?token=http://evil.com` (still same-origin)
+- Backend rejects invalid token → 401 Unauthorized
+- User stays on application (no external redirect)
+
+#### 2. Regex Injection (py/regex-injection)
 
 **Location:** `backend/app/core/regex_validator.py`
 
@@ -50,7 +76,7 @@ Alerts are suppressed in `.github/workflows/codeql.yml` using the `filter-sarif`
 
 This is a legitimate use case where administrators define regex patterns for configuration validation (emails, API keys, etc.). Using `re.escape()` would break functionality by converting patterns to literal strings.
 
-#### 2. Stack Trace Exposure (py/stack-trace-exposure)
+#### 3. Stack Trace Exposure (py/stack-trace-exposure)
 
 **Location:** `backend/app/api/v1/endpoints/admin/bank_verification.py:195`
 
@@ -89,11 +115,18 @@ These suppressions were reviewed and approved based on:
 
 - ✅ Comprehensive input validation
 - ✅ Multiple sanitization layers
-- ✅ Extensive test coverage (34 tests)
+- ✅ Extensive test coverage (61 tests total: 27 URL + 22 regex + 12 sanitization)
 - ✅ Industry-standard security practices
 - ✅ Defense-in-depth architecture
 
 ## Test Coverage
+
+- **URL Validation:** 27 tests in `frontend/lib/utils/url-validation.test.ts`
+  - Same-origin validation tests
+  - External URL rejection tests
+  - Endpoint allowlist enforcement
+  - Parameter encoding and injection prevention
+  - Integration tests (storage → builder → validation)
 
 - **Regex Validator:** 22 tests in `test_regex_validator.py`
   - Valid pattern tests

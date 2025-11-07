@@ -13,6 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from "sonner";
 import { Search, MoreHorizontal, Download, Eye, RefreshCw, Trash2, FileSpreadsheet } from "lucide-react"
 import { formatDateTime, getStatusBadgeVariant } from "@/lib/utils"
+import { buildSecurePreviewUrl, getAuthToken } from "@/lib/utils/url-validation"
 
 interface PaymentRoster {
   id: number
@@ -317,12 +318,18 @@ export function PaymentRosterList({ onRosterChange }: PaymentRosterListProps) {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() => {
-                              // Get token from localStorage, following CLAUDE.md pattern
-                              const token = localStorage.getItem("auth_token") ||
-                                            localStorage.getItem("token") || "";
-                              const encodedToken = encodeURIComponent(token);
-                              const encodedRosterId = encodeURIComponent(String(roster.id));
-                              window.open(`/api/v1/preview?type=roster&rosterId=${encodedRosterId}&token=${encodedToken}`, '_blank')
+                              try {
+                                // SECURITY: Use validated URL builder to prevent open redirect
+                                const safeUrl = buildSecurePreviewUrl('/api/v1/preview', {
+                                  type: 'roster',
+                                  rosterId: roster.id,
+                                  token: getAuthToken()
+                                });
+                                window.open(safeUrl, '_blank');
+                              } catch (error) {
+                                console.error('Failed to build preview URL:', error);
+                                toast.error('無法開啟預覽，請稍後再試');
+                              }
                             }}
                           >
                             <Eye className="mr-2 h-4 w-4" />
