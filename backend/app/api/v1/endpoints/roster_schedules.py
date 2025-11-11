@@ -428,6 +428,50 @@ async def execute_schedule_now(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to execute schedule")
 
 
+@router.get("/by-config/{config_id}")
+async def get_schedule_by_config(
+    config_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    依獎學金配置查詢排程
+    Get roster schedule by scholarship configuration ID
+    """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+
+    try:
+        stmt = select(RosterSchedule).where(RosterSchedule.scholarship_configuration_id == config_id)
+        result = await db.execute(stmt)
+        schedule = result.scalar_one_or_none()
+
+        if not schedule:
+            return ApiResponse(
+                success=True,
+                message="未找到排程",
+                data=None,
+            )
+
+        # Get scheduler status
+        schedule_dict = schedule.to_dict()
+        scheduler_status = roster_scheduler.get_schedule_status(schedule.id)
+        if scheduler_status:
+            schedule_dict["scheduler_info"] = scheduler_status
+
+        response_data = RosterScheduleResponse(**schedule_dict)
+        return ApiResponse(
+            success=True,
+            message="查詢成功",
+            data=response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting schedule by config {config_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get schedule by config"
+        )
+
+
 @router.get("/scheduler/status")
 async def get_scheduler_status(
     current_user: User = Depends(get_current_user),

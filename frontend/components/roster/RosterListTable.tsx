@@ -1,0 +1,248 @@
+"use client"
+
+import { useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Download, Eye, PlayCircle, Clock, CheckCircle2 } from "lucide-react"
+import { RosterDetailDialog } from "./RosterDetailDialog"
+import { apiClient } from "@/lib/api"
+import { toast } from "sonner"
+
+interface Period {
+  label: string
+  status: "completed" | "waiting"
+  roster_id?: number
+  roster_code?: string
+  completed_at?: string
+  total_amount?: number
+  qualified_count?: number
+  next_schedule?: string
+}
+
+interface RosterListTableProps {
+  periods: Period[]
+  configId: number
+  onRosterGenerated?: () => void
+}
+
+export function RosterListTable({ periods, configId, onRosterGenerated }: RosterListTableProps) {
+  const [selectedPeriod, setSelectedPeriod] = useState<Period | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [generating, setGenerating] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState<number | null>(null)
+
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "-"
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleString("zh-TW", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  const handleViewRoster = (period: Period) => {
+    setSelectedPeriod(period)
+    setDialogOpen(true)
+  }
+
+  const handleDownload = async (period: Period) => {
+    if (!period.roster_id) return
+
+    setDownloading(period.roster_id)
+    try {
+      const response = await apiClient.request(
+        `/payment-rosters/${period.roster_id}/download`,
+        {
+          method: "GET",
+          responseType: "blob",
+        }
+      )
+
+      // Create blob link to download
+      const url = window.URL.createObjectURL(new Blob([response]))
+      const link = document.createElement("a")
+      link.href = url
+      link.setAttribute("download", `${period.roster_code || period.label}.xlsx`)
+      document.body.appendChild(link)
+      link.click()
+      link.parentNode?.removeChild(link)
+
+      toast.success("造冊檔案已下載")
+    } catch (error) {
+      console.error("Failed to download roster:", error)
+      toast.error("下載失敗: 無法下載造冊檔案")
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  const handleGenerateNow = async (period: Period) => {
+    setGenerating(period.label)
+    try {
+      const response = await apiClient.request("/payment-rosters/generate", {
+        method: "POST",
+        data: {
+          scholarship_configuration_id: configId,
+          period_label: period.label,
+          roster_cycle: "monthly", // TODO: Get from schedule
+          academic_year: parseInt(period.label.split("-")[0]),
+          student_verification_enabled: true,
+          auto_export_excel: true,
+        },
+      })
+
+      if (response.success) {
+        toast.success(`已成功產生 ${period.label} 的造冊`)
+        onRosterGenerated?.()
+      } else {
+        throw new Error(response.message || "產生造冊失敗")
+      }
+    } catch (error: any) {
+      console.error("Failed to generate roster:", error)
+      toast.error(`產生造冊失敗: ${error.message || "無法產生造冊"}`)
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  const getRowClassName = (status: string) => {
+    return status === "completed"
+      ? "bg-green-50 hover:bg-green-100"
+      : "bg-gray-50 hover:bg-gray-100"
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>造冊列表</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {periods.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Clock className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <p>目前沒有造冊資料</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[120px]">期間</TableHead>
+                  <TableHead className="w-[120px]">狀態</TableHead>
+                  <TableHead>完成時間 / 下次排程</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {periods.map((period) => (
+                  <TableRow key={period.label} className={getRowClassName(period.status)}>
+                    {/* 期間 */}
+                    <TableCell className="font-medium">{period.label}</TableCell>
+
+                    {/* 狀態 */}
+                    <TableCell>
+                      {period.status === "completed" ? (
+                        <Badge variant="default" className="bg-green-600">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          已完成
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <Clock className="mr-1 h-3 w-3" />
+                          等待中
+                        </Badge>
+                      )}
+                    </TableCell>
+
+                    {/* 完成時間 / 下次排程 */}
+                    <TableCell>
+                      {period.status === "completed" ? (
+                        <div className="text-sm">
+                          <div>{formatDate(period.completed_at)}</div>
+                          {period.qualified_count !== undefined && (
+                            <div className="text-muted-foreground">
+                              {period.qualified_count} 人
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          {period.next_schedule ? (
+                            <>下次排程: {formatDate(period.next_schedule)}</>
+                          ) : (
+                            "待排程"
+                          )}
+                        </div>
+                      )}
+                    </TableCell>
+
+                    {/* 操作 */}
+                    <TableCell className="text-right">
+                      {period.status === "completed" ? (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewRoster(period)}
+                          >
+                            <Eye className="mr-1 h-4 w-4" />
+                            查看名單
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={() => handleDownload(period)}
+                            disabled={downloading === period.roster_id}
+                          >
+                            <Download className="mr-1 h-4 w-4" />
+                            {downloading === period.roster_id ? "下載中..." : "下載Excel"}
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleGenerateNow(period)}
+                          disabled={generating === period.label}
+                        >
+                          <PlayCircle className="mr-1 h-4 w-4" />
+                          {generating === period.label ? "產生中..." : "立即產生"}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Roster Detail Dialog */}
+      {selectedPeriod && (
+        <RosterDetailDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          period={selectedPeriod}
+          configId={configId}
+        />
+      )}
+    </>
+  )
+}

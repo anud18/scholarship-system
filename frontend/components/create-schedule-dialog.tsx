@@ -19,9 +19,17 @@ interface ScholarshipConfiguration {
 
 interface CreateScheduleDialogProps {
   onScheduleCreated: () => void
+  preselectedConfigId?: number
+  hideConfigSelector?: boolean
+  customTrigger?: React.ReactNode
 }
 
-export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialogProps) {
+export function CreateScheduleDialog({
+  onScheduleCreated,
+  preselectedConfigId,
+  hideConfigSelector = false,
+  customTrigger
+}: CreateScheduleDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [scholarshipConfigs, setScholarshipConfigs] = useState<ScholarshipConfiguration[]>([])
@@ -36,8 +44,16 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
   useEffect(() => {
     if (open) {
       fetchScholarshipConfigurations()
+
+      // Pre-select config if provided
+      if (preselectedConfigId) {
+        setFormData(prev => ({
+          ...prev,
+          scholarship_configuration_id: preselectedConfigId.toString()
+        }))
+      }
     }
-  }, [open])
+  }, [open, preselectedConfigId])
 
   const fetchScholarshipConfigurations = async () => {
     try {
@@ -128,10 +144,12 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
   return (
     <Dialog open={open} onOpenChange={setOpen} modal={true}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          建立排程
-        </Button>
+        {customTrigger || (
+          <Button>
+            <Plus className="w-4 h-4 mr-2" />
+            建立排程
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
@@ -175,24 +193,26 @@ export function CreateScheduleDialog({ onScheduleCreated }: CreateScheduleDialog
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="scholarship_configuration_id">獎學金設定 *</Label>
-            <Select
-              value={formData.scholarship_configuration_id}
-              onValueChange={(value) => handleInputChange("scholarship_configuration_id", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="選擇獎學金設定" />
-              </SelectTrigger>
-              <SelectContent>
-                {scholarshipConfigs.map((config) => (
-                  <SelectItem key={config.id} value={config.id.toString()}>
-                    {config.config_name} ({config.scholarship_type_name})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!hideConfigSelector && (
+            <div className="space-y-2">
+              <Label htmlFor="scholarship_configuration_id">獎學金設定 *</Label>
+              <Select
+                value={formData.scholarship_configuration_id}
+                onValueChange={(value) => handleInputChange("scholarship_configuration_id", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="選擇獎學金設定" />
+                </SelectTrigger>
+                <SelectContent>
+                  {scholarshipConfigs.map((config) => (
+                    <SelectItem key={config.id} value={config.id.toString()}>
+                      {config.config_name} ({config.scholarship_type_name})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="description">說明</Label>
