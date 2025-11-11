@@ -237,6 +237,7 @@ jobs:
           DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
           DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
           APP_ENV: test
+          TESTING: true
           SECRET_KEY: test-secret-key-ci-backend-tests
           MINIO_ACCESS_KEY: ci-test-minio-access
           MINIO_SECRET_KEY: ci-test-minio-secret
