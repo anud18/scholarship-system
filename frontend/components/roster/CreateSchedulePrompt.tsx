@@ -56,7 +56,7 @@ export function CreateSchedulePrompt({ configName, configId, onScheduleCreated }
 
           <Alert className="mt-6 max-w-md">
             <AlertDescription className="text-sm">
-              建立排程後,系統將自動依照設定的週期產生造冊檔案。
+              建立排程後,系統將自動依照設定的週期產生造冊檔案。 <br />
               您也可以隨時手動觸發造冊產生。
             </AlertDescription>
           </Alert>

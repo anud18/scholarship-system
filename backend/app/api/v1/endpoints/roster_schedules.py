@@ -136,9 +136,14 @@ async def create_roster_schedule(
         if not config:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship configuration not found")
 
+        # Auto-generate schedule name if not provided
+        schedule_name = schedule_data.schedule_name
+        if not schedule_name:
+            schedule_name = f"{config.config_name} - 自動排程"
+
         # Create new schedule
         new_schedule = RosterSchedule(
-            schedule_name=schedule_data.schedule_name,
+            schedule_name=schedule_name,
             description=schedule_data.description,
             scholarship_configuration_id=schedule_data.scholarship_configuration_id,
             roster_cycle=schedule_data.roster_cycle,

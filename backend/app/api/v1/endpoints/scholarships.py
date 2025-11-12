@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -418,7 +418,7 @@ async def add_student_to_whitelist(
 
 @router.post("/{scholarship_type}/upload-terms")
 async def upload_terms_document(
-    scholarship_type: str,
+    scholarship_type: str = Path(..., regex=r"^[a-z_]{1,50}$"),
     file: UploadFile = File(...),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -538,7 +538,7 @@ async def upload_terms_document(
 
 @router.get("/{scholarship_type}/terms")
 async def get_terms_document(
-    scholarship_type: str,
+    scholarship_type: str = Path(..., regex=r"^[a-z_]{1,50}$"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

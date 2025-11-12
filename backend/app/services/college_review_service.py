@@ -548,7 +548,6 @@ class CollegeReviewService:
                         ApplicationStatus.under_review.value,
                         ApplicationStatus.approved.value,
                         ApplicationStatus.rejected.value,
-                        "college_reviewed",
                     ]
                 ),
             ]
@@ -588,7 +587,6 @@ class CollegeReviewService:
                         ApplicationStatus.under_review.value,
                         ApplicationStatus.approved.value,
                         ApplicationStatus.rejected.value,
-                        "college_reviewed",
                     ]
                 ),
             ]
@@ -707,7 +705,6 @@ class CollegeReviewService:
                 selectinload(CollegeRanking.items)
                 .selectinload(CollegeRankingItem.application)
                 .selectinload(Application.scholarship_type_ref),
-                selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.college_review),
                 selectinload(CollegeRanking.scholarship_type).selectinload(ScholarshipType.sub_type_configs),
                 selectinload(CollegeRanking.creator),
                 selectinload(CollegeRanking.finalizer),

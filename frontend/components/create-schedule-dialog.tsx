@@ -34,7 +34,6 @@ export function CreateScheduleDialog({
   const [loading, setLoading] = useState(false)
   const [scholarshipConfigs, setScholarshipConfigs] = useState<ScholarshipConfiguration[]>([])
   const [formData, setFormData] = useState({
-    schedule_name: "",
     description: "",
     scholarship_configuration_id: "",
     roster_cycle: "",
@@ -70,11 +69,6 @@ export function CreateScheduleDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.schedule_name.trim()) {
-      toast.error("請輸入排程名稱")
-      return
-    }
-
     if (!formData.scholarship_configuration_id) {
       toast.error("請選擇獎學金設定")
       return
@@ -105,7 +99,6 @@ export function CreateScheduleDialog({
 
       // Reset form
       setFormData({
-        schedule_name: "",
         description: "",
         scholarship_configuration_id: "",
         roster_cycle: "",
@@ -163,34 +156,21 @@ export function CreateScheduleDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="schedule_name">排程名稱 *</Label>
-              <Input
-                id="schedule_name"
-                placeholder="例如：月度造冊排程"
-                value={formData.schedule_name}
-                onChange={(e) => handleInputChange("schedule_name", e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="roster_cycle">造冊週期 *</Label>
-              <Select
-                value={formData.roster_cycle}
-                onValueChange={(value) => handleInputChange("roster_cycle", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="選擇造冊週期" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">月度</SelectItem>
-                  <SelectItem value="half_yearly">半年度</SelectItem>
-                  <SelectItem value="yearly">年度</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="roster_cycle">造冊週期 *</Label>
+            <Select
+              value={formData.roster_cycle}
+              onValueChange={(value) => handleInputChange("roster_cycle", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="選擇造冊週期" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="monthly">月度</SelectItem>
+                <SelectItem value="half_yearly">半年度</SelectItem>
+                <SelectItem value="yearly">年度</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {!hideConfigSelector && (

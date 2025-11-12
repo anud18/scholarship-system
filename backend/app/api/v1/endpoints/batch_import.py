@@ -5,6 +5,7 @@ Provides endpoints for uploading, validating, and confirming
 offline application data imports.
 """
 
+import logging
 import os
 import re
 from io import BytesIO
@@ -40,6 +41,7 @@ from app.schemas.batch_import import (
 from app.services.batch_import_service import BatchImportService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def require_college_role(current_user: User = Depends(get_current_user)) -> User:
@@ -55,7 +57,7 @@ def require_college_role(current_user: User = Depends(get_current_user)) -> User
 @router.post("/upload-data")
 async def upload_batch_import_data(
     file: UploadFile = File(..., description="Excel或CSV檔案"),
-    scholarship_type: str = Query(..., description="獎學金類型代碼"),
+    scholarship_type: str = Query(..., description="獎學金類型代碼", regex=r"^[a-z_]{1,50}$"),
     academic_year: int = Query(..., description="學年度", ge=100, le=200),
     semester: Optional[str] = Query(None, description="學期"),
     current_user: User = Depends(require_college_role),
@@ -1434,7 +1436,7 @@ async def delete_batch_import(
 
 @router.get("/template")
 async def download_batch_import_template(
-    scholarship_type: str = Query(..., description="獎學金類型代碼"),
+    scholarship_type: str = Query(..., description="獎學金類型代碼", regex=r"^[a-z_]{1,50}$"),
     current_user: User = Depends(require_college_role),
     db: AsyncSession = Depends(get_db),
 ):

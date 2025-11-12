@@ -15,6 +15,8 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Users, DollarSign, Building2, InfoIcon } from "lucide-react"
 import { apiClient } from "@/lib/api"
+import { useReferenceData, getAcademyName, getDepartmentName } from "@/hooks/use-reference-data"
+import { useScholarshipData } from "@/hooks/use-scholarship-data"
 
 interface StudentInfo {
   application_id: number
@@ -24,7 +26,7 @@ interface StudentInfo {
   email: string
   college: string
   department: string
-  grade: string
+  term_count: number | string
   sub_type: string
   amount: number
   rank_position: number | null
@@ -53,6 +55,10 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedCollege, setSelectedCollege] = useState<string>("")
+
+  // Fetch reference data for translations
+  const { academies, departments, isLoading: refLoading } = useReferenceData()
+  const { subTypeTranslations, isLoading: subTypeLoading } = useScholarshipData()
 
   useEffect(() => {
     loadStudentData()
@@ -120,45 +126,49 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[80px]">排名</TableHead>
-            <TableHead>姓名</TableHead>
-            <TableHead>學號</TableHead>
-            <TableHead>身分證字號</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>系所</TableHead>
-            <TableHead>年級</TableHead>
-            <TableHead>獎學金子類型</TableHead>
-            <TableHead className="text-right">金額</TableHead>
-            <TableHead>狀態</TableHead>
+            <TableHead className="w-[80px] whitespace-nowrap">排名</TableHead>
+            <TableHead className="whitespace-nowrap">姓名</TableHead>
+            <TableHead className="whitespace-nowrap">學號</TableHead>
+            <TableHead className="whitespace-nowrap">身分證字號</TableHead>
+            <TableHead className="whitespace-nowrap">Email</TableHead>
+            <TableHead className="whitespace-nowrap">系所</TableHead>
+            <TableHead className="whitespace-nowrap">在學學期數</TableHead>
+            <TableHead className="whitespace-nowrap">獎學金子類型</TableHead>
+            <TableHead className="whitespace-nowrap">狀態</TableHead>
+            <TableHead className="text-right whitespace-nowrap">金額</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {students.map((student) => (
             <TableRow key={student.application_id}>
-              <TableCell className="font-medium">
+              <TableCell className="font-medium whitespace-nowrap">
                 {student.rank_position ?? "-"}
               </TableCell>
-              <TableCell>{student.student_name}</TableCell>
-              <TableCell>{student.student_id}</TableCell>
-              <TableCell className="font-mono text-sm">
+              <TableCell className="whitespace-nowrap">{student.student_name}</TableCell>
+              <TableCell className="whitespace-nowrap">{student.student_id}</TableCell>
+              <TableCell className="font-mono text-sm whitespace-nowrap">
                 {student.student_id_number}
               </TableCell>
-              <TableCell className="text-sm">{student.email}</TableCell>
-              <TableCell>{student.department}</TableCell>
-              <TableCell>{student.grade}</TableCell>
-              <TableCell>
-                <Badge variant="outline">{student.sub_type || "一般"}</Badge>
+              <TableCell className="text-sm whitespace-nowrap">{student.email}</TableCell>
+              <TableCell className="whitespace-nowrap">{getDepartmentName(student.department, departments)}</TableCell>
+              <TableCell className="whitespace-nowrap">{student.term_count}</TableCell>
+              <TableCell className="whitespace-nowrap">
+                <Badge variant="outline">
+                  {student.sub_type
+                    ? (subTypeTranslations.zh[student.sub_type] || student.sub_type)
+                    : "一般"}
+                </Badge>
               </TableCell>
-              <TableCell className="text-right font-medium">
-                {formatCurrency(student.amount)}
-              </TableCell>
-              <TableCell>
+              <TableCell className="whitespace-nowrap">
                 <Badge variant="default">正取</Badge>
                 {student.backup_info && student.backup_info.length > 0 && (
                   <Badge variant="secondary" className="ml-1">
                     +{student.backup_info.length}候補
                   </Badge>
                 )}
+              </TableCell>
+              <TableCell className="text-right font-medium whitespace-nowrap">
+                {formatCurrency(student.amount)}
               </TableCell>
             </TableRow>
           ))}
@@ -238,7 +248,7 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {data.has_matrix_distribution ? "學院分配" : "統一分配"}
+              {data.has_matrix_distribution ? "矩陣分配" : "統一分配"}
             </div>
             <p className="text-xs text-muted-foreground">
               {data.has_matrix_distribution
@@ -260,7 +270,7 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
               <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${Object.keys(data.summary.by_college).length}, 1fr)` }}>
                 {Object.entries(data.summary.by_college).map(([college, stats]) => (
                   <TabsTrigger key={college} value={college} className="flex items-center gap-2">
-                    <span>{college}</span>
+                    <span>{getAcademyName(college, academies)}</span>
                     <Badge variant="secondary" className="ml-1">
                       {stats.allocated}
                     </Badge>
@@ -272,7 +282,7 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
                 <TabsContent key={college} value={college} className="mt-4">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-semibold">{college} 學院</h3>
+                      <h3 className="text-lg font-semibold">{getAcademyName(college, academies)}</h3>
                       <p className="text-sm text-muted-foreground">
                         共 {data.summary.by_college[college].allocated} 位學生，
                         總金額 {formatCurrency(data.summary.by_college[college].total_amount)}

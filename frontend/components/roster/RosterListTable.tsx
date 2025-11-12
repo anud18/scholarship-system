@@ -26,6 +26,8 @@ interface Period {
   total_amount?: number
   qualified_count?: number
   next_schedule?: string
+  period_start_date?: string
+  period_end_date?: string
 }
 
 interface RosterListTableProps {
@@ -54,6 +56,25 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
     } catch {
       return dateStr
     }
+  }
+
+  const formatDateOnly = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "-"
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleDateString("zh-TW", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  const formatPeriodRange = (startDate?: string, endDate?: string) => {
+    if (!startDate || !endDate) return "-"
+    return `${formatDateOnly(startDate)} - ${formatDateOnly(endDate)}`
   }
 
   const handleViewRoster = (period: Period) => {
@@ -143,20 +164,26 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[120px]">期間</TableHead>
-                  <TableHead className="w-[120px]">狀態</TableHead>
-                  <TableHead>完成時間 / 下次排程</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
+                  <TableHead className="w-[120px] whitespace-nowrap">期間</TableHead>
+                  <TableHead className="whitespace-nowrap">造冊期間</TableHead>
+                  <TableHead className="w-[120px] whitespace-nowrap">狀態</TableHead>
+                  <TableHead className="whitespace-nowrap">完成時間 / 下次排程</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {periods.map((period) => (
                   <TableRow key={period.label} className={getRowClassName(period.status)}>
                     {/* 期間 */}
-                    <TableCell className="font-medium">{period.label}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{period.label}</TableCell>
+
+                    {/* 造冊期間 */}
+                    <TableCell className="whitespace-nowrap">
+                      {formatPeriodRange(period.period_start_date, period.period_end_date)}
+                    </TableCell>
 
                     {/* 狀態 */}
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       {period.status === "completed" ? (
                         <Badge variant="default" className="bg-green-600">
                           <CheckCircle2 className="mr-1 h-3 w-3" />

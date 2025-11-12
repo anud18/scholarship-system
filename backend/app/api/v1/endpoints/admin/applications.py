@@ -168,7 +168,7 @@ async def get_historical_applications(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
     status: Optional[str] = Query(None, description="Filter by status"),
-    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type", regex=r"^[a-z_]{1,50}$"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
     search: Optional[str] = Query(None, description="Search by student name or ID"),

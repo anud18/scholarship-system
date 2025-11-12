@@ -40,6 +40,7 @@ from app.schemas.roster import (
 )
 from app.services.excel_export_service import ExcelExportService
 from app.services.roster_service import RosterService
+from app.utils.academic_period import get_roster_period_dates
 
 logger = logging.getLogger(__name__)
 
@@ -413,12 +414,12 @@ async def preview_roster_students(
                 student_info = {
                     "application_id": application.id,
                     "student_name": student_data.get("std_cname", ""),
-                    "student_id": student_data.get("std_id", ""),
-                    "student_id_number": student_data.get("std_stdcode", ""),
+                    "student_id": student_data.get("std_stdcode", ""),
+                    "student_id_number": student_data.get("std_pid", ""),
                     "email": student_data.get("com_email", ""),
                     "college": college,
                     "department": student_data.get("std_depno", ""),
-                    "grade": student_data.get("std_grade", ""),
+                    "term_count": student_data.get("trm_termcount", ""),
                     "sub_type": item.allocated_sub_type,
                     "amount": float(application.amount or config.amount or 0),
                     "rank_position": item.rank_position,
@@ -570,6 +571,14 @@ async def get_roster_cycle_status(
                 period_label = f"{academic_year}-{month:02d}"
                 roster = roster_map.get(period_label)
 
+                # Calculate period dates
+                period_dates = get_roster_period_dates(
+                    academic_year=academic_year,
+                    semester=config.semester.value if config.semester else None,
+                    roster_cycle="monthly",
+                    period_label=period_label,
+                )
+
                 if roster:
                     periods.append(
                         {
@@ -580,6 +589,8 @@ async def get_roster_cycle_status(
                             "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
                             "total_amount": float(roster.total_amount) if roster.total_amount else 0,
                             "qualified_count": roster.qualified_count,
+                            "period_start_date": period_dates["start_date"].isoformat(),
+                            "period_end_date": period_dates["end_date"].isoformat(),
                         }
                     )
                 else:
@@ -589,6 +600,8 @@ async def get_roster_cycle_status(
                             "status": "waiting",
                             "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
                             "estimated_count": 0,  # TODO: Calculate estimated count
+                            "period_start_date": period_dates["start_date"].isoformat(),
+                            "period_end_date": period_dates["end_date"].isoformat(),
                         }
                     )
 
@@ -597,6 +610,14 @@ async def get_roster_cycle_status(
             for half in ["H1", "H2"]:
                 period_label = f"{academic_year}-{half}"
                 roster = roster_map.get(period_label)
+
+                # Calculate period dates
+                period_dates = get_roster_period_dates(
+                    academic_year=academic_year,
+                    semester=config.semester.value if config.semester else None,
+                    roster_cycle="semi_yearly",
+                    period_label=period_label,
+                )
 
                 if roster:
                     periods.append(
@@ -608,6 +629,8 @@ async def get_roster_cycle_status(
                             "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
                             "total_amount": float(roster.total_amount) if roster.total_amount else 0,
                             "qualified_count": roster.qualified_count,
+                            "period_start_date": period_dates["start_date"].isoformat(),
+                            "period_end_date": period_dates["end_date"].isoformat(),
                         }
                     )
                 else:
@@ -617,6 +640,8 @@ async def get_roster_cycle_status(
                             "status": "waiting",
                             "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
                             "estimated_count": 0,
+                            "period_start_date": period_dates["start_date"].isoformat(),
+                            "period_end_date": period_dates["end_date"].isoformat(),
                         }
                     )
 
@@ -624,6 +649,14 @@ async def get_roster_cycle_status(
             # Generate 1 yearly period
             period_label = str(academic_year)
             roster = roster_map.get(period_label)
+
+            # Calculate period dates
+            period_dates = get_roster_period_dates(
+                academic_year=academic_year,
+                semester=config.semester.value if config.semester else None,
+                roster_cycle="yearly",
+                period_label=period_label,
+            )
 
             if roster:
                 periods.append(
@@ -635,6 +668,8 @@ async def get_roster_cycle_status(
                         "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
                         "total_amount": float(roster.total_amount) if roster.total_amount else 0,
                         "qualified_count": roster.qualified_count,
+                        "period_start_date": period_dates["start_date"].isoformat(),
+                        "period_end_date": period_dates["end_date"].isoformat(),
                     }
                 )
             else:
@@ -644,6 +679,8 @@ async def get_roster_cycle_status(
                         "status": "waiting",
                         "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
                         "estimated_count": 0,
+                        "period_start_date": period_dates["start_date"].isoformat(),
+                        "period_end_date": period_dates["end_date"].isoformat(),
                     }
                 )
 

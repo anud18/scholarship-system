@@ -375,7 +375,7 @@ async def get_active_academic_periods(
 @router.get("/scholarship-periods")
 async def get_scholarship_periods(
     scholarship_id: Optional[int] = Query(None, description="Scholarship type ID"),
-    scholarship_code: Optional[str] = Query(None, description="Scholarship type code"),
+    scholarship_code: Optional[str] = Query(None, description="Scholarship type code", regex=r"^[a-z_]{1,50}$"),
     application_cycle: Optional[str] = Query(None, description="Application cycle filter (semester/yearly)"),
     session: AsyncSession = Depends(get_db),
 ) -> ApiResponse[dict]:

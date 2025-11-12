@@ -44,6 +44,7 @@ import { SSOLoginPage } from "@/components/sso-login-page";
 import { useAdminDashboard } from "@/hooks/use-admin";
 import { apiClient } from "@/lib/api";
 import { User } from "@/types/user";
+import { decodeJWT } from "@/lib/utils/jwt";
 
 export default function ScholarshipManagementSystem() {
   const [activeTab, setActiveTab] = useState("main");
@@ -86,21 +87,10 @@ export default function ScholarshipManagementSystem() {
 
   const handleSSOCallbackInMainPage = async (token: string) => {
     try {
-    // console.log(" Decoding JWT token directly in main page...");
+    // console.log(" Decoding JWT token using utility module...");
 
-      // Simple JWT decode
-      const base64Url = token.split(".")[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split("")
-          .map(function (c) {
-            return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
-          })
-          .join("")
-      );
-
-      const tokenData = JSON.parse(jsonPayload);
+      // Decode JWT using utility module (eliminates inline script for CSP compliance)
+      const tokenData = decodeJWT(token);
     // console.log(" Decoded token data in main page:", tokenData);
 
       // Create user object from token data
