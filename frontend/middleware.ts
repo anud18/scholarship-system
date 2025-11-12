@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { randomBytes } from "crypto";
 
 /**
  * Next.js Middleware for Content Security Policy (CSP)
@@ -8,8 +7,10 @@ import { randomBytes } from "crypto";
  */
 
 export function middleware(request: NextRequest) {
-  // Generate a cryptographically secure nonce
-  const nonce = randomBytes(16).toString("base64");
+  // Generate a cryptographically secure nonce using Web Crypto API (Edge Runtime compatible)
+  const nonceArray = new Uint8Array(16);
+  crypto.getRandomValues(nonceArray);
+  const nonce = Buffer.from(nonceArray).toString("base64");
 
   // Clone the request headers
   const requestHeaders = new Headers(request.headers);
