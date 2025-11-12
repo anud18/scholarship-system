@@ -3,7 +3,7 @@ Email Automation Rules Management API
 """
 
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -19,6 +19,82 @@ from app.schemas.response import ApiResponse
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def validate_condition_query(query: Optional[str]) -> None:
+    """
+    Validate condition_query to prevent SQL injection.
+
+    SECURITY: While the service now uses parameterized queries, this provides
+    defense-in-depth by preventing obviously malicious queries from being stored.
+
+    Raises:
+        HTTPException: If query contains dangerous SQL keywords or patterns
+    """
+    if not query:
+        return
+
+    # Convert to uppercase for case-insensitive checking
+    query_upper = query.upper()
+
+    # Whitelist: Only allow SELECT statements
+    if not query_upper.strip().startswith("SELECT"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="condition_query must be a SELECT statement only"
+        )
+
+    # Blacklist dangerous SQL keywords that could modify data
+    dangerous_keywords = [
+        "DROP",
+        "DELETE",
+        "UPDATE",
+        "INSERT",
+        "ALTER",
+        "CREATE",
+        "TRUNCATE",
+        "REPLACE",
+        "MERGE",
+        "GRANT",
+        "REVOKE",
+        "EXEC",
+        "EXECUTE",
+        "CALL",
+        "DECLARE",
+        "SET",
+        "INTO OUTFILE",
+        "INTO DUMPFILE",
+        "LOAD_FILE",
+        ";--",
+        "/*",
+        "*/",
+        "XP_",
+        "SP_",
+        "WAITFOR",
+    ]
+
+    for keyword in dangerous_keywords:
+        if keyword in query_upper:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=f"condition_query contains forbidden keyword: {keyword}"
+            )
+
+    # Check for multiple statements (semicolon followed by non-comment)
+    if ";" in query and not query.strip().endswith(";"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="condition_query cannot contain multiple SQL statements"
+        )
+
+    # Validate placeholder format: only {word_characters}
+    import re
+
+    invalid_placeholders = re.findall(r"\{[^a-zA-Z0-9_]+\}", query)
+    if invalid_placeholders:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid placeholder format. Only {{word_characters}} allowed. Found: {invalid_placeholders}",
+        )
+
+    logger.info(f"✓ Query validation passed: {query[:100]}...")
 
 
 # Pydantic schemas
@@ -124,6 +200,9 @@ async def create_automation_rule(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}")
 
+        # SECURITY: Validate condition_query to prevent SQL injection
+        validate_condition_query(rule_data.condition_query)
+
         # Create new rule
         new_rule = EmailAutomationRule(
             name=rule_data.name,
@@ -202,6 +281,8 @@ async def update_automation_rule(
         if rule_data.delay_hours is not None:
             rule.delay_hours = rule_data.delay_hours
         if rule_data.condition_query is not None:
+            # SECURITY: Validate condition_query to prevent SQL injection
+            validate_condition_query(rule_data.condition_query)
             rule.condition_query = rule_data.condition_query
         if rule_data.is_active is not None:
             rule.is_active = rule_data.is_active

@@ -4,7 +4,7 @@ Reference data API endpoints for lookup tables
 
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import and_
 from sqlalchemy import func as sa_func
 from sqlalchemy import select
@@ -143,9 +143,19 @@ async def get_enroll_types(
 
 @router.get("/all")
 async def get_all_reference_data(
+    response: Response,
     session: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Get all reference data in a single request"""
+    """
+    Get all reference data in a single request.
+
+    SECURITY: Sets no-cache headers to prevent sensitive organizational data from being cached.
+    """
+
+    # SECURITY: Prevent caching of organizational structure data
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
 
     # Get all reference data in parallel
     degrees_result = await session.execute(select(Degree))

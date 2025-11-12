@@ -121,18 +121,34 @@ class EmailAutomationService:
     async def _get_recipients(
         self, db: AsyncSession, rule: EmailAutomationRule, context: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """Get email recipients based on the rule's condition query"""
+        """
+        Get email recipients based on the rule's condition query.
+
+        SECURITY: Uses parameterized queries to prevent SQL injection.
+        Context values are passed as bound parameters, not string-formatted into SQL.
+        """
         if not rule.condition_query:
             logger.warning(f"⚠️  No condition_query defined for rule {rule.template_key}")
             return []
 
         try:
-            # Replace placeholders in the query with context values
-            formatted_query = rule.condition_query.format(**context)
-            logger.info(f"📧 Executing recipient query for {rule.template_key}:")
-            logger.info(f"   Query: {formatted_query[:200]}...")
+            # SECURITY FIX: Use parameterized query instead of string formatting
+            # Convert condition_query placeholders from {key} to :key format for bindparams
+            parameterized_query = rule.condition_query
 
-            result = await db.execute(text(formatted_query))
+            # Replace {placeholder} with :placeholder for SQLAlchemy bindparams
+            import re
+
+            placeholders = re.findall(r"\{(\w+)\}", rule.condition_query)
+            for placeholder in placeholders:
+                parameterized_query = parameterized_query.replace(f"{{{placeholder}}}", f":{placeholder}")
+
+            logger.info(f"📧 Executing recipient query for {rule.template_key}:")
+            logger.info(f"   Query template: {parameterized_query[:200]}...")
+            logger.info(f"   Parameters: {context}")
+
+            # Execute with bound parameters (prevents SQL injection)
+            result = await db.execute(text(parameterized_query), context)
 
             recipients = []
             for row in result:
@@ -146,6 +162,7 @@ class EmailAutomationService:
         except Exception as e:
             logger.error(f"❌ Failed to execute condition query for rule {rule.template_key}: {e}")
             logger.error(f"   Context: {context}")
+            logger.error(f"   Query: {rule.condition_query}")
             return []
 
     async def _send_automated_email(

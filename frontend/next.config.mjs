@@ -12,9 +12,15 @@ const nextConfig = {
   output: 'standalone',
   transpilePackages: ['lucide-react'],
 
-  // Fix React Email preview server workspace root detection
-  // Without this, Next.js incorrectly uses /home/jotp as root due to multiple package-lock.json files
-  outputFileTracingRoot: process.cwd(),
+  // SECURITY: Remove X-Powered-By header to prevent information disclosure
+  poweredByHeader: false,
+
+  // Strip console.logs in production builds (keeps error/warn for debugging)
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
+  },
 
   // API Proxy for development environment
   // Proxies /api/* requests to backend server

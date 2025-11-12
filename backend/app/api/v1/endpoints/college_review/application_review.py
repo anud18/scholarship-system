@@ -45,6 +45,22 @@ async def get_applications_for_review(
 ):
     """Get applications that are ready for college review"""
 
+    # SECURITY: Sanitize string inputs to remove null bytes and special characters
+    if scholarship_type:
+        scholarship_type = scholarship_type.replace("\x00", "").strip()
+        if not scholarship_type:  # If empty after sanitization
+            scholarship_type = None
+
+    if sub_type:
+        sub_type = sub_type.replace("\x00", "").strip()
+        if not sub_type:
+            sub_type = None
+
+    if semester:
+        semester = semester.replace("\x00", "").strip()
+        if not semester or semester not in ["first", "second", "annual"]:
+            semester = None
+
     # Granular authorization checks
     if not current_user.is_college() and not current_user.is_admin() and not current_user.is_super_admin():
         raise ReviewPermissionError("College role required for application review access")
