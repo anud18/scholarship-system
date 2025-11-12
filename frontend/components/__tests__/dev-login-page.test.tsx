@@ -48,16 +48,8 @@ jest.mock("@/lib/api", () => ({
 
 import { apiClient, api } from "@/lib/api";
 
-// Override with mutable mocks
-apiClient.auth.getMockUsers = mockGetMockUsers;
-apiClient.auth.mockSSOLogin = mockMockSSOLogin;
-if (api) {
-  api.auth = {
-    ...api.auth,
-    getMockUsers: mockGetMockUsers,
-    mockSSOLogin: mockMockSSOLogin,
-  } as any;
-}
+// Note: auth methods are already mocked in jest.mock() above (lines 34-47)
+// The mock functions mockGetMockUsers and mockMockSSOLogin are already wired up
 
 // Mock localStorage
 const mockLocalStorage = {

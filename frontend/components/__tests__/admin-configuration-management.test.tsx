@@ -93,7 +93,7 @@ mockApi.admin.deleteScholarshipConfiguration =
   mockDeleteScholarshipConfiguration;
 mockApi.admin.duplicateScholarshipConfiguration =
   mockDuplicateScholarshipConfiguration;
-mockApi.referenceData = { getAcademies: mockGetAcademies } as any;
+// Note: referenceData is already mocked in jest.mock() above (line 73-75)
 
 // Mock UI components to avoid complex rendering issues
 jest.mock("@/components/ui/card", () => ({
