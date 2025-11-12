@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/utils/logger";
 
 export async function GET(request: NextRequest) {
   try {
@@ -81,11 +82,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      console.error(
-        "Backend response error:",
-        response.status,
-        response.statusText
-      );
+      logger.error("Backend response error", { status: response.status });
       return NextResponse.json(
         { error: "Failed to fetch terms document" },
         { status: response.status }
@@ -108,11 +105,13 @@ export async function GET(request: NextRequest) {
         "Content-Disposition": contentDisposition,
         "Content-Length": fileBuffer.byteLength.toString(),
         "Accept-Ranges": "bytes",
-        "Cache-Control": "private, max-age=3600", // 1小時緩存
+        // SECURITY: Sensitive terms documents should not be cached
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
       },
     });
   } catch (error) {
-    console.error("Terms preview error:", error);
+    logger.error("Terms preview error", {});
     return NextResponse.json(
       { error: "Failed to preview terms document" },
       { status: 500 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { logger } from "@/lib/utils/logger";
 
 const INTERNAL_API_URL = process.env.INTERNAL_API_URL || "http://backend:8000";
 
@@ -165,7 +166,7 @@ export async function GET(request: NextRequest) {
         );
       }
     } catch (validationError: any) {
-      console.error("Input validation error:", validationError.message);
+      logger.error("Input validation error", {});
       return NextResponse.json(
         { error: validationError.message },
         { status: 400 }
@@ -184,7 +185,7 @@ export async function GET(request: NextRequest) {
     try {
       backendUrl = getSafeBackendUrl();
     } catch (error: any) {
-      console.error("Backend URL validation error:", error.message);
+      logger.error("Backend URL validation error", {});
       return NextResponse.json(
         { error: "Invalid backend configuration" },
         { status: 500 }
@@ -223,11 +224,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      console.error(
-        "Backend response error:",
-        response.status,
-        response.statusText
-      );
+      logger.error("Backend response error", { status: response.status });
       return NextResponse.json(
         { error: "Failed to fetch file from backend" },
         { status: response.status }
@@ -265,11 +262,13 @@ export async function GET(request: NextRequest) {
         "Content-Disposition": contentDisposition,
         "Content-Length": fileBuffer.byteLength.toString(),
         "Accept-Ranges": "bytes",
-        "Cache-Control": "private, max-age=3600", // 1小時緩存
+        // SECURITY: Sensitive documents should not be cached
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
       },
     });
   } catch (error) {
-    console.error("File preview error:", error);
+    logger.error("File preview error", {});
     return NextResponse.json(
       { error: "Failed to preview file" },
       { status: 500 }
@@ -321,7 +320,7 @@ async function handleRosterPreview(
     try {
       backendUrl = getSafeBackendUrl();
     } catch (error: any) {
-      console.error("[Roster Preview] Backend URL validation error:", error.message);
+      logger.error("Roster Preview: Backend URL validation error", {});
       return NextResponse.json(
         {
           success: false,
@@ -351,9 +350,7 @@ async function handleRosterPreview(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        `[Roster Preview] Backend error: ${response.status} - ${errorText}`
-      );
+      logger.error("Roster Preview: Backend error", { status: response.status });
       return NextResponse.json(
         {
           success: false,
@@ -377,7 +374,7 @@ async function handleRosterPreview(
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error("[Roster Preview] Error:", error);
+    logger.error("Roster Preview error", {});
 
     // Handle validation errors with 400 Bad Request
     if (error instanceof Error && error.message.startsWith("Invalid")) {

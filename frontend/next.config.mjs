@@ -15,11 +15,10 @@ const nextConfig = {
   // SECURITY: Remove X-Powered-By header to prevent information disclosure
   poweredByHeader: false,
 
-  // Strip console.logs in production builds (keeps error/warn for debugging)
+  // SECURITY: Strip ALL console logs in production to prevent information leakage
+  // Use the centralized logger (lib/utils/logger.ts) for production-safe logging
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production' ? {
-      exclude: ['error', 'warn'],
-    } : false,
+    removeConsole: process.env.NODE_ENV === 'production' ? true : false,
   },
 
   // API Proxy for development environment

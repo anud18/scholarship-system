@@ -11,6 +11,7 @@
 
 import type { ApiResponse } from '../api'; // Import from main api.ts for now
 import { z, type ZodType } from 'zod';
+import { logger } from '../utils/logger';
 
 /**
  * API validation error with detailed information
@@ -178,7 +179,7 @@ export class ApiClient {
       if (!response.ok) {
         // Handle specific error codes
         if (response.status === 401) {
-          console.error("Authentication failed - clearing token");
+          logger.error("Authentication failed", { status: 401, endpoint });
           this.clearToken();
 
           // Emit session expired event for global handling
@@ -190,9 +191,7 @@ export class ApiClient {
             );
           }
         } else if (response.status === 403) {
-          console.error(
-            "Authorization denied - user may not have proper permissions"
-          );
+          logger.error("Authorization denied", { status: 403, endpoint });
 
           // Emit unauthorized event
           if (typeof window !== "undefined") {
@@ -203,7 +202,7 @@ export class ApiClient {
             );
           }
         } else if (response.status === 429) {
-          console.warn("Rate limit exceeded - request throttled");
+          logger.warn("Rate limit exceeded", { endpoint });
         }
 
         const msg =
@@ -226,10 +225,9 @@ export class ApiClient {
           }
         } catch (error) {
           if (error instanceof z.ZodError) {
-            console.error("❌ API Response Validation Failed:", {
+            logger.error("API Response Validation Failed", {
               endpoint,
-              errors: error.errors,
-              received: data,
+              errorCount: error.errors.length,
             });
 
             // Only throw in development to prevent breaking production
@@ -254,7 +252,7 @@ export class ApiClient {
 
           // Log warning in development if message was missing
           if (!data.message && process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ API Response missing message field:', {
+            logger.warn('API Response missing message field', {
               endpoint,
               success: data.success,
               hasData: !!data.data,
@@ -314,7 +312,7 @@ export class ApiClient {
         data: data as T,
       } as ApiResponse<T>;
     } catch (error) {
-      console.error("API request failed:", error);
+      logger.error("API request failed", { endpoint });
       throw error;
     }
   }
