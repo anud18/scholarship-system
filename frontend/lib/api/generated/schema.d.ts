@@ -3698,7 +3698,9 @@ export interface paths {
         };
         /**
          * Get All Reference Data
-         * @description Get all reference data in a single request
+         * @description Get all reference data in a single request.
+         *
+         *     SECURITY: Sets no-cache headers to prevent sensitive organizational data from being cached.
          */
         get: operations["get_all_reference_data_api_v1_reference_data_all_get"];
         put?: never;
@@ -5910,6 +5912,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/preview-students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Roster Students
+         * @description 預覽造冊學生名單
+         *     Preview student list for roster generation
+         *
+         *     Returns:
+         *         - has_matrix_distribution: 是否有 Matrix 分配
+         *         - allocated_students: 正取學生列表
+         *         - summary: 統計摘要
+         */
+        get: operations["preview_roster_students_api_v1_payment_rosters_preview_students_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/cycle-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Roster Cycle Status
+         * @description 取得造冊週期狀態
+         *     Get roster cycle status for a scholarship configuration
+         *
+         *     Returns:
+         *         - schedule: 排程資訊
+         *         - roster_cycle: 造冊週期 (monthly/semi_yearly/yearly)
+         *         - periods: 期間列表 (已完成 + 等待造冊)
+         */
+        get: operations["get_roster_cycle_status_api_v1_payment_rosters_cycle_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/payment-rosters/{roster_id}": {
         parameters: {
             query?: never;
@@ -6227,6 +6281,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/roster-schedules/by-config/{config_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Schedule By Config
+         * @description 依獎學金配置查詢排程
+         *     Get roster schedule by scholarship configuration ID
+         */
+        get: operations["get_schedule_by_config_api_v1_roster_schedules_by_config__config_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roster-schedules/scheduler/status": {
         parameters: {
             query?: never;
@@ -6397,6 +6472,36 @@ export interface paths {
         get: operations["get_my_verified_account_api_v1_student_bank_accounts_my_verified_account_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/csp-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Csp Report Info
+         * @description Information endpoint about CSP reporting.
+         *     Browsers use POST, this GET is for documentation.
+         */
+        get: operations["csp_report_info_api_v1_csp_report_get"];
+        put?: never;
+        /**
+         * Report Csp Violation
+         * @description Receive and log CSP violation reports from browsers.
+         *
+         *     The browser sends violation reports to this endpoint when CSP blocks a resource.
+         *     Format follows the CSP Level 2 specification.
+         *
+         *     Returns 204 No Content as per CSP specification.
+         */
+        post: operations["report_csp_violation_api_v1_csp_report_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8265,9 +8370,9 @@ export interface components {
         RosterScheduleCreate: {
             /**
              * Schedule Name
-             * @description 排程名稱
+             * @description 排程名稱（留空則自動生成）
              */
-            schedule_name: string;
+            schedule_name?: string | null;
             /**
              * Description
              * @description 排程說明
@@ -19110,6 +19215,72 @@ export interface operations {
             };
         };
     };
+    preview_roster_students_api_v1_payment_rosters_preview_students_get: {
+        parameters: {
+            query: {
+                /** @description 獎學金配置ID */
+                config_id: number;
+                /** @description 排名ID (如有 Matrix Distribution) */
+                ranking_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_roster_cycle_status_api_v1_payment_rosters_cycle_status_get: {
+        parameters: {
+            query: {
+                /** @description 獎學金配置ID */
+                config_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_payment_roster_api_v1_payment_rosters__roster_id__get: {
         parameters: {
             query?: never;
@@ -19718,6 +19889,37 @@ export interface operations {
             };
         };
     };
+    get_schedule_by_config_api_v1_roster_schedules_by_config__config_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                config_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_scheduler_status_api_v1_roster_schedules_scheduler_status_get: {
         parameters: {
             query?: never;
@@ -20025,6 +20227,44 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+        };
+    };
+    csp_report_info_api_v1_csp_report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    report_csp_violation_api_v1_csp_report_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

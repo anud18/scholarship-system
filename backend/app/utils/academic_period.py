@@ -178,13 +178,23 @@ def get_roster_period_dates(
         try:
             # Extract month from label like "113-01"
             month = int(period_label.split("-")[1])
-            start_date = datetime(western_year, month, 1)
+
+            # For yearly scholarships, handle cross-year months
+            # September-December (9-12) are in the western_year
+            # January-August (1-8) are in the next year (western_year + 1)
+            if semester is None or semester == "annual":
+                calendar_year = western_year if month >= 9 else western_year + 1
+            else:
+                # For semester scholarships, use western_year directly
+                calendar_year = western_year
+
+            start_date = datetime(calendar_year, month, 1)
 
             # Calculate last day of month
             import calendar
 
-            last_day = calendar.monthrange(western_year, month)[1]
-            end_date = datetime(western_year, month, last_day)
+            last_day = calendar.monthrange(calendar_year, month)[1]
+            end_date = datetime(calendar_year, month, last_day)
         except (IndexError, ValueError):
             # Fallback to yearly if parsing fails
             start_date = datetime(western_year, 9, 1)

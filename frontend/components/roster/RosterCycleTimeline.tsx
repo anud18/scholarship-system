@@ -10,6 +10,8 @@ import { PeriodDetailDialog } from "./PeriodDetailDialog"
 
 interface Period {
   label: string
+  western_date?: string
+  display_label?: string
   status: "completed" | "waiting"
   roster_id?: number
   roster_code?: string
@@ -171,7 +173,9 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
               >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-2">
-                    <div className="text-sm font-semibold">{period.label}</div>
+                    <div className="text-sm font-semibold">
+                      {period.display_label || period.label}
+                    </div>
                     {period.status === "completed" ? (
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
                     ) : (

@@ -1,12 +1,9 @@
 import type React from "react";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { AuthProvider } from "@/hooks/use-auth";
-import { NotificationProvider } from "@/contexts/notification-context";
 import { SessionExpiredProvider } from "@/contexts/session-expired-context";
-import { QueryProvider } from "@/components/providers/query-provider";
 import { DebugPanelWrapper } from "@/components/debug-panel-wrapper";
-import { SWRProvider } from "@/components/providers/swr-provider";
+import { AppProvider } from "@/components/providers/app-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
@@ -43,19 +40,13 @@ export default function RootLayout({
   return (
     <html lang="zh-TW" className="scroll-smooth">
       <body className="antialiased">
-        <QueryProvider>
-          <SWRProvider>
-            <AuthProvider>
-              <NotificationProvider>
-                <SessionExpiredProvider>
-                  {children}
-                  <DebugPanelWrapper />
-                  <Toaster />
-                </SessionExpiredProvider>
-              </NotificationProvider>
-            </AuthProvider>
-          </SWRProvider>
-        </QueryProvider>
+        <AppProvider>
+          <SessionExpiredProvider>
+            {children}
+            <DebugPanelWrapper />
+            <Toaster />
+          </SessionExpiredProvider>
+        </AppProvider>
       </body>
     </html>
   );

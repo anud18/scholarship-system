@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import useSWR from "swr";
+import { useState, useEffect } from "react";
 import apiClient, { type ScholarshipConfiguration } from "@/lib/api";
 import { useAdminManagement } from "@/contexts/admin-management-context";
 
@@ -11,26 +11,31 @@ export function useWorkflows() {
     number | null
   >(null);
 
-  // Fetch scholarship configurations with React Query
+  // Fetch scholarship configurations with SWR
   const {
     data: configurations = [],
     isLoading,
     error,
-  } = useQuery({
-    queryKey: ["scholarshipConfigurations"],
-    queryFn: async () => {
+  } = useSWR(
+    activeTab === "workflows" ? "scholarshipConfigurations" : null,
+    async () => {
       const response = await apiClient.admin.getScholarshipConfigurations();
       if (response.success && response.data) {
-        // Auto-select first configuration if none selected
-        if (response.data.length > 0 && !selectedConfigurationId) {
-          setSelectedConfigurationId(response.data[0].id);
-        }
         return response.data as ScholarshipConfiguration[];
       }
       throw new Error(response.message || "Failed to load configurations");
     },
-    enabled: activeTab === "workflows", // Only fetch when workflows tab is active
-  });
+    {
+      revalidateOnFocus: false,
+    }
+  );
+
+  // Auto-select first configuration if none selected
+  useEffect(() => {
+    if (configurations.length > 0 && !selectedConfigurationId) {
+      setSelectedConfigurationId(configurations[0].id);
+    }
+  }, [configurations, selectedConfigurationId]);
 
   return {
     configurations,

@@ -129,66 +129,154 @@ export {
 } from './modules/quota';
 
 /**
- * Extended ApiClient with all API modules
+ * Extended ApiClient with all API modules (Lazy-loaded)
+ *
+ * This class uses lazy loading to reduce initial bundle size.
+ * Each module is only loaded when first accessed.
  */
 class ExtendedApiClient extends ApiClient {
-  public auth: ReturnType<typeof createAuthApi>;
-  public users: ReturnType<typeof createUsersApi>;
-  public scholarships: ReturnType<typeof createScholarshipsApi>;
-  public applications: ReturnType<typeof createApplicationsApi>;
-  public notifications: ReturnType<typeof createNotificationsApi>;
-  public quota: ReturnType<typeof createQuotaApi>;
-  public professor: ReturnType<typeof createProfessorApi>;
-  public college: ReturnType<typeof createCollegeApi>;
-  public whitelist: ReturnType<typeof createWhitelistApi>;
-  public systemSettings: ReturnType<typeof createSystemSettingsApi>;
-  public bankVerification: ReturnType<typeof createBankVerificationApi>;
-  public professorStudent: ReturnType<typeof createProfessorStudentApi>;
-  public emailAutomation: ReturnType<typeof createEmailAutomationApi>;
-  public batchImport: ReturnType<typeof createBatchImportApi>;
-  public referenceData: ReturnType<typeof createReferenceDataApi>;
-  public applicationFields: ReturnType<typeof createApplicationFieldsApi>;
-  public userProfiles: ReturnType<typeof createUserProfilesApi>;
-  public emailManagement: ReturnType<typeof createEmailManagementApi>;
-  public admin: ReturnType<typeof createAdminApi>;
-  public documentRequests: ReturnType<typeof createDocumentRequestsApi>;
-  public paymentRosters: ReturnType<typeof createPaymentRostersApi>;
-  public students: ReturnType<typeof createStudentsApi>;
-  // public reviews: ReturnType<typeof createReviewApi>; // Not used - professor reviews use professor endpoints
+  // Private properties for lazy initialization
+  private _auth?: ReturnType<typeof createAuthApi>;
+  private _users?: ReturnType<typeof createUsersApi>;
+  private _scholarships?: ReturnType<typeof createScholarshipsApi>;
+  private _applications?: ReturnType<typeof createApplicationsApi>;
+  private _notifications?: ReturnType<typeof createNotificationsApi>;
+  private _quota?: ReturnType<typeof createQuotaApi>;
+  private _professor?: ReturnType<typeof createProfessorApi>;
+  private _college?: ReturnType<typeof createCollegeApi>;
+  private _whitelist?: ReturnType<typeof createWhitelistApi>;
+  private _systemSettings?: ReturnType<typeof createSystemSettingsApi>;
+  private _bankVerification?: ReturnType<typeof createBankVerificationApi>;
+  private _professorStudent?: ReturnType<typeof createProfessorStudentApi>;
+  private _emailAutomation?: ReturnType<typeof createEmailAutomationApi>;
+  private _batchImport?: ReturnType<typeof createBatchImportApi>;
+  private _referenceData?: ReturnType<typeof createReferenceDataApi>;
+  private _applicationFields?: ReturnType<typeof createApplicationFieldsApi>;
+  private _userProfiles?: ReturnType<typeof createUserProfilesApi>;
+  private _emailManagement?: ReturnType<typeof createEmailManagementApi>;
+  private _admin?: ReturnType<typeof createAdminApi>;
+  private _documentRequests?: ReturnType<typeof createDocumentRequestsApi>;
+  private _paymentRosters?: ReturnType<typeof createPaymentRostersApi>;
+  private _students?: ReturnType<typeof createStudentsApi>;
+
+  // Lazy-loaded getters
+  get auth(): ReturnType<typeof createAuthApi> {
+    if (!this._auth) this._auth = createAuthApi();
+    return this._auth;
+  }
+
+  get users(): ReturnType<typeof createUsersApi> {
+    if (!this._users) this._users = createUsersApi();
+    return this._users;
+  }
+
+  get scholarships(): ReturnType<typeof createScholarshipsApi> {
+    if (!this._scholarships) this._scholarships = createScholarshipsApi();
+    return this._scholarships;
+  }
+
+  get applications(): ReturnType<typeof createApplicationsApi> {
+    if (!this._applications) this._applications = createApplicationsApi();
+    return this._applications;
+  }
+
+  get notifications(): ReturnType<typeof createNotificationsApi> {
+    if (!this._notifications) this._notifications = createNotificationsApi();
+    return this._notifications;
+  }
+
+  get quota(): ReturnType<typeof createQuotaApi> {
+    if (!this._quota) this._quota = createQuotaApi();
+    return this._quota;
+  }
+
+  get professor(): ReturnType<typeof createProfessorApi> {
+    if (!this._professor) this._professor = createProfessorApi();
+    return this._professor;
+  }
+
+  get college(): ReturnType<typeof createCollegeApi> {
+    if (!this._college) this._college = createCollegeApi();
+    return this._college;
+  }
+
+  get whitelist(): ReturnType<typeof createWhitelistApi> {
+    if (!this._whitelist) this._whitelist = createWhitelistApi();
+    return this._whitelist;
+  }
+
+  get systemSettings(): ReturnType<typeof createSystemSettingsApi> {
+    if (!this._systemSettings) this._systemSettings = createSystemSettingsApi();
+    return this._systemSettings;
+  }
+
+  get bankVerification(): ReturnType<typeof createBankVerificationApi> {
+    if (!this._bankVerification) this._bankVerification = createBankVerificationApi();
+    return this._bankVerification;
+  }
+
+  get professorStudent(): ReturnType<typeof createProfessorStudentApi> {
+    if (!this._professorStudent) this._professorStudent = createProfessorStudentApi();
+    return this._professorStudent;
+  }
+
+  get emailAutomation(): ReturnType<typeof createEmailAutomationApi> {
+    if (!this._emailAutomation) this._emailAutomation = createEmailAutomationApi();
+    return this._emailAutomation;
+  }
+
+  get batchImport(): ReturnType<typeof createBatchImportApi> {
+    if (!this._batchImport) this._batchImport = createBatchImportApi();
+    return this._batchImport;
+  }
+
+  get referenceData(): ReturnType<typeof createReferenceDataApi> {
+    if (!this._referenceData) this._referenceData = createReferenceDataApi();
+    return this._referenceData;
+  }
+
+  get applicationFields(): ReturnType<typeof createApplicationFieldsApi> {
+    if (!this._applicationFields) this._applicationFields = createApplicationFieldsApi();
+    return this._applicationFields;
+  }
+
+  get userProfiles(): ReturnType<typeof createUserProfilesApi> {
+    if (!this._userProfiles) this._userProfiles = createUserProfilesApi();
+    return this._userProfiles;
+  }
+
+  get emailManagement(): ReturnType<typeof createEmailManagementApi> {
+    if (!this._emailManagement) this._emailManagement = createEmailManagementApi();
+    return this._emailManagement;
+  }
+
+  get admin(): ReturnType<typeof createAdminApi> {
+    if (!this._admin) this._admin = createAdminApi();
+    return this._admin;
+  }
+
+  get documentRequests(): ReturnType<typeof createDocumentRequestsApi> {
+    if (!this._documentRequests) this._documentRequests = createDocumentRequestsApi();
+    return this._documentRequests;
+  }
+
+  get paymentRosters(): ReturnType<typeof createPaymentRostersApi> {
+    if (!this._paymentRosters) this._paymentRosters = createPaymentRostersApi();
+    return this._paymentRosters;
+  }
+
+  get students(): ReturnType<typeof createStudentsApi> {
+    if (!this._students) this._students = createStudentsApi();
+    return this._students;
+  }
 
   // Backward compatibility alias
-  public system: ReturnType<typeof createSystemSettingsApi>;
+  get system(): ReturnType<typeof createSystemSettingsApi> {
+    return this.systemSettings;
+  }
 
   constructor() {
     super();
-
-    // Initialize modules
-    this.auth = createAuthApi(); // Now using typed client internally
-    this.users = createUsersApi(); // Now using typed client internally
-    this.scholarships = createScholarshipsApi(); // Now using typed client internally
-    this.applications = createApplicationsApi(); // Now using typed client internally
-    this.notifications = createNotificationsApi(); // Now using typed client internally
-    this.quota = createQuotaApi(); // Now using typed client internally
-    this.professor = createProfessorApi(); // Now using typed client internally
-    this.college = createCollegeApi(); // Now using typed client internally
-    this.whitelist = createWhitelistApi(); // Now using typed client internally
-    this.systemSettings = createSystemSettingsApi(); // Now using typed client internally
-    this.bankVerification = createBankVerificationApi(); // Now using typed client internally
-    this.professorStudent = createProfessorStudentApi(); // Now using typed client internally
-    this.emailAutomation = createEmailAutomationApi(); // Now using typed client internally
-    this.batchImport = createBatchImportApi(); // Now using typed client internally
-    this.referenceData = createReferenceDataApi(); // Now using typed client internally
-    this.applicationFields = createApplicationFieldsApi(); // Now using typed client internally
-    this.userProfiles = createUserProfilesApi(); // Now using typed client internally
-    this.emailManagement = createEmailManagementApi(); // Now using typed client internally
-    this.admin = createAdminApi(); // Now using typed client internally
-    this.documentRequests = createDocumentRequestsApi(); // Now using typed client internally
-    this.paymentRosters = createPaymentRostersApi(); // Now using typed client internally
-    this.students = createStudentsApi(); // Now using typed client internally
-    // this.reviews = createReviewApi(); // Not used - professor reviews use professor endpoints
-
-    // Initialize backward compatibility alias
-    this.system = this.systemSettings;
   }
 
   /**

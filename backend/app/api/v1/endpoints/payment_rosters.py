@@ -566,8 +566,18 @@ async def get_roster_cycle_status(
         academic_year = config.academic_year
 
         if schedule.roster_cycle.value == "monthly":
+            # Determine if this is a yearly (academic year) scholarship
+            is_yearly = config.semester is None or config.semester.value == "annual"
+
             # Generate 12 months
-            for month in range(1, 13):
+            # For yearly scholarships: September to August (9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8)
+            # For semester scholarships: January to December (1, 2, 3, ..., 12)
+            if is_yearly:
+                month_sequence = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8]
+            else:
+                month_sequence = list(range(1, 13))
+
+            for month in month_sequence:
                 period_label = f"{academic_year}-{month:02d}"
                 roster = roster_map.get(period_label)
 
@@ -579,10 +589,18 @@ async def get_roster_cycle_status(
                     period_label=period_label,
                 )
 
+                # Calculate western calendar year-month for display
+                western_year = academic_year + 1911
+                calendar_year = western_year if month >= 9 else western_year + 1
+                western_date = f"{calendar_year}-{month:02d}"
+                display_label = f"{period_label} ({calendar_year}年{month}月)"
+
                 if roster:
                     periods.append(
                         {
                             "label": period_label,
+                            "western_date": western_date,
+                            "display_label": display_label,
                             "status": "completed",
                             "roster_id": roster.id,
                             "roster_code": roster.roster_code,
@@ -597,6 +615,8 @@ async def get_roster_cycle_status(
                     periods.append(
                         {
                             "label": period_label,
+                            "western_date": western_date,
+                            "display_label": display_label,
                             "status": "waiting",
                             "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
                             "estimated_count": 0,  # TODO: Calculate estimated count
