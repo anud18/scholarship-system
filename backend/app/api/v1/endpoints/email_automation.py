@@ -3,6 +3,7 @@ Email Automation Rules Management API
 """
 
 import logging
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.regex_validator import RegexValidationError, safe_regex_search
 from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.email_management import EmailAutomationRule, TriggerEvent
@@ -23,20 +25,42 @@ router = APIRouter()
 
 def validate_condition_query(query: Optional[str]) -> None:
     """
-    Validate condition_query to prevent SQL injection.
+    Validate condition_query to prevent SQL injection and ReDoS attacks.
 
-    SECURITY: While the service now uses parameterized queries, this provides
-    defense-in-depth by preventing obviously malicious queries from being stored.
+    SECURITY: Multi-layer validation:
+    1. Input length and pattern checks (prevent ReDoS attacks)
+    2. SQL keyword blacklist (prevent SQL injection)
+    3. Placeholder format validation with timeout protection (prevent ReDoS)
 
     Raises:
-        HTTPException: If query contains dangerous SQL keywords or patterns
+        HTTPException: If query contains dangerous SQL keywords, patterns, or exceeds limits
     """
     if not query:
         return
 
+    # SECURITY LAYER 1: Pre-validation checks to prevent obvious ReDoS attacks
+    MAX_QUERY_LENGTH = 5000
+    MAX_CONSECUTIVE_BRACES = 50
+
+    if len(query) > MAX_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"condition_query exceeds maximum length of {MAX_QUERY_LENGTH} characters",
+        )
+
+    # Check for excessive consecutive braces (potential ReDoS attack pattern)
+    consecutive_open_braces = re.search(r"\{{50,}", query)
+    consecutive_close_braces = re.search(r"\}{50,}", query)
+    if consecutive_open_braces or consecutive_close_braces:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"condition_query contains suspicious pattern: excessive consecutive braces (max {MAX_CONSECUTIVE_BRACES})",
+        )
+
     # Convert to uppercase for case-insensitive checking
     query_upper = query.upper()
 
+    # SECURITY LAYER 2: SQL Injection Prevention
     # Whitelist: Only allow SELECT statements
     if not query_upper.strip().startswith("SELECT"):
         raise HTTPException(
@@ -84,14 +108,44 @@ def validate_condition_query(query: Optional[str]) -> None:
             status_code=status.HTTP_400_BAD_REQUEST, detail="condition_query cannot contain multiple SQL statements"
         )
 
+    # SECURITY LAYER 3: Placeholder validation with ReDoS protection
     # Validate placeholder format: only {word_characters}
-    import re
+    try:
+        # SECURITY: Use safe_regex_search with timeout to prevent ReDoS attacks
+        # Strategy: Find all placeholders, then validate each one
+        # Pattern 1: Find all placeholders (any content between braces)
+        all_placeholders_pattern = r"\{[^}]*\}"
+        remaining_query = query
+        all_invalid = []
 
-    invalid_placeholders = re.findall(r"\{[^a-zA-Z0-9_]+\}", query)
-    if invalid_placeholders:
+        while True:
+            match = safe_regex_search(all_placeholders_pattern, remaining_query, timeout_seconds=1)
+            if not match:
+                break
+
+            placeholder = match.group(0)
+            # Extract content between braces
+            content = placeholder[1:-1]  # Remove { and }
+
+            # Check if content is valid (only word characters: a-z, A-Z, 0-9, _)
+            if not content or not re.match(r"^[a-zA-Z0-9_]+$", content):
+                all_invalid.append(placeholder)
+
+            # Move past this match
+            remaining_query = remaining_query[match.end() :]
+
+        if all_invalid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid placeholder format. Only {{word_characters}} allowed. Found: {all_invalid[:5]}",
+            )
+
+    except RegexValidationError as e:
+        # Regex pattern itself is malicious or causes ReDoS
+        logger.error(f"Regex validation error in condition_query: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid placeholder format. Only {{word_characters}} allowed. Found: {invalid_placeholders}",
+            detail=f"condition_query contains invalid pattern that cannot be safely validated: {str(e)}",
         )
 
     logger.info(f"✓ Query validation passed: {query[:100]}...")
