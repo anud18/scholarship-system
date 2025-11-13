@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { UserRole } from "@/lib/enums";
 import {
   BookOpen,
   Users,
@@ -93,11 +94,23 @@ export default function ScholarshipManagementSystem() {
       const tokenData = decodeJWT(token);
     // console.log(" Decoded token data in main page:", tokenData);
 
+      // Validate and cast role to UserRole enum
+      const validRoles: Array<UserRole> = [
+        UserRole.STUDENT,
+        UserRole.PROFESSOR,
+        UserRole.COLLEGE,
+        UserRole.ADMIN,
+        UserRole.SUPER_ADMIN,
+      ];
+      const userRole = validRoles.includes(tokenData.role as UserRole)
+        ? (tokenData.role as UserRole)
+        : UserRole.STUDENT; // Fallback to student if invalid
+
       // Create user object from token data
       const userData = {
         id: tokenData.sub,
         nycu_id: tokenData.nycu_id,
-        role: tokenData.role,
+        role: userRole,
         name: tokenData.nycu_id,
         email: `${tokenData.nycu_id}@nycu.edu.tw`,
         created_at: new Date().toISOString(),
@@ -112,10 +125,9 @@ export default function ScholarshipManagementSystem() {
     // console.log(" Login completed in main page, redirecting...");
 
       // Redirect based on user role
-      const userRole = userData.role;
       let redirectPath = "/";
 
-      if (userRole === "admin" || userRole === "super_admin") {
+      if (userData.role === "admin" || userData.role === "super_admin") {
         redirectPath = "/#dashboard";
       } else {
         redirectPath = "/#main";

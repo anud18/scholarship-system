@@ -86,7 +86,10 @@ export function ScheduleSettingDialog({
 
       const response = await apiClient.request(`/roster-schedules/${schedule.id}`, {
         method: "PUT",
-        data: updateData,
+        body: JSON.stringify(updateData),
+        headers: {
+          "Content-Type": "application/json",
+        },
       })
 
       if (response.success) {

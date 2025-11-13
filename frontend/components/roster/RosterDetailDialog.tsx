@@ -84,7 +84,8 @@ export function RosterDetailDialog({
         setHasMatrix(colleges.size > 1)
 
         if (colleges.size > 0) {
-          setSelectedCollege(Array.from(colleges)[0])
+          const firstCollege = Array.from(colleges)[0]
+          setSelectedCollege(firstCollege as string)
         }
       }
     } catch (error) {

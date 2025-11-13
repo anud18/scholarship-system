@@ -85,22 +85,29 @@ export function PeriodDetailDialog({
 
     setDownloading(true)
     try {
-      const response = await apiClient.request(
-        `/payment-rosters/${period.roster_id}/download`,
+      const token = apiClient.getToken()
+      const response = await fetch(
+        `/api/v1/payment-rosters/${period.roster_id}/download`,
         {
-          method: "GET",
-          responseType: "blob",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
       )
 
-      // Create blob link to download
-      const url = window.URL.createObjectURL(new Blob([response]))
+      if (!response.ok) {
+        throw new Error("Download failed")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
       link.setAttribute("download", `${period.roster_code || period.label}.xlsx`)
       document.body.appendChild(link)
       link.click()
       link.parentNode?.removeChild(link)
+      window.URL.revokeObjectURL(url)
 
       toast.success("造冊檔案已下載")
     } catch (error) {
@@ -118,13 +125,16 @@ export function PeriodDetailDialog({
       // For now, we'll use the generate API directly
       const response = await apiClient.request("/payment-rosters/generate", {
         method: "POST",
-        data: {
+        body: JSON.stringify({
           scholarship_configuration_id: configId,
           period_label: period.label,
           roster_cycle: "monthly", // TODO: Get from schedule
           academic_year: parseInt(period.label.split("-")[0]),
           student_verification_enabled: true,
           auto_export_excel: true,
+        }),
+        headers: {
+          "Content-Type": "application/json",
         },
       })
 

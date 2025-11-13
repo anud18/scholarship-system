@@ -283,7 +283,7 @@ export function RosterManagementDashboard() {
         </TabsContent>
 
         <TabsContent value="schedules" className="space-y-4">
-          <RosterScheduleList />
+          <RosterScheduleList onScheduleChange={fetchDashboardStats} />
         </TabsContent>
 
         <TabsContent value="scheduler" className="space-y-4">
