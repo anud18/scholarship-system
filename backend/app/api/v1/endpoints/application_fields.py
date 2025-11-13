@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -20,12 +20,9 @@ from app.models.application_field import ApplicationDocument
 from app.models.user import User
 from app.schemas.application_field import (
     ApplicationDocumentCreate,
-    ApplicationDocumentResponse,
     ApplicationDocumentUpdate,
     ApplicationFieldCreate,
-    ApplicationFieldResponse,
     ApplicationFieldUpdate,
-    ScholarshipFormConfigResponse,
 )
 from app.schemas.response import ApiResponse
 from app.services.application_field_service import ApplicationFieldService
@@ -143,9 +140,12 @@ async def delete_document(
 
 
 # Combined form configuration endpoints
+# SECURITY: This endpoint serves database-driven JSON configuration only.
+# No file system access or source code exposure. Path parameter validated
+# and used only in parameterized SQL queries.
 @router.get("/form-config/{scholarship_type}")
 async def get_scholarship_form_config(
-    scholarship_type: str,
+    scholarship_type: str = Path(..., regex=r"^[a-z_]{1,50}$"),
     include_inactive: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -167,10 +167,10 @@ async def get_scholarship_form_config(
         return ApiResponse(success=True, message=f"Form configuration retrieved for {scholarship_type}", data=config)
     except Exception as e:
         logger.error(f"API: Error getting form config for {scholarship_type}: {str(e)}")
-        # 返回空的配置而不是拋出異常
-        empty_config = ScholarshipFormConfigResponse(scholarship_type=scholarship_type, fields=[], documents=[])
-        return ApiResponse(
-            success=True, message=f"Form configuration retrieved for {scholarship_type} (empty)", data=empty_config
+        # Return 404 for invalid scholarship types (proper HTTP semantics)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Form configuration not found for scholarship type: {scholarship_type}",
         )
 
 

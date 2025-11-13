@@ -296,10 +296,12 @@ async def portal_sso_verify(
         logger.info(f"Redirecting user {nycu_id} to frontend via Portal verification: {redirect_url}")
 
         # Return redirect response
+        # SECURITY: Token passed via URL parameter only (no cookie).
+        # This prevents CSRF attacks by eliminating cookie-based authentication.
+        # Frontend reads token from ?token= query parameter.
         return RedirectResponse(
             url=redirect_url,
             status_code=302,
-            headers={"Set-Cookie": f"access_token={auth_result['access_token']}; Path=/; HttpOnly; Secure"},
         )
     except Exception as e:
         logger.error(f"Portal SSO error: {str(e)}")

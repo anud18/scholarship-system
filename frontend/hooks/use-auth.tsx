@@ -1,6 +1,7 @@
 "use client";
 
 import { apiClient, User } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -55,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(normalizedUser);
           console.log("Authentication restored from localStorage");
         } catch (err) {
-          console.error("Failed to parse stored user data:", err);
+          logger.error("Failed to parse stored user data", {});
           localStorage.removeItem("auth_token");
           localStorage.removeItem("user");
           localStorage.removeItem("dev_user");
@@ -114,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         errorCleared: true,
       });
     } catch (error) {
-      console.error("💥 Error in useAuth.login():", error);
+      logger.error("Error in login", {});
       setError(error instanceof Error ? error.message : "Login failed");
     }
   }, []);

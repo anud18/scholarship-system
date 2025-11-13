@@ -15,7 +15,7 @@ from app.models.roster_schedule import RosterScheduleStatus
 class RosterScheduleBase(BaseModel):
     """造冊排程基本模型"""
 
-    schedule_name: str = Field(..., min_length=1, max_length=100, description="排程名稱")
+    schedule_name: Optional[str] = Field(None, min_length=1, max_length=100, description="排程名稱（留空則自動生成）")
     description: Optional[str] = Field(None, description="排程說明")
     scholarship_configuration_id: int = Field(..., description="獎學金配置ID")
     roster_cycle: RosterCycle = Field(..., description="造冊週期")

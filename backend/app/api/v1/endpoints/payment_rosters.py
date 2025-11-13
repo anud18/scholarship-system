@@ -40,6 +40,7 @@ from app.schemas.roster import (
 )
 from app.services.excel_export_service import ExcelExportService
 from app.services.roster_service import RosterService
+from app.utils.academic_period import get_roster_period_dates
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +327,406 @@ async def list_payment_rosters(
     except Exception as e:
         logger.error(f"Failed to list rosters: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得造冊清單失敗")
+
+
+@router.get("/preview-students")
+async def preview_roster_students(
+    config_id: int = Query(..., description="獎學金配置ID"),
+    ranking_id: Optional[int] = Query(None, description="排名ID (如有 Matrix Distribution)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    預覽造冊學生名單
+    Preview student list for roster generation
+
+    Returns:
+        - has_matrix_distribution: 是否有 Matrix 分配
+        - allocated_students: 正取學生列表
+        - summary: 統計摘要
+    """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+
+    try:
+        from app.models.application import Application
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+        from app.models.scholarship import ScholarshipConfiguration
+
+        # Get scholarship configuration
+        stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == config_id)
+        result = await db.execute(stmt)
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到獎學金配置")
+
+        # Check if has matrix distribution
+        has_matrix_distribution = bool(config.has_college_quota and config.quotas)
+
+        # If no ranking_id provided, try to find the latest ranking for this config
+        if has_matrix_distribution and not ranking_id:
+            stmt = (
+                select(CollegeRanking)
+                .where(
+                    and_(
+                        CollegeRanking.scholarship_type_id == config.scholarship_type_id,
+                        CollegeRanking.distribution_executed == True,
+                    )
+                )
+                .order_by(CollegeRanking.created_at.desc())
+            )
+            result = await db.execute(stmt)
+            ranking = result.scalar_one_or_none()
+            if ranking:
+                ranking_id = ranking.id
+
+        allocated_students = []
+        summary = {
+            "total_allocated": 0,
+            "total_amount": 0.0,
+            "by_college": {},
+        }
+
+        if ranking_id:
+            # Get allocated students from CollegeRankingItem
+            stmt = (
+                select(CollegeRankingItem)
+                .options(selectinload(CollegeRankingItem.application))
+                .where(
+                    and_(
+                        CollegeRankingItem.ranking_id == ranking_id,
+                        CollegeRankingItem.is_allocated == True,
+                    )
+                )
+                .order_by(CollegeRankingItem.rank_position)
+            )
+            result = await db.execute(stmt)
+            ranking_items = result.scalars().all()
+
+            for item in ranking_items:
+                application = item.application
+                if not application:
+                    continue
+
+                student_data = application.student_data or {}
+                college = student_data.get("std_academyno", "Unknown")
+
+                student_info = {
+                    "application_id": application.id,
+                    "student_name": student_data.get("std_cname", ""),
+                    "student_id": student_data.get("std_stdcode", ""),
+                    "student_id_number": student_data.get("std_pid", ""),
+                    "email": student_data.get("com_email", ""),
+                    "college": college,
+                    "department": student_data.get("std_depno", ""),
+                    "term_count": student_data.get("trm_termcount", ""),
+                    "sub_type": item.allocated_sub_type,
+                    "amount": float(application.amount or config.amount or 0),
+                    "rank_position": item.rank_position,
+                    "is_allocated": True,
+                    "backup_info": item.backup_allocations or [],
+                }
+
+                allocated_students.append(student_info)
+
+                # Update summary
+                summary["total_allocated"] += 1
+                summary["total_amount"] += student_info["amount"]
+
+                if college not in summary["by_college"]:
+                    summary["by_college"][college] = {"allocated": 0, "total_amount": 0.0}
+
+                summary["by_college"][college]["allocated"] += 1
+                summary["by_college"][college]["total_amount"] += student_info["amount"]
+
+        else:
+            # No ranking, get all approved applications for this config
+            stmt = (
+                select(Application)
+                .where(
+                    and_(
+                        Application.scholarship_configuration_id == config_id,
+                        Application.status == "approved",
+                    )
+                )
+                .order_by(Application.created_at)
+            )
+            result = await db.execute(stmt)
+            applications = result.scalars().all()
+
+            for application in applications:
+                student_data = application.student_data or {}
+                college = student_data.get("std_academyno", "Unknown")
+
+                student_info = {
+                    "application_id": application.id,
+                    "student_name": student_data.get("std_cname", ""),
+                    "student_id": student_data.get("std_id", ""),
+                    "student_id_number": student_data.get("std_stdcode", ""),
+                    "email": student_data.get("com_email", ""),
+                    "college": college,
+                    "department": student_data.get("std_depno", ""),
+                    "grade": student_data.get("std_grade", ""),
+                    "sub_type": application.sub_scholarship_type,
+                    "amount": float(application.amount or config.amount or 0),
+                    "rank_position": None,
+                    "is_allocated": True,
+                    "backup_info": [],
+                }
+
+                allocated_students.append(student_info)
+
+                # Update summary
+                summary["total_allocated"] += 1
+                summary["total_amount"] += student_info["amount"]
+
+                if college not in summary["by_college"]:
+                    summary["by_college"][college] = {"allocated": 0, "total_amount": 0.0}
+
+                summary["by_college"][college]["allocated"] += 1
+                summary["by_college"][college]["total_amount"] += student_info["amount"]
+
+        return ApiResponse(
+            success=True,
+            message="查詢成功",
+            data={
+                "has_matrix_distribution": has_matrix_distribution,
+                "ranking_id": ranking_id,
+                "allocated_students": allocated_students,
+                "summary": summary,
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to preview students for config {config_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽學生名單失敗")
+
+
+@router.get("/cycle-status")
+async def get_roster_cycle_status(
+    config_id: int = Query(..., description="獎學金配置ID"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    取得造冊週期狀態
+    Get roster cycle status for a scholarship configuration
+
+    Returns:
+        - schedule: 排程資訊
+        - roster_cycle: 造冊週期 (monthly/semi_yearly/yearly)
+        - periods: 期間列表 (已完成 + 等待造冊)
+    """
+    check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
+
+    try:
+        from app.models.roster_schedule import RosterSchedule
+        from app.models.scholarship import ScholarshipConfiguration
+
+        # Get scholarship configuration
+        stmt = select(ScholarshipConfiguration).where(ScholarshipConfiguration.id == config_id)
+        result = await db.execute(stmt)
+        config = result.scalar_one_or_none()
+
+        if not config:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="找不到獎學金配置")
+
+        # Get schedule for this config
+        stmt = select(RosterSchedule).where(RosterSchedule.scholarship_configuration_id == config_id)
+        result = await db.execute(stmt)
+        schedule = result.scalar_one_or_none()
+
+        if not schedule:
+            return ApiResponse(
+                success=True,
+                message="未找到排程",
+                data={
+                    "schedule": None,
+                    "roster_cycle": None,
+                    "periods": [],
+                },
+            )
+
+        # Get existing rosters for this config
+        stmt = (
+            select(PaymentRoster)
+            .where(PaymentRoster.scholarship_configuration_id == config_id)
+            .order_by(PaymentRoster.period_label.desc())
+        )
+        result = await db.execute(stmt)
+        existing_rosters = result.scalars().all()
+
+        # Create a map of period_label -> roster
+        roster_map = {roster.period_label: roster for roster in existing_rosters}
+
+        # Generate period list based on roster_cycle
+        periods = []
+        academic_year = config.academic_year
+
+        if schedule.roster_cycle.value == "monthly":
+            # Determine if this is a yearly (academic year) scholarship
+            is_yearly = config.semester is None or config.semester.value == "annual"
+
+            # Generate 12 months
+            # For yearly scholarships: September to August (9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8)
+            # For semester scholarships: January to December (1, 2, 3, ..., 12)
+            if is_yearly:
+                month_sequence = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8]
+            else:
+                month_sequence = list(range(1, 13))
+
+            for month in month_sequence:
+                period_label = f"{academic_year}-{month:02d}"
+                roster = roster_map.get(period_label)
+
+                # Calculate period dates
+                period_dates = get_roster_period_dates(
+                    academic_year=academic_year,
+                    semester=config.semester.value if config.semester else None,
+                    roster_cycle="monthly",
+                    period_label=period_label,
+                )
+
+                # Calculate western calendar year-month for display
+                western_year = academic_year + 1911
+                calendar_year = western_year if month >= 9 else western_year + 1
+                western_date = f"{calendar_year}-{month:02d}"
+                display_label = f"{period_label} ({calendar_year}年{month}月)"
+
+                if roster:
+                    periods.append(
+                        {
+                            "label": period_label,
+                            "western_date": western_date,
+                            "display_label": display_label,
+                            "status": "completed",
+                            "roster_id": roster.id,
+                            "roster_code": roster.roster_code,
+                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                            "qualified_count": roster.qualified_count,
+                            "period_start_date": period_dates["start_date"].isoformat(),
+                            "period_end_date": period_dates["end_date"].isoformat(),
+                        }
+                    )
+                else:
+                    periods.append(
+                        {
+                            "label": period_label,
+                            "western_date": western_date,
+                            "display_label": display_label,
+                            "status": "waiting",
+                            "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
+                            "estimated_count": 0,  # TODO: Calculate estimated count
+                            "period_start_date": period_dates["start_date"].isoformat(),
+                            "period_end_date": period_dates["end_date"].isoformat(),
+                        }
+                    )
+
+        elif schedule.roster_cycle.value == "semi_yearly":
+            # Generate 2 half-year periods
+            for half in ["H1", "H2"]:
+                period_label = f"{academic_year}-{half}"
+                roster = roster_map.get(period_label)
+
+                # Calculate period dates
+                period_dates = get_roster_period_dates(
+                    academic_year=academic_year,
+                    semester=config.semester.value if config.semester else None,
+                    roster_cycle="semi_yearly",
+                    period_label=period_label,
+                )
+
+                if roster:
+                    periods.append(
+                        {
+                            "label": period_label,
+                            "status": "completed",
+                            "roster_id": roster.id,
+                            "roster_code": roster.roster_code,
+                            "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                            "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                            "qualified_count": roster.qualified_count,
+                            "period_start_date": period_dates["start_date"].isoformat(),
+                            "period_end_date": period_dates["end_date"].isoformat(),
+                        }
+                    )
+                else:
+                    periods.append(
+                        {
+                            "label": period_label,
+                            "status": "waiting",
+                            "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
+                            "estimated_count": 0,
+                            "period_start_date": period_dates["start_date"].isoformat(),
+                            "period_end_date": period_dates["end_date"].isoformat(),
+                        }
+                    )
+
+        elif schedule.roster_cycle.value == "yearly":
+            # Generate 1 yearly period
+            period_label = str(academic_year)
+            roster = roster_map.get(period_label)
+
+            # Calculate period dates
+            period_dates = get_roster_period_dates(
+                academic_year=academic_year,
+                semester=config.semester.value if config.semester else None,
+                roster_cycle="yearly",
+                period_label=period_label,
+            )
+
+            if roster:
+                periods.append(
+                    {
+                        "label": period_label,
+                        "status": "completed",
+                        "roster_id": roster.id,
+                        "roster_code": roster.roster_code,
+                        "completed_at": roster.completed_at.isoformat() if roster.completed_at else None,
+                        "total_amount": float(roster.total_amount) if roster.total_amount else 0,
+                        "qualified_count": roster.qualified_count,
+                        "period_start_date": period_dates["start_date"].isoformat(),
+                        "period_end_date": period_dates["end_date"].isoformat(),
+                    }
+                )
+            else:
+                periods.append(
+                    {
+                        "label": period_label,
+                        "status": "waiting",
+                        "next_schedule": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
+                        "estimated_count": 0,
+                        "period_start_date": period_dates["start_date"].isoformat(),
+                        "period_end_date": period_dates["end_date"].isoformat(),
+                    }
+                )
+
+        return ApiResponse(
+            success=True,
+            message="查詢成功",
+            data={
+                "schedule": {
+                    "id": schedule.id,
+                    "schedule_name": schedule.schedule_name,
+                    "roster_cycle": schedule.roster_cycle.value,
+                    "cron_expression": schedule.cron_expression,
+                    "status": schedule.status.value,
+                    "next_run_at": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
+                    "last_run_at": schedule.last_run_at.isoformat() if schedule.last_run_at else None,
+                },
+                "roster_cycle": schedule.roster_cycle.value,
+                "periods": periods,
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get cycle status for config {config_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢造冊週期狀態失敗")
 
 
 @router.get("/{roster_id}")
@@ -994,4 +1395,4 @@ async def get_roster_audit_logs(
         raise
     except Exception as e:
         logger.error(f"Failed to get audit logs for roster {roster_id}: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="取得稽核日誌失敗")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="查詢稽核日誌失敗")

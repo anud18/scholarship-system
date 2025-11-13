@@ -136,7 +136,6 @@ class GitHubIntegrationService:
                 select(CollegeRankingItem)
                 .options(
                     selectinload(CollegeRankingItem.application),
-                    selectinload(CollegeRankingItem.college_review),
                 )
                 .where(CollegeRankingItem.ranking_id == ranking.id)
                 .order_by(CollegeRankingItem.rank_position)
@@ -281,7 +280,6 @@ class GitHubIntegrationService:
             select(CollegeRankingItem)
             .options(
                 selectinload(CollegeRankingItem.application),
-                selectinload(CollegeRankingItem.college_review),
             )
             .where(CollegeRankingItem.ranking_id == ranking.id)
             .order_by(CollegeRankingItem.rank_position)

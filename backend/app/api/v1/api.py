@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     auth,
     batch_import,
     college_review,
+    csp_report,
     document_requests,
     email_automation,
     email_management,
@@ -72,3 +73,4 @@ api_router.include_router(payment_rosters.router, prefix="/payment-rosters", tag
 api_router.include_router(roster_schedules.router, prefix="/roster-schedules", tags=["Roster Schedules"])
 api_router.include_router(system_settings.router, prefix="/system-settings", tags=["System Settings"])
 api_router.include_router(student_bank_accounts.router, prefix="/student-bank-accounts", tags=["Student Bank Accounts"])
+api_router.include_router(csp_report.router, prefix="", tags=["Security"])

@@ -1,15 +1,20 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, Clock, FileSpreadsheet, Settings, Play, Pause, Square, Download } from "lucide-react"
+import { FileSpreadsheet, Settings, Play, Clock } from "lucide-react"
 import { RosterScheduleList } from "./roster-schedule-list"
-import { PaymentRosterList } from "./payment-roster-list"
 import { SchedulerStatus } from "./scheduler-status"
-import { CreateScheduleDialog } from "./create-schedule-dialog"
+import { CompactConfigSelector } from "./roster/CompactConfigSelector"
+import { CreateSchedulePrompt } from "./roster/CreateSchedulePrompt"
+import { ConfigInfoCard } from "./roster/ConfigInfoCard"
+import { MatrixQuotaDisplay } from "./roster/MatrixQuotaDisplay"
+import { StudentRosterPreview } from "./roster/StudentRosterPreview"
+import { RosterListTable } from "./roster/RosterListTable"
+import { ScheduleSettingDialog } from "./roster/ScheduleSettingDialog"
 import { apiClient } from "@/lib/api"
 
 interface DashboardStats {
@@ -29,7 +34,13 @@ export function RosterManagementDashboard() {
     schedulerRunning: false
   })
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState("schedules")
+  const [activeTab, setActiveTab] = useState("roster-management")
+  const [selectedConfig, setSelectedConfig] = useState<any>(null)
+  const [selectedSchedule, setSelectedSchedule] = useState<any>(null)
+  const [cycleData, setCycleData] = useState<any>(null)
+  const [loadingSchedule, setLoadingSchedule] = useState(false)
+  const [loadingCycle, setLoadingCycle] = useState(false)
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
 
   useEffect(() => {
     fetchDashboardStats()
@@ -65,91 +76,120 @@ export function RosterManagementDashboard() {
     }
   }
 
-  const handleRefresh = () => {
-    fetchDashboardStats()
+  const handleConfigSelect = async (configId: number, config: any) => {
+    setSelectedConfig(config)
+    setLoadingSchedule(true)
+    setLoadingCycle(true)
+
+    try {
+      // Load schedule for this config
+      const scheduleResponse = await apiClient.request(`/roster-schedules/by-config/${configId}`)
+
+      if (scheduleResponse.success && scheduleResponse.data) {
+        setSelectedSchedule(scheduleResponse.data)
+      } else {
+        setSelectedSchedule(null)
+      }
+    } catch (error) {
+      console.error("Failed to load schedule:", error)
+      setSelectedSchedule(null)
+    } finally {
+      setLoadingSchedule(false)
+    }
+
+    // Load cycle status
+    try {
+      const cycleResponse = await apiClient.request("/payment-rosters/cycle-status", {
+        method: "GET",
+        params: { config_id: configId },
+      })
+
+      if (cycleResponse.success && cycleResponse.data) {
+        setCycleData(cycleResponse.data)
+      } else {
+        setCycleData(null)
+      }
+    } catch (error) {
+      console.error("Failed to load cycle status:", error)
+      setCycleData(null)
+    } finally {
+      setLoadingCycle(false)
+    }
   }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">造冊管理系統</h1>
-          <p className="text-gray-600 mt-1">獎學金造冊排程與管理</p>
-        </div>
-        <div className="flex space-x-2">
-          <Button variant="outline" onClick={handleRefresh}>
-            <Clock className="w-4 h-4 mr-2" />
-            重新整理
-          </Button>
-          <CreateScheduleDialog onScheduleCreated={handleRefresh} />
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">造冊管理系統</h1>
+        <p className="text-gray-600 mt-1">獎學金造冊管理</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">總排程數</CardTitle>
-            <Settings className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalSchedules}</div>
-            <p className="text-xs text-muted-foreground">排程設定總數</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">啟用排程</CardTitle>
-            <Play className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.activeSchedules}</div>
-            <p className="text-xs text-muted-foreground">正在執行的排程</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">總造冊數</CardTitle>
-            <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalRosters}</div>
-            <p className="text-xs text-muted-foreground">已產生造冊總數</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">待處理造冊</CardTitle>
-            <Calendar className="h-4 w-4 text-orange-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{stats.pendingRosters}</div>
-            <p className="text-xs text-muted-foreground">尚未完成的造冊</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">排程器狀態</CardTitle>
-            {stats.schedulerRunning ? (
-              <Play className="h-4 w-4 text-green-600" />
-            ) : (
-              <Square className="h-4 w-4 text-red-600" />
-            )}
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-2">
-              <Badge variant={stats.schedulerRunning ? "default" : "destructive"}>
-                {stats.schedulerRunning ? "執行中" : "已停止"}
-              </Badge>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">總排程數</p>
+                <p className="text-2xl font-bold">{stats.totalSchedules}</p>
+              </div>
+              <Settings className="h-8 w-8 text-muted-foreground" />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              APScheduler 狀態
-            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">啟用排程</p>
+                <p className="text-2xl font-bold text-green-600">{stats.activeSchedules}</p>
+              </div>
+              <Play className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">總造冊數</p>
+                <p className="text-2xl font-bold">{stats.totalRosters}</p>
+              </div>
+              <FileSpreadsheet className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">待處理造冊</p>
+                <p className="text-2xl font-bold text-orange-600">{stats.pendingRosters}</p>
+              </div>
+              <Clock className="h-8 w-8 text-orange-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">排程器狀態</p>
+                <Badge variant={stats.schedulerRunning ? "default" : "destructive"}>
+                  {stats.schedulerRunning ? "執行中" : "已停止"}
+                </Badge>
+              </div>
+              {stats.schedulerRunning ? (
+                <Play className="h-8 w-8 text-green-600" />
+              ) : (
+                <Clock className="h-8 w-8 text-red-600" />
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -157,13 +197,13 @@ export function RosterManagementDashboard() {
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="roster-management" className="flex items-center space-x-2">
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>造冊管理</span>
+          </TabsTrigger>
           <TabsTrigger value="schedules" className="flex items-center space-x-2">
             <Settings className="w-4 h-4" />
             <span>排程管理</span>
-          </TabsTrigger>
-          <TabsTrigger value="rosters" className="flex items-center space-x-2">
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>造冊管理</span>
           </TabsTrigger>
           <TabsTrigger value="scheduler" className="flex items-center space-x-2">
             <Clock className="w-4 h-4" />
@@ -171,18 +211,95 @@ export function RosterManagementDashboard() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="schedules" className="space-y-4">
-          <RosterScheduleList onScheduleChange={handleRefresh} />
+        {/* 造冊管理 Tab */}
+        <TabsContent value="roster-management" className="space-y-4">
+          {/* Config Selector + Schedule Setting in top right */}
+          <div className="flex justify-end items-center gap-4">
+            <CompactConfigSelector onConfigSelect={handleConfigSelect} />
+
+            {selectedSchedule && (
+              <Button
+                variant="outline"
+                onClick={() => setScheduleDialogOpen(true)}
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                排程設定
+              </Button>
+            )}
+          </div>
+
+          {/* Content based on config selection */}
+          {loadingSchedule ? (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+                <p className="mt-4 text-muted-foreground">載入中...</p>
+              </CardContent>
+            </Card>
+          ) : selectedConfig ? (
+            <>
+              {!selectedSchedule ? (
+                <CreateSchedulePrompt
+                  configName={selectedConfig.config_name}
+                  configId={selectedConfig.id}
+                  onScheduleCreated={() => handleConfigSelect(selectedConfig.id, selectedConfig)}
+                />
+              ) : (
+                <div className="space-y-4">
+                  {/* Config Info Card */}
+                  <ConfigInfoCard config={selectedConfig} schedule={selectedSchedule} />
+
+                  {/* Matrix Quota Display (if applicable) */}
+                  <MatrixQuotaDisplay
+                    quotas={selectedConfig.quotas}
+                    hasMatrix={selectedConfig.has_college_quota}
+                  />
+
+                  {/* Student Roster Preview */}
+                  <StudentRosterPreview
+                    configId={selectedConfig.id}
+                    rankingId={selectedSchedule.ranking_id}
+                  />
+
+                  {/* Roster List Table */}
+                  {cycleData && cycleData.periods && (
+                    <RosterListTable
+                      periods={cycleData.periods}
+                      configId={selectedConfig.id}
+                    />
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <Card>
+              <CardContent className="p-12 text-center">
+                <p className="text-muted-foreground">
+                  請從右上角選擇獎學金配置以查看造冊資訊
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
-        <TabsContent value="rosters" className="space-y-4">
-          <PaymentRosterList onRosterChange={handleRefresh} />
+        <TabsContent value="schedules" className="space-y-4">
+          <RosterScheduleList onScheduleChange={fetchDashboardStats} />
         </TabsContent>
 
         <TabsContent value="scheduler" className="space-y-4">
           <SchedulerStatus />
         </TabsContent>
       </Tabs>
+
+      {/* Schedule Setting Dialog */}
+      {selectedSchedule && (
+        <ScheduleSettingDialog
+          open={scheduleDialogOpen}
+          onOpenChange={setScheduleDialogOpen}
+          schedule={selectedSchedule}
+          onUpdated={() => handleConfigSelect(selectedConfig.id, selectedConfig)}
+        />
+      )}
     </div>
   )
 }

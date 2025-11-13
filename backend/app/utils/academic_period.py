@@ -125,3 +125,104 @@ def format_academic_period(academic_year: int, semester: str, lang: str = "zh") 
     else:
         semester_name = "第一學期" if semester == "first" else "第二學期"
         return f"{academic_year}學年度{semester_name}"
+
+
+def get_roster_period_dates(
+    academic_year: int, semester: Optional[str], roster_cycle: str, period_label: str
+) -> Dict[str, datetime]:
+    """
+    Calculate start and end dates for a roster period based on academic calendar.
+
+    Taiwan academic calendar:
+    - Yearly: September (year) to August (year+1)
+    - First semester: August (year) to January (year+1)
+    - Second semester: February (year+1) to July (year+1)
+
+    Args:
+        academic_year: ROC academic year (e.g., 113, 114)
+        semester: 'first', 'second', or None for yearly
+        roster_cycle: 'yearly', 'monthly', 'semi_yearly'
+        period_label: Period identifier (e.g., '113', '113-01', '113-H1')
+
+    Returns:
+        Dictionary with 'start_date' and 'end_date' as datetime objects
+
+    Examples:
+        (113, None, 'yearly', '113') ->
+            {start: 2024-09-01, end: 2025-08-31}
+        (113, 'first', 'yearly', '113-1') ->
+            {start: 2024-08-01, end: 2025-01-31}
+        (113, 'second', 'yearly', '113-2') ->
+            {start: 2025-02-01, end: 2025-07-31}
+    """
+    western_year = academic_year + 1911
+
+    # Yearly scholarships (學年制)
+    if roster_cycle == "yearly" or semester is None or semester == "annual":
+        start_date = datetime(western_year, 9, 1)
+        end_date = datetime(western_year + 1, 8, 31)
+
+    # Semester-based scholarships (學期制)
+    elif semester == "first":
+        # First semester: August to January
+        start_date = datetime(western_year, 8, 1)
+        end_date = datetime(western_year + 1, 1, 31)
+
+    elif semester == "second":
+        # Second semester: February to July
+        start_date = datetime(western_year + 1, 2, 1)
+        end_date = datetime(western_year + 1, 7, 31)
+
+    # Monthly cycle (extract month from period_label like "113-01")
+    elif roster_cycle == "monthly":
+        try:
+            # Extract month from label like "113-01"
+            month = int(period_label.split("-")[1])
+
+            # For yearly scholarships, handle cross-year months
+            # September-December (9-12) are in the western_year
+            # January-August (1-8) are in the next year (western_year + 1)
+            if semester is None or semester == "annual":
+                calendar_year = western_year if month >= 9 else western_year + 1
+            else:
+                # For semester scholarships, use western_year directly
+                calendar_year = western_year
+
+            start_date = datetime(calendar_year, month, 1)
+
+            # Calculate last day of month
+            import calendar
+
+            last_day = calendar.monthrange(calendar_year, month)[1]
+            end_date = datetime(calendar_year, month, last_day)
+        except (IndexError, ValueError):
+            # Fallback to yearly if parsing fails
+            start_date = datetime(western_year, 9, 1)
+            end_date = datetime(western_year + 1, 8, 31)
+
+    # Semi-yearly cycle (half-year periods)
+    elif roster_cycle == "semi_yearly":
+        # H1: September to February, H2: March to August
+        if "H1" in period_label or "h1" in period_label:
+            start_date = datetime(western_year, 9, 1)
+            end_date = datetime(western_year + 1, 2, 28)  # Will adjust for leap year
+            # Adjust for leap year
+            import calendar
+
+            if calendar.isleap(western_year + 1):
+                end_date = datetime(western_year + 1, 2, 29)
+        else:  # H2
+            start_date = datetime(western_year + 1, 3, 1)
+            end_date = datetime(western_year + 1, 8, 31)
+
+    else:
+        # Default fallback
+        start_date = datetime(western_year, 9, 1)
+        end_date = datetime(western_year + 1, 8, 31)
+
+    logger.debug(
+        f"Calculated roster period dates for {period_label}: "
+        f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+    )
+
+    return {"start_date": start_date, "end_date": end_date}

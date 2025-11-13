@@ -206,15 +206,28 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         print(f"Logger error: {log_error}")
     # Do not log request body as it may contain sensitive data
 
-    return JSONResponse(
-        status_code=422,
-        content={
-            "success": False,
-            "message": "Validation failed",
-            "errors": errors,
-            "trace_id": getattr(request.state, "trace_id", None),
-        },
-    )
+    # SECURITY: In production, use generic error messages to prevent information disclosure
+    # In development/staging, provide detailed error messages for debugging
+    if settings.environment == "production":
+        return JSONResponse(
+            status_code=422,
+            content={
+                "success": False,
+                "message": "Invalid request parameters. Please check your input and try again.",
+                "trace_id": getattr(request.state, "trace_id", None),
+            },
+        )
+    else:
+        # Development/Staging: Provide detailed errors for debugging
+        return JSONResponse(
+            status_code=422,
+            content={
+                "success": False,
+                "message": "Validation failed",
+                "errors": errors,
+                "trace_id": getattr(request.state, "trace_id", None),
+            },
+        )
 
 
 @app.exception_handler(Exception)

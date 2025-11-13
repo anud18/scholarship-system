@@ -70,7 +70,9 @@ async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> L
 
 @router.get("/available-semesters")
 async def get_available_semesters(
-    scholarship_code: Optional[str] = Query(None, description="Filter periods by specific scholarship code"),
+    scholarship_code: Optional[str] = Query(
+        None, description="Filter periods by specific scholarship code", regex=r"^[a-z_]{1,50}$"
+    ),
     quota_management_mode: Optional[str] = Query(
         None, description="Filter periods by quota management mode (e.g., 'matrix')"
     ),

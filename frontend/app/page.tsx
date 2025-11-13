@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { UserRole } from "@/lib/enums";
 import {
   BookOpen,
   Users,
@@ -44,6 +45,7 @@ import { SSOLoginPage } from "@/components/sso-login-page";
 import { useAdminDashboard } from "@/hooks/use-admin";
 import { apiClient } from "@/lib/api";
 import { User } from "@/types/user";
+import { decodeJWT } from "@/lib/utils/jwt";
 
 export default function ScholarshipManagementSystem() {
   const [activeTab, setActiveTab] = useState("main");
@@ -86,28 +88,29 @@ export default function ScholarshipManagementSystem() {
 
   const handleSSOCallbackInMainPage = async (token: string) => {
     try {
-    // console.log(" Decoding JWT token directly in main page...");
+    // console.log(" Decoding JWT token using utility module...");
 
-      // Simple JWT decode
-      const base64Url = token.split(".")[1];
-      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split("")
-          .map(function (c) {
-            return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
-          })
-          .join("")
-      );
-
-      const tokenData = JSON.parse(jsonPayload);
+      // Decode JWT using utility module (eliminates inline script for CSP compliance)
+      const tokenData = decodeJWT(token);
     // console.log(" Decoded token data in main page:", tokenData);
+
+      // Validate and cast role to UserRole enum
+      const validRoles: Array<UserRole> = [
+        UserRole.STUDENT,
+        UserRole.PROFESSOR,
+        UserRole.COLLEGE,
+        UserRole.ADMIN,
+        UserRole.SUPER_ADMIN,
+      ];
+      const userRole = validRoles.includes(tokenData.role as UserRole)
+        ? (tokenData.role as UserRole)
+        : UserRole.STUDENT; // Fallback to student if invalid
 
       // Create user object from token data
       const userData = {
         id: tokenData.sub,
         nycu_id: tokenData.nycu_id,
-        role: tokenData.role,
+        role: userRole,
         name: tokenData.nycu_id,
         email: `${tokenData.nycu_id}@nycu.edu.tw`,
         created_at: new Date().toISOString(),
@@ -122,10 +125,9 @@ export default function ScholarshipManagementSystem() {
     // console.log(" Login completed in main page, redirecting...");
 
       // Redirect based on user role
-      const userRole = userData.role;
       let redirectPath = "/";
 
-      if (userRole === "admin" || userRole === "super_admin") {
+      if (userData.role === "admin" || userData.role === "super_admin") {
         redirectPath = "/#dashboard";
       } else {
         redirectPath = "/#main";

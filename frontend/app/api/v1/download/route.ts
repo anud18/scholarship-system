@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/lib/utils/logger";
 
 // ============================================================================
 // Security: Input Validation Utility
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
         );
       }
     } catch (validationError: any) {
-      console.error("Input validation error:", validationError.message);
+      logger.error("Input validation error", {});
       return NextResponse.json(
         { error: validationError.message },
         { status: 400 }
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest) {
     try {
       backendUrl = getSafeBackendUrl();
     } catch (error: any) {
-      console.error("Backend URL validation error:", error.message);
+      logger.error("Backend URL validation error", {});
       return NextResponse.json(
         { error: "Invalid backend configuration" },
         { status: 500 }
@@ -154,11 +155,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      console.error(
-        "Backend response error:",
-        response.status,
-        response.statusText
-      );
+      logger.error("Backend response error", { status: response.status });
       return NextResponse.json(
         { error: "Failed to fetch file from backend" },
         { status: response.status }
@@ -188,7 +185,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("File download error:", error);
+    logger.error("File download error", {});
     return NextResponse.json(
       { error: "Failed to download file" },
       { status: 500 }
