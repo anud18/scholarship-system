@@ -5,6 +5,7 @@ import { SessionExpiredProvider } from "@/contexts/session-expired-context";
 import { DebugPanelWrapper } from "@/components/debug-panel-wrapper";
 import { AppProvider } from "@/components/providers/app-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { getNonce } from "./NonceProvider";
 
 export const metadata: Metadata = {
   title: "獎學金申請與簽核系統 | 國立陽明交通大學教務處",
@@ -14,7 +15,6 @@ export const metadata: Metadata = {
   authors: [{ name: "國立陽明交通大學教務處" }],
   robots: "noindex, nofollow", // 系統內部使用
   generator: "v0.dev",
-  themeColor: "#1e40af",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },
@@ -30,16 +30,22 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: "#1e40af",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const nonce = await getNonce();
+
   return (
     <html lang="zh-TW" className="scroll-smooth">
-      <body className="antialiased">
+      <head nonce={nonce}>
+        {/* Next.js will automatically apply nonce to all injected scripts */}
+      </head>
+      <body className="antialiased" nonce={nonce}>
         <AppProvider>
           <SessionExpiredProvider>
             {children}
