@@ -491,6 +491,46 @@ make init-testdata
 | Student (碩士) | stu_master | stumaster123 |
 | Student (陸生) | stu_china | stuchina123 |
 
+### ⚠️ Important: Database Initialization Required
+
+**If you see 500 errors or "No users found" when accessing the development login page (`/dev-login`), your database is not properly initialized.**
+
+The system requires both lookup tables and test data to function correctly. Run one of the following:
+
+**Option 1: Full initialization (recommended for first-time setup)**
+```bash
+make init-all
+```
+
+**Option 2: Initialize database seed only (if services are already running)**
+```bash
+make db-seed
+```
+
+**Option 3: Step-by-step initialization**
+```bash
+# 1. Start services if not already running
+make docker-up
+
+# 2. Initialize lookup tables (reference data)
+make init-lookup
+
+# 3. Initialize test data (users and scholarships)
+make init-testdata
+```
+
+**Verification:**
+After running the seed command, you should see:
+```
+✅ Development seed completed successfully!
+📋 Test User Accounts:
+- Admin: admin@nycu.edu.tw
+- Super Admin: super_admin@nycu.edu.tw
+...
+```
+
+Access http://localhost:3000/dev-login to verify test users are loaded.
+
 ## Testing
 
 ### Backend Tests
