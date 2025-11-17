@@ -459,6 +459,13 @@ class ApplicationService:
         if scholarship_subtype_list:
             sub_scholarship_type = scholarship_subtype_list[0].lower()  # Normalize to lowercase
 
+        # Determine status based on is_draft flag
+        from app.models.enums import ApplicationStatus
+        from app.utils.i18n import ScholarshipI18n
+
+        status = ApplicationStatus.draft.value if is_draft else ApplicationStatus.submitted.value
+        status_name = ScholarshipI18n.get_application_status_text(status)
+
         # Create application
         application = Application(
             app_id=app_id,
@@ -476,7 +483,8 @@ class ApplicationService:
             student_data=student_snapshot,
             submitted_form_data=application_data.form_data.dict() if application_data.form_data else {},
             agree_terms=application_data.agree_terms or False,
-            status="draft" if is_draft else "submitted",
+            status=status,
+            status_name=status_name,
         )
 
         if not is_draft:
@@ -1122,7 +1130,13 @@ class ApplicationService:
             raise NotFoundError(f"Application {application_id} not found")
 
         if not application.is_editable:
-            raise ValidationError("Application cannot be submitted in current status")
+            from app.models.enums import ApplicationStatus
+
+            allowed_statuses = [ApplicationStatus.draft.value, ApplicationStatus.returned.value]
+            raise ValidationError(
+                f"Application cannot be submitted in current status '{application.status}'. "
+                f"Only applications with status {', '.join(repr(s) for s in allowed_statuses)} can be submitted."
+            )
 
         # 驗證所有必填欄位
         _ = ApplicationFormData(**application.submitted_form_data)
@@ -1458,9 +1472,11 @@ class ApplicationService:
                 application_id=application.id,
                 reviewer_id=user.id,
                 review_stage="status_update",
-                review_status=ReviewStatus.APPROVED.value
-                if status_update.status == ApplicationStatus.approved.value
-                else ReviewStatus.REJECTED.value,
+                review_status=(
+                    ReviewStatus.APPROVED.value
+                    if status_update.status == ApplicationStatus.approved.value
+                    else ReviewStatus.REJECTED.value
+                ),
                 comments=getattr(status_update, "comments", None),
                 decision_reason=getattr(status_update, "rejection_reason", None),
                 reviewed_at=datetime.utcnow(),
@@ -1556,9 +1572,11 @@ class ApplicationService:
                     "scholarship_type": scholarship.name if scholarship else "Unknown",
                     "scholarship_type_id": application.scholarship_type_id,
                     "review_result": review.review_status,
-                    "review_date": review.reviewed_at.strftime("%Y-%m-%d")
-                    if review.reviewed_at
-                    else datetime.utcnow().strftime("%Y-%m-%d"),
+                    "review_date": (
+                        review.reviewed_at.strftime("%Y-%m-%d")
+                        if review.reviewed_at
+                        else datetime.utcnow().strftime("%Y-%m-%d")
+                    ),
                     "professor_recommendation": review.recommendation,
                     "college_name": application.college_name if hasattr(application, "college_name") else "",
                     "review_deadline": "",  # Add if available from scholarship config
@@ -2239,19 +2257,25 @@ class ApplicationService:
                         student_no=app.student_data.get("std_stdcode", "") if app.student_data else "",
                         days_waiting=None,  # Calculate if needed
                         professor=None,  # Professor info not needed in professor view
-                        scholarship_configuration={
-                            "requires_professor_recommendation": app.scholarship_configuration.requires_professor_recommendation
+                        scholarship_configuration=(
+                            {
+                                "requires_professor_recommendation": (
+                                    app.scholarship_configuration.requires_professor_recommendation
+                                    if app.scholarship_configuration
+                                    else False
+                                ),
+                                "requires_college_review": (
+                                    app.scholarship_configuration.requires_college_review
+                                    if app.scholarship_configuration
+                                    else False
+                                ),
+                                "config_name": (
+                                    app.scholarship_configuration.config_name if app.scholarship_configuration else None
+                                ),
+                            }
                             if app.scholarship_configuration
-                            else False,
-                            "requires_college_review": app.scholarship_configuration.requires_college_review
-                            if app.scholarship_configuration
-                            else False,
-                            "config_name": app.scholarship_configuration.config_name
-                            if app.scholarship_configuration
-                            else None,
-                        }
-                        if app.scholarship_configuration
-                        else None,
+                            else None
+                        ),
                     )
                 )
 
@@ -2819,9 +2843,9 @@ class ApplicationService:
                         "message": f"申請編號 {application.app_id} 已指派給您進行教授推薦審查",
                         "application_id": application.id,
                         "app_id": application.app_id,
-                        "student_name": application.student_data.get("std_cname")
-                        if application.student_data
-                        else "Unknown",
+                        "student_name": (
+                            application.student_data.get("std_cname") if application.student_data else "Unknown"
+                        ),
                         "scholarship_name": application.scholarship_name,
                         "assigned_by": assigned_by.name,
                     },

@@ -2,26 +2,26 @@
 -r requirements.txt
 
 # Testing framework
-pytest==7.4.3
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-pytest-mock==3.12.0
-httpx==0.25.2
+pytest==8.3.0  # Updated for Python 3.13 compatibility
+pytest-asyncio==0.24.0  # Updated for Python 3.13 compatibility
+pytest-cov==6.0.0  # Updated for Python 3.13 compatibility
+pytest-mock==3.14.0  # Updated for Python 3.13 compatibility
+httpx==0.28.1  # Match main requirements
 
 # Database testing
-pytest-postgresql==5.0.0
-aiosqlite==0.19.0  # For SQLite support in testing
+pytest-postgresql==6.1.1  # Updated for Python 3.13 compatibility
+aiosqlite==0.20.0  # For SQLite support in testing
 
 # Code quality and formatting
-black==23.11.0
-isort==5.12.0
-flake8==6.1.0
-mypy==1.7.1
+black==24.8.0  # Updated for Python 3.13 compatibility
+isort==5.13.2  # Updated for Python 3.13 compatibility
+flake8==7.1.1  # Updated for Python 3.13 compatibility
+mypy==1.11.0  # Updated for Python 3.13 compatibility
 
 # Development tools
-pre-commit==3.5.0
-watchdog==3.0.0
+pre-commit==4.0.1  # Updated for Python 3.13 compatibility
+watchdog==5.0.3  # Updated for Python 3.13 compatibility
 
 # API documentation
-mkdocs==1.5.3
-mkdocs-material==9.4.8
+mkdocs==1.6.0  # Updated for Python 3.13 compatibility
+mkdocs-material==9.6.0  # Updated for Python 3.13 compatibility

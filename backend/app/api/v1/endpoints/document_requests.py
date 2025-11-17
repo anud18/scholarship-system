@@ -106,7 +106,7 @@ async def create_document_request(
                     "requested_documents": request_data.requested_documents,
                     "reason": request_data.reason,
                     "notes": request_data.notes or "",
-                    "requester_name": current_user.name or current_user.username,
+                    "requester_name": current_user.name or current_user.email,
                     "deadline": "",  # Add if deadline field exists in DocumentRequest model
                     "scholarship_type": application.scholarship_name,
                     "scholarship_type_id": application.scholarship_type_id,
@@ -120,7 +120,7 @@ async def create_document_request(
 
     # Build response
     response_data = DocumentRequestResponse.model_validate(document_request)
-    response_data.requested_by_name = current_user.username
+    response_data.requested_by_name = current_user.name
     response_data.application_app_id = application.app_id
 
     return {
@@ -171,7 +171,7 @@ async def list_application_document_requests(
     for doc_req in document_requests:
         item = DocumentRequestListItem.model_validate(doc_req)
         item.application_app_id = application.app_id
-        item.requested_by_name = doc_req.requested_by.username if doc_req.requested_by else "Unknown"
+        item.requested_by_name = doc_req.requested_by.name if doc_req.requested_by else "Unknown"
         response_list.append(item)
 
     return {
@@ -225,7 +225,7 @@ async def get_my_document_requests(
             scholarship_type_name=doc_req.application.scholarship_name,
             academic_year=doc_req.application.academic_year,
             semester=doc_req.application.semester,
-            requested_by_name=doc_req.requested_by.username if doc_req.requested_by else "Unknown",
+            requested_by_name=doc_req.requested_by.name if doc_req.requested_by else "Unknown",
             requested_at=doc_req.requested_at,
             requested_documents=doc_req.requested_documents,
             reason=doc_req.reason,
@@ -368,10 +368,8 @@ async def cancel_document_request(
 
     # Build response
     response_data = DocumentRequestResponse.model_validate(document_request)
-    response_data.requested_by_name = (
-        document_request.requested_by.username if document_request.requested_by else "Unknown"
-    )
-    response_data.cancelled_by_name = current_user.username
+    response_data.requested_by_name = document_request.requested_by.name if document_request.requested_by else "Unknown"
+    response_data.cancelled_by_name = current_user.name
     response_data.application_app_id = document_request.application.app_id
 
     return {

@@ -1,38 +1,36 @@
 # FastAPI and web framework
 fastapi==0.120.0
-starlette==0.47.2  # Security: Fixed multi-part form blocking issue (GHSA-2c2j-9gv5-cj73)
-uvicorn[standard]==0.24.0
+starlette==0.48.0  # Updated for Python 3.13 compatibility (compatible with FastAPI 0.120.0)
+uvicorn[standard]==0.38.0  # Updated for Python 3.13 compatibility
 python-multipart==0.0.20  # Security: Updated to fix DoS vulnerabilities (GHSA-59g5-xgcq-4qw3)
 
 # Database and ORM
-sqlalchemy==2.0.23
-alembic==1.12.1
-asyncpg==0.29.0
-psycopg2-binary==2.9.8
+sqlalchemy==2.0.44  # Updated for Python 3.13 compatibility
+alembic==1.17.2  # Updated for Python 3.13 compatibility
+asyncpg==0.30.0  # Updated for Python 3.13 compatibility
+psycopg2-binary==2.9.11  # Updated for Python 3.13 compatibility
 
 # Authentication and Security
-python-jose[cryptography]==3.4.0  # Security: Fixes algorithm confusion (PYSEC-2024-232) and JWT bomb (PYSEC-2024-233)
-passlib==1.7.4
-bcrypt==4.0.1
+PyJWT[crypto]==2.9.0  # Replaced python-jose (unmaintained, has CVE-2024-33663)
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1  # Updated for Python 3.13 compatibility
 cryptography==44.0.1  # Security: OpenSSL 3.4.1 update (GHSA-79v4-65xg-pq4g)
-# Note: ecdsa (transitive dependency) has Minerva timing attack - accepted risk (out of scope for library maintainers)
 python-decouple==3.8
 
 # Data validation and serialization
-pydantic==2.12.3
-pydantic[email]==2.12.3
-pydantic-settings==2.2.1
+pydantic==2.10.0  # CRITICAL: Updated from 2.12.3 for Python 3.13 compatibility
+pydantic[email]==2.10.0  # CRITICAL: Updated from 2.12.3 for Python 3.13 compatibility
+pydantic-settings==2.6.0  # Updated to match pydantic version
 email-validator==2.1.0
 
 # HTTP client and utilities
-httpx==0.25.2
-aiofiles==23.2.1
+httpx==0.28.1  # Updated for Python 3.13 compatibility
+aiofiles==24.1.0  # Updated for Python 3.13 compatibility
 python-dateutil==2.8.2
 tenacity==9.1.2
 
 # Caching
-redis==5.0.1
-aioredis==2.0.1
+redis==7.0.1  # Updated for Python 3.13 compatibility, includes async support (replaces aioredis)
 
 # Task scheduling
 apscheduler==3.10.4
@@ -43,21 +41,21 @@ fastapi-mail==1.4.1
 jinja2==3.1.6  # Security: Fixed sandbox escape vulnerability (GHSA-cpwx-vrp4-4pq7)
 
 # File processing and OCR
-pillow==11.1.0  # Security: Fixed buffer overflow (GHSA-44wm-f244-xhp3)
-opencv-python==4.8.1.78
+pillow==12.0.0  # Updated for Python 3.13 compatibility
+opencv-python==4.12.0.88  # Updated for Python 3.13 compatibility
 pytesseract==0.3.10
 google-generativeai==0.8.3
 python-magic==0.4.27
 
 # Object Storage
-minio==7.2.0
+minio==7.2.18  # Updated for Python 3.13 compatibility
 
 # Excel processing
-pandas==2.1.4
+pandas==2.3.3  # Updated for Python 3.13 compatibility
 openpyxl==3.1.2
 
 # Logging and monitoring
-structlog==23.2.0
-prometheus-client==0.18.0
+structlog==24.4.0  # Updated for Python 3.13 compatibility
+prometheus-client==0.21.0  # Updated for Python 3.13 compatibility
 
 # Development and testing dependencies moved to requirements-dev.txt

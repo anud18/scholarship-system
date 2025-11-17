@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.application import ApplicationStatus
 
@@ -82,10 +82,11 @@ class DynamicFormField(BaseModel):
     required: bool = Field(default=True, description="是否必填")
     validation_rules: Optional[Dict[str, Any]] = Field(default=None, description="驗證規則")
 
-    @validator("value")
+    @field_validator("value")
+    @classmethod
     def validate_value_type(cls, v, values):
         """根據 field_type 驗證值的類型"""
-        field_type = values.get("field_type")
+        field_type = values.data.get("field_type")
         if field_type == "select" and not isinstance(v, (list, str)):
             raise ValueError("Select field value must be a string or list")
         elif field_type == "number" and not isinstance(v, (int, float)):
@@ -134,7 +135,8 @@ class ApplicationFormData(BaseModel):
         ],
     )
 
-    @validator("fields")
+    @field_validator("fields")
+    @classmethod
     def validate_required_fields(cls, v):
         """驗證必填欄位"""
         for field_id, field in v.items():
@@ -164,15 +166,19 @@ class ApplicationCreate(BaseModel):
     """建立申請"""
 
     scholarship_type: str = Field(..., description="獎學金類型代碼", example="undergraduate_freshman")
-    configuration_id: int = Field(..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", example=1)
-    scholarship_subtype_list: List[str] = Field(default=[], description="獎學金子類型列表", example=["general", "special"])
+    configuration_id: int = Field(
+        ..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", example=1
+    )
+    scholarship_subtype_list: List[str] = Field(
+        default=[], description="獎學金子類型列表", example=["general", "special"]
+    )
     form_data: ApplicationFormData = Field(..., description="表單資料")
     agree_terms: Optional[bool] = Field(False, description="同意條款")
     is_renewal: Optional[bool] = Field(False, description="是否為續領申請")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_encoders={datetime: lambda v: v.isoformat()},
+        json_schema_extra={
             "example": {
                 "scholarship_type": "undergraduate_freshman",
                 "scholarship_subtype_list": ["general"],
@@ -197,7 +203,8 @@ class ApplicationCreate(BaseModel):
                     ],
                 },
             }
-        }
+        },
+    )
 
 
 class ApplicationUpdate(BaseModel):
@@ -209,8 +216,7 @@ class ApplicationUpdate(BaseModel):
     agree_terms: Optional[bool] = Field(None, description="同意條款")
     is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
 class ApplicationFileResponse(BaseModel):

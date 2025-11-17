@@ -5,7 +5,7 @@ Pydantic schemas for email management
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.email_management import EmailCategory, EmailStatus, ScheduleStatus
 
@@ -42,8 +42,7 @@ class EmailHistoryRead(EmailHistoryBase):
     sent_by_username: Optional[str] = None
     template_description: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     @classmethod
     def from_orm_with_relations(cls, obj):
@@ -140,8 +139,7 @@ class ScheduledEmailRead(ScheduledEmailBase):
     is_due: bool = False
     is_ready_to_send: bool = False
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     @classmethod
     def from_orm_with_relations(cls, obj):

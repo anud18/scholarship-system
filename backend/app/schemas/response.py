@@ -4,7 +4,7 @@ Standard API response schemas following the project patterns
 
 from typing import Generic, List, Optional, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 DataType = TypeVar("DataType")
 
@@ -18,10 +18,7 @@ class ApiResponse(BaseModel, Generic[DataType]):
     errors: Optional[List[str]] = None
     trace_id: Optional[str] = None
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ValidationError(BaseModel):
@@ -42,10 +39,7 @@ class DetailedApiResponse(BaseModel, Generic[DataType]):
     validation_errors: Optional[List[ValidationError]] = None
     trace_id: Optional[str] = None
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PaginatedApiResponse(BaseModel, Generic[DataType]):
@@ -61,7 +55,4 @@ class PaginatedApiResponse(BaseModel, Generic[DataType]):
     errors: Optional[List[str]] = None
     trace_id: Optional[str] = None
 
-    class Config:
-        """Pydantic configuration"""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

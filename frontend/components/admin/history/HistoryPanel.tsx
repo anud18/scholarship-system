@@ -96,11 +96,11 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
     useState<HistoricalApplicationFilters>({
       page: 1,
       size: 20,
-      status: "",
-      scholarship_type: "",
+      status: undefined,
+      scholarship_type: undefined,
       academic_year: undefined,
-      semester: "",
-      search: "",
+      semester: undefined,
+      search: undefined,
     });
 
   // Selected application for viewing details
@@ -123,7 +123,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
       const filters = {
         ...historicalApplicationsFilters,
         scholarship_type:
-          activeHistoricalTab === "all" ? "" : activeHistoricalTab,
+          activeHistoricalTab === "all" ? undefined : activeHistoricalTab,
       };
 
       const response = await apiClient.admin.getHistoricalApplications(filters);
@@ -171,11 +171,11 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         const response = await apiClient.admin.getHistoricalApplications({
           page: currentPage,
           size: 100, // 使用 API 允許的最大值
-          status: "",
-          scholarship_type: "",
+          status: undefined,
+          scholarship_type: undefined,
           academic_year: undefined,
-          semester: "",
-          search: "",
+          semester: undefined,
+          search: undefined,
         });
 
         if (response.success && response.data) {
@@ -294,7 +294,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                     onValueChange={value =>
                       setHistoricalApplicationsFilters(prev => ({
                         ...prev,
-                        status: value === "all" ? "" : value,
+                        status: value === "all" ? undefined : value,
                         page: 1,
                       }))
                     }
@@ -352,7 +352,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                     onValueChange={value =>
                       setHistoricalApplicationsFilters(prev => ({
                         ...prev,
-                        semester: value === "all" ? "" : value,
+                        semester: value === "all" ? undefined : value,
                         page: 1,
                       }))
                     }
@@ -655,7 +655,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                       onValueChange={value =>
                         setHistoricalApplicationsFilters(prev => ({
                           ...prev,
-                          status: value === "all" ? "" : value,
+                          status: value === "all" ? undefined : value,
                           page: 1,
                         }))
                       }

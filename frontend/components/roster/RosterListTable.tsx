@@ -12,16 +12,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Download, Eye, PlayCircle, Clock, CheckCircle2 } from "lucide-react"
+import { Download, Eye, PlayCircle, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react"
 import { RosterDetailDialog } from "./RosterDetailDialog"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
 
 interface Period {
   label: string
-  status: "completed" | "waiting"
+  status: "completed" | "waiting" | "failed" | "processing" | "draft" | "locked"
   roster_id?: number
   roster_code?: string
+  roster_status?: string
+  error_message?: string
   completed_at?: string
   total_amount?: number
   qualified_count?: number
@@ -120,7 +122,7 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
     }
   }
 
-  const handleGenerateNow = async (period: Period) => {
+  const handleGenerateNow = async (period: Period, isRegeneration: boolean = false) => {
     setGenerating(period.label)
     try {
       const response = await apiClient.request("/payment-rosters/generate", {
@@ -132,6 +134,7 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
           academic_year: parseInt(period.label.split("-")[0]),
           student_verification_enabled: true,
           auto_export_excel: true,
+          force_regenerate: isRegeneration,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -153,9 +156,19 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
   }
 
   const getRowClassName = (status: string) => {
-    return status === "completed"
-      ? "bg-green-50 hover:bg-green-100"
-      : "bg-gray-50 hover:bg-gray-100"
+    switch (status) {
+      case "completed":
+      case "locked":
+        return "bg-green-50 hover:bg-green-100"
+      case "failed":
+        return "bg-red-50 hover:bg-red-100"
+      case "processing":
+        return "bg-blue-50 hover:bg-blue-100"
+      case "draft":
+      case "waiting":
+      default:
+        return "bg-gray-50 hover:bg-gray-100"
+    }
   }
 
   return (
@@ -199,6 +212,26 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
                           <CheckCircle2 className="mr-1 h-3 w-3" />
                           已完成
                         </Badge>
+                      ) : period.status === "locked" ? (
+                        <Badge variant="default" className="bg-green-600">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          已鎖定
+                        </Badge>
+                      ) : period.status === "failed" ? (
+                        <Badge variant="destructive">
+                          <XCircle className="mr-1 h-3 w-3" />
+                          失敗
+                        </Badge>
+                      ) : period.status === "processing" ? (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                          處理中
+                        </Badge>
+                      ) : period.status === "draft" ? (
+                        <Badge variant="secondary">
+                          <Clock className="mr-1 h-3 w-3" />
+                          草稿
+                        </Badge>
                       ) : (
                         <Badge variant="secondary">
                           <Clock className="mr-1 h-3 w-3" />
@@ -209,7 +242,7 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
 
                     {/* 完成時間 / 下次排程 */}
                     <TableCell>
-                      {period.status === "completed" ? (
+                      {period.status === "completed" || period.status === "locked" ? (
                         <div className="text-sm">
                           <div>{formatDate(period.completed_at)}</div>
                           {period.qualified_count !== undefined && (
@@ -217,6 +250,19 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
                               {period.qualified_count} 人
                             </div>
                           )}
+                        </div>
+                      ) : period.status === "failed" ? (
+                        <div className="text-sm text-red-600">
+                          <div>產生失敗</div>
+                          {period.error_message && (
+                            <div className="text-xs line-clamp-2" title={period.error_message}>
+                              {period.error_message}
+                            </div>
+                          )}
+                        </div>
+                      ) : period.status === "processing" ? (
+                        <div className="text-sm text-blue-600">
+                          正在處理中...
                         </div>
                       ) : (
                         <div className="text-sm text-muted-foreground">
@@ -231,7 +277,7 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
 
                     {/* 操作 */}
                     <TableCell className="text-right">
-                      {period.status === "completed" ? (
+                      {period.status === "completed" || period.status === "locked" ? (
                         <div className="flex justify-end gap-2">
                           <Button
                             size="sm"
@@ -251,6 +297,25 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
                             {downloading === period.roster_id ? "下載中..." : "下載Excel"}
                           </Button>
                         </div>
+                      ) : period.status === "failed" ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleGenerateNow(period, true)}
+                          disabled={generating === period.label}
+                        >
+                          <PlayCircle className="mr-1 h-4 w-4" />
+                          {generating === period.label ? "產生中..." : "重新產生"}
+                        </Button>
+                      ) : period.status === "processing" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled
+                        >
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                          處理中...
+                        </Button>
                       ) : (
                         <Button
                           size="sm"

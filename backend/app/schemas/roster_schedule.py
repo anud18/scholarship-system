@@ -6,7 +6,7 @@ Roster Schedule Schemas
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.payment_roster import RosterCycle
 from app.models.roster_schedule import RosterScheduleStatus
@@ -26,7 +26,8 @@ class RosterScheduleBase(BaseModel):
     notification_emails: Optional[List[str]] = Field(None, description="通知信箱清單")
     notification_settings: Optional[Dict[str, Any]] = Field(None, description="通知設定")
 
-    @validator("cron_expression")
+    @field_validator("cron_expression")
+    @classmethod
     def validate_cron_expression(cls, v):
         """驗證Cron表達式格式"""
         if v is not None:
@@ -36,7 +37,8 @@ class RosterScheduleBase(BaseModel):
                 raise ValueError("Invalid cron expression format")
         return v
 
-    @validator("notification_emails")
+    @field_validator("notification_emails")
+    @classmethod
     def validate_notification_emails(cls, v):
         """驗證通知信箱格式"""
         if v is not None:
@@ -68,7 +70,8 @@ class RosterScheduleUpdate(BaseModel):
     notification_emails: Optional[List[str]] = Field(None, description="通知信箱清單")
     notification_settings: Optional[Dict[str, Any]] = Field(None, description="通知設定")
 
-    @validator("cron_expression")
+    @field_validator("cron_expression")
+    @classmethod
     def validate_cron_expression(cls, v):
         """驗證Cron表達式格式"""
         if v is not None:
@@ -78,7 +81,8 @@ class RosterScheduleUpdate(BaseModel):
                 raise ValueError("Invalid cron expression format")
         return v
 
-    @validator("notification_emails")
+    @field_validator("notification_emails")
+    @classmethod
     def validate_notification_emails(cls, v):
         """驗證通知信箱格式"""
         if v is not None:
@@ -124,8 +128,7 @@ class RosterScheduleResponse(BaseModel):
     updated_at: Optional[datetime]
     scheduler_info: Optional[Dict[str, Any]] = Field(None, description="排程器狀態資訊")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RosterScheduleListResponse(BaseModel):
@@ -202,8 +205,7 @@ class ScheduleExecutionHistory(BaseModel):
     roster_id: Optional[int]  # 產生的造冊ID
     execution_time_seconds: Optional[float]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScheduleExecutionHistoryResponse(BaseModel):

@@ -5,9 +5,9 @@ Security utilities for authentication and authorization
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+import jwt
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -54,7 +54,7 @@ def verify_token(token: str) -> Dict[str, Any]:
         return payload
     except jwt.ExpiredSignatureError:
         raise AuthenticationError("Token has expired")
-    except jwt.JWTError:
+    except jwt.PyJWTError:
         raise AuthenticationError("Invalid token")
 
 

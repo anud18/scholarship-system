@@ -126,17 +126,23 @@ async def get_all_applications(
             or (user.email if user else None),
             "days_waiting": None,
             # Include scholarship configuration for professor review settings
-            "scholarship_configuration": {
-                "requires_professor_recommendation": app.scholarship_configuration.requires_professor_recommendation
+            "scholarship_configuration": (
+                {
+                    "requires_professor_recommendation": (
+                        app.scholarship_configuration.requires_professor_recommendation
+                        if app.scholarship_configuration
+                        else False
+                    ),
+                    "requires_college_review": (
+                        app.scholarship_configuration.requires_college_review
+                        if app.scholarship_configuration
+                        else False
+                    ),
+                    "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None,
+                }
                 if app.scholarship_configuration
-                else False,
-                "requires_college_review": app.scholarship_configuration.requires_college_review
-                if app.scholarship_configuration
-                else False,
-                "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None,
-            }
-            if app.scholarship_configuration
-            else None,
+                else None
+            ),
         }
 
         # Calculate days waiting
@@ -168,7 +174,7 @@ async def get_historical_applications(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
     status: Optional[str] = Query(None, description="Filter by status"),
-    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type", regex=r"^[a-z_]{1,50}$"),
+    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
     academic_year: Optional[int] = Query(None, description="Filter by academic year"),
     semester: Optional[str] = Query(None, description="Filter by semester"),
     search: Optional[str] = Query(None, description="Search by student name or ID"),
@@ -219,6 +225,8 @@ async def get_historical_applications(
             stmt = stmt.where(Application.semester == Semester.first)
         elif semester == "second":
             stmt = stmt.where(Application.semester == Semester.second)
+        elif semester == "yearly":
+            stmt = stmt.where(Application.semester == Semester.yearly)
 
     if search:
         search_term = f"%{search}%"

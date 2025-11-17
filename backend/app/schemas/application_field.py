@@ -5,7 +5,7 @@ Application field configuration schemas
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.application_field import FieldType
 
@@ -74,8 +74,7 @@ class ApplicationFieldResponse(ApplicationFieldBase):
     is_fixed: Optional[bool] = Field(None, description="Is this a fixed field")
     prefill_value: Optional[str] = Field(None, description="Prefilled value from user profile")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ApplicationDocumentBase(BaseModel):
@@ -135,8 +134,7 @@ class ApplicationDocumentResponse(ApplicationDocumentBase):
     is_fixed: Optional[bool] = Field(None, description="Is this a fixed document")
     existing_file_url: Optional[str] = Field(None, description="URL of existing file from user profile")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScholarshipFormConfigResponse(BaseModel):
@@ -151,5 +149,4 @@ class ScholarshipFormConfigResponse(BaseModel):
     hasWhitelist: Optional[bool] = None
     terms_document_url: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

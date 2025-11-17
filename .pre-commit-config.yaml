@@ -5,11 +5,11 @@
 repos:
   # Python code formatting and linting
   - repo: https://github.com/psf/black
-    rev: 24.4.2
+    rev: 24.10.0
     hooks:
       - id: black
         files: ^backend/app/services/minio_service.py$|^backend/app/core/security.py$|^backend/app/api/v1/endpoints/payment_rosters.py$|^backend/app/schemas/roster.py$|^backend/app/services/audit_service.py$
-        language_version: python3.11
+        language_version: python3.13
         args: [--line-length=88]
 
   - repo: https://github.com/pycqa/isort
@@ -248,7 +248,7 @@ repos:
 
 # Configuration for specific hooks
 default_language_version:
-  python: python3.11
+  python: python3.13
   node: 22.11.0
 
 # Stages configuration

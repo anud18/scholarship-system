@@ -12,8 +12,8 @@ Tests utility modules including:
 
 from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
-from jose import jwt
 
 from app.core.config import settings
 from app.core.exceptions import AuthorizationError, BusinessLogicError, FileStorageError, NotFoundError, ValidationError

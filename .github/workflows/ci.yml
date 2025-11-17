@@ -9,7 +9,7 @@ on:
 
 env:
   NODE_VERSION: '22'
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.13'
   REGISTRY: ghcr.io
   USER: ${{ github.actor }}
   IMAGE_NAME: ${{ github.repository }}

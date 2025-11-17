@@ -5,9 +5,9 @@ Unit tests for core security utilities
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
+import jwt
 import pytest
 from fastapi.security import HTTPAuthorizationCredentials
-from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthenticationError, AuthorizationError

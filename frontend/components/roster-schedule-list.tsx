@@ -20,6 +20,8 @@ interface RosterSchedule {
   schedule_name: string
   description?: string
   scholarship_configuration_id: number
+  config_name?: string
+  scholarship_type_name?: string
   roster_cycle: string
   cron_expression?: string
   status: string
@@ -39,9 +41,10 @@ interface RosterSchedule {
 
 interface RosterScheduleListProps {
   onScheduleChange: () => void
+  onRosterGenerated?: () => void
 }
 
-export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps) {
+export function RosterScheduleList({ onScheduleChange, onRosterGenerated }: RosterScheduleListProps) {
   const [schedules, setSchedules] = useState<RosterSchedule[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -115,6 +118,7 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
 
       fetchSchedules()
       onScheduleChange()
+      onRosterGenerated?.()
     } catch (error) {
       console.error("執行排程失敗:", error)
       toast.error("無法執行排程")
@@ -202,6 +206,7 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
             <TableHeader>
               <TableRow>
                 <TableHead>排程名稱</TableHead>
+                <TableHead>獎學金配置</TableHead>
                 <TableHead>造冊週期</TableHead>
                 <TableHead>Cron 表達式</TableHead>
                 <TableHead>狀態</TableHead>
@@ -214,13 +219,13 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={9} className="text-center py-8">
                     載入中...
                   </TableCell>
                 </TableRow>
               ) : schedules.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                     沒有找到排程
                   </TableCell>
                 </TableRow>
@@ -234,6 +239,21 @@ export function RosterScheduleList({ onScheduleChange }: RosterScheduleListProps
                           <div className="text-sm text-gray-500 mt-1">
                             {schedule.description}
                           </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        {schedule.config_name && (
+                          <div className="font-medium text-sm">{schedule.config_name}</div>
+                        )}
+                        {schedule.scholarship_type_name && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {schedule.scholarship_type_name}
+                          </div>
+                        )}
+                        {!schedule.config_name && !schedule.scholarship_type_name && (
+                          <span className="text-gray-400 text-sm">-</span>
                         )}
                       </div>
                     </TableCell>

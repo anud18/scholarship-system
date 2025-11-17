@@ -5,7 +5,7 @@ User schemas for API requests and responses
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.user import EmployeeStatus, UserRole, UserType
 
@@ -78,8 +78,7 @@ class UserResponse(BaseModel):
     updated_at: datetime
     last_login_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserListResponse(BaseModel):
@@ -99,8 +98,7 @@ class UserListResponse(BaseModel):
     created_at: datetime
     last_login_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserStatsResponse(BaseModel):

@@ -23,6 +23,7 @@ class RosterCreateRequest(BaseModel):
     student_verification_enabled: bool = Field(True, description="是否啟用學籍驗證")
     ranking_id: Optional[int] = Field(None, description="指定排名ID（若有多個排名時使用）")
     auto_export_excel: bool = Field(True, description="是否自動產生Excel檔案並上傳到MinIO")
+    force_regenerate: bool = Field(False, description="是否強制重新產生（覆蓋已存在的造冊）")
 
 
 class RosterExportRequest(BaseModel):
@@ -74,7 +75,7 @@ class RosterAuditLogResponse(BaseModel):
 class RosterResponse(BaseModel):
     """造冊回應"""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
     roster_code: str
@@ -88,11 +89,11 @@ class RosterResponse(BaseModel):
     qualified_count: int
     disqualified_count: int
     total_amount: Decimal
-    created_by_user_id: int
+    created_by_user_id: int = Field(..., alias="created_by", description="建立者用戶ID")
     created_at: datetime
     updated_at: Optional[datetime] = None
     locked_at: Optional[datetime] = None
-    locked_by_user_id: Optional[int] = None
+    locked_by_user_id: Optional[int] = Field(None, alias="locked_by", description="鎖定者用戶ID")
 
     # Excel 檔案資訊
     excel_filename: Optional[str] = None

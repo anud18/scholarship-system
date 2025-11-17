@@ -309,7 +309,7 @@ async def export_quota_data(
                     "pending": quota_status.get("pending", 0),
                     "usage_percent": quota_status.get("usage_percent", 0),
                     "exported_at": datetime.now(timezone.utc).isoformat(),
-                    "exported_by": current_user.username,
+                    "exported_by": current_user.name or current_user.email,
                 }
                 export_data.append(export_record)
 

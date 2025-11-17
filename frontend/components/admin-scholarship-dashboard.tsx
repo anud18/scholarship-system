@@ -135,9 +135,8 @@ interface DashboardApplication {
   };
   reviewer_id?: number;
   final_approver_id?: number;
-  review_score?: number;
-  review_comments?: string;
-  rejection_reason?: string;
+  // Note: review_score, review_comments, rejection_reason removed from Application model
+  // Get these from ApplicationReview if needed via the reviews relationship
   reviewed_at?: string;
   approved_at?: string;
   academic_year?: string;
@@ -218,9 +217,6 @@ const transformApplicationData = (app: any): DashboardApplication => {
     professor: app.professor,
     reviewer_id: app.reviewer_id,
     final_approver_id: app.final_approver_id,
-    review_score: app.review_score,
-    review_comments: app.review_comments,
-    rejection_reason: app.rejection_reason,
     reviewed_at: app.reviewed_at,
     approved_at: app.approved_at,
     academic_year: app.academic_year,

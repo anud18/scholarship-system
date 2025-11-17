@@ -18,7 +18,7 @@ permissions:
 
 env:
   NODE_VERSION: '22'
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.13'
 
 jobs:
   # Auto-label PRs based on changes

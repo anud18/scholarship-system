@@ -8,7 +8,7 @@ student_data contains ONLY SIS API data snapshot (not student-submitted data).
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StudentSnapshotSchema(BaseModel):
@@ -67,8 +67,8 @@ class StudentSnapshotSchema(BaseModel):
     _term_data_status: Optional[str] = Field(None, description="學期資料狀態 (success/error/partial)")
     _term_error_message: Optional[str] = Field(None, description="學期資料錯誤訊息")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "std_stdcode": "310460031",
                 "std_enrollyear": 110,
@@ -111,7 +111,8 @@ class StudentSnapshotSchema(BaseModel):
                 "_api_fetched_at": "2025-10-22T17:27:08Z",
                 "_term_data_status": "success",
             }
-        }
+        },
+    )
 
 
 class StudentSnapshotMinimal(BaseModel):
@@ -124,7 +125,8 @@ class StudentSnapshotMinimal(BaseModel):
     std_cname: str
     com_email: str
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {"std_stdcode": "310460031", "std_cname": "王小明", "com_email": "nctutest@g2.nctu.edu.tw"}
-        }
+        },
+    )
