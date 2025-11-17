@@ -8,16 +8,16 @@ repos:
     rev: 24.10.0
     hooks:
       - id: black
-        files: ^backend/app/services/minio_service.py$|^backend/app/core/security.py$|^backend/app/api/v1/endpoints/payment_rosters.py$|^backend/app/schemas/roster.py$|^backend/app/services/audit_service.py$
+        files: ^backend/
         language_version: python3.13
-        args: [--line-length=88]
+        args: [--line-length=120, --target-version=py312]
 
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
       - id: isort
-        files: ^backend/app/services/minio_service.py$|^backend/app/core/security.py$|^backend/app/api/v1/endpoints/payment_rosters.py$|^backend/app/schemas/roster.py$|^backend/app/services/audit_service.py$
-        args: [--profile=black, --line-length=88]
+        files: ^backend/
+        args: [--profile=black, --line-length=120]
 
 # Temporarily disabled - will re-enable after core fix is committed
 # - repo: https://github.com/pycqa/flake8
