@@ -93,7 +93,7 @@ jobs:
         working-directory: ./backend
         run: |
           pip install -r requirements.txt
-          pip install black==23.11.0 flake8 mypy pylint
+          pip install black==24.8.0 flake8 mypy pylint
 
           echo "::group::Black Format Check"
           black --check --diff --line-length=120 . || {
