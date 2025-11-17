@@ -166,12 +166,8 @@ class ApplicationCreate(BaseModel):
     """建立申請"""
 
     scholarship_type: str = Field(..., description="獎學金類型代碼", example="undergraduate_freshman")
-    configuration_id: int = Field(
-        ..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", example=1
-    )
-    scholarship_subtype_list: List[str] = Field(
-        default=[], description="獎學金子類型列表", example=["general", "special"]
-    )
+    configuration_id: int = Field(..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", example=1)
+    scholarship_subtype_list: List[str] = Field(default=[], description="獎學金子類型列表", example=["general", "special"])
     form_data: ApplicationFormData = Field(..., description="表單資料")
     agree_terms: Optional[bool] = Field(False, description="同意條款")
     is_renewal: Optional[bool] = Field(False, description="是否為續領申請")

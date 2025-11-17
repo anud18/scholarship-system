@@ -1428,9 +1428,7 @@ async def download_roster_excel(
                 validate_object_name_minio(roster.minio_object_name)
             except HTTPException:
                 logger.error(f"Invalid minio_object_name from database: {roster.minio_object_name}")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="MinIO object name驗證失敗"
-                )
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="MinIO object name驗證失敗")
 
             # 使用MinIO下載
             try:

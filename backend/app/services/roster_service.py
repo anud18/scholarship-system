@@ -111,9 +111,7 @@ class RosterService:
                         raise ValueError(f"找不到排名: ID {ranking_id}")
 
                     if not ranking.distribution_executed:
-                        raise ValueError(
-                            f"無法從排名 {ranking_id} 產生造冊：尚未執行分發。" f"請先執行矩陣分發後再產生造冊。"
-                        )
+                        raise ValueError(f"無法從排名 {ranking_id} 產生造冊：尚未執行分發。" f"請先執行矩陣分發後再產生造冊。")
 
                     logger.info(f"已驗證排名 {ranking_id} 已執行分發 " f"({ranking.allocated_count} 位學生已分配)")
                 else:

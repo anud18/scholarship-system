@@ -503,15 +503,11 @@ class ExcelExportService:
 
         # 產生錯誤和警告
         if missing_required_info > 0:
-            validation_result["errors"].append(
-                f"{missing_required_info} records missing required fields (身分證字號/姓名)"
-            )
+            validation_result["errors"].append(f"{missing_required_info} records missing required fields (身分證字號/姓名)")
             validation_result["is_valid"] = False
 
         if missing_bank_info > 0:
-            validation_result["warnings"].append(
-                f"{missing_bank_info} records missing bank information (將標註於說明欄)"
-            )
+            validation_result["warnings"].append(f"{missing_bank_info} records missing bank information (將標註於說明欄)")
 
         if invalid_amounts > 0:
             validation_result["warnings"].append(f"{invalid_amounts} records have invalid amounts")
