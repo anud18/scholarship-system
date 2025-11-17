@@ -397,9 +397,9 @@ class ScholarshipConfigurationService:
             description_en=source_config.description_en,
             amount=source_config.amount,
             currency=source_config.currency,
-            whitelist_student_ids=source_config.whitelist_student_ids.copy()
-            if source_config.whitelist_student_ids
-            else {},
+            whitelist_student_ids=(
+                source_config.whitelist_student_ids.copy() if source_config.whitelist_student_ids else {}
+            ),
             requires_professor_recommendation=source_config.requires_professor_recommendation,
             requires_college_review=source_config.requires_college_review,
             is_active=True,

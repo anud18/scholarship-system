@@ -228,9 +228,9 @@ class ScholarshipConfigurationQuotaStatus(BaseModel):
     usage_percentage: Optional[float] = None
 
     # College-specific quota
-    college_quotas: Optional[
-        Dict[str, Dict[str, int]]
-    ] = None  # {"engineering": {"total": 10, "used": 3, "available": 7}}
+    college_quotas: Optional[Dict[str, Dict[str, int]]] = (
+        None  # {"engineering": {"total": 10, "used": 3, "available": 7}}
+    )
 
     # Status
     is_quota_exceeded: bool = False
@@ -370,7 +370,9 @@ class WhitelistStudentInfo(BaseModel):
 class WhitelistBatchAddRequest(BaseModel):
     """批量新增白名單請求"""
 
-    students: List[Dict[str, Any]] = Field(..., description="學生列表 [{'nycu_id': '0856001', 'sub_type': 'nstc'}, ...]")
+    students: List[Dict[str, Any]] = Field(
+        ..., description="學生列表 [{'nycu_id': '0856001', 'sub_type': 'nstc'}, ...]"
+    )
 
     @field_validator("students")
     @classmethod

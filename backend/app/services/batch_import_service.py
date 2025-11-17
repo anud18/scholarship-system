@@ -322,7 +322,11 @@ class BatchImportService:
         semester: Optional[str],
         student_dept_map: Optional[Dict[str, Optional[str]]] = None,
         student_row_map: Optional[Dict[str, int]] = None,
-    ) -> Tuple[Dict[str, Tuple[bool, Optional[str]]], Dict[str, Tuple[bool, Optional[str]]], List[Dict[str, Any]],]:
+    ) -> Tuple[
+        Dict[str, Tuple[bool, Optional[str]]],
+        Dict[str, Tuple[bool, Optional[str]]],
+        List[Dict[str, Any]],
+    ]:
         """
         Bulk validate college permissions and check duplicates for multiple students
 
@@ -726,9 +730,9 @@ class BatchImportService:
                     scholarship_type_id=scholarship_type_id,
                     scholarship_name=scholarship.name,
                     amount=None,  # Amount is now per sub-type in ScholarshipSubTypeConfig
-                    sub_scholarship_type=row_data.get("sub_types", [None])[0].lower()
-                    if row_data.get("sub_types")
-                    else "general",  # Lowercase, configuration-driven
+                    sub_scholarship_type=(
+                        row_data.get("sub_types", [None])[0].lower() if row_data.get("sub_types") else "general"
+                    ),  # Lowercase, configuration-driven
                     scholarship_subtype_list=row_data.get("sub_types", []),
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
                     academic_year=academic_year,

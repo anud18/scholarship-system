@@ -233,9 +233,11 @@ async def get_matrix_quota_status(
                 and_(
                     ScholarshipConfiguration.scholarship_type_id == phd_scholarship.id,
                     ScholarshipConfiguration.academic_year == academic_year,
-                    ScholarshipConfiguration.semester == semester
-                    if semester
-                    else ScholarshipConfiguration.semester.is_(None),
+                    (
+                        ScholarshipConfiguration.semester == semester
+                        if semester
+                        else ScholarshipConfiguration.semester.is_(None)
+                    ),
                     ScholarshipConfiguration.is_active.is_(True),
                 )
             )
@@ -553,9 +555,11 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
                 "sub_types": stype.sub_type_list or [],
                 "has_quota_limit": latest_config.has_quota_limit if latest_config else False,
                 "has_college_quota": latest_config.has_college_quota if latest_config else False,
-                "quota_management_mode": latest_config.quota_management_mode.value
-                if latest_config and latest_config.quota_management_mode
-                else "none",
+                "quota_management_mode": (
+                    latest_config.quota_management_mode.value
+                    if latest_config and latest_config.quota_management_mode
+                    else "none"
+                ),
                 "application_period": stype.application_cycle.value if stype.application_cycle else "semester",
                 "description": latest_config.description if latest_config else stype.description or "",
             }
@@ -600,9 +604,11 @@ async def get_quota_overview(
                 and_(
                     ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
                     ScholarshipConfiguration.academic_year == academic_year,
-                    ScholarshipConfiguration.semester == semester
-                    if semester
-                    else ScholarshipConfiguration.semester.is_(None),
+                    (
+                        ScholarshipConfiguration.semester == semester
+                        if semester
+                        else ScholarshipConfiguration.semester.is_(None)
+                    ),
                     ScholarshipConfiguration.is_active.is_(True),
                 )
             )
@@ -680,9 +686,9 @@ async def get_quota_overview(
                     "name_en": stype.name_en or stype.name,
                     "has_quota_limit": config.has_quota_limit,
                     "has_college_quota": config.has_college_quota,
-                    "quota_management_mode": config.quota_management_mode.value
-                    if config.quota_management_mode
-                    else "none",
+                    "quota_management_mode": (
+                        config.quota_management_mode.value if config.quota_management_mode else "none"
+                    ),
                     "application_period": stype.application_cycle.value if stype.application_cycle else "semester",
                     "description": config.description or stype.description or "",
                     "sub_types": sub_types,
@@ -772,7 +778,9 @@ async def create_scholarship_configuration(
         await db.refresh(new_config)
 
         return ApiResponse(
-            success=True, message="獎學金配置建立成功", data={"id": new_config.id, "config_code": new_config.config_code}
+            success=True,
+            message="獎學金配置建立成功",
+            data={"id": new_config.id, "config_code": new_config.config_code},
         )
 
     except HTTPException:
@@ -831,32 +839,32 @@ async def get_scholarship_configuration(
             "quota_management_mode": config.quota_management_mode.value if config.quota_management_mode else "none",
             "total_quota": config.total_quota,
             "quotas": config.quotas,
-            "renewal_application_start_date": config.renewal_application_start_date.isoformat()
-            if config.renewal_application_start_date
-            else None,
-            "renewal_application_end_date": config.renewal_application_end_date.isoformat()
-            if config.renewal_application_end_date
-            else None,
-            "application_start_date": config.application_start_date.isoformat()
-            if config.application_start_date
-            else None,
+            "renewal_application_start_date": (
+                config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
+            ),
+            "renewal_application_end_date": (
+                config.renewal_application_end_date.isoformat() if config.renewal_application_end_date else None
+            ),
+            "application_start_date": (
+                config.application_start_date.isoformat() if config.application_start_date else None
+            ),
             "application_end_date": config.application_end_date.isoformat() if config.application_end_date else None,
-            "renewal_professor_review_start": config.renewal_professor_review_start.isoformat()
-            if config.renewal_professor_review_start
-            else None,
-            "renewal_professor_review_end": config.renewal_professor_review_end.isoformat()
-            if config.renewal_professor_review_end
-            else None,
-            "renewal_college_review_start": config.renewal_college_review_start.isoformat()
-            if config.renewal_college_review_start
-            else None,
-            "renewal_college_review_end": config.renewal_college_review_end.isoformat()
-            if config.renewal_college_review_end
-            else None,
+            "renewal_professor_review_start": (
+                config.renewal_professor_review_start.isoformat() if config.renewal_professor_review_start else None
+            ),
+            "renewal_professor_review_end": (
+                config.renewal_professor_review_end.isoformat() if config.renewal_professor_review_end else None
+            ),
+            "renewal_college_review_start": (
+                config.renewal_college_review_start.isoformat() if config.renewal_college_review_start else None
+            ),
+            "renewal_college_review_end": (
+                config.renewal_college_review_end.isoformat() if config.renewal_college_review_end else None
+            ),
             "requires_professor_recommendation": config.requires_professor_recommendation,
-            "professor_review_start": config.professor_review_start.isoformat()
-            if config.professor_review_start
-            else None,
+            "professor_review_start": (
+                config.professor_review_start.isoformat() if config.professor_review_start else None
+            ),
             "professor_review_end": config.professor_review_end.isoformat() if config.professor_review_end else None,
             "requires_college_review": config.requires_college_review,
             "college_review_start": config.college_review_start.isoformat() if config.college_review_start else None,
@@ -1000,7 +1008,9 @@ async def update_scholarship_configuration(
         await db.commit()
         await db.refresh(config)
 
-        return ApiResponse(success=True, message="配置更新成功", data={"id": config.id, "config_code": config.config_code})
+        return ApiResponse(
+            success=True, message="配置更新成功", data={"id": config.id, "config_code": config.config_code}
+        )
 
     except HTTPException:
         raise
@@ -1048,7 +1058,9 @@ async def deactivate_scholarship_configuration(
 
         await db.commit()
 
-        return ApiResponse(success=True, message="配置已停用", data={"id": config.id, "config_code": config.config_code})
+        return ApiResponse(
+            success=True, message="配置已停用", data={"id": config.id, "config_code": config.config_code}
+        )
 
     except HTTPException:
         raise
@@ -1115,9 +1127,9 @@ async def duplicate_scholarship_configuration(
             description_en=source_config.description_en,
             amount=source_config.amount,
             currency=source_config.currency,
-            whitelist_student_ids=source_config.whitelist_student_ids.copy()
-            if source_config.whitelist_student_ids
-            else {},
+            whitelist_student_ids=(
+                source_config.whitelist_student_ids.copy() if source_config.whitelist_student_ids else {}
+            ),
             requires_professor_recommendation=source_config.requires_professor_recommendation,
             requires_college_review=source_config.requires_college_review,
             is_active=True,
@@ -1212,47 +1224,47 @@ async def list_scholarship_configurations(
                 "total_quota": config.total_quota,
                 "quotas": config.quotas,
                 "is_active": config.is_active,
-                "renewal_application_start_date": config.renewal_application_start_date.isoformat()
-                if config.renewal_application_start_date
-                else None,
-                "renewal_application_end_date": config.renewal_application_end_date.isoformat()
-                if config.renewal_application_end_date
-                else None,
-                "application_start_date": config.application_start_date.isoformat()
-                if config.application_start_date
-                else None,
-                "application_end_date": config.application_end_date.isoformat()
-                if config.application_end_date
-                else None,
+                "renewal_application_start_date": (
+                    config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
+                ),
+                "renewal_application_end_date": (
+                    config.renewal_application_end_date.isoformat() if config.renewal_application_end_date else None
+                ),
+                "application_start_date": (
+                    config.application_start_date.isoformat() if config.application_start_date else None
+                ),
+                "application_end_date": (
+                    config.application_end_date.isoformat() if config.application_end_date else None
+                ),
                 # Add review-related fields
-                "renewal_professor_review_start": config.renewal_professor_review_start.isoformat()
-                if config.renewal_professor_review_start
-                else None,
-                "renewal_professor_review_end": config.renewal_professor_review_end.isoformat()
-                if config.renewal_professor_review_end
-                else None,
-                "renewal_college_review_start": config.renewal_college_review_start.isoformat()
-                if config.renewal_college_review_start
-                else None,
-                "renewal_college_review_end": config.renewal_college_review_end.isoformat()
-                if config.renewal_college_review_end
-                else None,
+                "renewal_professor_review_start": (
+                    config.renewal_professor_review_start.isoformat() if config.renewal_professor_review_start else None
+                ),
+                "renewal_professor_review_end": (
+                    config.renewal_professor_review_end.isoformat() if config.renewal_professor_review_end else None
+                ),
+                "renewal_college_review_start": (
+                    config.renewal_college_review_start.isoformat() if config.renewal_college_review_start else None
+                ),
+                "renewal_college_review_end": (
+                    config.renewal_college_review_end.isoformat() if config.renewal_college_review_end else None
+                ),
                 "requires_professor_recommendation": config.requires_professor_recommendation,
-                "professor_review_start": config.professor_review_start.isoformat()
-                if config.professor_review_start
-                else None,
-                "professor_review_end": config.professor_review_end.isoformat()
-                if config.professor_review_end
-                else None,
+                "professor_review_start": (
+                    config.professor_review_start.isoformat() if config.professor_review_start else None
+                ),
+                "professor_review_end": (
+                    config.professor_review_end.isoformat() if config.professor_review_end else None
+                ),
                 "requires_college_review": config.requires_college_review,
-                "college_review_start": config.college_review_start.isoformat()
-                if config.college_review_start
-                else None,
+                "college_review_start": (
+                    config.college_review_start.isoformat() if config.college_review_start else None
+                ),
                 "college_review_end": config.college_review_end.isoformat() if config.college_review_end else None,
                 "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
-                "effective_start_date": config.effective_start_date.isoformat()
-                if config.effective_start_date
-                else None,
+                "effective_start_date": (
+                    config.effective_start_date.isoformat() if config.effective_start_date else None
+                ),
                 "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
                 "version": config.version,
                 "created_at": config.created_at.isoformat() if config.created_at else None,
@@ -1378,7 +1390,9 @@ async def batch_add_whitelist(
     await db.commit()
 
     return ApiResponse(
-        success=True, message=f"成功新增 {added_count} 位學生到白名單", data={"added_count": added_count, "errors": errors}
+        success=True,
+        message=f"成功新增 {added_count} 位學生到白名單",
+        data={"added_count": added_count, "errors": errors},
     )
 
 
@@ -1543,9 +1557,7 @@ async def export_whitelist_excel(
     excel_file = whitelist_excel_service.export_whitelist(export_data, scholarship_name)
 
     # Return as downloadable file
-    filename = (
-        f"{scholarship_name}_申請白名單_{config.academic_year}_{config.semester.value if config.semester else 'yearly'}.xlsx"
-    )
+    filename = f"{scholarship_name}_申請白名單_{config.academic_year}_{config.semester.value if config.semester else 'yearly'}.xlsx"
 
     return StreamingResponse(
         excel_file,

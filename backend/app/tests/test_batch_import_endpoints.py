@@ -227,9 +227,10 @@ class TestBatchImportEndpoints:
         await db.refresh(batch_import)
 
         # Mock scholarship and service
-        with patch("app.core.security.get_current_user", return_value=college_user), patch(
-            "app.api.v1.endpoints.batch_import.BatchImportService"
-        ) as mock_service_class:
+        with (
+            patch("app.core.security.get_current_user", return_value=college_user),
+            patch("app.api.v1.endpoints.batch_import.BatchImportService") as mock_service_class,
+        ):
             mock_service = Mock()
             mock_service.create_applications_from_batch = AsyncMock(return_value=([1, 2], []))
             mock_service.update_batch_import_status = AsyncMock()

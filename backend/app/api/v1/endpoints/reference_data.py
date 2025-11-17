@@ -480,9 +480,9 @@ async def get_scholarship_periods(
             "periods": periods,
             "cycle": cycle,
             "scholarship_name": scholarship_name,
-            "current_period": f"{taiwan_year}-{current_semester}"
-            if cycle == ApplicationCycle.semester.value
-            else f"{taiwan_year}",
+            "current_period": (
+                f"{taiwan_year}-{current_semester}" if cycle == ApplicationCycle.semester.value else f"{taiwan_year}"
+            ),
             "total_periods": len(periods),
         },
     )

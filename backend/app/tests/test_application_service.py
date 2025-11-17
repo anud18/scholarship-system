@@ -229,14 +229,16 @@ class TestApplicationService:
         # Mock student service
         mock_student_snapshot = {"name": "Test Student", "student_id": "112550001"}
 
-        with patch.object(service.db, "execute") as mock_execute, patch.object(
-            service.db, "add"
-        ) as mock_add, patch.object(service.db, "commit") as mock_commit, patch.object(
-            service.db, "refresh"
-        ), patch.object(
-            service.student_service,
-            "get_student_snapshot",
-            return_value=mock_student_snapshot,
+        with (
+            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "refresh"),
+            patch.object(
+                service.student_service,
+                "get_student_snapshot",
+                return_value=mock_student_snapshot,
+            ),
         ):
             # Mock database query results
             mock_execute.return_value.scalar_one.side_effect = [
@@ -289,14 +291,16 @@ class TestApplicationService:
         # Mock student service
         mock_student_snapshot = {"name": "Test Student", "student_id": "112550001"}
 
-        with patch.object(service.db, "execute") as mock_execute, patch.object(
-            service.db, "add"
-        ) as mock_add, patch.object(service.db, "commit") as mock_commit, patch.object(
-            service.db, "refresh"
-        ), patch.object(
-            service.student_service,
-            "get_student_snapshot",
-            return_value=mock_student_snapshot,
+        with (
+            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "refresh"),
+            patch.object(
+                service.student_service,
+                "get_student_snapshot",
+                return_value=mock_student_snapshot,
+            ),
         ):
             # Mock database query results
             mock_execute.return_value.scalar_one.side_effect = [
@@ -425,9 +429,11 @@ class TestApplicationService:
             is_renewal=True,
         )
 
-        with patch.object(service, "get_application_by_id", return_value=mock_application), patch.object(
-            service.db, "commit"
-        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
+        with (
+            patch.object(service, "get_application_by_id", return_value=mock_application),
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "refresh") as mock_refresh,
+        ):
             result = await service.update_application(application_id, update_data, mock_user)
 
             assert result == mock_application
@@ -479,9 +485,11 @@ class TestApplicationService:
         mock_application.status = ApplicationStatus.draft.value
         mock_application.submitted_form_data = {}
 
-        with patch.object(service.db, "execute") as mock_execute, patch.object(
-            service.db, "delete"
-        ) as mock_delete, patch.object(service.db, "commit") as mock_commit:
+        with (
+            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "delete") as mock_delete,
+            patch.object(service.db, "commit") as mock_commit,
+        ):
             mock_execute.return_value.scalar_one_or_none.return_value = mock_application
 
             result = await service.delete_application(application_id, mock_user)

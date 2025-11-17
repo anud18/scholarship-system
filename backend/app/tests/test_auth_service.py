@@ -60,11 +60,12 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_register_user_success(self, service, mock_user_create_data):
         """Test successful user registration"""
-        with patch.object(service.db, "execute") as mock_execute, patch.object(
-            service.db, "add"
-        ) as mock_add, patch.object(service.db, "commit") as mock_commit, patch.object(
-            service.db, "refresh"
-        ) as mock_refresh:
+        with (
+            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "refresh") as mock_refresh,
+        ):
             # Mock no existing users with same email or nycu_id
             mock_execute.return_value.scalar_one_or_none.return_value = None
 
@@ -170,9 +171,11 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_create_tokens(self, service, mock_user):
         """Test token creation for authenticated user"""
-        with patch("app.services.auth_service.create_access_token") as mock_access_token, patch(
-            "app.services.auth_service.create_refresh_token"
-        ) as mock_refresh_token, patch("app.schemas.user.UserResponse.model_validate") as mock_validate:
+        with (
+            patch("app.services.auth_service.create_access_token") as mock_access_token,
+            patch("app.services.auth_service.create_refresh_token") as mock_refresh_token,
+            patch("app.schemas.user.UserResponse.model_validate") as mock_validate,
+        ):
             # Mock token creation
             mock_access_token.return_value = "mock_access_token"
             mock_refresh_token.return_value = "mock_refresh_token"
@@ -211,9 +214,10 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_login_success(self, service, mock_user_login_data, mock_user):
         """Test complete login flow"""
-        with patch.object(service, "authenticate_user") as mock_auth, patch.object(
-            service, "create_tokens"
-        ) as mock_create_tokens:
+        with (
+            patch.object(service, "authenticate_user") as mock_auth,
+            patch.object(service, "create_tokens") as mock_create_tokens,
+        ):
             # Mock authentication and token creation
             mock_auth.return_value = mock_user
             mock_token_response = TokenResponse(
@@ -353,9 +357,11 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_token_data_structure(self, service, mock_user):
         """Test that token data contains expected fields"""
-        with patch("app.services.auth_service.create_access_token") as mock_access_token, patch(
-            "app.services.auth_service.create_refresh_token"
-        ), patch("app.schemas.user.UserResponse.model_validate"):
+        with (
+            patch("app.services.auth_service.create_access_token") as mock_access_token,
+            patch("app.services.auth_service.create_refresh_token"),
+            patch("app.schemas.user.UserResponse.model_validate"),
+        ):
             await service.create_tokens(mock_user)
 
             # Get the token data that was passed to token creation functions

@@ -252,7 +252,9 @@ async def create_automation_rule(
         try:
             trigger_enum = TriggerEvent(rule_data.trigger_event)
         except ValueError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=f"無效的觸發事件: {rule_data.trigger_event}"
+            )
 
         # SECURITY: Validate condition_query to prevent SQL injection
         validate_condition_query(rule_data.condition_query)
@@ -437,14 +439,18 @@ async def toggle_automation_rule(
             "updated_at": rule.updated_at.isoformat() if rule.updated_at else None,
         }
 
-        return ApiResponse(success=True, message=f"成功{'啟用' if rule.is_active else '停用'}自動化規則", data=response_data)
+        return ApiResponse(
+            success=True, message=f"成功{'啟用' if rule.is_active else '停用'}自動化規則", data=response_data
+        )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"切換自動化規則狀態失敗: {e}")
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"切換自動化規則狀態失敗: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"切換自動化規則狀態失敗: {str(e)}"
+        )
 
 
 @router.get("/trigger-events")

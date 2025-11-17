@@ -91,9 +91,10 @@ class TestProfessorApplicationsEndpoint:
     ):
         """Test successful retrieval of professor applications"""
         # Mock the service call and rate limiting
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class, patch(
-            "app.core.rate_limiting.get_rate_limiter"
-        ) as mock_get_limiter:
+        with (
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
+            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+        ):
             mock_service = mock_service_class.return_value
             mock_service.get_professor_applications_paginated = AsyncMock(return_value=(sample_applications, 1))
 
@@ -129,9 +130,10 @@ class TestProfessorApplicationsEndpoint:
         self, mock_professor, mock_db_session, mock_request, sample_applications
     ):
         """Test applications retrieval with status filter"""
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class, patch(
-            "app.core.rate_limiting.get_rate_limiter"
-        ) as mock_get_limiter:
+        with (
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
+            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+        ):
             mock_service = mock_service_class.return_value
             mock_service.get_professor_applications_paginated = AsyncMock(return_value=(sample_applications, 1))
 
@@ -159,9 +161,10 @@ class TestProfessorApplicationsEndpoint:
     @pytest.mark.asyncio
     async def test_get_professor_applications_empty_result(self, mock_professor, mock_db_session, mock_request):
         """Test applications retrieval with no results"""
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class, patch(
-            "app.core.rate_limiting.get_rate_limiter"
-        ) as mock_get_limiter:
+        with (
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
+            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+        ):
             mock_service = mock_service_class.return_value
             mock_service.get_professor_applications_paginated = AsyncMock(return_value=([], 0))
 
@@ -186,9 +189,10 @@ class TestProfessorApplicationsEndpoint:
     @pytest.mark.asyncio
     async def test_get_professor_applications_service_error(self, mock_professor, mock_db_session, mock_request):
         """Test applications retrieval when service throws error"""
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class, patch(
-            "app.core.rate_limiting.get_rate_limiter"
-        ) as mock_get_limiter:
+        with (
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
+            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+        ):
             mock_service = mock_service_class.return_value
             mock_service.get_professor_applications_paginated.side_effect = Exception("Database error")
 
@@ -327,9 +331,10 @@ class TestProfessorReviewEndpoints:
             mock_service.submit_professor_review = AsyncMock(return_value=mock_review_response)
 
             # Mock the TESTING environment variable and rate limiting
-            with patch("os.getenv", return_value="true"), patch(
-                "app.core.rate_limiting.get_rate_limiter"
-            ) as mock_get_limiter:
+            with (
+                patch("os.getenv", return_value="true"),
+                patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+            ):
                 mock_limiter = Mock()
                 mock_limiter.is_rate_limited = AsyncMock(return_value=(False, 10))
                 mock_get_limiter.return_value = mock_limiter
@@ -354,9 +359,10 @@ class TestProfessorReviewEndpoints:
         self, mock_professor, mock_db_session, mock_request, sample_review_create
     ):
         """Test review submission for non-existent application"""
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class, patch(
-            "app.core.rate_limiting.get_rate_limiter"
-        ) as mock_get_limiter:
+        with (
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
+            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+        ):
             mock_service = mock_service_class.return_value
             mock_service.get_application_by_id = AsyncMock(return_value=None)
 
@@ -384,9 +390,10 @@ class TestProfessorReviewEndpoints:
         mock_application = Mock()
         mock_application.id = 10
 
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class, patch(
-            "app.core.rate_limiting.get_rate_limiter"
-        ) as mock_get_limiter:
+        with (
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
+            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+        ):
             mock_service = mock_service_class.return_value
             mock_service.get_application_by_id = AsyncMock(return_value=mock_application)
             mock_service.can_professor_submit_review = AsyncMock(return_value=False)
@@ -510,9 +517,10 @@ class TestProfessorStatsEndpoint:
         self, mock_professor, mock_db_session, mock_request, sample_stats
     ):
         """Test successful retrieval of statistics"""
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class, patch(
-            "app.core.rate_limiting.get_rate_limiter"
-        ) as mock_get_limiter:
+        with (
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
+            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+        ):
             mock_service = mock_service_class.return_value
             mock_service.get_professor_review_stats = AsyncMock(return_value=sample_stats)
 
@@ -534,9 +542,10 @@ class TestProfessorStatsEndpoint:
     @pytest.mark.asyncio
     async def test_get_professor_review_stats_service_error(self, mock_professor, mock_db_session, mock_request):
         """Test statistics retrieval when service throws error"""
-        with patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class, patch(
-            "app.core.rate_limiting.get_rate_limiter"
-        ) as mock_get_limiter:
+        with (
+            patch("app.api.v1.endpoints.professor.ApplicationService") as mock_service_class,
+            patch("app.core.rate_limiting.get_rate_limiter") as mock_get_limiter,
+        ):
             mock_service = mock_service_class.return_value
             mock_service.get_professor_review_stats = AsyncMock(side_effect=Exception("Database connection failed"))
 

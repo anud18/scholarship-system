@@ -178,15 +178,17 @@ class ScholarshipService:
                     "description_en": config.description_en or scholarship_type.description_en,
                     "academic_year": config.academic_year,
                     "semester": config.semester.value if config.semester else None,
-                    "application_cycle": scholarship_type.application_cycle.value
-                    if scholarship_type.application_cycle
-                    else "semester",
+                    "application_cycle": (
+                        scholarship_type.application_cycle.value if scholarship_type.application_cycle else "semester"
+                    ),
                     "sub_type_list": eligible_subtypes,  # Only eligible subtypes
                     "all_sub_type_list": scholarship_type.sub_type_list or [],  # All subtypes for reference
                     "subtype_eligibility": subtype_eligibility_info,  # Detailed eligibility per subtype
-                    "sub_type_selection_mode": scholarship_type.sub_type_selection_mode.value
-                    if scholarship_type.sub_type_selection_mode
-                    else "single",
+                    "sub_type_selection_mode": (
+                        scholarship_type.sub_type_selection_mode.value
+                        if scholarship_type.sub_type_selection_mode
+                        else "single"
+                    ),
                     # Configuration-specific data
                     "amount": config.amount,
                     "currency": config.currency,

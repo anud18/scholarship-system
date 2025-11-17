@@ -218,7 +218,11 @@ class TestOCREndpoints:
         # Mock OCR service
         mock_ocr_service = MagicMock()
         mock_ocr_service.extract_general_text_from_image = AsyncMock(
-            return_value={"success": True, "extracted_text": "這是測試文件內容\n包含多行文字\n以及一些數字 123456", "confidence": 0.92}
+            return_value={
+                "success": True,
+                "extracted_text": "這是測試文件內容\n包含多行文字\n以及一些數字 123456",
+                "confidence": 0.92,
+            }
         )
         mock_get_ocr_service.return_value = mock_ocr_service
 

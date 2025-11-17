@@ -150,23 +150,25 @@ async def get_applications_by_scholarship(
             "submitted_form_data": processed_form_data,
             "agree_terms": app.agree_terms or False,
             "professor_id": app.professor_id,
-            "professor": {
-                "id": app.professor.id,
-                "name": app.professor.name,
-                "nycu_id": app.professor.nycu_id,
-                "email": app.professor.email,
-            }
-            if app.professor
-            else (
+            "professor": (
                 {
-                    "id": app.professor_id,
-                    "name": f"[教授不存在] ID: {app.professor_id}",
-                    "nycu_id": None,
-                    "email": None,
-                    "error": True,
+                    "id": app.professor.id,
+                    "name": app.professor.name,
+                    "nycu_id": app.professor.nycu_id,
+                    "email": app.professor.email,
                 }
-                if app.professor_id
-                else None
+                if app.professor
+                else (
+                    {
+                        "id": app.professor_id,
+                        "name": f"[教授不存在] ID: {app.professor_id}",
+                        "nycu_id": None,
+                        "email": None,
+                        "error": True,
+                    }
+                    if app.professor_id
+                    else None
+                )
             ),
             "reviewer_id": app.reviewer_id,
             "final_approver_id": app.final_approver_id,
@@ -185,17 +187,23 @@ async def get_applications_by_scholarship(
             or (user.email if user else None),
             "days_waiting": None,
             # Include scholarship configuration for professor review settings
-            "scholarship_configuration": {
-                "requires_professor_recommendation": app.scholarship_configuration.requires_professor_recommendation
+            "scholarship_configuration": (
+                {
+                    "requires_professor_recommendation": (
+                        app.scholarship_configuration.requires_professor_recommendation
+                        if app.scholarship_configuration
+                        else False
+                    ),
+                    "requires_college_review": (
+                        app.scholarship_configuration.requires_college_review
+                        if app.scholarship_configuration
+                        else False
+                    ),
+                    "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None,
+                }
                 if app.scholarship_configuration
-                else False,
-                "requires_college_review": app.scholarship_configuration.requires_college_review
-                if app.scholarship_configuration
-                else False,
-                "config_name": app.scholarship_configuration.config_name if app.scholarship_configuration else None,
-            }
-            if app.scholarship_configuration
-            else None,
+                else None
+            ),
         }
 
         # Calculate days waiting

@@ -84,9 +84,9 @@ async def get_all_scholarships(
             "description": scholarship.description,
             "description_en": scholarship.description_en,
             "sub_type_list": scholarship.sub_type_list or [],
-            "sub_type_selection_mode": scholarship.sub_type_selection_mode.value
-            if scholarship.sub_type_selection_mode
-            else "single",
+            "sub_type_selection_mode": (
+                scholarship.sub_type_selection_mode.value if scholarship.sub_type_selection_mode else "single"
+            ),
             # 使用篩選的學年學期或預設值
             "academic_year": display_academic_year,
             "semester": display_semester,
@@ -107,41 +107,45 @@ async def get_all_scholarships(
                     "amount": config.amount,
                     "currency": config.currency,
                     "whitelist_student_ids": config.whitelist_student_ids or {},
-                    "renewal_application_start_date": config.renewal_application_start_date.isoformat()
-                    if config.renewal_application_start_date
-                    else None,
-                    "renewal_application_end_date": config.renewal_application_end_date.isoformat()
-                    if config.renewal_application_end_date
-                    else None,
-                    "application_start_date": config.application_start_date.isoformat()
-                    if config.application_start_date
-                    else None,
-                    "application_end_date": config.application_end_date.isoformat()
-                    if config.application_end_date
-                    else None,
-                    "renewal_professor_review_start": config.renewal_professor_review_start.isoformat()
-                    if config.renewal_professor_review_start
-                    else None,
-                    "renewal_professor_review_end": config.renewal_professor_review_end.isoformat()
-                    if config.renewal_professor_review_end
-                    else None,
-                    "renewal_college_review_start": config.renewal_college_review_start.isoformat()
-                    if config.renewal_college_review_start
-                    else None,
-                    "renewal_college_review_end": config.renewal_college_review_end.isoformat()
-                    if config.renewal_college_review_end
-                    else None,
+                    "renewal_application_start_date": (
+                        config.renewal_application_start_date.isoformat()
+                        if config.renewal_application_start_date
+                        else None
+                    ),
+                    "renewal_application_end_date": (
+                        config.renewal_application_end_date.isoformat() if config.renewal_application_end_date else None
+                    ),
+                    "application_start_date": (
+                        config.application_start_date.isoformat() if config.application_start_date else None
+                    ),
+                    "application_end_date": (
+                        config.application_end_date.isoformat() if config.application_end_date else None
+                    ),
+                    "renewal_professor_review_start": (
+                        config.renewal_professor_review_start.isoformat()
+                        if config.renewal_professor_review_start
+                        else None
+                    ),
+                    "renewal_professor_review_end": (
+                        config.renewal_professor_review_end.isoformat() if config.renewal_professor_review_end else None
+                    ),
+                    "renewal_college_review_start": (
+                        config.renewal_college_review_start.isoformat() if config.renewal_college_review_start else None
+                    ),
+                    "renewal_college_review_end": (
+                        config.renewal_college_review_end.isoformat() if config.renewal_college_review_end else None
+                    ),
                     "requires_professor_recommendation": config.requires_professor_recommendation,
-                    "professor_review_start": config.professor_review_start.isoformat()
-                    if config.professor_review_start
-                    else None,
-                    "professor_review_end": config.professor_review_end.isoformat()
-                    if config.professor_review_end
-                    else None,
+                    "professor_review_start": (
+                        config.professor_review_start.isoformat() if config.professor_review_start else None
+                    ),
+                    "professor_review_end": (
+                        config.professor_review_end.isoformat() if config.professor_review_end else None
+                    ),
                     "requires_college_review": config.requires_college_review,
-                    "college_review_start": config.college_review_start.isoformat()
-                    if config.college_review_start
-                    else None,
+                    "college_review_start": (
+                        config.college_review_start.isoformat() if config.college_review_start else None
+                    ),
                     "college_review_end": config.college_review_end.isoformat() if config.college_review_end else None,
                     "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
                 }
@@ -303,13 +307,13 @@ async def get_scholarship_detail(id: int, db: AsyncSession = Depends(get_db)):
         "professor_review_end": active_config.professor_review_end if active_config else None,
         "college_review_start": active_config.college_review_start if active_config else None,
         "college_review_end": active_config.college_review_end if active_config else None,
-        "sub_type_selection_mode": scholarship.sub_type_selection_mode.value
-        if scholarship.sub_type_selection_mode
-        else "single",
+        "sub_type_selection_mode": (
+            scholarship.sub_type_selection_mode.value if scholarship.sub_type_selection_mode else "single"
+        ),
         "status": scholarship.status if hasattr(scholarship, "status") else "active",
-        "requires_professor_recommendation": active_config.requires_professor_recommendation
-        if active_config
-        else False,
+        "requires_professor_recommendation": (
+            active_config.requires_professor_recommendation if active_config else False
+        ),
         "requires_college_review": active_config.requires_college_review if active_config else False,
         "review_workflow": scholarship.review_workflow if hasattr(scholarship, "review_workflow") else None,
         "auto_approval_rules": scholarship.auto_approval_rules if hasattr(scholarship, "auto_approval_rules") else None,
@@ -675,13 +679,13 @@ async def toggle_scholarship_whitelist(
         "professor_review_end": active_config.professor_review_end if active_config else None,
         "college_review_start": active_config.college_review_start if active_config else None,
         "college_review_end": active_config.college_review_end if active_config else None,
-        "sub_type_selection_mode": scholarship.sub_type_selection_mode.value
-        if scholarship.sub_type_selection_mode
-        else "single",
+        "sub_type_selection_mode": (
+            scholarship.sub_type_selection_mode.value if scholarship.sub_type_selection_mode else "single"
+        ),
         "status": scholarship.status if hasattr(scholarship, "status") else "active",
-        "requires_professor_recommendation": active_config.requires_professor_recommendation
-        if active_config
-        else False,
+        "requires_professor_recommendation": (
+            active_config.requires_professor_recommendation if active_config else False
+        ),
         "requires_college_review": active_config.requires_college_review if active_config else False,
         "review_workflow": scholarship.review_workflow if hasattr(scholarship, "review_workflow") else None,
         "auto_approval_rules": scholarship.auto_approval_rules if hasattr(scholarship, "auto_approval_rules") else None,

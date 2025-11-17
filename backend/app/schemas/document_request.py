@@ -3,11 +3,9 @@ Document Request schemas for API requests and responses
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
-
-from app.models.document_request import DocumentRequestStatus
 
 
 class DocumentRequestCreate(BaseModel):
@@ -19,7 +17,11 @@ class DocumentRequestCreate(BaseModel):
         example=["transcript", "recommendation_letter", "research_plan"],
     )
     reason: str = Field(
-        ..., description="Why these documents are needed", min_length=10, max_length=1000, example="需要補充成績單以確認學業成績"
+        ...,
+        description="Why these documents are needed",
+        min_length=10,
+        max_length=1000,
+        example="需要補充成績單以確認學業成績",
     )
     notes: Optional[str] = Field(
         None,
@@ -39,7 +41,11 @@ class DocumentRequestCancel(BaseModel):
     """Schema for cancelling a document request"""
 
     cancellation_reason: str = Field(
-        ..., description="Reason for cancelling the request", min_length=5, max_length=500, example="申請已被駁回，無需補件"
+        ...,
+        description="Reason for cancelling the request",
+        min_length=5,
+        max_length=500,
+        example="申請已被駁回，無需補件",
     )
 
 

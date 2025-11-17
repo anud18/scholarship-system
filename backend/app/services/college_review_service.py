@@ -1217,9 +1217,11 @@ class QuotaDistributionService:
                         # Note: ranking_score field removed
                         "final_ranking_position": app.final_ranking_position,
                         "quota_available": college_quota,
-                        "allocation_reason": f"Within {sub_type}-{college} quota"
-                        if is_allocated
-                        else f"{sub_type}-{college} quota exceeded",
+                        "allocation_reason": (
+                            f"Within {sub_type}-{college} quota"
+                            if is_allocated
+                            else f"{sub_type}-{college} quota exceeded"
+                        ),
                     }
                     results.append(result)
 

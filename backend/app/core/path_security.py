@@ -32,7 +32,9 @@ def validate_filename_strict(filename: str, allow_unicode: bool = False) -> None
         HTTPException: If validation fails
     """
     if not filename:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="檔案名稱不得為空 / Filename cannot be empty")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="檔案名稱不得為空 / Filename cannot be empty"
+        )
 
     # Validation 1: Check for path traversal patterns
     if ".." in filename or "/" in filename or "\\" in filename:
@@ -47,7 +49,8 @@ def validate_filename_strict(filename: str, allow_unicode: bool = False) -> None
         dangerous_chars = ["|", "<", ">", ":", '"', "?", "*"]
         if any(char in filename for char in dangerous_chars):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="檔案名稱包含無效字元 / Filename contains invalid characters"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="檔案名稱包含無效字元 / Filename contains invalid characters",
             )
     else:
         # Strict ASCII-only validation (CLAUDE.md standard)
@@ -102,7 +105,9 @@ def validate_object_name_minio(object_name: str) -> None:
         HTTPException: If validation fails
     """
     if not object_name:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="物件名稱不得為空 / Object name cannot be empty")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="物件名稱不得為空 / Object name cannot be empty"
+        )
 
     # Check for absolute path (should be relative)
     if object_name.startswith("/"):
@@ -123,7 +128,8 @@ def validate_object_name_minio(object_name: str) -> None:
         # Each part should not be empty (avoid double slashes)
         if not part:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="無效的物件名稱：路徑格式錯誤 / Invalid object name: malformed path"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="無效的物件名稱：路徑格式錯誤 / Invalid object name: malformed path",
             )
 
 
@@ -197,7 +203,9 @@ def validate_upload_file(
         HTTPException: If validation fails
     """
     if not filename:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="檔案名稱不得為空 / Filename cannot be empty")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="檔案名稱不得為空 / Filename cannot be empty"
+        )
 
     # Apply strict filename validation
     validate_filename_strict(filename, allow_unicode=allow_unicode)

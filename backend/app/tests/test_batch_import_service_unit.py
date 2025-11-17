@@ -150,9 +150,11 @@ class TestBatchImportService:
         mock_result = Mock()
         mock_result.scalars.return_value.all.return_value = []
 
-        with patch.object(service.db, "execute", return_value=mock_result), patch.object(
-            service.db, "add"
-        ) as mock_add, patch.object(service.db, "flush", new_callable=AsyncMock) as mock_flush:
+        with (
+            patch.object(service.db, "execute", return_value=mock_result),
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "flush", new_callable=AsyncMock) as mock_flush,
+        ):
             user_map = await service._get_or_create_users_bulk(sample_excel_data)
 
             # Should create 2 new users
@@ -191,15 +193,19 @@ class TestBatchImportService:
             "_term_data_status": "success",
         }
 
-        with patch.object(service.db, "get", return_value=mock_scholarship), patch.object(
-            service, "_get_or_create_users_bulk", return_value=user_map
-        ), patch.object(service.db, "add") as mock_add, patch.object(
-            service.db, "flush", new_callable=AsyncMock
-        ), patch.object(
-            service.student_service, "get_student_snapshot", new_callable=AsyncMock, return_value=mock_student_snapshot
-        ), patch.object(
-            service.db, "execute"
-        ) as mock_execute:
+        with (
+            patch.object(service.db, "get", return_value=mock_scholarship),
+            patch.object(service, "_get_or_create_users_bulk", return_value=user_map),
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "flush", new_callable=AsyncMock),
+            patch.object(
+                service.student_service,
+                "get_student_snapshot",
+                new_callable=AsyncMock,
+                return_value=mock_student_snapshot,
+            ),
+            patch.object(service.db, "execute") as mock_execute,
+        ):
             # Mock ApplicationSequence lookup
             mock_seq_result = Mock()
             mock_seq_result.scalar_one_or_none.return_value = None
@@ -224,10 +230,11 @@ class TestBatchImportService:
         batch_import.id = 1
         batch_import.importer_id = 10
 
-        with patch.object(service.db, "get", return_value=mock_scholarship), patch.object(
-            service, "_get_or_create_users_bulk", side_effect=Exception("Database error")
-        ), patch.object(service.db, "rollback", new_callable=AsyncMock) as mock_rollback, patch.object(
-            service.db, "commit", new_callable=AsyncMock
+        with (
+            patch.object(service.db, "get", return_value=mock_scholarship),
+            patch.object(service, "_get_or_create_users_bulk", side_effect=Exception("Database error")),
+            patch.object(service.db, "rollback", new_callable=AsyncMock) as mock_rollback,
+            patch.object(service.db, "commit", new_callable=AsyncMock),
         ):
             with pytest.raises(BatchImportError) as exc_info:
                 await service.create_applications_from_batch(
@@ -451,9 +458,10 @@ class TestBatchImportService:
     @pytest.mark.asyncio
     async def test_create_batch_import_record(self, service):
         """Test batch import record creation"""
-        with patch.object(service.db, "add") as mock_add, patch.object(
-            service.db, "flush", new_callable=AsyncMock
-        ) as mock_flush:
+        with (
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "flush", new_callable=AsyncMock) as mock_flush,
+        ):
             batch_import = await service.create_batch_import_record(
                 importer_id=10,
                 college_code="E",

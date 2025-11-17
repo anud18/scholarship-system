@@ -3,7 +3,7 @@ Notification endpoints for managing user notifications and system announcements
 """
 
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, delete
@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user, get_db
 from app.models.notification import Notification, NotificationPriority, NotificationType
 from app.models.user import User
-from app.schemas.notification import NotificationCreate, NotificationResponse
+from app.schemas.notification import NotificationCreate
 from app.schemas.response import ApiResponse
 from app.services.notification_service import NotificationService
 
@@ -106,7 +106,9 @@ async def markAllNotificationsAsRead(
         service = NotificationService(db)
         updated_count = await service.markAllNotificationsAsRead(current_user.id)
 
-        return ApiResponse(success=True, message=f"已標記 {updated_count} 條通知為已讀", data={"updated_count": updated_count})
+        return ApiResponse(
+            success=True, message=f"已標記 {updated_count} 條通知為已讀", data={"updated_count": updated_count}
+        )
 
     except Exception as e:
         await db.rollback()
@@ -175,12 +177,14 @@ async def getNotificationDetail(
             "title_en": notification.title_en,
             "message": notification.message,
             "message_en": notification.message_en,
-            "notification_type": notification.notification_type.value
-            if hasattr(notification.notification_type, "value")
-            else str(notification.notification_type),
-            "priority": notification.priority.value
-            if hasattr(notification.priority, "value")
-            else str(notification.priority),
+            "notification_type": (
+                notification.notification_type.value
+                if hasattr(notification.notification_type, "value")
+                else str(notification.notification_type)
+            ),
+            "priority": (
+                notification.priority.value if hasattr(notification.priority, "value") else str(notification.priority)
+            ),
             "related_resource_type": notification.related_resource_type,
             "related_resource_id": notification.related_resource_id,
             "action_url": notification.action_url,
@@ -235,12 +239,14 @@ async def createSystemAnnouncement(
             "title_en": notification.title_en,
             "message": notification.message,
             "message_en": notification.message_en,
-            "notification_type": notification.notification_type.value
-            if hasattr(notification.notification_type, "value")
-            else str(notification.notification_type),
-            "priority": notification.priority.value
-            if hasattr(notification.priority, "value")
-            else str(notification.priority),
+            "notification_type": (
+                notification.notification_type.value
+                if hasattr(notification.notification_type, "value")
+                else str(notification.notification_type)
+            ),
+            "priority": (
+                notification.priority.value if hasattr(notification.priority, "value") else str(notification.priority)
+            ),
             "related_resource_type": notification.related_resource_type,
             "related_resource_id": notification.related_resource_id,
             "action_url": notification.action_url,
@@ -378,12 +384,16 @@ async def getAllAnnouncements(
                 "title_en": notification.title_en,
                 "message": notification.message,
                 "message_en": notification.message_en,
-                "notification_type": notification.notification_type.value
-                if hasattr(notification.notification_type, "value")
-                else str(notification.notification_type),
-                "priority": notification.priority.value
-                if hasattr(notification.priority, "value")
-                else str(notification.priority),
+                "notification_type": (
+                    notification.notification_type.value
+                    if hasattr(notification.notification_type, "value")
+                    else str(notification.notification_type)
+                ),
+                "priority": (
+                    notification.priority.value
+                    if hasattr(notification.priority, "value")
+                    else str(notification.priority)
+                ),
                 "related_resource_type": notification.related_resource_type,
                 "related_resource_id": notification.related_resource_id,
                 "action_url": notification.action_url,
@@ -398,7 +408,9 @@ async def getAllAnnouncements(
             items.append(notification_data)
 
         return ApiResponse(
-            success=True, message="系統公告列表獲取成功", data={"items": items, "total": total, "page": page, "size": size}
+            success=True,
+            message="系統公告列表獲取成功",
+            data={"items": items, "total": total, "page": page, "size": size},
         )
 
     except Exception as e:
@@ -436,12 +448,14 @@ async def getAnnouncement(
             "title_en": notification.title_en,
             "message": notification.message,
             "message_en": notification.message_en,
-            "notification_type": notification.notification_type.value
-            if hasattr(notification.notification_type, "value")
-            else str(notification.notification_type),
-            "priority": notification.priority.value
-            if hasattr(notification.priority, "value")
-            else str(notification.priority),
+            "notification_type": (
+                notification.notification_type.value
+                if hasattr(notification.notification_type, "value")
+                else str(notification.notification_type)
+            ),
+            "priority": (
+                notification.priority.value if hasattr(notification.priority, "value") else str(notification.priority)
+            ),
             "related_resource_type": notification.related_resource_type,
             "related_resource_id": notification.related_resource_id,
             "action_url": notification.action_url,
@@ -496,12 +510,14 @@ async def createAnnouncement(
             "title_en": notification.title_en,
             "message": notification.message,
             "message_en": notification.message_en,
-            "notification_type": notification.notification_type.value
-            if hasattr(notification.notification_type, "value")
-            else str(notification.notification_type),
-            "priority": notification.priority.value
-            if hasattr(notification.priority, "value")
-            else str(notification.priority),
+            "notification_type": (
+                notification.notification_type.value
+                if hasattr(notification.notification_type, "value")
+                else str(notification.notification_type)
+            ),
+            "priority": (
+                notification.priority.value if hasattr(notification.priority, "value") else str(notification.priority)
+            ),
             "related_resource_type": notification.related_resource_type,
             "related_resource_id": notification.related_resource_id,
             "action_url": notification.action_url,
@@ -580,12 +596,14 @@ async def updateAnnouncement(
             "title_en": notification.title_en,
             "message": notification.message,
             "message_en": notification.message_en,
-            "notification_type": notification.notification_type.value
-            if hasattr(notification.notification_type, "value")
-            else str(notification.notification_type),
-            "priority": notification.priority.value
-            if hasattr(notification.priority, "value")
-            else str(notification.priority),
+            "notification_type": (
+                notification.notification_type.value
+                if hasattr(notification.notification_type, "value")
+                else str(notification.notification_type)
+            ),
+            "priority": (
+                notification.priority.value if hasattr(notification.priority, "value") else str(notification.priority)
+            ),
             "related_resource_type": notification.related_resource_type,
             "related_resource_id": notification.related_resource_id,
             "action_url": notification.action_url,

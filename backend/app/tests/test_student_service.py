@@ -223,9 +223,11 @@ class TestStudentService:
             "notes": "Updated notes",
         }
 
-        with patch.object(service, "get_student_by_id", return_value=mock_student), patch.object(
-            service.db, "commit"
-        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
+        with (
+            patch.object(service, "get_student_by_id", return_value=mock_student),
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "refresh") as mock_refresh,
+        ):
             result = await service.update_student_info(student_id, update_info)
 
             # Verify student attributes were updated
@@ -266,9 +268,12 @@ class TestStudentService:
                 return False
             return original_hasattr(obj, attr)
 
-        with patch.object(service, "get_student_by_id", return_value=mock_student), patch.object(
-            service.db, "commit"
-        ), patch.object(service.db, "refresh"), patch("builtins.hasattr", side_effect=mock_hasattr):
+        with (
+            patch.object(service, "get_student_by_id", return_value=mock_student),
+            patch.object(service.db, "commit"),
+            patch.object(service.db, "refresh"),
+            patch("builtins.hasattr", side_effect=mock_hasattr),
+        ):
             await service.update_student_info(student_id, update_info)
 
             # Verify valid field was updated
@@ -281,9 +286,11 @@ class TestStudentService:
     @pytest.mark.asyncio
     async def test_create_student_success(self, service, mock_student_data):
         """Test successfully creating a new student"""
-        with patch.object(service.db, "add") as mock_add, patch.object(
-            service.db, "commit"
-        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
+        with (
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "refresh") as mock_refresh,
+        ):
             # Mock the created student
             created_student = Mock(spec=Student)
             created_student.id = 2

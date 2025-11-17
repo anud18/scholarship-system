@@ -91,9 +91,9 @@ class SubTypeCumulativeStatusResponse(BaseModel):
 
     sub_type_code: str
     status: str  # 'approved' | 'rejected' | 'pending'
-    rejected_by: Optional[
-        Dict[str, Any]
-    ] = None  # {'role': 'professor', 'name': '王小明', 'reviewed_at': '2025-01-15 14:30:00'}
+    rejected_by: Optional[Dict[str, Any]] = (
+        None  # {'role': 'professor', 'name': '王小明', 'reviewed_at': '2025-01-15 14:30:00'}
+    )
     comments: Optional[str] = None
 
     model_config = {"from_attributes": True}

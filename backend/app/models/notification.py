@@ -243,9 +243,11 @@ class Notification(Base):
         """Convert notification to dictionary for API responses (Facebook-style)"""
         return {
             "id": self.id,
-            "type": self.notification_type.value
-            if isinstance(self.notification_type, NotificationType)
-            else self.notification_type,
+            "type": (
+                self.notification_type.value
+                if isinstance(self.notification_type, NotificationType)
+                else self.notification_type
+            ),
             "title": self.title,
             "title_en": self.title_en,
             "message": self.message,

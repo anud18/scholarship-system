@@ -47,10 +47,11 @@ class TestScholarshipRulesServiceCreate:
             is_hard_rule=True,
         )
 
-        with patch.object(service, "_validate_scholarship_type", return_value=mock_scholarship_type), patch.object(
-            service.db, "add"
-        ), patch.object(service.db, "commit", new_callable=AsyncMock), patch.object(
-            service.db, "refresh", new_callable=AsyncMock
+        with (
+            patch.object(service, "_validate_scholarship_type", return_value=mock_scholarship_type),
+            patch.object(service.db, "add"),
+            patch.object(service.db, "commit", new_callable=AsyncMock),
+            patch.object(service.db, "refresh", new_callable=AsyncMock),
         ):
             await service.create_rule(rule_data, created_by=1)
 
@@ -74,10 +75,12 @@ class TestScholarshipRulesServiceCreate:
             is_hard_rule=True,
         )
 
-        with patch.object(service, "_validate_scholarship_type", return_value=mock_scholarship_type), patch.object(
-            service, "_validate_sub_type", new_callable=AsyncMock
-        ), patch.object(service.db, "add"), patch.object(service.db, "commit", new_callable=AsyncMock), patch.object(
-            service.db, "refresh", new_callable=AsyncMock
+        with (
+            patch.object(service, "_validate_scholarship_type", return_value=mock_scholarship_type),
+            patch.object(service, "_validate_sub_type", new_callable=AsyncMock),
+            patch.object(service.db, "add"),
+            patch.object(service.db, "commit", new_callable=AsyncMock),
+            patch.object(service.db, "refresh", new_callable=AsyncMock),
         ):
             await service.create_rule(rule_data, created_by=1)
 
@@ -116,9 +119,11 @@ class TestScholarshipRulesServiceUpdate:
             message="Updated message",
         )
 
-        with patch.object(service, "_get_rule_by_id", return_value=existing_rule), patch.object(
-            service.db, "commit", new_callable=AsyncMock
-        ), patch.object(service.db, "refresh", new_callable=AsyncMock):
+        with (
+            patch.object(service, "_get_rule_by_id", return_value=existing_rule),
+            patch.object(service.db, "commit", new_callable=AsyncMock),
+            patch.object(service.db, "refresh", new_callable=AsyncMock),
+        ):
             await service.update_rule(1, rule_update, updated_by=2)
 
             assert existing_rule.expected_value == "3.5"
@@ -136,10 +141,11 @@ class TestScholarshipRulesServiceUpdate:
             sub_type="type_b",
         )
 
-        with patch.object(service, "_get_rule_by_id", return_value=existing_rule), patch.object(
-            service, "_validate_sub_type", new_callable=AsyncMock
-        ), patch.object(service.db, "commit", new_callable=AsyncMock), patch.object(
-            service.db, "refresh", new_callable=AsyncMock
+        with (
+            patch.object(service, "_get_rule_by_id", return_value=existing_rule),
+            patch.object(service, "_validate_sub_type", new_callable=AsyncMock),
+            patch.object(service.db, "commit", new_callable=AsyncMock),
+            patch.object(service.db, "refresh", new_callable=AsyncMock),
         ):
             await service.update_rule(1, rule_update, updated_by=2)
 
@@ -159,9 +165,11 @@ class TestScholarshipRulesServiceDelete:
         """Test successful rule deletion"""
         rule = Mock(spec=ScholarshipRule, id=1)
 
-        with patch.object(service, "_get_rule_by_id", return_value=rule), patch.object(
-            service.db, "delete", new_callable=AsyncMock
-        ), patch.object(service.db, "commit", new_callable=AsyncMock):
+        with (
+            patch.object(service, "_get_rule_by_id", return_value=rule),
+            patch.object(service.db, "delete", new_callable=AsyncMock),
+            patch.object(service.db, "commit", new_callable=AsyncMock),
+        ):
             result = await service.delete_rule(1)
 
             assert result
@@ -247,9 +255,11 @@ class TestScholarshipRulesServiceCopy:
         mock_result.scalars.return_value.all.return_value = source_rules
         service.db.execute = AsyncMock(return_value=mock_result)
 
-        with patch.object(service, "_find_existing_rule", return_value=None), patch.object(
-            service, "_create_rule_from_source", new_callable=AsyncMock
-        ), patch.object(service.db, "commit", new_callable=AsyncMock):
+        with (
+            patch.object(service, "_find_existing_rule", return_value=None),
+            patch.object(service, "_create_rule_from_source", new_callable=AsyncMock),
+            patch.object(service.db, "commit", new_callable=AsyncMock),
+        ):
             copied, skipped = await service.copy_rules_to_period(
                 source_academic_year=112,
                 source_semester=Semester.first,
@@ -269,8 +279,9 @@ class TestScholarshipRulesServiceCopy:
 
         existing_rule = Mock(spec=ScholarshipRule)
 
-        with patch.object(service, "_find_existing_rule", return_value=existing_rule), patch.object(
-            service.db, "commit", new_callable=AsyncMock
+        with (
+            patch.object(service, "_find_existing_rule", return_value=existing_rule),
+            patch.object(service.db, "commit", new_callable=AsyncMock),
         ):
             copied, skipped = await service.copy_rules_to_period(
                 source_academic_year=112,
@@ -292,9 +303,11 @@ class TestScholarshipRulesServiceCopy:
 
         existing_rule = Mock(spec=ScholarshipRule)
 
-        with patch.object(service, "_find_existing_rule", return_value=existing_rule), patch.object(
-            service, "_update_rule_from_source", new_callable=AsyncMock
-        ), patch.object(service.db, "commit", new_callable=AsyncMock):
+        with (
+            patch.object(service, "_find_existing_rule", return_value=existing_rule),
+            patch.object(service, "_update_rule_from_source", new_callable=AsyncMock),
+            patch.object(service.db, "commit", new_callable=AsyncMock),
+        ):
             copied, skipped = await service.copy_rules_to_period(
                 source_academic_year=112,
                 source_semester=Semester.first,
@@ -361,12 +374,12 @@ class TestScholarshipRulesServiceTemplate:
         mock_result = Mock()
         mock_result.scalars.return_value.all.return_value = template_rules
 
-        with patch.object(service, "_get_rule_by_id", return_value=template_rule), patch.object(
-            service.db, "execute", new_callable=AsyncMock, return_value=mock_result
-        ), patch.object(service, "_find_existing_rule", return_value=None), patch.object(
-            service, "_create_rule_from_source", new_callable=AsyncMock
-        ), patch.object(
-            service.db, "commit", new_callable=AsyncMock
+        with (
+            patch.object(service, "_get_rule_by_id", return_value=template_rule),
+            patch.object(service.db, "execute", new_callable=AsyncMock, return_value=mock_result),
+            patch.object(service, "_find_existing_rule", return_value=None),
+            patch.object(service, "_create_rule_from_source", new_callable=AsyncMock),
+            patch.object(service.db, "commit", new_callable=AsyncMock),
         ):
             count = await service.apply_template(
                 template_id=1,
@@ -382,8 +395,9 @@ class TestScholarshipRulesServiceTemplate:
         """Test applying non-template rule fails"""
         non_template = Mock(spec=ScholarshipRule, id=1, is_template=False)
 
-        with patch.object(service, "_get_rule_by_id", return_value=non_template), pytest.raises(
-            ValueError, match="not a template"
+        with (
+            patch.object(service, "_get_rule_by_id", return_value=non_template),
+            pytest.raises(ValueError, match="not a template"),
         ):
             await service.apply_template(
                 template_id=1,

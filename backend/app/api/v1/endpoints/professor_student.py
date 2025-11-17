@@ -239,9 +239,11 @@ async def update_professor_student_relationship(
                 "relationship_type": relationship.relationship_type,
                 "status": "active" if relationship.is_active else "inactive",
                 "start_date": relationship.created_at.isoformat() if relationship.created_at else None,
-                "end_date": relationship.updated_at.isoformat()
-                if not relationship.is_active and relationship.updated_at
-                else None,
+                "end_date": (
+                    relationship.updated_at.isoformat()
+                    if not relationship.is_active and relationship.updated_at
+                    else None
+                ),
                 "notes": relationship.notes,
             },
         }

@@ -50,9 +50,11 @@ class TestNotificationService:
         title = "Test Notification"
         message = "Test message"
 
-        with patch.object(service.db, "add") as mock_add, patch.object(
-            service.db, "commit"
-        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
+        with (
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "refresh") as mock_refresh,
+        ):
             # Mock the created notification
             created_notification = Mock(spec=Notification)
             created_notification.id = 1
@@ -135,9 +137,11 @@ class TestNotificationService:
         title = "System Announcement"
         message = "Important system message"
 
-        with patch.object(service.db, "add") as mock_add, patch.object(
-            service.db, "commit"
-        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
+        with (
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "refresh") as mock_refresh,
+        ):
             created_notification = Mock(spec=Notification)
             created_notification.id = 1
             created_notification.user_id = None  # System announcement
@@ -379,9 +383,11 @@ class TestNotificationService:
         title = "系統通知"
         message = "重要系統消息"
 
-        with patch.object(service.db, "add_all") as mock_add_all, patch.object(
-            service.db, "commit"
-        ) as mock_commit, patch.object(service.db, "refresh") as mock_refresh:
+        with (
+            patch.object(service.db, "add_all") as mock_add_all,
+            patch.object(service.db, "commit") as mock_commit,
+            patch.object(service.db, "refresh") as mock_refresh,
+        ):
             # Mock created notifications
             created_notifications = [Mock(spec=Notification) for _ in user_ids]
             for i, notification in enumerate(created_notifications):
@@ -497,9 +503,11 @@ class TestNotificationService:
         mock_notification.id = notification_id
         mock_notification.user_id = None  # System notification
 
-        with patch.object(service.db, "execute") as mock_execute, patch.object(
-            service.db, "add"
-        ) as mock_add, patch.object(service.db, "commit") as mock_commit:
+        with (
+            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "add") as mock_add,
+            patch.object(service.db, "commit") as mock_commit,
+        ):
             # Mock notification query
             mock_execute.return_value.scalar_one_or_none.side_effect = [
                 mock_notification,  # Notification found
@@ -535,9 +543,11 @@ class TestNotificationService:
         """Test marking all notifications as read for a user"""
         user_id = 1
 
-        with patch.object(service.db, "execute") as mock_execute, patch.object(
-            service.db, "add_all"
-        ) as mock_add_all, patch.object(service.db, "commit") as mock_commit:
+        with (
+            patch.object(service.db, "execute") as mock_execute,
+            patch.object(service.db, "add_all") as mock_add_all,
+            patch.object(service.db, "commit") as mock_commit,
+        ):
             # Mock personal update result
             mock_personal_result = Mock()
             mock_personal_result.rowcount = 3
