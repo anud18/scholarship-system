@@ -117,6 +117,29 @@ export function RosterManagementDashboard() {
     }
   }
 
+  const refetchCycleData = async () => {
+    if (!selectedConfig) return
+
+    setLoadingCycle(true)
+    try {
+      const cycleResponse = await apiClient.request("/payment-rosters/cycle-status", {
+        method: "GET",
+        params: { config_id: selectedConfig.id },
+      })
+
+      if (cycleResponse.success && cycleResponse.data) {
+        setCycleData(cycleResponse.data)
+      } else {
+        setCycleData(null)
+      }
+    } catch (error) {
+      console.error("Failed to refetch cycle status:", error)
+      setCycleData(null)
+    } finally {
+      setLoadingCycle(false)
+    }
+  }
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
@@ -266,6 +289,7 @@ export function RosterManagementDashboard() {
                     <RosterListTable
                       periods={cycleData.periods}
                       configId={selectedConfig.id}
+                      onRosterGenerated={refetchCycleData}
                     />
                   )}
                 </div>
@@ -283,7 +307,10 @@ export function RosterManagementDashboard() {
         </TabsContent>
 
         <TabsContent value="schedules" className="space-y-4">
-          <RosterScheduleList onScheduleChange={fetchDashboardStats} />
+          <RosterScheduleList
+            onScheduleChange={fetchDashboardStats}
+            onRosterGenerated={refetchCycleData}
+          />
         </TabsContent>
 
         <TabsContent value="scheduler" className="space-y-4">

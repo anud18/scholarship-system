@@ -25,8 +25,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { GraduationCap, Users, UserCheck, X, Search, Eye } from "lucide-react";
 import { StudentDetailModal } from "./StudentDetailModal";
+import { useReferenceData, getDepartmentName } from "@/hooks/use-reference-data";
 
 export function StudentListManagement() {
+  const { departments, isLoading: refDataLoading } = useReferenceData();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -306,7 +308,7 @@ export function StudentListManagement() {
                       </TableCell>
                       <TableCell>{student.name}</TableCell>
                       <TableCell className="text-sm">{student.email}</TableCell>
-                      <TableCell>{student.dept_name || "未設定"}</TableCell>
+                      <TableCell>{getDepartmentName(student.dept_code, departments)}</TableCell>
                       <TableCell>{getStatusBadge(student.status)}</TableCell>
                       <TableCell className="text-sm">
                         {formatDate(student.created_at)}

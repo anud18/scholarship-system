@@ -224,9 +224,7 @@ async def upload_batch_import_data(
         content_type = (
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             if file.filename.endswith(".xlsx")
-            else "application/vnd.ms-excel"
-            if file.filename.endswith(".xls")
-            else "text/csv"
+            else "application/vnd.ms-excel" if file.filename.endswith(".xls") else "text/csv"
         )
 
         minio_service.client.put_object(
@@ -1109,7 +1107,11 @@ async def confirm_batch_import(
 
         return {
             "success": True,
-            "message": "批次匯入成功" if len(creation_errors) == 0 else f"批次匯入完成，部分失敗 ({len(creation_errors)} 筆錯誤)",
+            "message": (
+                "批次匯入成功"
+                if len(creation_errors) == 0
+                else f"批次匯入完成，部分失敗 ({len(creation_errors)} 筆錯誤)"
+            ),
             "data": response_data.model_dump(),
         }
 

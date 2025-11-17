@@ -569,9 +569,11 @@ class EmailAutomationService:
 
                     # Prepare metadata
                     metadata = {
-                        "email_category": EmailCategory(email_row.email_category)
-                        if email_row.email_category
-                        else EmailCategory.system,
+                        "email_category": (
+                            EmailCategory(email_row.email_category)
+                            if email_row.email_category
+                            else EmailCategory.system
+                        ),
                         "application_id": email_row.application_id,
                         "scholarship_type_id": email_row.scholarship_type_id,
                         "sent_by_system": True,

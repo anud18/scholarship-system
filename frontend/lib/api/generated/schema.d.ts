@@ -5921,13 +5921,13 @@ export interface paths {
         };
         /**
          * Preview Roster Students
-         * @description 預覽造冊學生名單
-         *     Preview student list for roster generation
+         * @description 預覽造冊學生名單（包含完整驗證）
+         *     Preview student list for roster generation with full validation
          *
          *     Returns:
          *         - has_matrix_distribution: 是否有 Matrix 分配
-         *         - allocated_students: 正取學生列表
-         *         - summary: 統計摘要
+         *         - students: 學生列表（包含驗證狀態）
+         *         - summary: 統計摘要（包含排除原因統計）
          */
         get: operations["preview_roster_students_api_v1_payment_rosters_preview_students_get"];
         put?: never;
@@ -6548,9 +6548,7 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: {
-                [key: string]: unknown;
-            }[] | null;
+            data?: Record<string, never>[] | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -6566,9 +6564,7 @@ export interface components {
             /** Message */
             message: string;
             /** Data */
-            data?: {
-                [key: string]: unknown;
-            } | null;
+            data?: Record<string, never> | null;
             /** Errors */
             errors?: string[] | null;
             /** Trace Id */
@@ -6729,9 +6725,7 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: {
-                [key: string]: unknown;
-            } | null;
+            validation_rules?: Record<string, never> | null;
         };
         /**
          * ApplicationDocumentUpdate
@@ -6765,9 +6759,7 @@ export interface components {
             /** Example File Url */
             example_file_url?: string | null;
             /** Validation Rules */
-            validation_rules?: {
-                [key: string]: unknown;
-            } | null;
+            validation_rules?: Record<string, never> | null;
         };
         /**
          * ApplicationFieldCreate
@@ -6840,9 +6832,7 @@ export interface components {
              * Field Options
              * @description Field options
              */
-            field_options?: {
-                [key: string]: unknown;
-            }[] | null;
+            field_options?: Record<string, never>[] | null;
             /**
              * Display Order
              * @description Display order
@@ -6869,16 +6859,12 @@ export interface components {
              * Validation Rules
              * @description Validation rules
              */
-            validation_rules?: {
-                [key: string]: unknown;
-            } | null;
+            validation_rules?: Record<string, never> | null;
             /**
              * Conditional Rules
              * @description Conditional rules
              */
-            conditional_rules?: {
-                [key: string]: unknown;
-            } | null;
+            conditional_rules?: Record<string, never> | null;
         };
         /**
          * ApplicationFieldUpdate
@@ -6906,9 +6892,7 @@ export interface components {
             /** Step Value */
             step_value?: number | null;
             /** Field Options */
-            field_options?: {
-                [key: string]: unknown;
-            }[] | null;
+            field_options?: Record<string, never>[] | null;
             /** Display Order */
             display_order?: number | null;
             /** Is Active */
@@ -6918,13 +6902,9 @@ export interface components {
             /** Help Text En */
             help_text_en?: string | null;
             /** Validation Rules */
-            validation_rules?: {
-                [key: string]: unknown;
-            } | null;
+            validation_rules?: Record<string, never> | null;
             /** Conditional Rules */
-            conditional_rules?: {
-                [key: string]: unknown;
-            } | null;
+            conditional_rules?: Record<string, never> | null;
         };
         /**
          * ApplicationFormData
@@ -7061,13 +7041,9 @@ export interface components {
             /** Semester */
             semester?: string | null;
             /** Student Data */
-            student_data: {
-                [key: string]: unknown;
-            };
+            student_data: Record<string, never>;
             /** Submitted Form Data */
-            submitted_form_data: {
-                [key: string]: unknown;
-            };
+            submitted_form_data: Record<string, never>;
             /**
              * Agree Terms
              * @default false
@@ -7096,9 +7072,7 @@ export interface components {
              */
             updated_at: string;
             /** Meta Data */
-            meta_data?: {
-                [key: string]: unknown;
-            } | null;
+            meta_data?: Record<string, never> | null;
             /**
              * Reviews
              * @default []
@@ -7294,9 +7268,7 @@ export interface components {
              * Updates
              * @description 要更新的欄位
              */
-            updates: {
-                [key: string]: unknown;
-            };
+            updates: Record<string, never>;
         };
         /** Body_create_ranking_api_v1_college_review_rankings_post */
         Body_create_ranking_api_v1_college_review_rankings_post: {
@@ -7500,9 +7472,7 @@ export interface components {
              * Parameters
              * @description Operation-specific parameters
              */
-            parameters?: {
-                [key: string]: unknown;
-            } | null;
+            parameters?: Record<string, never> | null;
         };
         /**
          * BulkScholarshipAssignRequest
@@ -7684,9 +7654,7 @@ export interface components {
              */
             email_domain: string | null;
             /** Custom Attributes */
-            custom_attributes?: {
-                [key: string]: unknown;
-            } | null;
+            custom_attributes?: Record<string, never> | null;
         };
         /**
          * DocumentData
@@ -7810,9 +7778,7 @@ export interface components {
              * Validation Rules
              * @description 驗證規則
              */
-            validation_rules?: {
-                [key: string]: unknown;
-            } | null;
+            validation_rules?: Record<string, never> | null;
         };
         /** EmailAutomationRuleCreate */
         EmailAutomationRuleCreate: {
@@ -7937,13 +7903,9 @@ export interface components {
          */
         FormConfigSaveRequest: {
             /** Fields */
-            fields: {
-                [key: string]: unknown;
-            }[];
+            fields: Record<string, never>[];
             /** Documents */
-            documents: {
-                [key: string]: unknown;
-            }[];
+            documents: Record<string, never>[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -8037,9 +7999,7 @@ export interface components {
              * Metadata
              * @description 額外資料
              */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
+            metadata?: Record<string, never> | null;
         };
         /**
          * NotificationUpdate
@@ -8063,9 +8023,7 @@ export interface components {
             /** Expires At */
             expires_at?: string | null;
             /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            } | null;
+            metadata?: Record<string, never> | null;
             /**
              * Is Dismissed
              * @description 是否已關閉
@@ -8104,9 +8062,7 @@ export interface components {
              * Distribution Rules
              * @description Custom distribution rules
              */
-            distribution_rules?: {
-                [key: string]: unknown;
-            } | null;
+            distribution_rules?: Record<string, never> | null;
         };
         /**
          * RankingImportItem
@@ -8314,6 +8270,12 @@ export interface components {
              * @default true
              */
             auto_export_excel: boolean;
+            /**
+             * Force Regenerate
+             * @description 是否強制重新產生（覆蓋已存在的造冊）
+             * @default false
+             */
+            force_regenerate: boolean;
         };
         /**
          * RosterCycle
@@ -8417,9 +8379,7 @@ export interface components {
              * Notification Settings
              * @description 通知設定
              */
-            notification_settings?: {
-                [key: string]: unknown;
-            } | null;
+            notification_settings?: Record<string, never> | null;
         };
         /**
          * RosterScheduleStatus
@@ -8432,6 +8392,7 @@ export interface components {
          * @description 更新排程狀態模型
          */
         RosterScheduleStatusUpdate: {
+            /** @description 排程狀態 */
             status: components["schemas"]["RosterScheduleStatus"];
         };
         /**
@@ -8480,9 +8441,7 @@ export interface components {
              * Notification Settings
              * @description 通知設定
              */
-            notification_settings?: {
-                [key: string]: unknown;
-            } | null;
+            notification_settings?: Record<string, never> | null;
         };
         /**
          * RosterStatus
@@ -8876,9 +8835,7 @@ export interface components {
              * Test Data
              * @description 測試數據（用於模板變數替換）
              */
-            test_data?: {
-                [key: string]: unknown;
-            };
+            test_data?: Record<string, never>;
             /**
              * Subject Override
              * @description 覆蓋主旨（可選）
@@ -9194,13 +9151,9 @@ export interface components {
              */
             preferred_language: string;
             /** Privacy Settings */
-            privacy_settings?: {
-                [key: string]: unknown;
-            } | null;
+            privacy_settings?: Record<string, never> | null;
             /** Custom Fields */
-            custom_fields?: {
-                [key: string]: unknown;
-            } | null;
+            custom_fields?: Record<string, never> | null;
         };
         /**
          * UserProfileUpdate
@@ -9218,13 +9171,9 @@ export interface components {
             /** Preferred Language */
             preferred_language?: string | null;
             /** Privacy Settings */
-            privacy_settings?: {
-                [key: string]: unknown;
-            } | null;
+            privacy_settings?: Record<string, never> | null;
             /** Custom Fields */
-            custom_fields?: {
-                [key: string]: unknown;
-            } | null;
+            custom_fields?: Record<string, never> | null;
         };
         /**
          * UserRole
@@ -9277,9 +9226,7 @@ export interface components {
              * Students
              * @description 學生列表 [{'nycu_id': '0856001', 'sub_type': 'nstc'}, ...]
              */
-            students: {
-                [key: string]: unknown;
-            }[];
+            students: Record<string, never>[];
         };
         /**
          * WhitelistBatchRemoveRequest
@@ -9967,9 +9914,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": Record<string, never>;
             };
         };
         responses: {
@@ -12018,9 +11963,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": Record<string, never>;
             };
         };
         responses: {
@@ -12075,9 +12018,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": Record<string, never>;
             };
         };
         responses: {
@@ -13745,9 +13686,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": Record<string, never>;
             };
         };
         responses: {
@@ -15199,9 +15138,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": Record<string, never>;
             };
         };
         responses: {
@@ -15267,9 +15204,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": Record<string, never>;
             };
         };
         responses: {
@@ -15335,9 +15270,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": Record<string, never>;
             };
         };
         responses: {
@@ -15574,9 +15507,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": Record<string, never>[];
                 };
             };
         };
@@ -15596,9 +15527,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": Record<string, never>[];
                 };
             };
         };
@@ -15618,9 +15547,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": Record<string, never>[];
                 };
             };
         };
@@ -15640,9 +15567,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": Record<string, never>[];
                 };
             };
         };
@@ -15662,9 +15587,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": Record<string, never>[];
                 };
             };
         };
@@ -15704,9 +15627,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": Record<string, never>[];
                 };
             };
         };
@@ -15729,9 +15650,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": Record<string, never>[];
                 };
             };
             /** @description Validation Error */
@@ -15760,9 +15679,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
         };
@@ -15782,9 +15699,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
         };
@@ -15807,9 +15722,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
             /** @description Validation Error */
@@ -15838,9 +15751,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
         };
@@ -15896,9 +15807,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
         };
@@ -17595,9 +17504,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
             /** @description Validation Error */
@@ -17628,9 +17535,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
             /** @description Validation Error */
@@ -17661,9 +17566,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
             /** @description Validation Error */
@@ -17694,9 +17597,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
             /** @description Validation Error */
@@ -17727,9 +17628,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": Record<string, never>;
                 };
             };
             /** @description Validation Error */
@@ -19222,6 +19121,12 @@ export interface operations {
                 config_id: number;
                 /** @description 排名ID (如有 Matrix Distribution) */
                 ranking_id?: number | null;
+                /** @description 造冊期別標籤（可選，預設自動產生） */
+                period_label?: string | null;
+                /** @description 學年度（可選，預設從配置取得） */
+                academic_year?: number | null;
+                /** @description 是否啟用學籍驗證 */
+                student_verification_enabled?: boolean;
             };
             header?: never;
             path?: never;

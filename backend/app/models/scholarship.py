@@ -588,7 +588,9 @@ class ScholarshipConfiguration(Base):
 
     # 配額詳細設定
     total_quota = Column(Integer, nullable=True)  # 總配額數量
-    quotas = Column(JSON, nullable=True)  # 配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
+    quotas = Column(
+        JSON, nullable=True
+    )  # 配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
 
     # 金額設定 (從 ScholarshipType 移至此處)
     amount = Column(Integer, nullable=False)  # 獎學金金額（整數）

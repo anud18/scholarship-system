@@ -5,7 +5,7 @@ Scholarship Configuration schemas for API requests and responses
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import ApplicationCycle, QuotaManagementMode, Semester
 
@@ -69,22 +69,24 @@ class ScholarshipConfigurationBase(BaseModel):
     # 版本控制
     version: str = "1.0"
 
-    @validator("total_quota")
+    @field_validator("total_quota")
+    @classmethod
     def validate_total_quota(cls, v, values):
         """Validate total quota when quota limit is enabled"""
-        if values.get("has_quota_limit") and v is None:
+        if values.data.get("has_quota_limit") and v is None:
             raise ValueError("總配額不能為空當啟用配額限制時")
         return v
 
-    @validator("quotas")
+    @field_validator("quotas")
+    @classmethod
     def validate_quotas(cls, v, values):
         """Validate quota configuration"""
-        if values.get("has_college_quota"):
+        if values.data.get("has_college_quota"):
             if not v:
                 raise ValueError("配額配置不能為空當啟用學院配額時")
 
             # Check if college quota sum exceeds total quota
-            total_quota = values.get("total_quota")
+            total_quota = values.data.get("total_quota")
             if total_quota and v:
                 # For matrix structure: {sub_type: {college: quota}}
                 college_total = sum(
@@ -94,26 +96,29 @@ class ScholarshipConfigurationBase(BaseModel):
                     raise ValueError(f"配額總和 ({college_total}) 超過總配額 ({total_quota})")
         return v
 
-    @validator("renewal_professor_review_end")
+    @field_validator("renewal_professor_review_end")
+    @classmethod
     def validate_renewal_professor_review(cls, v, values):
         """Validate renewal professor review dates"""
-        if not values.get("requires_professor_recommendation"):
-            if v or values.get("renewal_professor_review_start"):
+        if not values.data.get("requires_professor_recommendation"):
+            if v or values.data.get("renewal_professor_review_start"):
                 raise ValueError("續領教授審查時間不應設定當不需要教授推薦時")
         return v
 
-    @validator("renewal_college_review_end")
+    @field_validator("renewal_college_review_end")
+    @classmethod
     def validate_renewal_college_review(cls, v, values):
         """Validate renewal college review dates"""
-        if not values.get("requires_college_review"):
-            if v or values.get("renewal_college_review_start"):
+        if not values.data.get("requires_college_review"):
+            if v or values.data.get("renewal_college_review_start"):
                 raise ValueError("續領學院審查時間不應設定當不需要學院審查時")
         return v
 
-    @validator("effective_end_date")
+    @field_validator("effective_end_date")
+    @classmethod
     def validate_effective_dates(cls, v, values):
         """Validate effective date range"""
-        start_date = values.get("effective_start_date")
+        start_date = values.data.get("effective_start_date")
         if start_date and v and v <= start_date:
             raise ValueError("結束日期必須晚於開始日期")
         return v
@@ -206,8 +211,7 @@ class ScholarshipConfigurationResponse(ScholarshipConfigurationBase):
             return f"{self.academic_year}-{self.semester.value}"
         return str(self.academic_year)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScholarshipConfigurationQuotaStatus(BaseModel):
@@ -224,16 +228,15 @@ class ScholarshipConfigurationQuotaStatus(BaseModel):
     usage_percentage: Optional[float] = None
 
     # College-specific quota
-    college_quotas: Optional[
-        Dict[str, Dict[str, int]]
-    ] = None  # {"engineering": {"total": 10, "used": 3, "available": 7}}
+    college_quotas: Optional[Dict[str, Dict[str, int]]] = (
+        None  # {"engineering": {"total": 10, "used": 3, "available": 7}}
+    )
 
     # Status
     is_quota_exceeded: bool = False
     is_quota_warning: bool = False  # > 80% used
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScholarshipConfigurationSummary(BaseModel):
@@ -261,8 +264,7 @@ class ScholarshipConfigurationSummary(BaseModel):
             return f"{self.academic_year}-{self.semester.value}"
         return str(self.academic_year)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScholarshipConfigurationBulkCreate(BaseModel):
@@ -270,7 +272,8 @@ class ScholarshipConfigurationBulkCreate(BaseModel):
 
     configurations: List[ScholarshipConfigurationCreate]
 
-    @validator("configurations")
+    @field_validator("configurations")
+    @classmethod
     def validate_configurations(cls, v):
         """Validate configurations list"""
         if not v:
@@ -293,15 +296,16 @@ class ScholarshipConfigurationExport(BaseModel):
     include_expired: bool = False
     scholarship_type_ids: Optional[List[int]] = None
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "format": "json",
                 "include_inactive": False,
                 "include_expired": False,
                 "scholarship_type_ids": [1, 2, 3],
             }
-        }
+        },
+    )
 
 
 class ScholarshipConfigurationImport(BaseModel):
@@ -311,7 +315,8 @@ class ScholarshipConfigurationImport(BaseModel):
     overwrite_existing: bool = False
     validate_only: bool = False
 
-    @validator("configurations")
+    @field_validator("configurations")
+    @classmethod
     def validate_import_data(cls, v):
         """Validate import data structure"""
         if not v:
@@ -334,15 +339,16 @@ class ScholarshipConfigurationValidation(BaseModel):
     warnings: List[str] = []
     suggestions: List[str] = []
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "is_valid": False,
                 "errors": ["總配額不能為空當啟用配額限制時"],
                 "warnings": ["配額使用率已達 90%"],
                 "suggestions": ["建議增加配額或調整分配策略"],
             }
-        }
+        },
+    )
 
 
 # Whitelist Management Schemas
@@ -358,16 +364,18 @@ class WhitelistStudentInfo(BaseModel):
     note: Optional[str] = Field(None, description="備註")
     is_registered: bool = Field(default=False, description="是否已註冊")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WhitelistBatchAddRequest(BaseModel):
     """批量新增白名單請求"""
 
-    students: List[Dict[str, Any]] = Field(..., description="學生列表 [{'nycu_id': '0856001', 'sub_type': 'nstc'}, ...]")
+    students: List[Dict[str, Any]] = Field(
+        ..., description="學生列表 [{'nycu_id': '0856001', 'sub_type': 'nstc'}, ...]"
+    )
 
-    @validator("students")
+    @field_validator("students")
+    @classmethod
     def validate_students(cls, v):
         if not v:
             raise ValueError("學生列表不能為空")
@@ -383,7 +391,8 @@ class WhitelistBatchRemoveRequest(BaseModel):
     nycu_ids: List[str] = Field(..., description="學號列表 ['0856001', '0856002', ...]")
     sub_type: Optional[str] = Field(None, description="子獎學金類型，若為 None 則從所有子類型中移除")
 
-    @validator("nycu_ids")
+    @field_validator("nycu_ids")
+    @classmethod
     def validate_nycu_ids(cls, v):
         if not v:
             raise ValueError("學號列表不能為空")
@@ -408,8 +417,8 @@ class WhitelistImportResult(BaseModel):
     )
     warnings: List[str] = Field(default=[], description="警告訊息")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "success_count": 45,
                 "error_count": 3,
@@ -419,4 +428,5 @@ class WhitelistImportResult(BaseModel):
                 ],
                 "warnings": ["第 10 行學號重複，已跳過"],
             }
-        }
+        },
+    )

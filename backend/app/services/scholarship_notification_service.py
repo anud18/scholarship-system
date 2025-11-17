@@ -364,7 +364,7 @@ class ScholarshipNotificationService:
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #2c5282;">Professor Review Request</h2>
 
-                <p>Dear Professor {professor_user.name or professor_user.username},</p>
+                <p>Dear Professor {professor_user.name or professor_user.email},</p>
 
                 <p>You have been requested to review a scholarship application for one of your students.</p>
 

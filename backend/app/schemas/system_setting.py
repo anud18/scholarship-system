@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.system_setting import ConfigCategory, ConfigDataType
 
@@ -16,7 +16,8 @@ class SystemSettingBase(BaseModel):
     allow_empty: bool = Field(False, description="是否允許空值")
     validation_regex: Optional[str] = Field(None, description="驗證正則表達式")
 
-    @validator("key")
+    @field_validator("key")
+    @classmethod
     def validate_key(cls, v):
         if not v or len(v.strip()) == 0:
             raise ValueError("Configuration key cannot be empty")
@@ -29,13 +30,15 @@ class SystemSettingBase(BaseModel):
             )
         return v.strip()
 
-    @validator("value")
+    @field_validator("value")
+    @classmethod
     def validate_value(cls, v):
         if v is None:
             raise ValueError("Configuration value cannot be None")
         return str(v)
 
-    @validator("description")
+    @field_validator("description")
+    @classmethod
     def validate_description(cls, v):
         if v and len(v) > 500:
             raise ValueError("Description cannot exceed 500 characters")
@@ -59,13 +62,15 @@ class SystemSettingUpdate(BaseModel):
     allow_empty: Optional[bool] = Field(None, description="是否允許空值")
     validation_regex: Optional[str] = Field(None, description="驗證正則表達式")
 
-    @validator("value")
+    @field_validator("value")
+    @classmethod
     def validate_value(cls, v):
         if v is not None:
             return str(v)
         return v
 
-    @validator("description")
+    @field_validator("description")
+    @classmethod
     def validate_description(cls, v):
         if v and len(v) > 500:
             raise ValueError("Description cannot exceed 500 characters")
@@ -74,6 +79,8 @@ class SystemSettingUpdate(BaseModel):
 
 class SystemSettingResponse(BaseModel):
     """系統配置的響應模型"""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     key: str
@@ -89,9 +96,6 @@ class SystemSettingResponse(BaseModel):
     last_modified_by: Optional[int]
     created_at: datetime
     updated_at: Optional[datetime]
-
-    class Config:
-        orm_mode = True
 
 
 class ConfigValidationRequest(BaseModel):
@@ -112,6 +116,8 @@ class ConfigValidationResponse(BaseModel):
 class ConfigurationAuditLogResponse(BaseModel):
     """配置審計日誌響應模型"""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     config_key: str
     action: str  # 'create', 'update', 'delete'
@@ -120,9 +126,6 @@ class ConfigurationAuditLogResponse(BaseModel):
     changed_by: int
     changed_at: datetime
     user_name: Optional[str]  # 操作者姓名
-
-    class Config:
-        orm_mode = True
 
 
 class SystemSettingListResponse(BaseModel):

@@ -333,9 +333,7 @@ class BankVerificationService:
                     confidence_level = (
                         "high"
                         if similarity >= HIGH_CONFIDENCE_THRESHOLD
-                        else "medium"
-                        if similarity >= LOW_CONFIDENCE_THRESHOLD
-                        else "low"
+                        else "medium" if similarity >= LOW_CONFIDENCE_THRESHOLD else "low"
                     )
                     needs_manual_review = similarity < LOW_CONFIDENCE_THRESHOLD or not is_match
 

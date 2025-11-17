@@ -139,21 +139,23 @@ class ScholarshipAnalyticsService:
         return {
             "status_distribution": status_counts,
             "status_flow_analysis": status_flow,
-            "completion_rate": len(
-                [
-                    app
-                    for app in applications
-                    if app.status
-                    in [
-                        ApplicationStatus.approved.value,
-                        ApplicationStatus.rejected.value,
+            "completion_rate": (
+                len(
+                    [
+                        app
+                        for app in applications
+                        if app.status
+                        in [
+                            ApplicationStatus.approved.value,
+                            ApplicationStatus.rejected.value,
+                        ]
                     ]
-                ]
-            )
-            / len(applications)
-            * 100
-            if applications
-            else 0,
+                )
+                / len(applications)
+                * 100
+                if applications
+                else 0
+            ),
         }
 
     def _analyze_scholarship_types(self, applications: List[Application]) -> Dict[str, Any]:
@@ -206,18 +208,22 @@ class ScholarshipAnalyticsService:
 
         return {
             "scholarship_type_distribution": type_stats,
-            "most_popular_type_id": max(
-                type_stats.keys(),
-                key=lambda k: type_stats[k]["total_applications"],
-            )
-            if type_stats
-            else None,
-            "highest_approval_rate_type_id": max(
-                type_stats.keys(),
-                key=lambda k: type_stats[k]["approval_rate"],
-            )
-            if type_stats
-            else None,
+            "most_popular_type_id": (
+                max(
+                    type_stats.keys(),
+                    key=lambda k: type_stats[k]["total_applications"],
+                )
+                if type_stats
+                else None
+            ),
+            "highest_approval_rate_type_id": (
+                max(
+                    type_stats.keys(),
+                    key=lambda k: type_stats[k]["approval_rate"],
+                )
+                if type_stats
+                else None
+            ),
         }
 
     def _analyze_temporal_patterns(self, applications: List[Application]) -> Dict[str, Any]:
@@ -259,12 +265,14 @@ class ScholarshipAnalyticsService:
             "monthly_submissions": monthly_submissions,
             "day_of_week_patterns": day_patterns,
             "seasonal_distribution": seasonal_data,
-            "peak_submission_month": max(
-                monthly_submissions.keys(),
-                key=lambda k: monthly_submissions[k]["total"],
-            )
-            if monthly_submissions
-            else None,
+            "peak_submission_month": (
+                max(
+                    monthly_submissions.keys(),
+                    key=lambda k: monthly_submissions[k]["total"],
+                )
+                if monthly_submissions
+                else None
+            ),
         }
 
     def _analyze_renewal_patterns(self, applications: List[Application]) -> Dict[str, Any]:
@@ -346,9 +354,11 @@ class ScholarshipAnalyticsService:
         success_factors["renewal_correlation"] = {
             "approved_renewals": approved_renewals,
             "rejected_renewals": rejected_renewals,
-            "renewal_success_rate": (approved_renewals / (approved_renewals + rejected_renewals) * 100)
-            if (approved_renewals + rejected_renewals) > 0
-            else 0,
+            "renewal_success_rate": (
+                (approved_renewals / (approved_renewals + rejected_renewals) * 100)
+                if (approved_renewals + rejected_renewals) > 0
+                else 0
+            ),
         }
 
         # Note: Priority score correlation removed (priority_score field removed from Application model)
@@ -404,11 +414,13 @@ class ScholarshipAnalyticsService:
                 "trends": {
                     "most_popular_scholarship": type_analysis.get("most_popular_type"),
                     "highest_success_rate": type_analysis.get("highest_approval_rate_type"),
-                    "renewal_success_advantage": renewal_analysis.get("renewal_approval_rate", 0)
-                    - renewal_analysis.get("new_application_approval_rate", 0)
-                    if renewal_analysis.get("renewal_approval_rate")
-                    and renewal_analysis.get("new_application_approval_rate")
-                    else 0,
+                    "renewal_success_advantage": (
+                        renewal_analysis.get("renewal_approval_rate", 0)
+                        - renewal_analysis.get("new_application_approval_rate", 0)
+                        if renewal_analysis.get("renewal_approval_rate")
+                        and renewal_analysis.get("new_application_approval_rate")
+                        else 0
+                    ),
                 },
             }
 

@@ -76,38 +76,36 @@ class ExcelExportService:
             self._set_default_columns()
 
     def _set_default_columns(self):
-        """Set default STD_UP_MIXLISTA 30-column structure according to specification"""
+        """Set default 28-column structure for payment roster export"""
         self.template_columns = [
             "身分證字號",  # 1. 必填
             "姓名",  # 2. 必填
-            "帳號",  # 3. 若無則標註於說明欄
-            "銀行代碼",  # 4. 若無則標註於說明欄
+            "帳號",  # 3. 郵局帳號
+            "銀行代碼",  # 4. 統一填700(郵局)
             "職別(稱)",  # 5. 固定值"學生"
             "戶籍地址",  # 6. 選填
             "身份別代碼",  # 7. 學生固定為1
-            "單位",  # 8. 固定值"次"
+            "單位(ex:時,月,次...)",  # 8. 固定值"次"
             "數量",  # 9. 固定值"1"
             "單價",  # 10. 獎學金金額
-            "健保費",  # 11. 學生不適用，填0
-            "勞保費",  # 12. 學生不適用，填0
-            "就保費",  # 13. 學生不適用，填0
-            "勞退費",  # 14. 學生不適用，填0
-            "職災費",  # 15. 學生不適用，填0
-            "補充保費",  # 16. 學生不適用，填0
-            "所得稅",  # 17. 學生不適用，填0
-            "入會費",  # 18. 學生不適用，填0
-            "互助費",  # 19. 學生不適用，填0
-            "其他費用1",  # 20. 學生不適用，填0
-            "其他費用2",  # 21. 學生不適用，填0
-            "其他費用3",  # 22. 學生不適用，填0
-            "其他費用4",  # 23. 學生不適用，填0
-            "其他費用5",  # 24. 學生不適用，填0
+            "機關負擔勞保費",  # 11. 學生不適用，留空
+            "機關負擔健保費",  # 12. 學生不適用，留空
+            "機關負擔補充保費",  # 13. 學生不適用，留空
+            "機關負擔勞退金",  # 14. 學生不適用，留空
+            "機關負擔離職金",  # 15. 學生不適用，留空
+            "機關負擔職災",  # 16. 學生不適用，留空
+            "個人自付勞保費",  # 17. 學生不適用，留空
+            "個人自付健保費",  # 18. 學生不適用，留空
+            "個人自付補充保費",  # 19. 學生不適用，留空
+            "個人自付勞退金",  # 20. 學生不適用，留空
+            "個人自付離職金",  # 21. 學生不適用，留空
+            "代扣所得",  # 22. 學生不適用，留空
+            "其他代扣",  # 23. 學生不適用，留空
+            "免稅給付",  # 24. 獎學金金額(全額免稅)
             "說明",  # 25. 組合字串：期間+獎學金+狀態
             "E-MAIL",  # 26. 選填
-            "個人身分別",  # 27. 本國人=1
-            "居留天數",  # 28. 本國人預設"是"
-            "保留欄位1",  # 29. 保留
-            "保留欄位2",  # 30. 保留
+            "個人身分別(1:本國人,2:外國人,3:大陸人)",  # 27. 本國人=1
+            "居留天數是否滿183天(是/否)",  # 28. 本國人預設"是"
         ]
 
         # Field mapping for easy access
@@ -115,16 +113,31 @@ class ExcelExportService:
             "id_number": 0,  # 身分證字號
             "name": 1,  # 姓名
             "bank_account": 2,  # 帳號
+            "bank_code": 3,  # 銀行代碼
             "job_title": 4,  # 職別(稱)
             "address": 5,  # 戶籍地址
             "identity_code": 6,  # 身份別代碼
-            "unit": 7,  # 單位
+            "unit": 7,  # 單位(ex:時,月,次...)
             "quantity": 8,  # 數量
             "amount": 9,  # 單價
+            "org_labor_insurance": 10,  # 機關負擔勞保費
+            "org_health_insurance": 11,  # 機關負擔健保費
+            "org_supplementary_premium": 12,  # 機關負擔補充保費
+            "org_labor_pension": 13,  # 機關負擔勞退金
+            "org_severance": 14,  # 機關負擔離職金
+            "org_occupational_injury": 15,  # 機關負擔職災
+            "personal_labor_insurance": 16,  # 個人自付勞保費
+            "personal_health_insurance": 17,  # 個人自付健保費
+            "personal_supplementary_premium": 18,  # 個人自付補充保費
+            "personal_labor_pension": 19,  # 個人自付勞退金
+            "personal_severance": 20,  # 個人自付離職金
+            "withheld_income": 21,  # 代扣所得
+            "other_deductions": 22,  # 其他代扣
+            "tax_exempt_payment": 23,  # 免稅給付
             "remarks": 24,  # 說明
             "email": 25,  # E-MAIL
             "personal_identity": 26,  # 個人身分別
-            "residence_days": 27,  # 居留天數
+            "residence_days": 27,  # 居留天數是否滿183天
         }
 
     def ensure_export_directory(self):
@@ -373,78 +386,55 @@ class ExcelExportService:
                 remarks_parts.append("缺銀行資訊")
             remarks = " ".join(remarks_parts)
 
-            # 建立STD_UP_MIXLISTA 30欄位資料映射
+            # 建立28欄位標準格式資料映射
             row_data = {
                 # 1. 身分證字號 (必填)
                 "身分證字號": item.student_id_number,
                 # 2. 姓名 (必填)
                 "姓名": item.student_name,
-                # 3. 帳號 (若無則標註於說明欄)
+                # 3. 帳號 (郵局帳號)
                 "帳號": item.bank_account or "",
-                # 4. 銀行代碼 (若無則標註於說明欄)
+                # 4. 銀行代碼 (郵局代碼固定為700)
+                "銀行代碼": "700",
                 # 5. 職別(稱) (固定值"學生")
                 "職別(稱)": "學生",
                 # 6. 戶籍地址 (選填)
                 "戶籍地址": item.permanent_address or "",
-                # 7. 是否為學生 (固定值"1")
-                "是否為學生": "1",
-                # 8. 給付總額
-                "給付總額": float(item.scholarship_amount) if item.scholarship_amount else 0,
-                # 9. 免稅額
-                "免稅額": float(item.scholarship_amount) if item.scholarship_amount else 0,  # 獎學金通常全額免稅
-                # 10. 應扣繳稅額
-                "應扣繳稅額": 0,  # 獎學金免稅
-                # 11-24. 各月份金額 (都填"0")
-                "1月": "0",
-                "2月": "0",
-                "3月": "0",
-                "4月": "0",
-                "5月": "0",
-                "6月": "0",
-                "7月": "0",
-                "8月": "0",
-                "9月": "0",
-                "10月": "0",
-                "11月": "0",
-                "12月": "0",
-                "本期獎金": "0",
-                "其他": "0",
-                # 25. 說明
+                # 7. 身份別代碼 (學生固定為1)
+                "身份別代碼": "1",
+                # 8. 單位(ex:時,月,次...) (固定值"次")
+                "單位(ex:時,月,次...)": "次",
+                # 9. 數量 (固定值"1")
+                "數量": "1",
+                # 10. 單價 (獎學金金額)
+                "單價": float(item.scholarship_amount) if item.scholarship_amount else 0,
+                # 11-16. 機關負擔項目 (學生不適用，留空)
+                "機關負擔勞保費": "",
+                "機關負擔健保費": "",
+                "機關負擔補充保費": "",
+                "機關負擔勞退金": "",
+                "機關負擔離職金": "",
+                "機關負擔職災": "",
+                # 17-21. 個人自付項目 (學生不適用，留空)
+                "個人自付勞保費": "",
+                "個人自付健保費": "",
+                "個人自付補充保費": "",
+                "個人自付勞退金": "",
+                "個人自付離職金": "",
+                # 22-23. 代扣項目 (學生不適用，留空)
+                "代扣所得": "",
+                "其他代扣": "",
+                # 24. 免稅給付 (獎學金金額，全額免稅)
+                "免稅給付": float(item.scholarship_amount) if item.scholarship_amount else 0,
+                # 25. 說明 (期間+獎學金+狀態)
                 "說明": remarks,
-                # 26. 身分證件字號 (與第1欄相同)
-                "身分證件字號": item.student_id_number,
-                # 27. 統一證號
-                "統一證號": "",  # 個人通常為空
-                # 28. 扣繳憑單類別
-                "扣繳憑單類別": "50",  # 獎學金所得類別代碼
-                # 29. 所得格式代碼
-                "所得格式代碼": "50",  # 獎學金格式代碼
-                # 30. 申報年度
-                "申報年度": str(roster.academic_year)
-                if hasattr(roster, "academic_year") and roster.academic_year
-                else datetime.now().year,
+                # 26. E-MAIL (選填)
+                "E-MAIL": item.student_email or "",
+                # 27. 個人身分別(1:本國人,2:外國人,3:大陸人) (本國人=1)
+                "個人身分別(1:本國人,2:外國人,3:大陸人)": "1",
+                # 28. 居留天數是否滿183天(是/否) (本國人預設"是")
+                "居留天數是否滿183天(是/否)": "是",
             }
-
-            # 根據造冊月份，將獎學金金額填入對應月份欄位
-            if hasattr(roster, "period_label") and roster.period_label:
-                period_label = roster.period_label
-                amount_str = str(float(item.scholarship_amount)) if item.scholarship_amount else "0"
-
-                # 解析期間標籤並填入對應月份
-                if "-" in period_label:
-                    try:
-                        if period_label.count("-") == 1:  # YYYY-MM 格式
-                            year, month = period_label.split("-")
-                            month_num = int(month)
-                            if 1 <= month_num <= 12:
-                                month_name = f"{month_num}月"
-                                if month_name in row_data:
-                                    row_data[month_name] = amount_str
-                        elif "H1" in period_label or "H2" in period_label:  # 半年度格式
-                            # 上半年(H1)或下半年(H2)的處理可以在這裡實作
-                            pass
-                    except (ValueError, IndexError):
-                        logger.warning(f"Failed to parse period_label: {period_label}")
 
             # 儲存Excel行資料到資料庫
             item.excel_row_data = row_data
@@ -452,7 +442,7 @@ class ExcelExportService:
 
             excel_data.append(row_data)
 
-        logger.info(f"Prepared {len(excel_data)} rows for STD_UP_MIXLISTA export")
+        logger.info(f"Prepared {len(excel_data)} rows for 28-column format export")
         return excel_data
 
     def _validate_export_data(self, excel_data: List[Dict]) -> Dict[str, Any]:
@@ -513,11 +503,15 @@ class ExcelExportService:
 
         # 產生錯誤和警告
         if missing_required_info > 0:
-            validation_result["errors"].append(f"{missing_required_info} records missing required fields (身分證字號/姓名)")
+            validation_result["errors"].append(
+                f"{missing_required_info} records missing required fields (身分證字號/姓名)"
+            )
             validation_result["is_valid"] = False
 
         if missing_bank_info > 0:
-            validation_result["warnings"].append(f"{missing_bank_info} records missing bank information (將標註於說明欄)")
+            validation_result["warnings"].append(
+                f"{missing_bank_info} records missing bank information (將標註於說明欄)"
+            )
 
         if invalid_amounts > 0:
             validation_result["warnings"].append(f"{invalid_amounts} records have invalid amounts")

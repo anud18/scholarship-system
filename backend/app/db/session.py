@@ -12,6 +12,8 @@ from sqlalchemy.pool import QueuePool
 from app.core.config import settings
 
 # Enhanced async engine configuration for PostgreSQL with better error handling
+# Note: Async engines use AsyncAdaptedQueuePool by default (no need to specify poolclass)
+# Python 3.13 + SQLAlchemy 2.0+ requires proper async pool handling
 async_engine = create_async_engine(
     settings.database_url,
     echo=False,  # 關閉詳細 SQL 日誌
@@ -20,20 +22,22 @@ async_engine = create_async_engine(
     pool_size=10,  # Increased from 5 to 10 for better concurrency
     max_overflow=20,  # Increased from 10 to 20 for burst traffic
     pool_timeout=60,  # Increased timeout to 60 seconds
-    poolclass=QueuePool,
+    # poolclass is omitted - async engines use AsyncAdaptedQueuePool by default
     # Additional async engine parameters for better connection management
-    connect_args={
-        "prepared_statement_cache_size": 0,  # Disable prepared statement cache
-        "statement_cache_size": 0,  # Disable statement cache
-        "command_timeout": 60,  # Command timeout in seconds
-        "timeout": 30,  # Connection timeout in seconds
-        "server_settings": {
-            "application_name": "scholarship_system_async",
-            "jit": "off",  # Disable JIT compilation for faster query startup
-        },
-    }
-    if "postgresql" in settings.database_url
-    else {},
+    connect_args=(
+        {
+            "prepared_statement_cache_size": 0,  # Disable prepared statement cache
+            "statement_cache_size": 0,  # Disable statement cache
+            "command_timeout": 60,  # Command timeout in seconds
+            "timeout": 30,  # Connection timeout in seconds
+            "server_settings": {
+                "application_name": "scholarship_system_async",
+                "jit": "off",  # Disable JIT compilation for faster query startup
+            },
+        }
+        if "postgresql" in settings.database_url
+        else {}
+    ),
 )
 
 # Enhanced sync engine configuration for PostgreSQL
@@ -47,12 +51,14 @@ sync_engine = create_engine(
     pool_timeout=60,  # Increased timeout to 60 seconds
     poolclass=QueuePool,
     # Additional sync engine parameters for better connection management
-    connect_args={
-        "connect_timeout": 30,  # Connection timeout in seconds
-        "options": "-c application_name=scholarship_system_sync -c jit=off",
-    }
-    if "postgresql" in settings.database_url_sync
-    else {},
+    connect_args=(
+        {
+            "connect_timeout": 30,  # Connection timeout in seconds
+            "options": "-c application_name=scholarship_system_sync -c jit=off",
+        }
+        if "postgresql" in settings.database_url_sync
+        else {}
+    ),
 )
 
 # Async session maker (SQLAlchemy 2.0 style)

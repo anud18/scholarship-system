@@ -19,7 +19,6 @@ from app.core.security import require_admin
 from app.db.deps import get_db
 from app.models.notification import Notification
 from app.models.user import User
-from app.schemas.common import PaginatedResponse
 from app.schemas.notification import NotificationCreate, NotificationResponse, NotificationUpdate
 
 logger = logging.getLogger(__name__)
@@ -70,9 +69,9 @@ async def get_all_announcements(
             "title_en": ann.title_en,
             "message": ann.message,
             "message_en": ann.message_en,
-            "notification_type": ann.notification_type.value
-            if hasattr(ann.notification_type, "value")
-            else str(ann.notification_type),
+            "notification_type": (
+                ann.notification_type.value if hasattr(ann.notification_type, "value") else str(ann.notification_type)
+            ),
             "priority": ann.priority.value if hasattr(ann.priority, "value") else str(ann.priority),
             "related_resource_type": ann.related_resource_type,
             "related_resource_id": ann.related_resource_id,
@@ -136,12 +135,14 @@ async def create_announcement(
         "title_en": announcement.title_en,
         "message": announcement.message,
         "message_en": announcement.message_en,
-        "notification_type": announcement.notification_type.value
-        if hasattr(announcement.notification_type, "value")
-        else str(announcement.notification_type),
-        "priority": announcement.priority.value
-        if hasattr(announcement.priority, "value")
-        else str(announcement.priority),
+        "notification_type": (
+            announcement.notification_type.value
+            if hasattr(announcement.notification_type, "value")
+            else str(announcement.notification_type)
+        ),
+        "priority": (
+            announcement.priority.value if hasattr(announcement.priority, "value") else str(announcement.priority)
+        ),
         "related_resource_type": announcement.related_resource_type,
         "related_resource_id": announcement.related_resource_id,
         "action_url": announcement.action_url,
@@ -184,12 +185,14 @@ async def get_announcement(id: int, current_user: User = Depends(require_admin),
         "title_en": announcement.title_en,
         "message": announcement.message,
         "message_en": announcement.message_en,
-        "notification_type": announcement.notification_type.value
-        if hasattr(announcement.notification_type, "value")
-        else str(announcement.notification_type),
-        "priority": announcement.priority.value
-        if hasattr(announcement.priority, "value")
-        else str(announcement.priority),
+        "notification_type": (
+            announcement.notification_type.value
+            if hasattr(announcement.notification_type, "value")
+            else str(announcement.notification_type)
+        ),
+        "priority": (
+            announcement.priority.value if hasattr(announcement.priority, "value") else str(announcement.priority)
+        ),
         "related_resource_type": announcement.related_resource_type,
         "related_resource_id": announcement.related_resource_id,
         "action_url": announcement.action_url,
@@ -254,12 +257,14 @@ async def update_announcement(
         "title_en": announcement.title_en,
         "message": announcement.message,
         "message_en": announcement.message_en,
-        "notification_type": announcement.notification_type.value
-        if hasattr(announcement.notification_type, "value")
-        else str(announcement.notification_type),
-        "priority": announcement.priority.value
-        if hasattr(announcement.priority, "value")
-        else str(announcement.priority),
+        "notification_type": (
+            announcement.notification_type.value
+            if hasattr(announcement.notification_type, "value")
+            else str(announcement.notification_type)
+        ),
+        "priority": (
+            announcement.priority.value if hasattr(announcement.priority, "value") else str(announcement.priority)
+        ),
         "related_resource_type": announcement.related_resource_type,
         "related_resource_id": announcement.related_resource_id,
         "action_url": announcement.action_url,

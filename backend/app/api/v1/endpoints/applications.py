@@ -418,11 +418,11 @@ async def delete_application(
         return {
             "success": True,
             "message": "申請已刪除",
-            "data": deleted_app.dict()
-            if hasattr(deleted_app, "dict")
-            else deleted_app.model_dump()
-            if hasattr(deleted_app, "model_dump")
-            else {"id": id},
+            "data": (
+                deleted_app.dict()
+                if hasattr(deleted_app, "dict")
+                else deleted_app.model_dump() if hasattr(deleted_app, "model_dump") else {"id": id}
+            ),
         }
     except Exception as e:
         logger.error(f"Error deleting application {id}: {str(e)}")
@@ -498,11 +498,11 @@ async def restore_application(
         }
     except (NotFoundError, ValidationError, AuthorizationError) as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST
-            if isinstance(e, ValidationError)
-            else status.HTTP_404_NOT_FOUND
-            if isinstance(e, NotFoundError)
-            else status.HTTP_403_FORBIDDEN,
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+                if isinstance(e, ValidationError)
+                else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
+            ),
             detail=str(e),
         )
 
@@ -578,11 +578,11 @@ async def upload_file(
     return {
         "success": True,
         "message": "檔案上傳成功",
-        "data": result.dict()
-        if hasattr(result, "dict")
-        else result.model_dump()
-        if hasattr(result, "model_dump")
-        else result,
+        "data": (
+            result.dict()
+            if hasattr(result, "dict")
+            else result.model_dump() if hasattr(result, "model_dump") else result
+        ),
     }
 
 
@@ -796,11 +796,11 @@ async def update_student_data(
         }
     except (NotFoundError, ValidationError, AuthorizationError) as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST
-            if isinstance(e, ValidationError)
-            else status.HTTP_404_NOT_FOUND
-            if isinstance(e, NotFoundError)
-            else status.HTTP_403_FORBIDDEN,
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+                if isinstance(e, ValidationError)
+                else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
+            ),
             detail=str(e),
         )
 

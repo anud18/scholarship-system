@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
 from app.models.application import Application
+from app.models.enums import QuotaManagementMode
 from app.models.payment_roster import (
     PaymentRoster,
     PaymentRosterItem,
@@ -88,26 +89,45 @@ class RosterService:
             if existing_roster and existing_roster.is_locked:
                 raise RosterLockedError(f"Cannot regenerate locked roster {existing_roster.roster_code}")
 
-            # Validate that distribution is executed when ranking_id is provided
-            if ranking_id:
-                from app.models.college_review import CollegeRanking
+            # 取得獎學金配置以檢查配額模式
+            scholarship_config = (
+                self.db.query(ScholarshipConfiguration)
+                .filter(ScholarshipConfiguration.id == scholarship_configuration_id)
+                .first()
+            )
 
-                ranking = self.db.query(CollegeRanking).filter(CollegeRanking.id == ranking_id).first()
+            if not scholarship_config:
+                raise ValueError(f"找不到獎學金配置: ID {scholarship_configuration_id}")
 
-                if not ranking:
-                    raise ValueError(f"Ranking with ID {ranking_id} not found")
+            # 根據配額管理模式進行驗證
+            if scholarship_config.quota_management_mode == QuotaManagementMode.matrix_based:
+                # Matrix 模式：必須有 ranking 且已執行分發
+                if ranking_id:
+                    from app.models.college_review import CollegeRanking
 
-                if not ranking.distribution_executed:
-                    raise ValueError(
-                        f"Cannot generate roster from ranking {ranking_id}: "
-                        f"Distribution has not been executed yet. "
-                        f"Please execute matrix distribution before generating roster."
+                    ranking = self.db.query(CollegeRanking).filter(CollegeRanking.id == ranking_id).first()
+
+                    if not ranking:
+                        raise ValueError(f"找不到排名: ID {ranking_id}")
+
+                    if not ranking.distribution_executed:
+                        raise ValueError(
+                            f"無法從排名 {ranking_id} 產生造冊：尚未執行分發。" f"請先執行矩陣分發後再產生造冊。"
+                        )
+
+                    logger.info(f"已驗證排名 {ranking_id} 已執行分發 " f"({ranking.allocated_count} 位學生已分配)")
+                else:
+                    # Matrix 模式但沒有提供 ranking_id，後續會自動偵測
+                    logger.info("Matrix 模式獎學金但未提供 ranking_id，將在篩選申請時自動偵測最新的已執行分發的排名")
+            else:
+                # 非 Matrix 模式：不應使用 ranking_id
+                if ranking_id is not None:
+                    logger.warning(
+                        f"獎學金配置 {scholarship_configuration_id} 使用 '{scholarship_config.quota_management_mode.value}' 模式，"
+                        f"但提供了 ranking_id {ranking_id}。此參數將被忽略。"
                     )
-
-                logger.info(
-                    f"Validated ranking {ranking_id} has executed distribution "
-                    f"({ranking.allocated_count} students allocated)"
-                )
+                    # 將 ranking_id 設為 None 以確保不會被使用
+                    ranking_id = None
 
             # 產生造冊代碼
             roster_code = self._generate_roster_code(scholarship_configuration_id, period_label, academic_year)
@@ -214,9 +234,10 @@ class RosterService:
                         disqualified_count += 1
                         continue
 
-                    # 學籍API驗證並更新學生資料
+                    # 學籍API驗證並取得最新資料
                     verification_result = None
                     verification_status = StudentVerificationStatus.VERIFIED
+                    fresh_student_data = None  # 儲存 API 當下拉取的新鮮資料
 
                     if student_verification_enabled:
                         # 呼叫學籍API取得最新資料
@@ -228,71 +249,62 @@ class RosterService:
                         if verification_status == StudentVerificationStatus.API_ERROR:
                             verification_failures += 1
                         else:
-                            # 檢查API回傳的學生資料是否與Application中的資料有差異
-                            api_student_data = verification_result.get("student_info", {})
-                            if api_student_data:
-                                # 比較關鍵欄位，如有差異則更新
-                                fields_to_check = [
-                                    "name",
-                                    "department",
-                                    "grade",
-                                    "gpa",
-                                    "email",
-                                    "phone",
-                                    "address",
-                                    "bank_account",
-                                ]
-                                has_changes = False
-                                updated_fields = []
+                            # 取得 API 回傳的新鮮資料（用於資格驗證）
+                            fresh_student_data = verification_result.get("student_info", {})
 
-                                for field in fields_to_check:
-                                    if field in api_student_data and api_student_data[field] != stored_student_data.get(
-                                        field
-                                    ):
-                                        old_value = stored_student_data.get(field)
-                                        stored_student_data[field] = api_student_data[field]
-                                        has_changes = True
-                                        updated_fields.append(field)
-                                        logger.info(
-                                            f"Updated {field} for application {application.id}: {old_value} -> {api_student_data[field]}"
-                                        )
-
-                                if has_changes:
-                                    # 更新Application的student_data欄位
-                                    application.student_data = stored_student_data
-                                    self.db.add(application)
-
-                                    # 記錄更新日誌
-                                    audit_service.log_roster_operation(
-                                        roster_id=roster.id,
-                                        action=RosterAuditAction.ITEM_UPDATE,
-                                        title=f"更新申請 {application.id} 的學生資料",
-                                        user_id=created_by_user_id,
-                                        user_name=user_name,
-                                        description=f"學籍驗證後更新欄位: {', '.join(updated_fields)}",
-                                        old_values={f: stored_student_data.get(f) for f in updated_fields},
-                                        new_values={
-                                            f: api_student_data[f] for f in updated_fields if f in api_student_data
-                                        },
-                                        level=RosterAuditLevel.INFO,
-                                        metadata={
-                                            "application_id": application.id,
-                                            "updated_fields": updated_fields,
-                                            "verification_status": verification_result.get("status").value
-                                            if verification_result.get("status")
-                                            else None,
-                                            "verification_message": verification_result.get("message")
-                                            if verification_result
-                                            else None,
-                                        },
-                                        tags=["student_data_update", "verification"],
-                                        db=self.db,
-                                    )
-
-                    # 驗證學生是否符合該期的獎學金規則
+                    # ✅ 優先使用新鮮 API 資料進行資格驗證
                     eligibility_result = self._validate_student_eligibility(
-                        application, roster.academic_year, roster.period_label
+                        application, roster.academic_year, roster.period_label, fresh_api_data=fresh_student_data
                     )
+
+                    # ⬇️ 驗證完成後，才更新 student_data（作為稽核記錄）
+                    if fresh_student_data:
+                        # 檢查並更新 student_data
+                        has_changes = False
+                        updated_fields = []
+
+                        # 合併 API 資料到 stored_student_data
+                        for key, value in fresh_student_data.items():
+                            if stored_student_data.get(key) != value:
+                                old_value = stored_student_data.get(key)
+                                stored_student_data[key] = value
+                                has_changes = True
+                                updated_fields.append(key)
+                                logger.info(f"Updated {key} for application {application.id}: {old_value} -> {value}")
+
+                        if has_changes:
+                            # 更新Application的student_data欄位（稽核用）
+                            application.student_data = stored_student_data
+                            self.db.add(application)
+
+                            # 記錄更新日誌
+                            audit_service.log_roster_operation(
+                                roster_id=roster.id,
+                                action=RosterAuditAction.ITEM_UPDATE,
+                                title=f"更新申請 {application.id} 的學生資料",
+                                user_id=created_by_user_id,
+                                user_name=user_name,
+                                description=f"學籍驗證後更新欄位: {', '.join(updated_fields)}",
+                                old_values={f: stored_student_data.get(f) for f in updated_fields},
+                                new_values={
+                                    f: fresh_student_data[f] for f in updated_fields if f in fresh_student_data
+                                },
+                                level=RosterAuditLevel.INFO,
+                                metadata={
+                                    "application_id": application.id,
+                                    "updated_fields": updated_fields,
+                                    "verification_status": (
+                                        verification_result.get("status").value
+                                        if verification_result.get("status")
+                                        else None
+                                    ),
+                                    "verification_message": (
+                                        verification_result.get("message") if verification_result else None
+                                    ),
+                                },
+                                tags=["student_data_update", "verification"],
+                                db=self.db,
+                            )
 
                     # 建立造冊明細
                     roster_item = self._create_roster_item(
@@ -326,19 +338,34 @@ class RosterService:
             roster.disqualified_count = disqualified_count
             roster.total_amount = total_amount
             roster.verification_api_failures = verification_failures
-            roster.completed_at = datetime.now(timezone.utc)
-            roster.status = RosterStatus.COMPLETED
 
-            # 記錄完成日誌
+            # 關鍵改進：在設置為 COMPLETED 前進行資料一致性驗證
+            validation = self.validate_roster_consistency(roster)
+            if not validation["is_valid"]:
+                error_details = "; ".join(validation["errors"])
+                logger.error(f"Roster data inconsistency detected: {error_details}")
+                raise RosterGenerationError(f"造冊資料一致性驗證失敗: {error_details}")
+
+            # 記錄警告（如果有）
+            if validation["warnings"]:
+                for warning in validation["warnings"]:
+                    logger.warning(f"Roster {roster_code} validation warning: {warning}")
+
+            # 驗證通過後 flush 資料到資料庫（但不 commit）
+            # 這確保 lazy loading 的關聯資料（如 roster.items）可以被存取
+            # 狀態設置將由 API 端點在所有操作成功後進行
+            self.db.flush()
+
+            # 記錄產生日誌（狀態尚未設置為 COMPLETED）
             audit_service.log_roster_operation(
                 roster_id=roster.id,
-                action=RosterAuditAction.STATUS_CHANGE,
-                title=f"造冊產生完成: 合格{qualified_count}人, 不合格{disqualified_count}人",
+                action=RosterAuditAction.CREATE,
+                title=f"造冊資料產生: 合格{qualified_count}人, 不合格{disqualified_count}人",
                 user_id=created_by_user_id,
                 user_name=user_name,
-                description=f"造冊產生完成，總金額: ${total_amount}，API失敗: {verification_failures}次",
-                old_values={"status": "processing"},
-                new_values={"status": "completed"},
+                description=f"造冊資料產生完成，總金額: ${total_amount}，API失敗: {verification_failures}次",
+                old_values=None,
+                new_values=None,
                 level=RosterAuditLevel.INFO,
                 affected_items_count=qualified_count + disqualified_count,
                 metadata={
@@ -347,19 +374,82 @@ class RosterService:
                     "total_amount": float(total_amount),
                     "verification_failures": verification_failures,
                 },
-                tags=["completion", trigger_type.value],
+                tags=["generation", trigger_type.value],
                 db=self.db,
             )
 
-            self.db.commit()
-            logger.info(f"Roster {roster_code} generated successfully")
+            # 重要：不再在此處 commit，讓調用者決定何時提交
+            # 這確保了造冊產生和後續操作（如 Excel 匯出）在同一個事務中
+            logger.info(f"Roster {roster_code} generated successfully (not yet committed)")
 
             return roster
 
         except Exception as e:
-            self.db.rollback()
+            # 不在此處執行 rollback，讓調用者決定如何處理事務
+            # 這避免了與 API 端點的 rollback 重複執行
             logger.error(f"Error generating roster: {e}")
             raise RosterGenerationError(f"Failed to generate roster: {e}")
+
+    def validate_roster_consistency(self, roster: PaymentRoster) -> Dict[str, Any]:
+        """
+        驗證造冊資料一致性
+        Validate roster data consistency
+
+        Args:
+            roster: 要驗證的造冊物件
+
+        Returns:
+            {
+                "is_valid": bool,  # 是否通過驗證
+                "errors": List[str],  # 錯誤列表
+                "warnings": List[str]  # 警告列表
+            }
+        """
+        errors = []
+        warnings = []
+
+        # 1. 檢查明細數量是否與統計一致
+        item_count = len(roster.items) if roster.items else 0
+        expected_count = roster.qualified_count + roster.disqualified_count
+
+        if item_count != expected_count:
+            errors.append(
+                f"明細數量不一致: 實際 {item_count} 筆，但統計顯示應有 {expected_count} 筆 "
+                f"(合格={roster.qualified_count}, 不合格={roster.disqualified_count})"
+            )
+
+        # 2. 檢查金額總計是否正確
+        if roster.items:
+            actual_total = sum(
+                item.scholarship_amount for item in roster.items if item.is_included and item.is_qualified
+            )
+            if abs(float(actual_total) - float(roster.total_amount)) > 0.01:
+                errors.append(f"總金額不一致: 計算值={actual_total}, 儲存值={roster.total_amount}")
+
+        # 3. 檢查是否有明細資料（至少應該有 qualified + disqualified > 0）
+        if expected_count > 0 and item_count == 0:
+            errors.append(f"統計顯示有 {expected_count} 筆資料，但沒有任何明細項目")
+
+        # 4. 檢查所有明細項目的必需欄位
+        if roster.items:
+            for idx, item in enumerate(roster.items):
+                if not item.student_id_number:
+                    errors.append(f"明細項目 #{idx + 1} 缺少學生身分證字號")
+                if not item.student_name:
+                    errors.append(f"明細項目 #{idx + 1} 缺少學生姓名")
+                if item.scholarship_amount is None or item.scholarship_amount <= 0:
+                    errors.append(f"明細項目 #{idx + 1} 獎學金金額無效")
+
+        # 5. 檢查狀態為 COMPLETED 時是否有 Excel 檔案（警告級別）
+        if roster.status == RosterStatus.COMPLETED:
+            if not roster.excel_filename and not roster.minio_object_name:
+                warnings.append("造冊狀態為已完成，但沒有關聯的 Excel 檔案")
+
+        return {
+            "is_valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+        }
 
     def get_roster_by_id(self, roster_id: int) -> Optional[PaymentRoster]:
         """根據ID取得造冊"""
@@ -469,42 +559,157 @@ class RosterService:
         """
         取得符合條件的申請
 
-        如果指定 ranking_id，只選取該排名中已分配的申請（正取學生）
-        否則選取所有 approved 狀態的申請
+        根據配額管理模式使用不同的篩選邏輯：
+        - matrix_based: 必須使用 ranking_id，只選取已分配(is_allocated=True)的申請
+        - 其他模式(none/simple/college_based): 選取所有 approved 狀態的申請
         """
-        from app.models.college_review import CollegeRankingItem
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
 
-        # 基本條件：已核准的申請
-        query = (
-            self.db.query(Application)
-            .join(ScholarshipConfiguration)
-            .filter(
-                and_(
-                    ScholarshipConfiguration.id == scholarship_configuration_id,
-                    Application.status == "approved",  # 已核准
-                    Application.academic_year == academic_year,
-                )
+        # 1. 取得獎學金配置以判斷配額模式
+        config = (
+            self.db.query(ScholarshipConfiguration)
+            .filter(ScholarshipConfiguration.id == scholarship_configuration_id)
+            .first()
+        )
+
+        if not config:
+            raise ValueError(f"找不到獎學金配置: ID {scholarship_configuration_id}")
+
+        # 2. 基本查詢：已核准的申請
+        # 容錯處理：如果 scholarship_configuration_id 為 NULL，則比對 scholarship_type_id
+        query = self.db.query(Application).filter(
+            and_(
+                or_(
+                    Application.scholarship_configuration_id == scholarship_configuration_id,
+                    and_(
+                        Application.scholarship_configuration_id.is_(None),
+                        Application.scholarship_type_id == config.scholarship_type_id,
+                    ),
+                ),
+                Application.status == "approved",  # 已核准
+                Application.academic_year == academic_year,
             )
         )
 
-        # 如果指定了 ranking_id，只選取該排名中已分配的申請
-        if ranking_id is not None:
+        logger.info(
+            f"Querying applications for config {scholarship_configuration_id} "
+            f"(scholarship_type {config.scholarship_type_id}), fallback enabled for NULL config_id"
+        )
+
+        # 3. 根據配額管理模式使用不同的過濾邏輯
+        if config.quota_management_mode == QuotaManagementMode.matrix_based:
+            # Matrix 模式：必須使用 ranking + is_allocated 過濾
+            logger.info(f"Using matrix-based filtering for scholarship config {scholarship_configuration_id}")
+
+            # 如果沒有提供 ranking_id，自動偵測最新的已執行分發的 ranking
+            if ranking_id is None:
+                # 從 period_label 推導學期
+                semester = self._extract_semester_from_period(period_label)
+
+                # 查詢最新的已完成分發的 ranking
+                ranking = (
+                    self.db.query(CollegeRanking)
+                    .filter(
+                        and_(
+                            CollegeRanking.scholarship_type_id == config.scholarship_type_id,
+                            CollegeRanking.academic_year == academic_year,
+                            CollegeRanking.is_finalized == True,  # 必須已完成
+                            CollegeRanking.distribution_executed == True,  # 必須已執行分發
+                        )
+                    )
+                    .order_by(CollegeRanking.finalized_at.desc())
+                    .first()
+                )
+
+                if not ranking:
+                    raise ValueError(
+                        f"找不到已執行分發的排名。Matrix 模式獎學金必須先執行矩陣分發才能產生造冊。"
+                        f"獎學金類型ID: {config.scholarship_type_id}, 學年度: {academic_year}"
+                    )
+
+                ranking_id = ranking.id
+                logger.info(
+                    f"Auto-detected ranking ID {ranking_id} "
+                    f"(finalized at {ranking.finalized_at}, {ranking.allocated_count} students allocated)"
+                )
+
+            # 只選取該 ranking 中已分配(正取)的申請
             query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
-                and_(CollegeRankingItem.ranking_id == ranking_id, CollegeRankingItem.is_allocated == True)  # 只選正取
+                and_(
+                    CollegeRankingItem.ranking_id == ranking_id,
+                    CollegeRankingItem.is_allocated == True,  # 只選正取學生
+                )
+            )
+        else:
+            # 非 Matrix 模式 (none/simple/college_based)：直接從 approved 狀態選取
+            logger.info(
+                f"Using non-matrix filtering mode '{config.quota_management_mode.value}' "
+                f"for scholarship config {scholarship_configuration_id}"
             )
 
-        # 根據期間標記篩選
-        if period_label.endswith("-H1") or period_label.endswith("-H2"):
-            # 半年期間 - 根據學期篩選
-            semester = "first" if period_label.endswith("-H1") else "second"
-            query = query.filter(Application.semester == semester)
-        elif "-" in period_label and len(period_label.split("-")) == 2:
-            # 月份期間 - 可以根據申請日期或其他條件篩選
-            year, month = period_label.split("-")
-            # 這裡可以加入更細緻的月份篩選邏輯
-            pass
+            # 如果誤傳了 ranking_id，記錄警告但忽略
+            if ranking_id is not None:
+                logger.warning(
+                    f"ranking_id {ranking_id} provided for non-matrix scholarship mode "
+                    f"'{config.quota_management_mode.value}', will be ignored"
+                )
+
+        # 4. 根據期間標記進行額外篩選
+        # 重要：只有當獎學金配置本身是學期制時才應用學期過濾
+        if config.semester is not None:
+            # 學期制獎學金：應用學期過濾
+            if period_label.endswith("-H1") or period_label.endswith("-H2"):
+                # 半年期間 - 根據學期篩選
+                semester = "first" if period_label.endswith("-H1") else "second"
+                query = query.filter(Application.semester == semester)
+                logger.info(f"Filtering semester-based scholarship for semester '{semester}'")
+            elif "-" in period_label and len(period_label.split("-")) == 2:
+                # 月份期間 - 根據月份對應學期
+                year, month = period_label.split("-")
+                try:
+                    month_int = int(month)
+                    # 2-7月 = 下學期(second), 8-1月 = 上學期(first)
+                    if month_int in [2, 3, 4, 5, 6, 7]:
+                        semester = "second"
+                        query = query.filter(Application.semester == semester)
+                        logger.info(
+                            f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
+                        )
+                    elif month_int in [8, 9, 10, 11, 12, 1]:
+                        semester = "first"
+                        query = query.filter(Application.semester == semester)
+                        logger.info(
+                            f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
+                        )
+                except ValueError:
+                    logger.warning(f"Invalid month in period_label: {month}")
+        else:
+            # 學年制獎學金：不應用學期過濾
+            # 申請的 semester 應該是 NULL
+            logger.info(
+                f"Yearly scholarship detected (config.semester=NULL), "
+                f"not applying semester filter for period {period_label}"
+            )
 
         return query.all()
+
+    def _extract_semester_from_period(self, period_label: str) -> Optional[str]:
+        """從期間標記提取學期資訊"""
+        if period_label.endswith("-H1"):
+            return "first"
+        elif period_label.endswith("-H2"):
+            return "second"
+        elif "-" in period_label and len(period_label.split("-")) == 2:
+            year, month = period_label.split("-")
+            try:
+                month_int = int(month)
+                if month_int in [2, 3, 4, 5, 6, 7]:
+                    return "second"
+                elif month_int in [8, 9, 10, 11, 12, 1]:
+                    return "first"
+            except ValueError:
+                pass
+        return None
 
     def _create_roster_item(
         self,
@@ -535,20 +740,31 @@ class RosterService:
             else:
                 exclusion_reason = "不符合獎學金資格條件"
         # 3. 檢查銀行帳戶資訊
-        # FIXED: bank_account should be in submitted_form_data, not student_data (CLAUDE.md principle)
+        # IMPORTANT: Support both nested (schema-compliant) and flat (legacy) data structures
         form_data = application.submitted_form_data or {}
         form_fields = form_data.get("fields", {})
 
         # Extract bank_account from various possible field names
         bank_account = ""
         for field_name in ["postal_account", "bank_account", "account_number", "帳戶號碼", "帳號", "郵局帳號"]:
+            # Check nested structure first (schema-compliant)
             if field_name in form_fields and form_fields[field_name].get("value"):
                 bank_account = str(form_fields[field_name]["value"])
+                logger.debug(f"Found bank account '{bank_account}' in nested structure (field: {field_name})")
+                break
+            # Check flat structure (backward compatibility for existing data)
+            elif field_name in form_data and form_data.get(field_name):
+                bank_account = str(form_data[field_name])
+                logger.debug(f"Found bank account '{bank_account}' in flat structure (field: {field_name})")
                 break
 
         if not bank_account:
             is_included = False
             exclusion_reason = "缺少銀行帳戶資訊"
+            logger.warning(
+                f"Application {application.id} missing bank account. "
+                f"Checked nested and flat structures. submitted_form_data keys: {list(form_data.keys())}"
+            )
 
         # 查詢 CollegeRankingItem 以取得備取資訊
         backup_info = None
@@ -691,7 +907,11 @@ class RosterService:
         )
 
     def _validate_student_eligibility(
-        self, application: Application, academic_year: int, period_label: str
+        self,
+        application: Application,
+        academic_year: int,
+        period_label: str,
+        fresh_api_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         驗證學生是否符合該期的獎學金規則
@@ -700,6 +920,7 @@ class RosterService:
             application: 申請記錄
             academic_year: 學年度
             period_label: 期間標記 (YYYY-MM, YYYY-H1/H2, YYYY)
+            fresh_api_data: 從 API 拉取的新鮮學生資料（優先使用）
 
         Returns:
             Dict[str, Any]: 驗證結果
@@ -715,7 +936,12 @@ class RosterService:
             scholarship_config = application.scholarship_configuration
 
             if not scholarship_config or not student:
-                return {"is_eligible": False, "failed_rules": ["缺少學生或獎學金配置資訊"], "warning_rules": [], "details": {}}
+                return {
+                    "is_eligible": False,
+                    "failed_rules": ["缺少學生或獎學金配置資訊"],
+                    "warning_rules": [],
+                    "details": {},
+                }
 
             # 取得該獎學金類型在該學年度的規則
             rules = self._get_scholarship_rules(
@@ -731,13 +957,13 @@ class RosterService:
                     "details": {"no_rules_found": True},
                 }
 
-            # 驗證每條規則
+            # 驗證每條規則（使用新鮮 API 資料）
             failed_rules = []
             warning_rules = []
             details = {}
 
             for rule in rules:
-                rule_result = self._evaluate_scholarship_rule(rule, student, application)
+                rule_result = self._evaluate_scholarship_rule(rule, student, application, fresh_api_data=fresh_api_data)
 
                 if not rule_result["passed"]:
                     if rule.is_hard_rule:
@@ -782,14 +1008,20 @@ class RosterService:
             semester = "first"
         elif period_label.endswith("-H2"):
             semester = "second"
+        elif period_label.endswith("-annual"):
+            semester = None  # 全年度獎學金，不限學期
         elif "-" in period_label and len(period_label.split("-")) == 2:
             # 月份格式，可能需要根據月份推導學期
             year, month = period_label.split("-")
-            month_int = int(month)
-            if month_int in [2, 3, 4, 5, 6, 7]:
-                semester = "second"  # 下學期
-            elif month_int in [8, 9, 10, 11, 12, 1]:
-                semester = "first"  # 上學期
+            try:
+                month_int = int(month)
+                if month_int in [2, 3, 4, 5, 6, 7]:
+                    semester = "second"  # 下學期
+                elif month_int in [8, 9, 10, 11, 12, 1]:
+                    semester = "first"  # 上學期
+            except ValueError:
+                # month is not a number, leave semester as None
+                logger.debug(f"Period label '{period_label}' does not contain numeric month, semester remains None")
 
         query = (
             self.db.query(ScholarshipRule)
@@ -798,7 +1030,8 @@ class RosterService:
                     ScholarshipRule.scholarship_type_id == scholarship_type_id,
                     ScholarshipRule.is_active.is_(True),
                     or_(
-                        ScholarshipRule.academic_year == academic_year, ScholarshipRule.academic_year.is_(None)  # 通用規則
+                        ScholarshipRule.academic_year == academic_year,
+                        ScholarshipRule.academic_year.is_(None),  # 通用規則
                     ),
                     or_(ScholarshipRule.semester == semester, ScholarshipRule.semester.is_(None)),  # 不限學期
                     or_(ScholarshipRule.sub_type == sub_type, ScholarshipRule.sub_type.is_(None)),  # 通用子類型
@@ -809,12 +1042,16 @@ class RosterService:
 
         return query.all()
 
-    def _evaluate_scholarship_rule(self, rule: ScholarshipRule, student, application: Application) -> Dict[str, Any]:
+    def _evaluate_scholarship_rule(
+        self, rule: ScholarshipRule, student, application: Application, fresh_api_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """評估單一獎學金規則"""
 
         try:
-            # 根據規則類型獲取學生資料中的對應值
-            actual_value = self._get_student_field_value(rule.condition_field, student, application)
+            # 根據規則類型獲取學生資料中的對應值（優先使用新鮮 API 資料）
+            actual_value = self._get_student_field_value(
+                rule.condition_field, student, application, fresh_api_data=fresh_api_data
+            )
 
             # 評估條件
             passed = self._evaluate_condition(actual_value, rule.operator, rule.expected_value)
@@ -843,8 +1080,24 @@ class RosterService:
                 "error": str(e),
             }
 
-    def _get_student_field_value(self, field_name: str, student, application: Application):
+    def _get_student_field_value(
+        self, field_name: str, student, application: Application, fresh_api_data: Optional[Dict[str, Any]] = None
+    ):
         """從學生或申請資料中獲取指定欄位的值"""
+
+        # 最優先：檢查 fresh_api_data（API 當下拉取的資料）
+        if fresh_api_data and (field_name.startswith("std_") or field_name.startswith("trm_")):
+            value = fresh_api_data.get(field_name)
+            if value is not None:
+                logger.debug(f"Found field '{field_name}' = {value} in fresh_api_data (current API data)")
+                return value
+
+        # 次優先：檢查 application.student_data JSON 中的 API 資料（申請時的快照）
+        if application.student_data and (field_name.startswith("std_") or field_name.startswith("trm_")):
+            value = application.student_data.get(field_name)
+            if value is not None:
+                logger.debug(f"Found field '{field_name}' = {value} in application.student_data (snapshot)")
+                return value
 
         # 常見的欄位映射
         field_mapping = {
@@ -949,7 +1202,9 @@ class RosterService:
             }
 
             # 3. 取得符合條件的申請
-            eligible_applications = self._get_eligible_applications(scholarship_configuration_id, academic_year)
+            eligible_applications = self._get_eligible_applications(
+                scholarship_configuration_id, period_label, academic_year, ranking_id=None
+            )
 
             # 4. 模擬學籍驗證和規則驗證
             estimated_items = []
@@ -1040,9 +1295,9 @@ class RosterService:
 
             result = {
                 "scholarship_configuration_id": scholarship_configuration_id,
-                "scholarship_name": scholarship_config.scholarship_type.name
-                if scholarship_config.scholarship_type
-                else "Unknown",
+                "scholarship_name": (
+                    scholarship_config.scholarship_type.name if scholarship_config.scholarship_type else "Unknown"
+                ),
                 "period_label": period_label,
                 "roster_cycle": roster_cycle.value,
                 "academic_year": academic_year,

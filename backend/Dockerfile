@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -10,19 +10,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Install system dependencies
-# Security: Pin exact package versions to prevent dependency confusion attacks
-# Configure trusted Debian repositories explicitly
+# Security: Use trusted Debian repositories with package authentication
+# Allows automatic security updates while maintaining repository trust
 RUN echo "deb http://deb.debian.org/debian trixie main" > /etc/apt/sources.list && \
     echo "deb http://deb.debian.org/debian-security trixie-security main" >> /etc/apt/sources.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends --allow-unauthenticated=false \
-    curl=8.14.1-2 \
-    gcc=4:14.2.0-1 \
-    postgresql-client=17+278 \
-    tesseract-ocr=5.5.0-1+b1 \
-    tesseract-ocr-eng=1:4.1.0-2 \
-    libpq-dev=17.6-0+deb13u1 \
-    libmagic-dev=1:5.46-5 \
+    curl \
+    gcc \
+    postgresql-client \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    libpq-dev \
+    libmagic-dev \
     && rm -rf /var/lib/apt/lists/* \
     && dpkg --get-selections > /installed-packages.list
 

@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BankInfoBase(BaseModel):
@@ -134,8 +134,7 @@ class UserProfileResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CompleteUserProfileResponse(BaseModel):
@@ -170,8 +169,7 @@ class ProfileHistoryResponse(BaseModel):
     change_reason: Optional[str] = None
     changed_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BankInfoUpdate(BankInfoBase):

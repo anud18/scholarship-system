@@ -92,9 +92,9 @@ class BulkApprovalService:
                         {
                             "application_id": application.id,
                             "app_id": application.app_id,
-                            "student_id": application.student_data.get("student_id")
-                            if application.student_data
-                            else None,
+                            "student_id": (
+                                application.student_data.get("student_id") if application.student_data else None
+                            ),
                             "previous_status": old_status,
                             "new_status": application.status,
                             "approved_at": application.approved_at.isoformat(),
@@ -202,9 +202,9 @@ class BulkApprovalService:
                         {
                             "application_id": application.id,
                             "app_id": application.app_id,
-                            "student_id": application.student_data.get("student_id")
-                            if application.student_data
-                            else None,
+                            "student_id": (
+                                application.student_data.get("student_id") if application.student_data else None
+                            ),
                             "previous_status": old_status,
                             "rejected_at": application.decision_date.isoformat(),
                             "rejection_reason": rejection_reason,
@@ -320,9 +320,9 @@ class BulkApprovalService:
                         {
                             "application_id": application.id,
                             "app_id": application.app_id,
-                            "student_id": application.student_data.get("student_id")
-                            if application.student_data
-                            else None,
+                            "student_id": (
+                                application.student_data.get("student_id") if application.student_data else None
+                            ),
                             # Note: priority_score field removed
                             "is_renewal": application.is_renewal,
                             "auto_approved_at": application.approved_at.isoformat(),

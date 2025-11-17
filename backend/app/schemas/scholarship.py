@@ -7,7 +7,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Import the actual enums from models to ensure consistency
 from app.models.enums import Semester
@@ -129,8 +129,7 @@ class ScholarshipTypeResponse(ScholarshipTypeBase):
     created_by: Optional[int] = None
     updated_by: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WhitelistToggleRequest(BaseModel):
@@ -138,8 +137,7 @@ class WhitelistToggleRequest(BaseModel):
 
     enabled: bool = Field(..., description="是否啟用白名單")
 
-    class Config:
-        json_schema_extra = {"example": {"enabled": True}}
+    model_config = ConfigDict(json_schema_extra={"example": {"enabled": True}})
 
 
 class ScholarshipRuleBase(BaseModel):
@@ -219,8 +217,7 @@ class ScholarshipRuleResponse(ScholarshipRuleBase):
             return v.value
         return v  # It's already a string
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RuleMessage(BaseModel):
@@ -272,8 +269,7 @@ class EligibleScholarshipResponse(BaseModel):
     errors: List[RuleMessage]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScholarshipSubTypeConfigBase(BaseModel):
@@ -334,8 +330,7 @@ class ScholarshipSubTypeConfigResponse(ScholarshipSubTypeConfigBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Rule filtering and bulk operation schemas

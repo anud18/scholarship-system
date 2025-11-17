@@ -386,7 +386,9 @@ class ApplicationAuditService:
             compared_fields = verification_result.get("compared_fields", 0)
 
             match_text = "相符" if overall_match else "不相符"
-            description = f"驗證銀行帳戶 {app_id}: {match_text} (信心度: {average_confidence:.2f}, 比對欄位: {compared_fields})"
+            description = (
+                f"驗證銀行帳戶 {app_id}: {match_text} (信心度: {average_confidence:.2f}, 比對欄位: {compared_fields})"
+            )
 
             meta_data = {
                 "app_id": app_id,
@@ -430,7 +432,8 @@ class ApplicationAuditService:
         summary = batch_result.get("summary", {})
 
         description = (
-            f"批次驗證銀行帳戶: 處理 {total_processed} 筆申請, " f"成功 {successful_verifications} 筆, 失敗 {failed_verifications} 筆"
+            f"批次驗證銀行帳戶: 處理 {total_processed} 筆申請, "
+            f"成功 {successful_verifications} 筆, 失敗 {failed_verifications} 筆"
         )
 
         # Use the first application ID as the resource ID for batch operations

@@ -94,7 +94,7 @@ class RosterSchedule(Base):
 
     def to_dict(self):
         """轉換為字典格式"""
-        return {
+        result = {
             "id": self.id,
             "schedule_name": self.schedule_name,
             "description": self.description,
@@ -118,6 +118,17 @@ class RosterSchedule(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+        # Include scholarship configuration info if relationship is loaded
+        if self.scholarship_configuration:
+            result["config_name"] = self.scholarship_configuration.config_name
+            result["scholarship_type_name"] = (
+                self.scholarship_configuration.scholarship_type.name
+                if self.scholarship_configuration.scholarship_type
+                else None
+            )
+
+        return result
 
     def update_execution_stats(self, success: bool, error_message: Optional[str] = None):
         """更新執行統計"""

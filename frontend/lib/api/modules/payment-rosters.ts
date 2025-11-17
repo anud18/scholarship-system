@@ -56,12 +56,14 @@ export function createPaymentRostersApi() {
       student_verification_enabled?: boolean;
       ranking_id?: number;
       auto_export_excel?: boolean;
+      force_regenerate?: boolean;
     }): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/payment-rosters/generate', {
         body: {
           ...data,
           student_verification_enabled: data.student_verification_enabled ?? true,
           auto_export_excel: data.auto_export_excel ?? true,
+          force_regenerate: data.force_regenerate ?? false,
         },
       });
       return toApiResponse(response);

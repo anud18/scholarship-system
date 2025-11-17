@@ -23,9 +23,17 @@ import { apiClient } from "@/lib/api"
 
 interface Period {
   label: string
-  status: "completed" | "waiting"
+  status: "completed" | "waiting" | "failed" | "processing" | "draft" | "locked"
   roster_id?: number
   roster_code?: string
+  roster_status?: string
+  error_message?: string
+  completed_at?: string
+  total_amount?: number
+  qualified_count?: number
+  next_schedule?: string
+  period_start_date?: string
+  period_end_date?: string
 }
 
 interface RosterDetailDialogProps {

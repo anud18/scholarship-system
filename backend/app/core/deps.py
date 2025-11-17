@@ -2,18 +2,18 @@
 Dependency injection functions for FastAPI
 """
 
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Generator
 
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.dynamic_config import dynamic_config
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, SessionLocal
 from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/login")
@@ -26,6 +26,15 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
         finally:
             await session.close()
+
+
+def get_sync_db() -> Generator[Session, None, None]:
+    """Get synchronous database session"""
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
@@ -41,7 +50,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
-    except JWTError:
+    except jwt.PyJWTError:
         raise credentials_exception
 
     stmt = select(User).options(selectinload(User.admin_scholarships)).where(User.id == int(user_id))

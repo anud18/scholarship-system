@@ -5,7 +5,7 @@ Email management API endpoints for viewing email history and scheduled emails
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -350,7 +350,9 @@ async def enable_test_mode(
         db.add(audit_log)
         await db.commit()
 
-        return ApiResponse(success=True, message=f"測試模式已啟用，將於 {duration_hours} 小時後自動關閉", data=test_config)
+        return ApiResponse(
+            success=True, message=f"測試模式已啟用，將於 {duration_hours} 小時後自動關閉", data=test_config
+        )
 
     except Exception as e:
         await db.rollback()
@@ -531,7 +533,9 @@ async def send_test_email(
         # Get email template
         template = await EmailTemplateService.get_template(db, request.template_key)
         if not template:
-            raise HTTPException(status_code=404, detail=f"郵件模板 '{request.template_key}' 不存在，請檢查模板鍵名是否正確")
+            raise HTTPException(
+                status_code=404, detail=f"郵件模板 '{request.template_key}' 不存在，請檢查模板鍵名是否正確"
+            )
 
         # Render subject and body with test data
         try:
@@ -796,7 +800,9 @@ async def get_react_email_template_source(*, template_name: str, current_user: U
             raise HTTPException(status_code=404, detail=f"模板 '{template_name}' 不存在")
 
         return ApiResponse(
-            success=True, message="成功獲取模板源碼", data={"source": source, "language": "typescript", "read_only": True}
+            success=True,
+            message="成功獲取模板源碼",
+            data={"source": source, "language": "typescript", "read_only": True},
         )
 
     except HTTPException:

@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.session import get_db_session
-from app.models.payment_roster import RosterCycle, RosterTriggerType
+from app.models.payment_roster import RosterCycle, RosterStatus, RosterTriggerType
 from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
 from app.services.roster_service import RosterService
 
@@ -253,7 +253,7 @@ class RosterSchedulerService:
                     roster_cycle=roster_cycle, target_date=datetime.now()
                 )
 
-                # 呼叫 RosterService 建立造冊（使用傳入的 force_regenerate 參數）
+                # 階段 1: 呼叫 RosterService 建立造冊（但不提交）
                 roster = roster_service.generate_roster(
                     scholarship_configuration_id=schedule["scholarship_configuration_id"],
                     period_label=period_label,
@@ -262,33 +262,59 @@ class RosterSchedulerService:
                     created_by_user_id=schedule["created_by_user_id"],
                     trigger_type=RosterTriggerType.SCHEDULED,
                     student_verification_enabled=schedule.get("student_verification_enabled", True),
-                    force_regenerate=force_regenerate,  # 使用參數而非硬編碼
+                    force_regenerate=force_regenerate,
                 )
 
-                # Auto-export Excel for scheduled rosters
-                excel_export_result = None
-                try:
-                    from app.services.excel_export_service import ExcelExportService
+                logger.info(f"Scheduled roster {roster.roster_code} generated (not yet committed)")
 
-                    export_service = ExcelExportService()
-                    excel_export_result = export_service.export_roster_to_excel(
-                        roster=roster,
-                        template_name="STD_UP_MIXLISTA",
-                        include_header=True,
-                        include_statistics=True,
-                        include_excluded=False,
-                    )
-                    db.commit()  # Commit to save minio_object_name
-                    logger.info(
-                        f"Excel file automatically exported for scheduled roster {roster.roster_code}: "
-                        f"{excel_export_result.get('minio_object_name', 'N/A')}"
-                    )
-                except Exception as export_error:
-                    logger.error(
-                        f"Auto-export failed for scheduled roster {roster.roster_code}: {export_error}", exc_info=True
-                    )
-                    # Don't fail roster generation if export fails
-                    excel_export_result = {"error": str(export_error)}
+                # 階段 2: Excel 匯出（在同一個事務中）
+                excel_export_result = None
+                from app.services.excel_export_service import ExcelExportService
+
+                export_service = ExcelExportService()
+                excel_export_result = export_service.export_roster_to_excel(
+                    roster=roster,
+                    template_name="STD_UP_MIXLISTA",
+                    include_header=True,
+                    include_statistics=True,
+                    include_excluded=False,
+                )
+                logger.info(
+                    f"Excel file exported for scheduled roster {roster.roster_code}: "
+                    f"{excel_export_result.get('minio_object_name', 'N/A')}"
+                )
+
+                # 階段 3: 記錄稽核日誌，然後設置狀態並提交事務
+                # 先記錄稽核日誌，確保日誌成功後才標記為 COMPLETED
+                from app.models.roster_audit import RosterAuditAction, RosterAuditLevel
+                from app.services.audit_service import audit_service
+
+                audit_service.log_roster_operation(
+                    roster_id=roster.id,
+                    action=RosterAuditAction.STATUS_CHANGE,
+                    title="排程造冊狀態設置為已完成",
+                    user_id=schedule["created_by_user_id"],
+                    user_name="System (Scheduler)",
+                    description="排程自動產生造冊完成，狀態設置為 COMPLETED",
+                    old_values={"status": "processing"},
+                    new_values={"status": "completed"},
+                    level=RosterAuditLevel.INFO,
+                    metadata={
+                        "excel_exported": bool(excel_export_result),
+                        "schedule_id": schedule["id"],
+                    },
+                    tags=["status_change", "scheduled", "completion"],
+                    db=db,
+                )
+
+                # 稽核日誌成功後，才設置狀態為 COMPLETED
+                roster.status = RosterStatus.COMPLETED
+                roster.completed_at = datetime.now(timezone.utc)
+
+                db.commit()
+                logger.info(
+                    f"Scheduled roster {roster.roster_code} committed successfully with status={roster.status.value}"
+                )
 
                 message = f"Successfully created roster {roster.roster_code}"
                 if excel_export_result and "error" not in excel_export_result:
@@ -303,7 +329,9 @@ class RosterSchedulerService:
                 }
 
         except Exception as e:
-            logger.error(f"Failed to create roster from schedule: {e}")
+            logger.error(f"Failed to create roster from schedule: {e}", exc_info=True)
+            # 發生異常時回滾事務
+            db.rollback()
             return {"success": False, "error": str(e), "message": f"Failed to create roster: {e}"}
 
     async def _get_schedule_by_id(self, db, schedule_id: int) -> Optional[Dict]:

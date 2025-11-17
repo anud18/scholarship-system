@@ -71,7 +71,8 @@ async def create_review(
         if normalized_code not in reviewable_subtypes:
             logger.warning(f"[Create Review] Authorization failed: '{normalized_code}' not in {reviewable_subtypes}")
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail=f"您無權審查子項目 '{item.sub_type_code}'（該子項目可能已被前位審查者拒絕）"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"您無權審查子項目 '{item.sub_type_code}'（該子項目可能已被前位審查者拒絕）",
             )
 
         # Update the item with normalized code
@@ -80,7 +81,9 @@ async def create_review(
     # 驗證拒絕時是否有評論
     for item in review_data.items:
         if item.recommendation == "reject" and not item.comments:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"拒絕子項目 '{item.sub_type_code}' 時必須提供評論")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=f"拒絕子項目 '{item.sub_type_code}' 時必須提供評論"
+            )
 
     # 計算整體建議
     items_dict = [item.model_dump() for item in review_data.items]

@@ -79,7 +79,9 @@ async def get_my_verified_account(
                 "success": True,
                 "message": "尚未有已驗證的郵局帳號",
                 "data": VerifiedAccountCheckResponse(
-                    has_verified_account=False, account=None, message="您尚未有已驗證的郵局帳號。當您首次提交申請並經過管理員審核通過後，您的帳號將被記錄為已驗證狀態。"
+                    has_verified_account=False,
+                    account=None,
+                    message="您尚未有已驗證的郵局帳號。當您首次提交申請並經過管理員審核通過後，您的帳號將被記錄為已驗證狀態。",
                 ),
             }
 

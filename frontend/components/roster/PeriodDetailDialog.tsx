@@ -22,15 +22,21 @@ import {
   DollarSign,
   PlayCircle,
   Loader2,
+  XCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Lock,
 } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
 
 interface Period {
   label: string
-  status: "completed" | "waiting"
+  status: "completed" | "waiting" | "failed" | "processing" | "draft" | "locked"
   roster_id?: number
   roster_code?: string
+  roster_status?: string
+  error_message?: string
   completed_at?: string
   total_amount?: number
   qualified_count?: number
@@ -158,19 +164,30 @@ export function PeriodDetailDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {period.status === "completed" ? "造冊詳情" : "等待造冊"} - {period.label}
+            {period.status === "completed" || period.status === "locked"
+              ? "造冊詳情"
+              : period.status === "failed"
+              ? "造冊失敗"
+              : period.status === "processing"
+              ? "造冊處理中"
+              : "等待造冊"}{" "}
+            - {period.label}
           </DialogTitle>
           <DialogDescription>
-            {period.status === "completed"
+            {period.status === "completed" || period.status === "locked"
               ? "查看此期間的造冊詳細資訊"
+              : period.status === "failed"
+              ? "造冊產生過程中發生錯誤"
+              : period.status === "processing"
+              ? "系統正在處理此造冊，請稍候"
               : "此期間尚未產生造冊"}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {period.status === "completed" ? (
+          {period.status === "completed" || period.status === "locked" ? (
             <>
-              {/* Completed Roster Details */}
+              {/* Completed/Locked Roster Details */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-muted-foreground">造冊代碼</Label>
@@ -180,7 +197,17 @@ export function PeriodDetailDialog({
                 <div className="space-y-2">
                   <Label className="text-muted-foreground">狀態</Label>
                   <div>
-                    <Badge variant="default">已完成</Badge>
+                    {period.status === "locked" ? (
+                      <Badge variant="default" className="bg-green-600">
+                        <Lock className="mr-1 h-3 w-3" />
+                        已鎖定
+                      </Badge>
+                    ) : (
+                      <Badge variant="default" className="bg-green-600">
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        已完成
+                      </Badge>
+                    )}
                   </div>
                 </div>
 
@@ -229,9 +256,101 @@ export function PeriodDetailDialog({
                 </Button>
               </DialogFooter>
             </>
+          ) : period.status === "failed" ? (
+            <>
+              {/* Failed Roster Details */}
+              <Alert variant="destructive">
+                <XCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="space-y-2">
+                    <p className="font-semibold">造冊產生失敗</p>
+                    {period.error_message && (
+                      <p className="text-sm">{period.error_message}</p>
+                    )}
+                  </div>
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid grid-cols-2 gap-4">
+                {period.roster_code && (
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">造冊代碼</Label>
+                    <p className="font-mono font-medium">{period.roster_code}</p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">狀態</Label>
+                  <div>
+                    <Badge variant="destructive">
+                      <XCircle className="mr-1 h-3 w-3" />
+                      失敗
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                  關閉
+                </Button>
+                <Button variant="destructive" onClick={handleGenerateNow} disabled={generating}>
+                  {generating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      重新產生中...
+                    </>
+                  ) : (
+                    <>
+                      <PlayCircle className="mr-2 h-4 w-4" />
+                      重新產生造冊
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : period.status === "processing" ? (
+            <>
+              {/* Processing Roster Details */}
+              <Alert className="bg-blue-50 border-blue-200">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  系統正在處理此造冊，請稍候片刻。造冊完成後會自動更新狀態。
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid grid-cols-2 gap-4">
+                {period.roster_code && (
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">造冊代碼</Label>
+                    <p className="font-mono font-medium">{period.roster_code}</p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">狀態</Label>
+                  <div>
+                    <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      處理中
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                  關閉
+                </Button>
+              </DialogFooter>
+            </>
           ) : (
             <>
-              {/* Waiting Roster Details */}
+              {/* Waiting/Draft Roster Details */}
               <Alert>
                 <InfoIcon className="h-4 w-4" />
                 <AlertDescription>

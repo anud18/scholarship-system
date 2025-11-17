@@ -147,12 +147,16 @@ class SchemaValidationMiddleware(BaseHTTPMiddleware):
         try:
             if isinstance(data, list):
                 for item in data:
-                    response_model.model_validate(item) if hasattr(
-                        response_model, "model_validate"
-                    ) else response_model(**item)
+                    (
+                        response_model.model_validate(item)
+                        if hasattr(response_model, "model_validate")
+                        else response_model(**item)
+                    )
             else:
-                response_model.model_validate(data) if hasattr(response_model, "model_validate") else response_model(
-                    **data
+                (
+                    response_model.model_validate(data)
+                    if hasattr(response_model, "model_validate")
+                    else response_model(**data)
                 )
 
             logger.debug(f"✅ Schema validation passed for {method} {path}")
@@ -207,13 +211,17 @@ def validate_response_in_dev(response_model: type):
                 try:
                     if isinstance(result, list):
                         for item in result:
-                            response_model.model_validate(item) if hasattr(
-                                response_model, "model_validate"
-                            ) else response_model(**item)
+                            (
+                                response_model.model_validate(item)
+                                if hasattr(response_model, "model_validate")
+                                else response_model(**item)
+                            )
                     else:
-                        response_model.model_validate(result) if hasattr(
-                            response_model, "model_validate"
-                        ) else response_model(**result)
+                        (
+                            response_model.model_validate(result)
+                            if hasattr(response_model, "model_validate")
+                            else response_model(**result)
+                        )
 
                     logger.debug(f"✅ Response validation passed for {func.__name__}")
 

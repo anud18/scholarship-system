@@ -286,17 +286,36 @@ class PortalSSOService:
                 logger.info(f"Preserved pre-authorized role for {nycu_id}: {user.role.value}")
 
             user.user_type = user_type  # Update user type based on verification
-            if dept_name:
-                user.dept_name = dept_name
-            if dept_code:
-                user.dept_code = dept_code
-            user.raw_data = raw_data
-            # Store student data if available
+
+            # For students, prioritize Student API data for department info
             if student_data:
+                # Extract department info from Student API (more accurate)
+                api_dept_code = student_data.get("trm_depno") or student_data.get("std_depno")
+                api_dept_name = student_data.get("trm_depname") or student_data.get("std_depname")
+
+                if api_dept_code:
+                    user.dept_code = api_dept_code
+                elif dept_code:
+                    user.dept_code = dept_code
+
+                if api_dept_name:
+                    user.dept_name = api_dept_name
+                elif dept_name:
+                    user.dept_name = dept_name
+
+                # Store student data
                 if user.raw_data:
                     user.raw_data["student_api_data"] = student_data
                 else:
                     user.raw_data = {"student_api_data": student_data}
+            else:
+                # Non-student users: use Portal SSO data
+                if dept_name:
+                    user.dept_name = dept_name
+                if dept_code:
+                    user.dept_code = dept_code
+
+            user.raw_data = raw_data
             logger.info(f"Updated existing user {nycu_id}")
             return user
 

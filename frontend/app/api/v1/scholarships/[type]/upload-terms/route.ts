@@ -35,19 +35,33 @@ export async function POST(
 
     // Get form data from request
     const formData = await request.formData();
+    const file = formData.get("file");
+
+    // Validate file exists
+    if (!file || !(file instanceof File)) {
+      return NextResponse.json(
+        { success: false, message: "File is required" },
+        { status: 400 }
+      );
+    }
 
     // Construct backend URL using INTERNAL_API_URL (Docker internal network)
     const backendUrl = `${INTERNAL_API_URL}/api/v1/scholarships/${encodeURIComponent(type)}/upload-terms`;
 
-    console.log(`[Upload Terms Proxy] Forwarding to: ${backendUrl}`);
+    console.log(`[Upload Terms Proxy] Forwarding file "${file.name}" to: ${backendUrl}`);
+
+    // Create a fresh FormData instance to avoid stream consumption issues
+    const backendFormData = new FormData();
+    backendFormData.append("file", file);
 
     // Forward request to backend
+    // IMPORTANT: Don't set Content-Type header - let fetch auto-set with boundary
     const response = await fetch(backendUrl, {
       method: "POST",
       headers: {
         Authorization: authHeader,
       },
-      body: formData,
+      body: backendFormData,
     });
 
     // Get response data

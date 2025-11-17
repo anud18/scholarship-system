@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calendar, CheckCircle2, Clock, AlertCircle } from "lucide-react"
+import { Calendar, CheckCircle2, Clock, AlertCircle, XCircle, Loader2 } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import { PeriodDetailDialog } from "./PeriodDetailDialog"
 
@@ -12,9 +12,11 @@ interface Period {
   label: string
   western_date?: string
   display_label?: string
-  status: "completed" | "waiting"
+  status: "completed" | "waiting" | "failed" | "processing" | "draft" | "locked"
   roster_id?: number
   roster_code?: string
+  roster_status?: string
+  error_message?: string
   completed_at?: string
   total_amount?: number
   qualified_count?: number
@@ -135,6 +137,8 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
   }
 
   const completedCount = data.periods.filter((p) => p.status === "completed").length
+  const failedCount = data.periods.filter((p) => p.status === "failed").length
+  const processingCount = data.periods.filter((p) => p.status === "processing").length
   const waitingCount = data.periods.filter((p) => p.status === "waiting").length
 
   return (
@@ -145,7 +149,7 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
             <div>
               <CardTitle>預計分發週期</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                造冊週期: {getCycleName(data.roster_cycle)} • 已完成 {completedCount} / 總計{" "}
+                造冊週期: {getCycleName(data.roster_cycle)} • 已完成 {completedCount}{failedCount > 0 && <span className="text-red-600"> • 失敗 {failedCount}</span>}{processingCount > 0 && <span className="text-blue-600"> • 處理中 {processingCount}</span>} / 總計{" "}
                 {data.periods.length} 期
               </p>
             </div>
@@ -167,6 +171,10 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
                 className={`cursor-pointer transition-all hover:shadow-md ${
                   period.status === "completed"
                     ? "bg-green-50 border-green-200"
+                    : period.status === "failed"
+                    ? "bg-red-50 border-red-200"
+                    : period.status === "processing"
+                    ? "bg-blue-50 border-blue-200"
                     : "bg-gray-50 border-gray-200"
                 }`}
                 onClick={() => handlePeriodClick(period)}
@@ -178,6 +186,10 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
                     </div>
                     {period.status === "completed" ? (
                       <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ) : period.status === "failed" ? (
+                      <XCircle className="h-4 w-4 text-red-600" />
+                    ) : period.status === "processing" ? (
+                      <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
                     ) : (
                       <Clock className="h-4 w-4 text-gray-400" />
                     )}
@@ -196,6 +208,29 @@ export function RosterCycleTimeline({ configId }: RosterCycleTimelineProps) {
                           {formatCurrency(period.total_amount)}
                         </div>
                       )}
+                    </div>
+                  ) : period.status === "failed" ? (
+                    <div className="space-y-1">
+                      <Badge variant="destructive" className="text-xs">
+                        失敗
+                      </Badge>
+                      <div className="text-xs text-muted-foreground">
+                        {period.qualified_count || 0} 人
+                      </div>
+                      {period.error_message && (
+                        <div className="text-xs text-red-600 line-clamp-2" title={period.error_message}>
+                          {period.error_message.substring(0, 50)}...
+                        </div>
+                      )}
+                    </div>
+                  ) : period.status === "processing" ? (
+                    <div className="space-y-1">
+                      <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                        處理中
+                      </Badge>
+                      <div className="text-xs text-muted-foreground">
+                        正在生成造冊...
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-1">

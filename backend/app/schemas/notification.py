@@ -5,7 +5,7 @@ Notification schemas for API requests and responses
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.notification import NotificationPriority, NotificationType
 
@@ -31,9 +31,7 @@ class NotificationResponse(BaseModel):
     created_at: datetime
     metadata: Optional[Dict[str, Any]] = Field(None, alias="meta_data")
 
-    class Config:
-        from_attributes = True
-        populate_by_name = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class NotificationCreate(BaseModel):
@@ -49,14 +47,16 @@ class NotificationCreate(BaseModel):
     expires_at: Optional[datetime] = Field(None, description="過期時間")
     metadata: Optional[Dict[str, Any]] = Field(None, description="額外資料")
 
-    @validator("notification_type")
+    @field_validator("notification_type")
+    @classmethod
     def validate_notification_type(cls, v):
         valid_types = [t.value for t in NotificationType]
         if v not in valid_types:
             raise ValueError(f"Invalid notification type. Must be one of: {valid_types}")
         return v
 
-    @validator("priority")
+    @field_validator("priority")
+    @classmethod
     def validate_priority(cls, v):
         valid_priorities = [p.value for p in NotificationPriority]
         if v not in valid_priorities:
@@ -78,7 +78,8 @@ class NotificationUpdate(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(None)
     is_dismissed: Optional[bool] = Field(None, description="是否已關閉")
 
-    @validator("notification_type")
+    @field_validator("notification_type")
+    @classmethod
     def validate_notification_type(cls, v):
         if v is not None:
             valid_types = [t.value for t in NotificationType]
@@ -86,7 +87,8 @@ class NotificationUpdate(BaseModel):
                 raise ValueError(f"Invalid notification type. Must be one of: {valid_types}")
         return v
 
-    @validator("priority")
+    @field_validator("priority")
+    @classmethod
     def validate_priority(cls, v):
         if v is not None:
             valid_priorities = [p.value for p in NotificationPriority]

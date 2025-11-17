@@ -226,13 +226,15 @@ async def update_configuration(
             category=configuration.category if configuration.category is not None else existing.category,
             data_type=configuration.data_type if configuration.data_type is not None else existing.data_type,
             description=configuration.description if configuration.description is not None else existing.description,
-            is_sensitive=configuration.is_sensitive
-            if configuration.is_sensitive is not None
-            else existing.is_sensitive,
+            is_sensitive=(
+                configuration.is_sensitive if configuration.is_sensitive is not None else existing.is_sensitive
+            ),
             allow_empty=configuration.allow_empty if configuration.allow_empty is not None else existing.allow_empty,
-            validation_regex=configuration.validation_regex
-            if configuration.validation_regex is not None
-            else existing.validation_regex,
+            validation_regex=(
+                configuration.validation_regex
+                if configuration.validation_regex is not None
+                else existing.validation_regex
+            ),
             user_id=current_user.id,
         )
 

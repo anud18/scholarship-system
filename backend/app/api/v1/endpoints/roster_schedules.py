@@ -10,12 +10,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.functions import count
 
 from app.core.deps import get_current_user
 from app.core.security import check_user_roles
 from app.db.deps import get_db
 from app.models.roster_schedule import RosterSchedule, RosterScheduleStatus
+from app.models.scholarship import ScholarshipConfiguration
 from app.models.user import User, UserRole
 from app.schemas.response import ApiResponse
 from app.schemas.roster_schedule import (
@@ -48,8 +50,10 @@ async def list_roster_schedules(
     check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
-        # Build query
-        stmt = select(RosterSchedule)
+        # Build query with eager loading of scholarship configuration
+        stmt = select(RosterSchedule).options(
+            joinedload(RosterSchedule.scholarship_configuration).joinedload(ScholarshipConfiguration.scholarship_type)
+        )
 
         # Apply filters
         if status_filter:
@@ -446,7 +450,15 @@ async def get_schedule_by_config(
     check_user_roles([UserRole.admin, UserRole.super_admin], current_user)
 
     try:
-        stmt = select(RosterSchedule).where(RosterSchedule.scholarship_configuration_id == config_id)
+        stmt = (
+            select(RosterSchedule)
+            .options(
+                joinedload(RosterSchedule.scholarship_configuration).joinedload(
+                    ScholarshipConfiguration.scholarship_type
+                )
+            )
+            .where(RosterSchedule.scholarship_configuration_id == config_id)
+        )
         result = await db.execute(stmt)
         schedule = result.scalar_one_or_none()
 

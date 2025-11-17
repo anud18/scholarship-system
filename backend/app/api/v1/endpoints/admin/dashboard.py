@@ -477,12 +477,14 @@ async def get_system_announcements(
             "title_en": notification.title_en,
             "message": notification.message,
             "message_en": notification.message_en,
-            "notification_type": notification.notification_type.value
-            if hasattr(notification.notification_type, "value")
-            else str(notification.notification_type),
-            "priority": notification.priority.value
-            if hasattr(notification.priority, "value")
-            else str(notification.priority),
+            "notification_type": (
+                notification.notification_type.value
+                if hasattr(notification.notification_type, "value")
+                else str(notification.notification_type)
+            ),
+            "priority": (
+                notification.priority.value if hasattr(notification.priority, "value") else str(notification.priority)
+            ),
             "related_resource_type": notification.related_resource_type,
             "related_resource_id": notification.related_resource_id,
             "action_url": notification.action_url,

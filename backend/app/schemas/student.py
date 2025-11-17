@@ -5,7 +5,7 @@ Student schemas for API requests and responses with normalized database design
 from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # === 查詢表相關 Schemas ===
 
@@ -21,8 +21,7 @@ class DegreeResponse(DegreeBase):
 
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class IdentityBase(BaseModel):
@@ -36,8 +35,7 @@ class IdentityResponse(IdentityBase):
 
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StudyingStatusBase(BaseModel):
@@ -51,8 +49,7 @@ class StudyingStatusResponse(StudyingStatusBase):
 
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SchoolIdentityBase(BaseModel):
@@ -66,8 +63,7 @@ class SchoolIdentityResponse(SchoolIdentityBase):
 
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AcademyBase(BaseModel):
@@ -88,8 +84,7 @@ class AcademyResponse(AcademyBase):
 
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DepartmentBase(BaseModel):
@@ -110,8 +105,7 @@ class DepartmentResponse(DepartmentBase):
 
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EnrollTypeBase(BaseModel):
@@ -134,8 +128,7 @@ class EnrollTypeResponse(EnrollTypeBase):
     id: int
     degree: Optional[DegreeResponse] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # === 學生資料相關 Schemas ===
@@ -242,8 +235,7 @@ class StudentResponse(StudentBase):
         else:
             return "undergraduate"
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StudentDetailResponse(StudentResponse):

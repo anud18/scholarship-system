@@ -335,11 +335,11 @@ export function AdminManagementInterface({
     useState<HistoricalApplicationFilters>({
       page: 1,
       size: 20,
-      status: "",
-      scholarship_type: "",
+      status: undefined,
+      scholarship_type: undefined,
       academic_year: undefined,
-      semester: "",
-      search: "",
+      semester: undefined,
+      search: undefined,
     });
 
   // 系統公告相關狀態
@@ -767,7 +767,7 @@ export function AdminManagementInterface({
       const filters = {
         ...historicalApplicationsFilters,
         scholarship_type:
-          activeHistoricalTab === "all" ? "" : activeHistoricalTab,
+          activeHistoricalTab === "all" ? undefined : activeHistoricalTab,
       };
 
       const response = await apiClient.admin.getHistoricalApplications(filters);
@@ -1023,11 +1023,11 @@ export function AdminManagementInterface({
         const response = await apiClient.admin.getHistoricalApplications({
           page: currentPage,
           size: 100, // 使用 API 允許的最大值
-          status: "",
-          scholarship_type: "",
+          status: undefined,
+          scholarship_type: undefined,
           academic_year: undefined,
-          semester: "",
-          search: "",
+          semester: undefined,
+          search: undefined,
         });
 
         if (response.success && response.data) {
@@ -2238,7 +2238,7 @@ export function AdminManagementInterface({
                           onValueChange={value =>
                             setHistoricalApplicationsFilters(prev => ({
                               ...prev,
-                              status: value === "all" ? "" : value,
+                              status: value === "all" ? undefined : value,
                               page: 1,
                             }))
                           }
@@ -2296,7 +2296,7 @@ export function AdminManagementInterface({
                           onValueChange={value =>
                             setHistoricalApplicationsFilters(prev => ({
                               ...prev,
-                              semester: value === "all" ? "" : value,
+                              semester: value === "all" ? undefined : value,
                               page: 1,
                             }))
                           }
@@ -2595,7 +2595,7 @@ export function AdminManagementInterface({
                               onValueChange={value =>
                                 setHistoricalApplicationsFilters(prev => ({
                                   ...prev,
-                                  status: value === "all" ? "" : value,
+                                  status: value === "all" ? undefined : value,
                                   page: 1,
                                 }))
                               }

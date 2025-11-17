@@ -1090,9 +1090,9 @@ class EmailService:
                 "app_id": application.app_id,
                 "student_name": getattr(application, "student_name", ""),
                 "scholarship_type": getattr(application, "scholarship_type", ""),
-                "submit_date": application.submitted_at.strftime("%Y-%m-%d")
-                if getattr(application, "submitted_at", None)
-                else "",
+                "submit_date": (
+                    application.submitted_at.strftime("%Y-%m-%d") if getattr(application, "submitted_at", None) else ""
+                ),
                 "professor_name": getattr(professor, "name", "") if professor else "",
                 "professor_email": getattr(professor, "email", "") if professor else "",
                 "scholarship_type_id": getattr(application, "scholarship_type_id", None),

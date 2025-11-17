@@ -1014,6 +1014,12 @@ export interface ApplicationDocument {
   existing_file_url?: string;
 }
 
+/**
+ * Historical application response type
+ * MANUAL MAINTENANCE: This type is manually maintained and not auto-generated.
+ * Keep in sync with backend: HistoricalApplicationResponse in app/schemas/application.py
+ * Required fields MUST match backend required fields to prevent validation errors.
+ */
 export interface HistoricalApplication {
   id: number;
   app_id: string;
@@ -1034,7 +1040,7 @@ export interface HistoricalApplication {
   is_renewal?: boolean;
 
   // Academic information
-  academic_year?: number;
+  academic_year: number;
   semester?: string;
 
   // Important dates
@@ -1047,9 +1053,6 @@ export interface HistoricalApplication {
   // Review information
   professor_name?: string;
   reviewer_name?: string;
-  review_score?: number;
-  review_comments?: string;
-  rejection_reason?: string;
 }
 
 export interface HistoricalApplicationFilters {
