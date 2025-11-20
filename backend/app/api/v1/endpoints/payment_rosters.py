@@ -698,6 +698,10 @@ async def preview_roster_students(
 
     except HTTPException:
         raise
+    except ValueError as e:
+        # Handle validation errors with specific messages (e.g., missing ranking)
+        logger.error(f"Failed to preview students for config {config_id}: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to preview students for config {config_id}: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="預覽學生名單失敗")
