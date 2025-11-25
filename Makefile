@@ -305,7 +305,12 @@ init-testdata: ## Initialize test data (users, scholarships, etc.)
 	@echo "  - Student (碩士): stu_master / stumaster123"
 	@echo "  - Student (陸生): stu_china / stuchina123"
 
-init-all: docker-up ## Initialize complete development environment (Docker + DB + Test Data)
+init-all: ## Initialize complete development environment (Docker + DB + Test Data)
+	@echo "$(CYAN)📁 Creating required directories on host...$(NC)"
+	@mkdir -p backend/uploads backend/exports backend/app/templates
+	@echo "$(GREEN)✅ Directories created$(NC)"
+	@echo ""
+	@$(MAKE) docker-up
 	@echo "$(CYAN)🚀 Running database seed...$(NC)"
 	@docker exec scholarship_backend_dev python -m app.seed
 	@echo ""

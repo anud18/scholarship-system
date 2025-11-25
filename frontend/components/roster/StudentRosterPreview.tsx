@@ -118,7 +118,20 @@ export function StudentRosterPreview({ configId, rankingId }: StudentRosterPrevi
       }
     } catch (err) {
       console.error("Failed to load student data:", err)
-      setError("載入學生資料時發生錯誤")
+      // Try to extract error message from different error sources
+      let errorMessage = "載入學生資料時發生錯誤"
+
+      if (err instanceof Error) {
+        errorMessage = err.message
+      } else if (typeof err === "object" && err !== null) {
+        if ("detail" in err) {
+          errorMessage = (err as any).detail
+        } else if ("message" in err) {
+          errorMessage = (err as any).message
+        }
+      }
+
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
