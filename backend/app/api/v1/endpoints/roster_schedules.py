@@ -494,9 +494,10 @@ async def get_schedule_by_config(
                 )
             )
             .where(RosterSchedule.scholarship_configuration_id == config_id)
+            .order_by(RosterSchedule.created_at.desc())  # Get most recent schedule
         )
         result = await db.execute(stmt)
-        schedule = result.scalar_one_or_none()
+        schedule = result.scalars().first()  # Use first() instead of scalar_one_or_none()
 
         if not schedule:
             return ApiResponse(
