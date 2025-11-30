@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.sql.functions import count
 
 from app.core.deps import get_current_user
@@ -163,7 +163,19 @@ async def create_roster_schedule(
 
         db.add(new_schedule)
         await db.commit()
-        await db.refresh(new_schedule)
+
+        # Reload with eager loading of relationships to avoid lazy loading issues
+        stmt = (
+            select(RosterSchedule)
+            .options(
+                selectinload(RosterSchedule.scholarship_configuration).selectinload(
+                    ScholarshipConfiguration.scholarship_type
+                )
+            )
+            .where(RosterSchedule.id == new_schedule.id)
+        )
+        result = await db.execute(stmt)
+        new_schedule = result.scalar_one()
 
         # Add to scheduler if active and has cron expression
         if new_schedule.status == RosterScheduleStatus.ACTIVE and new_schedule.cron_expression:
@@ -260,7 +272,19 @@ async def update_roster_schedule(
         schedule.updated_at = datetime.utcnow()
 
         await db.commit()
-        await db.refresh(schedule)
+
+        # Reload with eager loading of relationships
+        stmt = (
+            select(RosterSchedule)
+            .options(
+                selectinload(RosterSchedule.scholarship_configuration).selectinload(
+                    ScholarshipConfiguration.scholarship_type
+                )
+            )
+            .where(RosterSchedule.id == schedule_id)
+        )
+        result = await db.execute(stmt)
+        schedule = result.scalar_one()
 
         # Update scheduler if needed
         if schedule.status == RosterScheduleStatus.ACTIVE and schedule.cron_expression:
@@ -317,7 +341,19 @@ async def update_schedule_status(
         schedule.updated_at = datetime.utcnow()
 
         await db.commit()
-        await db.refresh(schedule)
+
+        # Reload with eager loading of relationships
+        stmt = (
+            select(RosterSchedule)
+            .options(
+                selectinload(RosterSchedule.scholarship_configuration).selectinload(
+                    ScholarshipConfiguration.scholarship_type
+                )
+            )
+            .where(RosterSchedule.id == schedule_id)
+        )
+        result = await db.execute(stmt)
+        schedule = result.scalar_one()
 
         # Handle scheduler operations based on status change
         if status_data.status == RosterScheduleStatus.ACTIVE:

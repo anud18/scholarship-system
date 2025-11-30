@@ -19,7 +19,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.application_sequence import ApplicationSequence
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus, Semester
-from app.models.scholarship import ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationError
 from app.services.student_service import StudentService
@@ -644,6 +644,52 @@ class BatchImportService:
                 batch_id=batch_import.id,
             )
 
+        # Convert semester string to Semester enum for configuration lookup
+        semester_enum = None
+        if semester:
+            try:
+                semester_enum = Semester(semester)
+            except ValueError:
+                raise BatchImportError(
+                    message=f"無效的學期值: {semester}",
+                    batch_id=batch_import.id,
+                )
+
+        # Find scholarship configuration for this academic period
+        config_stmt = select(ScholarshipConfiguration).where(
+            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+            ScholarshipConfiguration.academic_year == academic_year,
+        )
+
+        # Handle semester filtering (None means yearly scholarship)
+        if semester_enum is None:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+        else:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
+
+        config_result = await self.db.execute(config_stmt)
+        scholarship_config = config_result.scalar_one_or_none()
+
+        if not scholarship_config:
+            period_label = f"{academic_year}學年度"
+            if semester_enum:
+                semester_names = {
+                    Semester.first: "第一學期",
+                    Semester.second: "第二學期",
+                    Semester.annual: "全學年",
+                }
+                period_label += f" {semester_names.get(semester_enum, semester)}"
+
+            raise BatchImportError(
+                message=f"找不到獎學金配置：{scholarship.name} ({period_label})。請先建立該學期的獎學金配置。",
+                batch_id=batch_import.id,
+            )
+
+        logger.info(
+            f"Found scholarship configuration: {scholarship_config.config_name} "
+            f"(ID: {scholarship_config.id}) for batch import {batch_import.id}"
+        )
+
         # Begin transaction - all operations will be rolled back if any fails
         current_row = 0
         try:
@@ -728,6 +774,7 @@ class BatchImportService:
                     app_id=app_id,
                     user_id=user.id,
                     scholarship_type_id=scholarship_type_id,
+                    scholarship_configuration_id=scholarship_config.id,  # Link to specific configuration
                     scholarship_name=scholarship.name,
                     amount=None,  # Amount is now per sub-type in ScholarshipSubTypeConfig
                     sub_scholarship_type=(
