@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BatchImportError
 from app.models.batch_import import BatchImport
-from app.models.enums import BatchImportStatus
-from app.models.scholarship import ScholarshipType
+from app.models.enums import BatchImportStatus, Semester
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.batch_import import BatchImportValidationError
 from app.services.batch_import_service import BatchImportService
@@ -36,6 +36,19 @@ class TestBatchImportService:
         scholarship.main_type = "general"
         scholarship.sub_type_selection_mode = "single"
         return scholarship
+
+    @pytest.fixture
+    def mock_scholarship_config(self):
+        """Mock scholarship configuration"""
+        config = Mock(spec=ScholarshipConfiguration)
+        config.id = 1
+        config.scholarship_type_id = 1
+        config.academic_year = 113
+        config.semester = Semester.first
+        config.config_name = "Test Scholarship 113-1"
+        config.config_code = "test_113_1"
+        config.amount = 10000
+        return config
 
     @pytest.fixture
     def sample_excel_data(self):
@@ -163,7 +176,9 @@ class TestBatchImportService:
             assert len(user_map) == 2
 
     @pytest.mark.asyncio
-    async def test_create_applications_from_batch_success(self, service, mock_scholarship, sample_excel_data):
+    async def test_create_applications_from_batch_success(
+        self, service, mock_scholarship, mock_scholarship_config, sample_excel_data
+    ):
         """Test successful application creation from batch"""
         batch_import = Mock(spec=BatchImport)
         batch_import.id = 1
@@ -206,10 +221,15 @@ class TestBatchImportService:
             ),
             patch.object(service.db, "execute") as mock_execute,
         ):
-            # Mock ApplicationSequence lookup
+            # Mock scholarship configuration lookup and ApplicationSequence lookup
+            mock_config_result = Mock()
+            mock_config_result.scalar_one_or_none.return_value = mock_scholarship_config
+
             mock_seq_result = Mock()
             mock_seq_result.scalar_one_or_none.return_value = None
-            mock_execute.return_value = mock_seq_result
+
+            # Set up execute to return config first, then sequence on subsequent calls
+            mock_execute.side_effect = [mock_config_result] + [mock_seq_result] * 2
 
             created_ids, errors = await service.create_applications_from_batch(
                 batch_import=batch_import,
@@ -224,7 +244,9 @@ class TestBatchImportService:
             assert len(errors) == 0
 
     @pytest.mark.asyncio
-    async def test_create_applications_from_batch_rollback_on_error(self, service, mock_scholarship, sample_excel_data):
+    async def test_create_applications_from_batch_rollback_on_error(
+        self, service, mock_scholarship, mock_scholarship_config, sample_excel_data
+    ):
         """Test transaction rollback on error"""
         batch_import = Mock(spec=BatchImport)
         batch_import.id = 1
@@ -235,7 +257,13 @@ class TestBatchImportService:
             patch.object(service, "_get_or_create_users_bulk", side_effect=Exception("Database error")),
             patch.object(service.db, "rollback", new_callable=AsyncMock) as mock_rollback,
             patch.object(service.db, "commit", new_callable=AsyncMock),
+            patch.object(service.db, "execute") as mock_execute,
         ):
+            # Mock configuration lookup
+            mock_config_result = Mock()
+            mock_config_result.scalar_one_or_none.return_value = mock_scholarship_config
+            mock_execute.return_value = mock_config_result
+
             with pytest.raises(BatchImportError) as exc_info:
                 await service.create_applications_from_batch(
                     batch_import=batch_import,
@@ -266,6 +294,34 @@ class TestBatchImportService:
                 )
 
             assert "不存在" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_create_applications_from_batch_no_configuration(self, service, mock_scholarship, sample_excel_data):
+        """Test error when scholarship configuration doesn't exist for the academic period"""
+        batch_import = Mock(spec=BatchImport)
+        batch_import.id = 1
+
+        with (
+            patch.object(service.db, "get", return_value=mock_scholarship),
+            patch.object(service.db, "execute") as mock_execute,
+        ):
+            # Mock configuration lookup returning None (no config found)
+            mock_config_result = Mock()
+            mock_config_result.scalar_one_or_none.return_value = None
+            mock_execute.return_value = mock_config_result
+
+            with pytest.raises(BatchImportError) as exc_info:
+                await service.create_applications_from_batch(
+                    batch_import=batch_import,
+                    parsed_data=sample_excel_data,
+                    scholarship_type_id=1,
+                    academic_year=113,
+                    semester="first",
+                )
+
+            # Should mention configuration not found
+            assert "找不到獎學金配置" in str(exc_info.value)
+            assert "113學年度" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_validate_college_permission_success(self, service):
