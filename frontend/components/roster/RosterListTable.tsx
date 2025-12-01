@@ -296,6 +296,15 @@ export function RosterListTable({ periods, configId, onRosterGenerated }: Roster
                             <Download className="mr-1 h-4 w-4" />
                             {downloading === period.roster_id ? "下載中..." : "下載Excel"}
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleGenerateNow(period, true)}
+                            disabled={generating === period.label}
+                          >
+                            <PlayCircle className="mr-1 h-4 w-4" />
+                            {generating === period.label ? "產生中..." : "重新產生"}
+                          </Button>
                         </div>
                       ) : period.status === "failed" ? (
                         <Button

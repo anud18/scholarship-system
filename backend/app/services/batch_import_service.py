@@ -662,7 +662,7 @@ class BatchImportService:
         )
 
         # Handle semester filtering (None means yearly scholarship)
-        if semester_enum is None:
+        if semester_enum is None or semester_enum == Semester.yearly:
             config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
         else:
             config_stmt = config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
