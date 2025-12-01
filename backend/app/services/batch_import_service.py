@@ -676,7 +676,7 @@ class BatchImportService:
                 semester_names = {
                     Semester.first: "第一學期",
                     Semester.second: "第二學期",
-                    Semester.annual: "全學年",
+                    Semester.yearly: "全學年",
                 }
                 period_label += f" {semester_names.get(semester_enum, semester)}"
 
