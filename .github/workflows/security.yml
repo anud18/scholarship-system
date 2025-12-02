@@ -5,8 +5,8 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
-  schedule:
-    - cron: '34 23 * * 4'  # Weekly on Thursday
+  # schedule:
+  #   - cron: '34 23 * * 4'  # Weekly on Thursday
   workflow_dispatch:
   workflow_call:  # Allow other workflows to invoke security scans
 
