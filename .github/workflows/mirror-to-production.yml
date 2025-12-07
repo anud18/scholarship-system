@@ -272,19 +272,29 @@ jobs:
             REMOVED_DIRS="${REMOVED_DIRS}- .claude/ (Claude Code configuration)\n"
           fi
 
-          # Remove docker-compose variants (keep only monitoring if needed)
-          echo "::notice::Removing docker-compose variant files"
+          # Remove docker-compose variants (keep production files)
+          echo "::notice::Removing non-production docker-compose variant files"
           for file in docker-compose.*.yml; do
             if [ -f "$file" ]; then
-              echo "::notice::Removing $file"
-              git rm "$file" 2>/dev/null || true
-              REMOVED_DIRS="${REMOVED_DIRS}- $file (Docker Compose variant)\n"
+              # Keep production-related docker-compose files
+              if [[ "$file" == "docker-compose.prod.yml" ]] || \
+                 [[ "$file" == "docker-compose.prod-db.yml" ]] || \
+                 [[ "$file" == "docker-compose.prod-db-monitoring.yml" ]]; then
+                echo "::notice::Preserving $file (production file)"
+              else
+                echo "::notice::Removing $file"
+                git rm "$file" 2>/dev/null || true
+                REMOVED_DIRS="${REMOVED_DIRS}- $file (Docker Compose variant)\n"
+              fi
             fi
           done
 
-          # Remove subdirectory docker-compose files (except monitoring)
+          # Remove subdirectory docker-compose files (except monitoring and production)
           find . -type f -name "docker-compose*.yml" 2>/dev/null | while read file; do
-            if [[ "$file" != "./monitoring/"* ]]; then
+            if [[ "$file" != "./monitoring/"* ]] && \
+               [[ "$file" != "./docker-compose.prod.yml" ]] && \
+               [[ "$file" != "./docker-compose.prod-db.yml" ]] && \
+               [[ "$file" != "./docker-compose.prod-db-monitoring.yml" ]]; then
               echo "::notice::Removing $file"
               git rm "$file" 2>/dev/null || true
               REMOVED_DIRS="${REMOVED_DIRS}- $file (Docker Compose file)\n"
@@ -528,8 +538,13 @@ jobs:
           - All test directories: `frontend/__tests__/`, `frontend/*/‌__tests__/`, `backend/app/tests/`
           - All test files: `*.test.tsx`, `*.test.ts`, `*.test.py`, `test_*.py`
           - Test configuration: `jest.config.js`, `pytest.ini`, `tsconfig.test.json`, `.coverage`
-          - Docker compose variants: `docker-compose.*.yml`
+          - Docker compose variants: `docker-compose.*.yml` (except production files: `docker-compose.prod*.yml`)
           - Documentation files: `*.md` (README, CONTRIBUTING, etc.)
+
+          ### Files Preserved for Production
+          - Production Docker Compose: `docker-compose.prod.yml`, `docker-compose.prod-db.yml`, `docker-compose.prod-db-monitoring.yml`
+          - Backup scripts: `scripts/backup.sh`
+          - Production configurations and deployment files
 
           ## 📝 Notes
 
@@ -644,9 +659,11 @@ jobs:
               ':!frontend/tsconfig.test.json' \
               ':!backend/pytest.ini' \
               ':!backend/.coverage' \
-              ':!docker-compose.*.yml' \
+              ':!docker-compose.dev.yml' \
+              ':!docker-compose.staging.yml' \
+              ':!docker-compose.staging-db.yml' \
+              ':!docker-compose.staging-db-monitoring.yml' \
               ':!backend/docker-compose.yml' \
-              ':!**/docker-compose.yml' \
               ':!**/*.md' \
               | tail -1)
 
@@ -680,9 +697,11 @@ jobs:
               ':!frontend/tsconfig.test.json' \
               ':!backend/pytest.ini' \
               ':!backend/.coverage' \
-              ':!docker-compose.*.yml' \
+              ':!docker-compose.dev.yml' \
+              ':!docker-compose.staging.yml' \
+              ':!docker-compose.staging-db.yml' \
+              ':!docker-compose.staging-db-monitoring.yml' \
               ':!backend/docker-compose.yml' \
-              ':!**/docker-compose.yml' \
               ':!**/*.md' \
               | tail -1 || echo "Initial commit")
             echo "::notice::First sync - file statistics: $FILE_STATS"
