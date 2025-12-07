@@ -31,25 +31,11 @@ log "========================================="
 # Create backup directory for today
 mkdir -p "${BACKUP_PATH}"
 
-# Setup secure password authentication using temporary .pgpass file
+# Setup secure password authentication using .pgpass file
 log "Setting up secure authentication..."
-PGPASS_FILE="${HOME}/.pgpass.backup.$$"
-
-# Create .pgpass file with error handling
-if ! echo "${POSTGRES_HOST}:${POSTGRES_PORT}:${POSTGRES_DB}:${POSTGRES_USER}:${POSTGRES_PASSWORD}" > "${PGPASS_FILE}"; then
-    log "ERROR: Failed to create password file"
-    exit 1
-fi
-
-# Set secure permissions with error handling
-if ! chmod 600 "${PGPASS_FILE}"; then
-    log "ERROR: Failed to set secure permissions on password file"
-    rm -f "${PGPASS_FILE}"
-    exit 1
-fi
-
-# Export PGPASSFILE to use our temporary file
-export PGPASSFILE="${PGPASS_FILE}"
+PGPASS_FILE="${HOME}/.pgpass"
+echo "${POSTGRES_HOST}:${POSTGRES_PORT}:${POSTGRES_DB}:${POSTGRES_USER}:${POSTGRES_PASSWORD}" > "${PGPASS_FILE}"
+chmod 600 "${PGPASS_FILE}"
 log "Password file created with secure permissions"
 
 # Check PostgreSQL connection
