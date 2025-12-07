@@ -85,9 +85,12 @@ services:
     image: postgres:15-alpine
     container_name: scholarship_postgres_backup
     environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-scholarship_db}
       POSTGRES_USER: ${POSTGRES_USER:-scholarship_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_DIR: /backups
       BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 2 * * *}  # Daily at 2 AM
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
     volumes:
@@ -100,9 +103,46 @@ services:
         condition: service_healthy
     command: |
       sh -c '
+        echo "========================================="
+        echo "  Backup Service Starting"
+        echo "========================================="
+        echo "Installing dcron..."
         apk add --no-cache dcron
-        echo "$BACKUP_SCHEDULE /backup.sh" | crontab -
-        crond -f
+
+        echo ""
+        echo "Backup Configuration:"
+        echo "  Database: ${POSTGRES_DB}"
+        echo "  Schedule: ${BACKUP_SCHEDULE}"
+        echo "  Retention: ${BACKUP_RETENTION_DAYS} days"
+        echo "  Backup directory: /backups"
+        echo ""
+
+        echo "Setting up cron job..."
+        echo "${BACKUP_SCHEDULE} /backup.sh >> /var/log/backup.log 2>&1" | crontab -
+
+        echo "Configured cron jobs:"
+        crontab -l
+
+        echo ""
+        echo "========================================="
+        echo "  Running initial backup..."
+        echo "========================================="
+        /backup.sh || echo "Initial backup failed - check configuration"
+
+        echo ""
+        echo "========================================="
+        echo "  Starting cron daemon"
+        echo "========================================="
+        echo "Cron will run backup at: ${BACKUP_SCHEDULE}"
+        echo "To trigger manual backup, run:"
+        echo "  docker exec scholarship_postgres_backup /backup.sh"
+        echo ""
+        echo "To view backup logs:"
+        echo "  docker exec scholarship_postgres_backup cat /var/log/backup.log"
+        echo ""
+
+        # Start cron in foreground
+        crond -f -l 2
       '
     restart: unless-stopped
     logging:
@@ -110,6 +150,14 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
 
   # =========================================================================
   # MONITORING SERVICES - Moved to docker-compose.prod-db-monitoring.yml
