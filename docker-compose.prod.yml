@@ -229,6 +229,9 @@ services:
         max-file: "3"
 
   # cAdvisor - Container metrics
+  # Note: privileged mode is required for cAdvisor to access host-level metrics
+  # and monitor Docker containers. This is a known requirement for cAdvisor.
+  # Security: Ensure this service is not exposed to the public internet.
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: cadvisor_prod_ap
