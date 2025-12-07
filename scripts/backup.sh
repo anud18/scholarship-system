@@ -31,13 +31,6 @@ log "========================================="
 # Create backup directory for today
 mkdir -p "${BACKUP_PATH}"
 
-# Setup secure password authentication using .pgpass file
-log "Setting up secure authentication..."
-PGPASS_FILE="${HOME}/.pgpass"
-echo "${POSTGRES_HOST}:${POSTGRES_PORT}:${POSTGRES_DB}:${POSTGRES_USER}:${POSTGRES_PASSWORD}" > "${PGPASS_FILE}"
-chmod 600 "${PGPASS_FILE}"
-log "Password file created with secure permissions"
-
 # Check PostgreSQL connection
 log "Testing database connection..."
 if ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; then
@@ -45,7 +38,6 @@ if ! pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}
     log "  Host: ${POSTGRES_HOST}:${POSTGRES_PORT}"
     log "  Database: ${POSTGRES_DB}"
     log "  User: ${POSTGRES_USER}"
-    rm -f "${PGPASS_FILE}"
     exit 1
 fi
 log "Database connection successful"
@@ -55,7 +47,7 @@ log "Creating backup: ${BACKUP_FILE}"
 log "  Database: ${POSTGRES_DB}"
 log "  Format: Custom (compressed)"
 
-if pg_dump \
+if PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump \
     -h "${POSTGRES_HOST}" \
     -p "${POSTGRES_PORT}" \
     -U "${POSTGRES_USER}" \
@@ -81,12 +73,10 @@ if pg_dump \
         log "Permissions set: 640 (read-only for group)"
     else
         log "ERROR: Backup file was not created"
-        rm -f "${PGPASS_FILE}"
         exit 1
     fi
 else
     log "ERROR: pg_dump failed"
-    rm -f "${PGPASS_FILE}"
     exit 1
 fi
 
@@ -146,9 +136,6 @@ find "${BACKUP_DIR}" -name "*.dump" -mtime -7 -exec ls -lh {} \; | \
 log "========================================="
 log "Backup completed successfully"
 log "========================================="
-
-# Cleanup password file
-rm -f "${PGPASS_FILE}"
 
 # Exit with success
 exit 0
