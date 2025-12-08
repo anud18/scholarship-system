@@ -936,9 +936,16 @@ class RosterService:
             scholarship_config = application.scholarship_configuration
 
             if not scholarship_config or not student:
+                if not student and not scholarship_config:
+                    missing_reason = "缺少學生資訊/獎學金配置"
+                elif not student:
+                    missing_reason = "缺少學生資訊"
+                else:
+                    missing_reason = "缺少獎學金配置"
+
                 return {
                     "is_eligible": False,
-                    "failed_rules": ["缺少學生或獎學金配置資訊"],
+                    "failed_rules": [missing_reason],
                     "warning_rules": [],
                     "details": {},
                 }

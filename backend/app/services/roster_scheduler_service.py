@@ -35,12 +35,19 @@ class RosterSchedulerService:
     def _setup_scheduler(self):
         """設定APScheduler"""
         # 設定Redis作為Job Store
+        # Parse REDIS_URL: redis://:password@host:port/db
+        from urllib.parse import urlparse
+        parsed = urlparse(settings.redis_url)
+        redis_password = parsed.password if parsed.password else None
+        redis_host = parsed.hostname if parsed.hostname else "redis"
+        redis_port = parsed.port if parsed.port else 6379
+
         jobstores = {
             "default": RedisJobStore(
-                host=settings.redis_url.split("://")[1].split(":")[0],
-                port=int(settings.redis_url.split(":")[-1].split("/")[0]),
+                host=redis_host,
+                port=redis_port,
                 db=1,  # 使用不同的Redis資料庫避免衝突
-                password=None,
+                password=redis_password,
             )
         }
 

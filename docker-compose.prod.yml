@@ -1,0 +1,313 @@
+version: '3.8'
+
+services:
+  # Redis Cache for Application Layer
+  redis:
+    image: redis:7-alpine
+    container_name: scholarship_redis_prod
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    expose:
+      - "6379"
+    volumes:
+      - redis_prod_data:/data
+    networks:
+      - scholarship_prod_network
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # FastAPI Backend
+  backend:
+    image: ghcr.io/anud18/scholarship-system-backend:${TAG:-latest}
+    container_name: scholarship_backend_prod
+    expose:
+      - "8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      DATABASE_URL_SYNC: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      ENVIRONMENT: production
+      MINIO_ENDPOINT: ${MINIO_HOST}:${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-scholarship-documents}
+      MINIO_SECURE: ${MINIO_SECURE:-true}
+      # Email Configuration
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME}
+      # Portal SSO Configuration
+      PORTAL_SSO_ENABLED: ${PORTAL_SSO_ENABLED:-true}
+      PORTAL_JWT_SERVER_URL: ${PORTAL_JWT_SERVER_URL}
+      PORTAL_TEST_MODE: ${PORTAL_TEST_MODE:-false}
+      PORTAL_SSO_TIMEOUT: ${PORTAL_SSO_TIMEOUT:-10.0}
+      # Student API Configuration
+      STUDENT_API_ENABLED: ${STUDENT_API_ENABLED:-true}
+      STUDENT_API_BASE_URL: ${STUDENT_API_BASE_URL}
+      STUDENT_API_ACCOUNT: ${STUDENT_API_ACCOUNT}
+      STUDENT_API_HMAC_KEY: ${STUDENT_API_HMAC_KEY}
+      STUDENT_API_TIMEOUT: ${STUDENT_API_TIMEOUT:-10.0}
+      STUDENT_API_ENCODE_TYPE: ${STUDENT_API_ENCODE_TYPE:-UTF-8}
+      # Mock SSO disabled in production
+      ENABLE_MOCK_SSO: "false"
+      # Frontend URLs
+      FRONTEND_URL: https://${DOMAIN}  # External URL (for user redirects)
+      FRONTEND_INTERNAL_URL: http://frontend:3000  # Internal Docker network URL (for API calls)
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./logs/backend:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - scholarship_prod_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  # Next.js Frontend
+  frontend:
+    image: ghcr.io/anud18/scholarship-system-frontend:${TAG:-latest}
+    container_name: scholarship_frontend_prod
+    expose:
+      - "3000"
+    environment:
+      NEXT_PUBLIC_API_URL: https://${DOMAIN}
+      NODE_ENV: production
+      NEXT_PUBLIC_NYCU_PORTAL_URL: ${NEXT_PUBLIC_NYCU_PORTAL_URL}
+      # Internal API URL for server-side requests
+      INTERNAL_API_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - scholarship_prod_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  # Nginx Reverse Proxy with SSL
+  nginx:
+    image: nginx:alpine
+    container_name: scholarship_nginx_prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl/prod:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - scholarship_prod_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost/health", "-k"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  # Log Management (Optional)
+  logrotate:
+    image: alpine:latest
+    container_name: scholarship_logrotate_prod
+    volumes:
+      - ./logs:/logs
+      - ./scripts/logrotate.conf:/etc/logrotate.conf:ro
+    networks:
+      - scholarship_prod_network
+    command: |
+      sh -c '
+        apk add --no-cache logrotate
+        while true; do
+          logrotate /etc/logrotate.conf
+          sleep 3600
+        done
+      '
+    restart: unless-stopped
+
+  # =========================================================================
+  # MONITORING SERVICES
+  # =========================================================================
+
+  # Grafana Alloy - Unified telemetry collector
+  alloy:
+    image: grafana/alloy:latest
+    container_name: scholarship_alloy_prod_ap
+    volumes:
+      - ./monitoring/config/alloy/prod-ap-vm.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./logs/nginx:/var/log/nginx:ro
+    networks:
+      - scholarship_prod_network
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Node Exporter - System metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter_prod_ap
+    command:
+      - '--path.rootfs=/host'
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /:/host:ro,rslave
+    expose:
+      - "9100"
+    networks:
+      - scholarship_prod_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # cAdvisor - Container metrics
+  # Note: privileged mode is required for cAdvisor to access host-level metrics
+  # and monitor Docker containers. This is a known requirement for cAdvisor.
+  # Security: Ensure this service is not exposed to the public internet.
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor_prod_ap
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    expose:
+      - "8080"
+    networks:
+      - scholarship_prod_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Nginx Prometheus Exporter
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    container_name: nginx_exporter_prod_ap
+    command:
+      - '-nginx.scrape-uri=http://nginx:80/nginx_status'
+    expose:
+      - "9113"
+    depends_on:
+      - nginx
+    networks:
+      - scholarship_prod_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+  # Redis Exporter
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis_exporter_prod_ap
+    command:
+      - "-redis.addr=redis:6379"
+      - "-redis.password=${REDIS_PASSWORD}"
+    expose:
+      - "9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - scholarship_prod_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  redis_prod_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/scholarship/app/redis/data
+
+networks:
+  scholarship_prod_network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.24.0.0/16
