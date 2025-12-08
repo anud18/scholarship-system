@@ -535,7 +535,7 @@ jobs:
           ${{ env.REMOVED_DIRS }}
 
           ### Files Excluded from Sync (Not Deleted)
-          - All test directories: `frontend/__tests__/`, `frontend/*/‌__tests__/`, `backend/app/tests/`
+          - All test directories: `frontend/__tests__/`, `frontend/*/__tests__/`, `backend/app/tests/`
           - All test files: `*.test.tsx`, `*.test.ts`, `*.test.py`, `test_*.py`
           - Test configuration: `jest.config.js`, `pytest.ini`, `tsconfig.test.json`, `.coverage`
           - Docker compose variants: `docker-compose.*.yml` (except production files: `docker-compose.prod*.yml`)
@@ -664,6 +664,7 @@ jobs:
               ':!docker-compose.staging-db.yml' \
               ':!docker-compose.staging-db-monitoring.yml' \
               ':!backend/docker-compose.yml' \
+              ':!**/docker-compose.yml' \
               ':!**/*.md' \
               | tail -1)
 
