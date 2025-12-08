@@ -28,7 +28,7 @@ services:
 
   # FastAPI Backend
   backend:
-    image: ghcr.io/jotpalch/scholarship-system-backend:${TAG:-latest}
+    image: ghcr.io/anud18/scholarship-system-backend:${TAG:-latest}
     container_name: scholarship_backend_prod
     expose:
       - "8000"
