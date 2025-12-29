@@ -51,9 +51,15 @@ interface RosterItem {
   college: string
   department: string
   scholarship_subtype: string
-  scholarship_amount: number
+  scholarship_amount: number | string  // Backend may return Decimal as string
   bank_account?: string
   is_included: boolean
+  verification_snapshot?: {
+    student_info?: {
+      trm_depname?: string
+      trm_academyname?: string
+    }
+  }
 }
 
 export function RosterDetailDialog({
@@ -103,18 +109,24 @@ export function RosterDetailDialog({
     }
   }
 
-  const getItemsByCollege = (college: string): RosterItem[] => {
-    return rosterItems.filter((item) => item.college === college)
+  // 輔助函式：取得學院名稱
+  const getCollege = (item: RosterItem): string => {
+    return item.college || item.verification_snapshot?.student_info?.trm_academyname || ""
   }
 
-  const colleges = Array.from(new Set(rosterItems.map((item) => item.college))).sort()
+  const getItemsByCollege = (college: string): RosterItem[] => {
+    return rosterItems.filter((item) => getCollege(item) === college)
+  }
 
-  const formatCurrency = (amount: number) => {
+  const colleges = Array.from(new Set(rosterItems.map((item) => getCollege(item)))).filter(Boolean).sort()
+
+  const formatCurrency = (amount: number | null | undefined) => {
+    const safeAmount = amount ?? 0
     return new Intl.NumberFormat("zh-TW", {
       style: "currency",
       currency: "TWD",
       minimumFractionDigits: 0,
-    }).format(amount)
+    }).format(safeAmount)
   }
 
   const renderStudentTable = (items: RosterItem[]) => {
@@ -134,7 +146,6 @@ export function RosterDetailDialog({
           <TableRow>
             <TableHead>姓名</TableHead>
             <TableHead>學號</TableHead>
-            <TableHead>身分證字號</TableHead>
             <TableHead>系所</TableHead>
             <TableHead>獎學金子類型</TableHead>
             <TableHead className="text-right">金額</TableHead>
@@ -144,14 +155,13 @@ export function RosterDetailDialog({
           {includedItems.map((item, index) => (
             <TableRow key={index}>
               <TableCell className="font-medium">{item.student_name}</TableCell>
-              <TableCell>{item.student_id}</TableCell>
               <TableCell className="font-mono text-sm">{item.student_id_number}</TableCell>
-              <TableCell>{item.department}</TableCell>
+              <TableCell>{item.department || item.verification_snapshot?.student_info?.trm_depname || "-"}</TableCell>
               <TableCell>
                 <Badge variant="outline">{item.scholarship_subtype || "一般"}</Badge>
               </TableCell>
               <TableCell className="text-right font-medium">
-                {formatCurrency(item.scholarship_amount)}
+                {formatCurrency(Number(item.scholarship_amount))}
               </TableCell>
             </TableRow>
           ))}
@@ -218,7 +228,7 @@ export function RosterDetailDialog({
                 {formatCurrency(
                   rosterItems
                     .filter(item => item.is_included)
-                    .reduce((sum, item) => sum + item.scholarship_amount, 0)
+                    .reduce((sum, item) => sum + (Number(item.scholarship_amount) || 0), 0)
                 )}
               </span>
             </div>

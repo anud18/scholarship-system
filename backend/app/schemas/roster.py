@@ -47,11 +47,17 @@ class RosterItemResponse(BaseModel):
     application_id: int
     student_id_number: str
     student_name: str
+    student_id: Optional[str] = None  # 學號 (from application.student_data)
+    email: Optional[str] = None  # Email
+    college: Optional[str] = None  # 學院
+    department: Optional[str] = None  # 系所
     scholarship_amount: Decimal
+    scholarship_subtype: Optional[str] = None  # 獎學金子類型
     verification_status: StudentVerificationStatus
     verification_snapshot: Optional[Dict[str, Any]] = None  # 對應 model 欄位名稱
     is_included: bool  # 對應 model 欄位名稱
     exclusion_reason: Optional[str] = None  # 對應 model 欄位名稱
+    bank_account: Optional[str] = None  # 銀行帳號
     created_at: datetime
     updated_at: Optional[datetime] = None
 
