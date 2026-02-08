@@ -2,7 +2,7 @@
 fastapi==0.120.0
 starlette==0.48.0  # Updated for Python 3.13 compatibility (compatible with FastAPI 0.120.0)
 uvicorn[standard]==0.38.0  # Updated for Python 3.13 compatibility
-python-multipart==0.0.20  # Security: Updated to fix DoS vulnerabilities (GHSA-59g5-xgcq-4qw3)
+python-multipart==0.0.22  # Security: Updated to fix DoS vulnerabilities (GHSA-59g5-xgcq-4qw3)
 
 # Database and ORM
 sqlalchemy==2.0.44  # Updated for Python 3.13 compatibility
