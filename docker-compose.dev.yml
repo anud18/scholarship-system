@@ -122,12 +122,14 @@ services:
       target: builder
     image: ghcr.io/anud18/scholarship-system-frontend:${TAG:-latest}
     container_name: scholarship_frontend_dev
-    command: bun run dev
+    command: bun --bun run dev
     ports:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NODE_ENV: development
+      # Bun optimizations
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: /tmp/bun-cache
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
       # Mock Student API URL for development
@@ -136,6 +138,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+      - bun-cache:/tmp/bun-cache
     depends_on:
       - backend
       - mock-student-api
@@ -173,6 +176,8 @@ volumes:
   redis_dev_data:
     driver: local
   minio_dev_data:
+    driver: local
+  bun-cache:
     driver: local
 
 networks:
