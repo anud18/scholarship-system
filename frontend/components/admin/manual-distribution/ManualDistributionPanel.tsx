@@ -37,8 +37,18 @@ export function ManualDistributionPanel({
   const {
     scholarshipConfig,
     selectedAcademicYear,
+    setSelectedAcademicYear,
     selectedSemester,
+    setSelectedSemester,
+    availableOptions,
   } = useCollegeManagement();
+
+  const semesterLabel = (s: string) => {
+    if (s === "first") return "第一學期";
+    if (s === "second") return "第二學期";
+    if (s === "yearly") return "全年";
+    return s;
+  };
 
   // Resolve the scholarship type ID from config
   const scholarshipTypeId = useMemo(() => {
@@ -273,8 +283,28 @@ export function ManualDistributionPanel({
               </div>
             </div>
 
-            {/* Filter bar */}
-            <div className="flex gap-2 mt-3">
+            {/* Year / Semester / College filters */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={selectedAcademicYear ?? ""}
+                onChange={(e) => setSelectedAcademicYear(e.target.value ? Number(e.target.value) : undefined)}
+              >
+                <option value="">選擇學年度</option>
+                {(availableOptions?.academic_years ?? []).map((yr) => (
+                  <option key={yr} value={yr}>{yr} 學年度</option>
+                ))}
+              </select>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={selectedSemester ?? ""}
+                onChange={(e) => setSelectedSemester(e.target.value || undefined)}
+              >
+                <option value="">選擇學期</option>
+                {(availableOptions?.semesters ?? []).map((s) => (
+                  <option key={s} value={s}>{semesterLabel(s)}</option>
+                ))}
+              </select>
               <select
                 className="border rounded px-2 py-1 text-sm"
                 value={collegeFilter}
