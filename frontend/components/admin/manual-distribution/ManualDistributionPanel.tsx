@@ -357,6 +357,35 @@ export function ManualDistributionPanel({
                 <Download className="h-4 w-4 mr-1" />
                 匯出 Excel
               </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={localAllocations.size === 0 || isLoading}
+                  >
+                    清空所有分配
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>確認清空所有分配？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      此操作將清除目前所有學生的獎學金分配。這是可還原的，可在儲存前取消。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>取消</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        setLocalAllocations(new Map());
+                      }}
+                    >
+                      確認清空
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
               <Button
                 variant="outline"
                 size="sm"
@@ -521,6 +550,12 @@ export function ManualDistributionPanel({
                     >
                       申請類別
                     </th>
+                    <th
+                      rowSpan={2}
+                      className="px-1.5 py-1.5 border border-slate-200 text-center font-semibold text-[11px] w-8 bg-red-50"
+                    >
+                      取消
+                    </th>
                     {subTypeCols.length > 0 && (
                       <th
                         colSpan={subTypeCols.length}
@@ -600,7 +635,7 @@ export function ManualDistributionPanel({
                   {filteredStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={9 + subTypeCols.length}
+                        colSpan={10 + subTypeCols.length}
                         className="px-4 py-10 text-center text-slate-500"
                       >
                         {students.length === 0
@@ -622,7 +657,7 @@ export function ManualDistributionPanel({
                             className="bg-slate-100"
                           >
                             <td
-                              colSpan={9 + subTypeCols.length}
+                              colSpan={10 + subTypeCols.length}
                               className="px-4 py-1.5 text-xs font-bold text-slate-600 border-y border-slate-300"
                             >
                               {collegeName || collegeCode}
@@ -656,6 +691,31 @@ export function ManualDistributionPanel({
                                     })
                                   ) : (
                                     <span className="text-[11px] text-slate-400">
+                                      —
+                                    </span>
+                                  )}
+                                </td>
+                                {/* Cancel allocation button */}
+                                <td className="px-1 py-1.5 border-r border-slate-100 text-center">
+                                  {curAlloc ? (
+                                    <button
+                                      onClick={() => {
+                                        setLocalAllocations(prev => {
+                                          const next = new Map(prev);
+                                          next.set(
+                                            student.ranking_item_id,
+                                            null
+                                          );
+                                          return next;
+                                        });
+                                      }}
+                                      className="px-2 py-1 text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200 cursor-pointer transition-colors"
+                                      title="取消此學生的分配"
+                                    >
+                                      ✕
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-300">
                                       —
                                     </span>
                                   )}
