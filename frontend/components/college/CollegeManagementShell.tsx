@@ -36,8 +36,8 @@ const RankingManagementPanel = dynamic(
   }
 );
 
-const DistributionPanel = dynamic(
-  () => import("./distribution/DistributionPanel").then(mod => ({ default: mod.DistributionPanel })),
+const ManualDistributionPanel = dynamic(
+  () => import("@/components/admin/manual-distribution/ManualDistributionPanel").then(mod => ({ default: mod.ManualDistributionPanel })),
   {
     loading: () => (
       <div className="flex items-center justify-center py-8">
@@ -350,7 +350,7 @@ function CollegeManagementContent({ user }: { user: User }) {
 
               {/* 獎學金分發標籤頁 */}
               <TabsContent value="distribution" className="space-y-6">
-                <DistributionPanel
+                <ManualDistributionPanel
                   user={user}
                   scholarshipType={scholarshipType}
                 />
