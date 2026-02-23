@@ -40,12 +40,12 @@ def _config_semester_condition(semester: str):
     """
     Build a SQLAlchemy condition for ScholarshipConfiguration.semester.
     The frontend sends "yearly" for annual scholarships, but the DB stores
-    NULL (Semester enum null) or Semester.annual for those rows.
+    NULL or the enum value "yearly" for those rows.
     """
     if semester == "yearly":
         return or_(
             ScholarshipConfiguration.semester.is_(None),
-            ScholarshipConfiguration.semester == "annual",
+            ScholarshipConfiguration.semester == "yearly",
         )
     return ScholarshipConfiguration.semester == semester
 
