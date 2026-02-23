@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.application import Application
-from app.models.college_review import CollegeRanking, CollegeRankingItem
+from app.models.college_review import CollegeRanking, CollegeRankingItem, ManualDistributionHistory
 from app.models.enums import ApplicationStatus, ReviewStage
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipSubTypeConfig
 
@@ -337,6 +337,57 @@ class ManualDistributionService:
             updated_count += 1
 
         await self.db.flush()
+
+        # Record allocation history for undo/redo
+        try:
+            # Get current state snapshot
+            ranking_query = select(CollegeRanking).where(
+                and_(
+                    CollegeRanking.scholarship_type_id == scholarship_type_id,
+                    CollegeRanking.academic_year == academic_year,
+                    _ranking_semester_condition(semester),
+                )
+            )
+            result = await self.db.execute(ranking_query)
+            rankings = result.scalars().all()
+            ranking_ids = [r.id for r in rankings]
+
+            if ranking_ids:
+                # Get current allocations
+                items_query = select(CollegeRankingItem).where(
+                    CollegeRankingItem.ranking_id.in_(ranking_ids)
+                )
+                result = await self.db.execute(items_query)
+                items = result.scalars().all()
+
+                # Build snapshot
+                allocations_snapshot = {}
+                total_allocated = 0
+                for item in items:
+                    if item.is_allocated:
+                        allocations_snapshot[item.id] = {
+                            "sub_type": item.allocated_sub_type,
+                            "allocation_year": item.allocation_year,
+                            "status": item.status,
+                        }
+                        total_allocated += 1
+
+                # Create history record
+                history = ManualDistributionHistory(
+                    scholarship_type_id=scholarship_type_id,
+                    academic_year=academic_year,
+                    semester=semester,
+                    allocations_snapshot=allocations_snapshot,
+                    operation_type="save",
+                    change_summary=f"Saved {updated_count} allocation(s)",
+                    total_allocated=total_allocated,
+                )
+                self.db.add(history)
+                await self.db.flush()
+        except Exception as e:
+            logger.warning(f"Failed to record allocation history: {e}")
+            # Don't fail the allocation if history recording fails
+
         return {"updated_count": updated_count}
 
     async def finalize(
@@ -411,6 +462,86 @@ class ManualDistributionService:
             "rejected_count": rejected_count,
             "total": approved_count + rejected_count,
         }
+
+    async def restore_from_history(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+        allocations_snapshot: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Restore allocations from a historical snapshot.
+        The snapshot contains: {ranking_item_id: {sub_type, allocation_year, status}, ...}
+        """
+        # First clear all current allocations
+        ranking_query = select(CollegeRanking).where(
+            and_(
+                CollegeRanking.scholarship_type_id == scholarship_type_id,
+                CollegeRanking.academic_year == academic_year,
+                _ranking_semester_condition(semester),
+            )
+        )
+        result = await self.db.execute(ranking_query)
+        rankings = result.scalars().all()
+        ranking_ids = [r.id for r in rankings]
+
+        if ranking_ids:
+            # Clear all allocations
+            items_query = select(CollegeRankingItem).where(
+                CollegeRankingItem.ranking_id.in_(ranking_ids)
+            )
+            result = await self.db.execute(items_query)
+            items = result.scalars().all()
+
+            for item in items:
+                item.is_allocated = False
+                item.allocated_sub_type = None
+                item.allocation_year = None
+                item.status = "ranked"
+                item.allocation_reason = None
+
+        # Now restore from snapshot
+        restored_count = 0
+        for item_id_str, alloc_data in allocations_snapshot.items():
+            try:
+                item_id = int(item_id_str)
+                item_query = select(CollegeRankingItem).where(
+                    CollegeRankingItem.id == item_id
+                )
+                result = await self.db.execute(item_query)
+                item = result.scalar_one_or_none()
+
+                if item and alloc_data.get("sub_type"):
+                    item.is_allocated = True
+                    item.allocated_sub_type = alloc_data["sub_type"]
+                    item.allocation_year = alloc_data.get("allocation_year")
+                    item.status = alloc_data.get("status", "allocated")
+                    item.allocation_reason = "還原歷史分發"
+                    restored_count += 1
+            except (ValueError, TypeError):
+                logger.warning(f"Skipping invalid item ID in snapshot: {item_id_str}")
+                continue
+
+        await self.db.flush()
+
+        # Record this restore as a history event
+        try:
+            history = ManualDistributionHistory(
+                scholarship_type_id=scholarship_type_id,
+                academic_year=academic_year,
+                semester=semester,
+                allocations_snapshot=allocations_snapshot,
+                operation_type="revert",
+                change_summary=f"Restored {restored_count} allocation(s) from history",
+                total_allocated=restored_count,
+            )
+            self.db.add(history)
+            await self.db.flush()
+        except Exception as e:
+            logger.warning(f"Failed to record restore history: {e}")
+
+        return {"restored_count": restored_count}
 
     async def _validate_allocations(
         self,

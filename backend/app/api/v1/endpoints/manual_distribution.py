@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_admin_user, get_db
+from app.models.college_review import ManualDistributionHistory
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.services.manual_distribution_service import ManualDistributionService
 
@@ -38,6 +39,19 @@ class FinalizeRequest(BaseModel):
     scholarship_type_id: int
     academic_year: int
     semester: str
+
+
+class DistributionHistoryItem(BaseModel):
+    id: int
+    operation_type: str
+    change_summary: Optional[str]
+    total_allocated: Optional[int]
+    created_at: str
+    created_by: Optional[int]
+
+
+class RestoreRequest(BaseModel):
+    history_id: int
 
 
 @router.get("/available-combinations")
@@ -193,3 +207,95 @@ async def finalize(
         }
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/{scholarship_type_id}/history")
+async def get_distribution_history(
+    scholarship_type_id: int,
+    academic_year: int = Query(...),
+    semester: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """Get allocation history for a scholarship/year/semester combination."""
+    try:
+        result = await db.execute(
+            select(ManualDistributionHistory)
+            .where(
+                ManualDistributionHistory.scholarship_type_id == scholarship_type_id,
+                ManualDistributionHistory.academic_year == academic_year,
+                ManualDistributionHistory.semester == semester,
+            )
+            .order_by(ManualDistributionHistory.created_at.desc())
+        )
+        histories = result.scalars().all()
+
+        history_data = [
+            {
+                "id": h.id,
+                "operation_type": h.operation_type,
+                "change_summary": h.change_summary,
+                "total_allocated": h.total_allocated,
+                "created_at": h.created_at.isoformat() if h.created_at else None,
+                "created_by": h.created_by,
+            }
+            for h in histories
+        ]
+
+        return {
+            "success": True,
+            "message": "Distribution history retrieved successfully",
+            "data": history_data,
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving distribution history: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve distribution history",
+        )
+
+
+@router.post("/{scholarship_type_id}/restore")
+async def restore_from_history(
+    scholarship_type_id: int,
+    request: RestoreRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """Restore allocations from a specific history record."""
+    service = ManualDistributionService(db)
+    try:
+        # Fetch the history record
+        result = await db.execute(
+            select(ManualDistributionHistory).where(
+                ManualDistributionHistory.id == request.history_id,
+                ManualDistributionHistory.scholarship_type_id == scholarship_type_id,
+            )
+        )
+        history = result.scalar_one_or_none()
+
+        if not history:
+            raise ValueError("History record not found")
+
+        # Restore allocations from snapshot
+        restore_result = await service.restore_from_history(
+            scholarship_type_id,
+            history.academic_year,
+            history.semester,
+            history.allocations_snapshot,
+        )
+
+        await db.commit()
+        return {
+            "success": True,
+            "message": f"Restored {restore_result['restored_count']} allocations from history",
+            "data": restore_result,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error restoring from history: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to restore from history",
+        )

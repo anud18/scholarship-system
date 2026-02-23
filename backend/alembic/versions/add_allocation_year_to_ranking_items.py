@@ -1,7 +1,7 @@
 """add allocation_year to college_ranking_items
 
 Revision ID: add_allocation_year_001
-Revises: normalize_scholarship_subtypes
+Revises: 20251031_add_minio_object_name
 Create Date: 2026-02-24
 
 Tracks which academic year's quota was used when allocating a student.
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = "add_allocation_year_001"
-down_revision = "normalize_scholarship_subtypes"
+down_revision = "20251031_add_minio_object_name"
 branch_labels = None
 depends_on = None
 

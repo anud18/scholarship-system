@@ -88,6 +88,23 @@ export interface FinalizeResult {
   total: number;
 }
 
+export interface DistributionHistoryRecord {
+  id: number;
+  operation_type: string;
+  change_summary: string | null;
+  total_allocated: number | null;
+  created_at: string | null;
+  created_by: number | null;
+}
+
+export interface RestoreRequest {
+  history_id: number;
+}
+
+export interface RestoreResult {
+  restored_count: number;
+}
+
 export interface AvailableCombinations {
   scholarship_types: Array<{
     id: number;
@@ -182,6 +199,41 @@ export function createManualDistributionApi() {
         { body: request as any }
       );
       return toApiResponse(response) as ApiResponse<FinalizeResult>;
+    },
+
+    /**
+     * Get allocation history for a scholarship/year/semester combination.
+     */
+    getHistory: async (
+      scholarship_type_id: number,
+      academic_year: number,
+      semester: string
+    ): Promise<ApiResponse<DistributionHistoryRecord[]>> => {
+      const response = await typedClient.raw.GET(
+        `/api/v1/manual-distribution/${scholarship_type_id}/history` as any,
+        {
+          params: {
+            query: { academic_year, semester } as any,
+          },
+        }
+      );
+      return toApiResponse(response) as ApiResponse<
+        DistributionHistoryRecord[]
+      >;
+    },
+
+    /**
+     * Restore allocations from a specific history record.
+     */
+    restoreFromHistory: async (
+      scholarship_type_id: number,
+      request: RestoreRequest
+    ): Promise<ApiResponse<RestoreResult>> => {
+      const response = await typedClient.raw.POST(
+        `/api/v1/manual-distribution/${scholarship_type_id}/restore` as any,
+        { body: request as any }
+      );
+      return toApiResponse(response) as ApiResponse<RestoreResult>;
     },
   };
 }
