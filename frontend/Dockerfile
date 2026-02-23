@@ -1,5 +1,8 @@
 FROM oven/bun:1-alpine AS base
 
+# Install Node.js for running Next.js (Bun for deps, Node for runtime)
+RUN apk add --no-cache nodejs
+
 # Install dependencies only when needed
 FROM base AS deps
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
