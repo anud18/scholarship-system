@@ -70,6 +70,28 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "effective_end_date": now + timedelta(days=90),
             "version": "1.0",
         },
+        # 學士班新生獎學金配置 (114-2)
+        {
+            "scholarship_type_id": undergrad_scholarship.id,
+            "config_code": "undergraduate_freshman_114_2",
+            "config_name": "學士班新生獎學金 114學年第二學期",
+            "academic_year": 114,
+            "semester": Semester.second,
+            "description": "114學年度第二學期學士班新生獎學金配置",
+            "description_en": "Undergraduate Freshman Scholarship Configuration for 114-2",
+            "has_quota_limit": False,
+            "has_college_quota": False,
+            "quota_management_mode": QuotaManagementMode.simple,
+            "total_quota": 50,
+            "amount": 10000,
+            "currency": "TWD",
+            "application_start_date": now - timedelta(days=30),
+            "application_end_date": now + timedelta(days=30),
+            "is_active": True,
+            "effective_start_date": now - timedelta(days=60),
+            "effective_end_date": now + timedelta(days=90),
+            "version": "1.0",
+        },
         # 博士生獎學金配置 (114學年) - Matrix Quota
         {
             "scholarship_type_id": phd_scholarship.id,
