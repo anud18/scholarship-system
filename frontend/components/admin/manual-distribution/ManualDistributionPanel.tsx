@@ -129,7 +129,7 @@ export function ManualDistributionPanel({
     setSaveMessage(null);
     try {
       const allocations = Array.from(localAllocations.entries()).map(
-        ([ranking_item_id, sub_type_code]) => ({ ranking_item_id, sub_type_code })
+        ([ranking_item_id, sub_type_code]: [number, string | null]) => ({ ranking_item_id, sub_type_code })
       );
       const resp = await apiClient.manualDistribution.allocate({
         scholarship_type_id: scholarshipTypeId,
