@@ -295,8 +295,14 @@ export function ManualDistributionPanel({
       if (resp.success && resp.data) {
         setHistory(resp.data);
         setShowHistoryDialog(true);
+      } else {
+        setSaveMessage({
+          type: "error",
+          text: resp.message || "載入歷史記錄失敗",
+        });
       }
-    } catch {
+    } catch (error) {
+      console.error("Load history error:", error);
       setSaveMessage({ type: "error", text: "載入歷史記錄失敗" });
     } finally {
       setIsLoadingHistory(false);
@@ -317,11 +323,42 @@ export function ManualDistributionPanel({
           text: `成功還原 ${resp.data.restored_count} 筆分配紀錄`,
         });
         setShowHistoryDialog(false);
-        await fetchData();
+        // Reload data by calling the fetch function directly
+        const [studentsResp, quotaResp] = await Promise.all([
+          apiClient.manualDistribution.getStudents(
+            scholarshipTypeId,
+            selectedAcademicYear!,
+            selectedSemester!
+          ),
+          apiClient.manualDistribution.getQuotaStatus(
+            scholarshipTypeId,
+            selectedAcademicYear!,
+            selectedSemester!
+          ),
+        ]);
+        if (studentsResp.success && studentsResp.data) {
+          setStudents(studentsResp.data);
+          const initial = new Map<number, LocalAlloc | null>();
+          for (const s of studentsResp.data) {
+            if (s.allocated_sub_type) {
+              initial.set(s.ranking_item_id, {
+                sub_type: s.allocated_sub_type,
+                year: s.allocation_year ?? selectedAcademicYear,
+              });
+            } else {
+              initial.set(s.ranking_item_id, null);
+            }
+          }
+          setLocalAllocations(initial);
+        }
+        if (quotaResp.success && quotaResp.data) {
+          setQuotaStatus(quotaResp.data);
+        }
       } else {
         setSaveMessage({ type: "error", text: resp.message || "還原失敗" });
       }
-    } catch {
+    } catch (error) {
+      console.error("Restore error:", error);
       setSaveMessage({ type: "error", text: "還原時發生錯誤" });
     } finally {
       setIsRestoring(false);
