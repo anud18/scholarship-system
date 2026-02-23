@@ -24,7 +24,6 @@ from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.schemas.review import ReviewCreate, ReviewItemResponse, ReviewResponse, ReviewSubmitRequest
 from app.services.application_audit_service import ApplicationAuditService
-from app.services.college_review_service import CollegeReviewService
 from app.services.review_service import ReviewService
 
 logger = logging.getLogger(__name__)
@@ -529,18 +528,7 @@ async def submit_application_review(
             ],
         )
 
-        # Trigger auto-redistribution for rankings (college/admin reviews only)
-        redistribution_info = None
-        if current_user.is_college() or current_user.is_admin() or current_user.is_super_admin():
-            college_review_service = CollegeReviewService(db)
-            redistribution_info = await college_review_service.auto_redistribute_after_status_change(
-                application_id=application_id, executor_id=current_user.id
-            )
-            logger.info(f"Auto-redistribution completed for application {application_id}: {redistribution_info}")
-
         response_data = review_response.model_dump()
-        if redistribution_info:
-            response_data["redistribution_info"] = redistribution_info
 
         return ApiResponse(
             success=True,

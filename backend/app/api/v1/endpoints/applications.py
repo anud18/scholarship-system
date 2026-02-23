@@ -646,16 +646,6 @@ async def update_application_status(
     # Update status
     result = await service.update_application_status(id, current_user, status_update)
 
-    # Check and execute auto-redistribution if status changed to approved/rejected
-    redistribution_info = {"auto_redistributed": False}
-    if status_update.status in ["approved", "rejected"]:
-        from app.services.college_review_service import CollegeReviewService
-
-        review_service = CollegeReviewService(db)
-        redistribution_info = await review_service.auto_redistribute_after_status_change(
-            application_id=id, executor_id=current_user.id
-        )
-
     # Log audit trail for status update
     audit_service = ApplicationAuditService(db)
     await audit_service.log_status_update(
@@ -668,15 +658,11 @@ async def update_application_status(
         request=request,
     )
 
-    # Prepare result data with redistribution info
     result_dict = result.model_dump() if hasattr(result, "model_dump") else result.dict()
     return {
         "success": True,
         "message": "狀態已更新",
-        "data": {
-            **result_dict,
-            "redistribution_info": redistribution_info,
-        },
+        "data": result_dict,
     }
 
 
