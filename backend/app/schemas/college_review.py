@@ -79,12 +79,6 @@ class RankingOrderUpdate(BaseModel):
     position: int
 
 
-class QuotaDistributionRequest(BaseModel):
-    """Schema for quota distribution request"""
-
-    distribution_rules: Optional[Dict[str, Any]] = Field(None, description="Custom distribution rules")
-
-
 class RankingUpdate(BaseModel):
     """Schema for updating ranking metadata"""
 

@@ -321,7 +321,7 @@ export function RankingManagementPanel({
         ),
       ]);
 
-      // Increment data version to notify other panels (e.g., DistributionPanel) to refresh
+      // Increment data version to notify other panels to refresh
       incrementDataVersion();
       console.log('[RankingManagementPanel] Data version incremented after review');
     } catch (error) {
